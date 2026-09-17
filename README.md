@@ -8,16 +8,6 @@ This is not emotion classification. It is a **neural engagement analyser** — a
 
 ---
 
-## GrowthDesk Studios — Why This Matters
-
-NeuroLens is built by [GrowthDesk Studios](https://growthdesk.com/), the creative and performance marketing arm of GrowthDesk — an Asia Pacific marketing technology company operating at the intersection of proprietary intelligence (PULSE), specialised MarTech (SKALE, DREA), and human expertise. By integrating computational neuroscience into our video creative workflow, NeuroLens gives GrowthDesk Studios a capability that no other social media or performance marketing agency in the region can offer: the ability to objectively measure, second by second, how a piece of video content stimulates the human brain — before it ever goes live.
-
-- **Data science–grounded creative for real estate and FMCG.** Instead of relying on subjective creative reviews or post-launch vanity metrics, GrowthDesk Studios uses NeuroLens to pre-test video ads for property launches (DREA) and shopper activation campaigns (SKALE) against predicted neural engagement — identifying weak moments, validating whether hero product shots or talent reveals actually drive cortical activation, and optimising edits before media spend is committed.
-- **AI-centric execution as a competitive moat.** NeuroLens extends GrowthDesk's existing intelligence layer (PULSE) into the creative process itself. Where PULSE surfaces market and competitor signals to inform strategy, NeuroLens provides a neuroscience-grade signal on creative quality — closing the loop from insight to execution with AI at every stage.
-- **Differentiation in a crowded APAC market.** Social media and performance marketing in Asia Pacific is dominated by agencies competing on reach, cost efficiency, and content volume. NeuroLens shifts the conversation to creative effectiveness measured at the neural level — a fundamentally different value proposition that positions GrowthDesk Studios as a science-first creative partner, not just another content factory.
-
----
-
 ## Core Objectives
 
 ### 1. Temporal Engagement Scoring
