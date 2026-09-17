@@ -1,0 +1,38 @@
+# NeuroLens — Python Dependencies
+# Python 3.10+ required
+# Install with: pip install -r requirements.txt
+
+# ─── NumPy must be pinned BEFORE installing tribev2 ─────────────────────────
+# neuralset (tribev2 internal dep) breaks with NumPy >= 2.1
+numpy>=1.26.4,<2.1.0
+
+# ─── Core ML ────────────────────────────────────────────────────────────────
+torch>=2.0.0
+
+# ─── TRIBE v2 (install AFTER numpy is pinned) ──────────────────────────────
+# Cannot be listed here as a standard requirement — install separately:
+#   pip install "tribev2[plotting] @ git+https://github.com/facebookresearch/tribev2.git"
+
+# ─── Neuroimaging / Atlas ───────────────────────────────────────────────────
+nilearn>=0.10.3
+
+# ─── Visualisation ──────────────────────────────────────────────────────────
+matplotlib>=3.7.0
+
+# ─── HuggingFace ────────────────────────────────────────────────────────────
+huggingface_hub>=0.20.0
+
+# ─── Jupyter ────────────────────────────────────────────────────────────────
+jupyter>=1.0.0
+ipykernel>=6.0.0
+ipywidgets>=8.0.0
+packaging>=23.0
+
+# ─── Flask API (for Phase 1B) ──────────────────────────────────────────────
+flask>=3.0.0
+flask-cors>=4.0.0
+
+# ─── System dependency (not pip-installable) ────────────────────────────────
+# ffmpeg — required for audio stripping
+#   Ubuntu/Debian: sudo apt install ffmpeg
+#   macOS: brew install ffmpeg

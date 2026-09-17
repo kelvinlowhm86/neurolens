@@ -1,0 +1,15 @@
+{
+  "hf_token": "hf_REPLACE_ME",
+  "paths": {
+    "models": "./models",
+    "data": "./data",
+    "output": "./output"
+  },
+  "model": {
+    "repo_id": "facebook/tribev2",
+    "llama_repo_id": "meta-llama/Llama-3.2-3B",
+    "pre_download_llama": false
+  },
+  "hf_download_timeout": 300,
+  "max_video_duration_seconds": 120
+}

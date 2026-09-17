@@ -1,0 +1,65 @@
+# ─── Secrets ────────────────────────────────────────────────────────────────
+# config.json holds a live HuggingFace token. Copy config.sample.json instead.
+config.json
+.env
+.env.*
+
+# ─── Model weights & HF caches ─────────────────────────────────────────────
+# Everything TRIBE v2 pulls lands under ./models (HF_HOME points here):
+#   models/hub/     — model snapshots (V-JEPA2 ~14 GB, LLaMA 3.2-3B ~6 GB,
+#                     Wav2Vec-BERT ~1 GB, tribev2 ckpt ~1 GB)
+#   models/xet/     — hf_xet dedup chunk cache (can rival the download size)
+#   models/assets/  — HF assets cache
+#   models/datasets/— HF datasets cache
+#   models/llama/   — explicit snapshot_download target (explore.ipynb cell 10)
+# Plus tribev2's per-modality feature cache, which shares this folder.
+/models/
+
+# Stray caches if the env vars above are ever bypassed
+.cache/
+cache/
+hub/
+
+# ─── Neuroimaging atlas data ───────────────────────────────────────────────
+# NILEARN_DATA points at data/nilearn (fsaverage5 + Destrieux, ~200 MB once
+# fully fetched). Re-downloads automatically on first run.
+/data/nilearn/
+
+# ─── Sample media (large, re-obtainable) ───────────────────────────────────
+# 155 MB of source ads. Ignore the contents, but keep the manifest README --
+# a negation cannot rescue a file from inside an excluded *directory*, so the
+# directory itself must stay un-excluded.
+/data/videos/*
+!/data/videos/README.md
+
+# ─── Generated output ──────────────────────────────────────────────────────
+/output/
+/data/output/**/*.json
+/data/output/**/*.npy
+/data/output/**/*.png
+# ...but keep the thumbnails the dashboard renders:
+!/data/output/**/thumb.jpg
+
+# ─── Logs & temp ───────────────────────────────────────────────────────────
+*.log
+*.tmp
+*.noaudio.mp4
+
+# ─── Python ────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# ─── Jupyter ───────────────────────────────────────────────────────────────
+.ipynb_checkpoints/
+*/.ipynb_checkpoints/
+.jupyter/
+
+# ─── OS / editor ───────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
