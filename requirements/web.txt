@@ -2,3 +2,4 @@
 -r base.txt
 flask>=3.0.0
 flask-cors>=4.0.0
+boto3>=1.34
