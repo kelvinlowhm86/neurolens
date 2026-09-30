@@ -36,11 +36,13 @@ def golden_masks():
 
 def golden_inputs(case):
     """Rebuild the inputs from the recipe stored in the fixture and in the spec."""
-    rng = np.random.default_rng(0)
+    # "short_edge" uses seed 1: its dropped last row is the min or max of the auditory series,
+    # so cut-then-rescale and rescale-then-cut differ (seed 0 cannot tell them apart).
+    rng = np.random.default_rng(1 if case == "short_edge" else 0)
     full = rng.standard_normal((12, N_VERTICES))
     if case == "equal":
         noaudio = rng.standard_normal((12, N_VERTICES))
-    elif case == "short":
+    elif case in ("short", "short_edge"):
         noaudio = rng.standard_normal((11, N_VERTICES))
     else:
         raise ValueError(case)
@@ -72,7 +74,7 @@ def test_golden_recipe_matches_spec():
     golden = json.loads(GOLDEN_PATH.read_text())
     assert golden["recipe"]["roi_order"] == ROI_ORDER
     assert golden["recipe"]["n_vertices"] == N_VERTICES
-    assert set(golden["cases"]) == {"equal", "short"}
+    assert set(golden["cases"]) == {"equal", "short", "short_edge"}
 
 
 def test_roi_label_map_keys_and_order():
@@ -96,6 +98,13 @@ def test_golden_equal_length():
 def test_golden_shorter_noaudio():
     golden = json.loads(GOLDEN_PATH.read_text())["cases"]["short"]
     full, noaudio = golden_inputs("short")
+    result = extract_engagement(full, noaudio, golden_masks())
+    assert result == golden
+
+
+def test_golden_shorter_noaudio_edge():
+    golden = json.loads(GOLDEN_PATH.read_text())["cases"]["short_edge"]
+    full, noaudio = golden_inputs("short_edge")
     result = extract_engagement(full, noaudio, golden_masks())
     assert result == golden
 

@@ -12,7 +12,8 @@
     "masks": "ROI i is True on vertices [i*200, i*200+200), False elsewhere",
     "equal": "rng=default_rng(0); preds_full=standard_normal((12,20484)); preds_noaudio=standard_normal((12,20484))",
     "short": "rng=default_rng(0) (fresh); preds_full=standard_normal((12,20484)); preds_noaudio=standard_normal((11,20484))",
-    "numpy": "2.2.6"
+    "numpy": "2.2.6",
+    "short_edge": "rng=default_rng(1) (fresh); preds_full=standard_normal((12,20484)); preds_noaudio=standard_normal((11,20484)); the dropped last row is the min or max of the auditory series, so cut-then-rescale and rescale-then-cut give different numbers"
   },
   "cases": {
     "equal": {
@@ -331,6 +332,167 @@
             "ppa_scenes": 0.5601,
             "sts_social": 0.5408,
             "auditory": 0.7593
+          },
+          "auditory_with_audio": null,
+          "auditory_without_audio": null
+        }
+      ]
+    },
+    "short_edge": {
+      "duration_seconds": 12,
+      "timesteps": [
+        {
+          "t": 0,
+          "engagement_overall": 0.3062,
+          "regions": {
+            "ffa_faces": 0.0,
+            "eba_bodies": 0.0,
+            "ppa_scenes": 0.4971,
+            "sts_social": 1.0,
+            "auditory": 0.3501
+          },
+          "auditory_with_audio": 0.3578,
+          "auditory_without_audio": 0.8534
+        },
+        {
+          "t": 1,
+          "engagement_overall": 0.7499,
+          "regions": {
+            "ffa_faces": 0.4259,
+            "eba_bodies": 0.875,
+            "ppa_scenes": 0.0,
+            "sts_social": 0.4481,
+            "auditory": 0.9783
+          },
+          "auditory_with_audio": 1.0,
+          "auditory_without_audio": 0.7343
+        },
+        {
+          "t": 2,
+          "engagement_overall": 0.5033,
+          "regions": {
+            "ffa_faces": 0.3251,
+            "eba_bodies": 0.5283,
+            "ppa_scenes": 0.0228,
+            "sts_social": 0.9658,
+            "auditory": 0.2498
+          },
+          "auditory_with_audio": 0.2553,
+          "auditory_without_audio": 0.4422
+        },
+        {
+          "t": 3,
+          "engagement_overall": 1.0,
+          "regions": {
+            "ffa_faces": 1.0,
+            "eba_bodies": 0.3434,
+            "ppa_scenes": 0.7934,
+            "sts_social": 0.5766,
+            "auditory": 0.1051
+          },
+          "auditory_with_audio": 0.1074,
+          "auditory_without_audio": 0.4545
+        },
+        {
+          "t": 4,
+          "engagement_overall": 0.4074,
+          "regions": {
+            "ffa_faces": 0.6321,
+            "eba_bodies": 0.5555,
+            "ppa_scenes": 0.298,
+            "sts_social": 0.4912,
+            "auditory": 0.0532
+          },
+          "auditory_with_audio": 0.0544,
+          "auditory_without_audio": 1.0
+        },
+        {
+          "t": 5,
+          "engagement_overall": 0.7317,
+          "regions": {
+            "ffa_faces": 0.8249,
+            "eba_bodies": 0.5073,
+            "ppa_scenes": 0.3882,
+            "sts_social": 0.3166,
+            "auditory": 0.5972
+          },
+          "auditory_with_audio": 0.6104,
+          "auditory_without_audio": 0.5023
+        },
+        {
+          "t": 6,
+          "engagement_overall": 0.5142,
+          "regions": {
+            "ffa_faces": 0.5622,
+            "eba_bodies": 1.0,
+            "ppa_scenes": 0.1216,
+            "sts_social": 0.4196,
+            "auditory": 0.1105
+          },
+          "auditory_with_audio": 0.113,
+          "auditory_without_audio": 0.0
+        },
+        {
+          "t": 7,
+          "engagement_overall": 0.7673,
+          "regions": {
+            "ffa_faces": 0.3554,
+            "eba_bodies": 0.6579,
+            "ppa_scenes": 1.0,
+            "sts_social": 0.5118,
+            "auditory": 0.0
+          },
+          "auditory_with_audio": 0.0,
+          "auditory_without_audio": 0.2276
+        },
+        {
+          "t": 8,
+          "engagement_overall": 0.0,
+          "regions": {
+            "ffa_faces": 0.3269,
+            "eba_bodies": 0.7863,
+            "ppa_scenes": 0.332,
+            "sts_social": 0.0,
+            "auditory": 0.2034
+          },
+          "auditory_with_audio": 0.2079,
+          "auditory_without_audio": 0.4008
+        },
+        {
+          "t": 9,
+          "engagement_overall": 0.1957,
+          "regions": {
+            "ffa_faces": 0.2214,
+            "eba_bodies": 0.6983,
+            "ppa_scenes": 0.2762,
+            "sts_social": 0.3218,
+            "auditory": 0.3513
+          },
+          "auditory_with_audio": 0.3591,
+          "auditory_without_audio": 0.9512
+        },
+        {
+          "t": 10,
+          "engagement_overall": 0.9855,
+          "regions": {
+            "ffa_faces": 0.597,
+            "eba_bodies": 0.1103,
+            "ppa_scenes": 0.5367,
+            "sts_social": 0.9018,
+            "auditory": 0.7172
+          },
+          "auditory_with_audio": 0.7331,
+          "auditory_without_audio": 0.493
+        },
+        {
+          "t": 11,
+          "engagement_overall": 0.444,
+          "regions": {
+            "ffa_faces": 0.3088,
+            "eba_bodies": 0.3512,
+            "ppa_scenes": 0.352,
+            "sts_social": 0.3331,
+            "auditory": 1.0
           },
           "auditory_with_audio": null,
           "auditory_without_audio": null
