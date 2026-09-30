@@ -8,7 +8,6 @@
 ### In scope
 - Autoscaling on the SQS queue, standing at zero; up to two workers for experiments
 - Visibility timeout 120 s with a heartbeat, fast failure release, and Spot-interruption and shutdown handling
-- Dead-letter queue after two receive attempts
 - S3-based job status and Flask status/result endpoints
 - Duplicate-safe processing of multi-record and repeated messages
 - Real client-side polling UI
@@ -52,7 +51,7 @@ Scale on the whole queue, including messages being worked on. Scaling only on *v
 
 ## 3. Queue changes (Terraform, on M1's queue)
 - **Visibility timeout 120 s** (was 900 s). The §6 heartbeat keeps long jobs invisible; a dead worker's job is retried within about two minutes.
-- **Dead-letter queue** with `maxReceiveCount = 2`. Remove M1's `# TODO(M2b)` comment.
+- The dead-letter queue (`maxReceiveCount = 2`) already exists (M2a §4h). This milestone only reads its message count for the experiments' reliability numbers.
 
 ## 4. Job status tracking
 Status objects at `status/{job_id}.json` in the same bucket:
@@ -132,7 +131,7 @@ Add to the suite, written first against §1a:
 
 ## 10. File layout additions
 ```
-infra/terraform/          MODIFIED: scale-out/in alarms and policies, DLQ, 120 s visibility, IAM additions
+infra/terraform/          MODIFIED: scale-out/in alarms and policies, 120 s visibility, IAM additions
 neurolens/worker.py       MODIFIED: status writes, SKIPPED, Heartbeat, release, SIGTERM shutdown
 neurolens/storage.py      MODIFIED: result_exists, get_result, get_status, put_status
 neurolens/web/app.py      MODIFIED: /api/jobs/<id>/status and /api/jobs/<id>/result

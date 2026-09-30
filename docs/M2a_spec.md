@@ -15,14 +15,14 @@ Also run `aws ec2 describe-instance-type-offerings --location-type availability-
 - VPC with private subnets for workers, a NAT instance for outbound traffic, and a free S3 gateway endpoint
 - Launch Template + Auto Scaling Group of Spot GPU workers, standing at zero, with **no scaling policy yet** (a worker is started by hand, §4d)
 - systemd unit that pulls the latest code on every start; UserData that pulls weights and writes config on first boot
-- Cost guards: a worker that shuts its instance down when idle or broken, and an email alarm for a long-running GPU
+- Cost guards: a worker that shuts its instance down when idle or broken, an email alarm for a long-running GPU, and a retry cap (dead-letter queue, §4h) so a job that keeps failing stops after two attempts instead of repeating real GPU inference
 - `deploy_code.sh` for code updates without an image rebuild
 - Results written to S3 with a conditional write, instead of M1's local output folder
 - Start/stop scripts that keep idle cost near zero
 - A fake-mode wiring rehearsal on a cheap CPU instance, then the real-model check deferred from M1
 
 ### Out of scope
-- **M2b:** autoscaling, two workers, dead-letter queue, 120 s visibility timeout with heartbeat, fast failure release, graceful shutdown on Spot interruption, job-status objects and endpoints, the polling UI, and Experiments 1–2. Until M2b, a Spot interruption or crash simply means the message reappears after M1's 900 s visibility timeout.
+- **M2b:** autoscaling, two workers, 120 s visibility timeout with heartbeat, fast failure release, graceful shutdown on Spot interruption, job-status objects and endpoints, the polling UI, and Experiments 1–2. Until M2b, a Spot interruption or crash simply means the message reappears after M1's 900 s visibility timeout.
 - **M3:** Aurora, user accounts, credits/billing, Google sign-in, the web tier's load balancer.
 - EKS/Kubernetes, containers, image registries.
 
@@ -120,6 +120,9 @@ A CloudWatch alarm on the ASG's `GroupInServiceInstances` > 0 continuously for *
 ### 4g. Configuration additions (`config.sample.json`)
 `worker.idle_exit_minutes` (absent means never exit on idle; UserData sets 30 on AWS).
 
+### 4h. Retry cap (dead-letter queue, Terraform on M1's queue)
+Real inference costs money, and M1's queue would redeliver a permanently failing job every 900 s for days. Add a **dead-letter queue** (a side queue that parks a message after repeated failures) named `<queue_name>-dlq`, SQS-managed encryption on, message retention 14 days, and a **redrive policy** on the job queue with `maxReceiveCount = 2`: a message received twice without being deleted moves to the dead-letter queue and is never retried again. Remove M1's `# TODO(M2b)` comment on the queue. With the 900 s visibility timeout a failing job is given up on after about 15 minutes (M2b shortens that with its heartbeat). SQS moves the message itself, so the worker's IAM needs no access to the dead-letter queue. To inspect a parked job: `aws sqs receive-message --queue-url <dlq url>`; to retry after a fix, use the console's "Start DLQ redrive". The name starts with `neurolens-`, so the deploy user's scoped policy already covers it.
+
 ## 5. Code deployment (`infra/deploy_code.sh`)
 ```bash
 #!/usr/bin/env bash
@@ -191,6 +194,7 @@ tests/                              MODIFIED: §8 tests
 11. The §4f alarm exists and its email subscription is confirmed.
 12. `terraform apply` run twice reports no changes the second time.
 13. `FAKE_INFERENCE=1 pytest` passes locally and in CI, including the §8 tests, and the tests were committed before the implementation.
+14. A job forced to fail twice lands in the dead-letter queue and is not retried again. Force it by starting the rehearsal worker with a `paths.output` that cannot be created: every job then fails before any work, so the test costs nothing. Fix the path afterwards and confirm a new job completes.
 
 ## 11. Between sessions, idle cost and teardown
 - End every working session with `stop_work.sh`.
