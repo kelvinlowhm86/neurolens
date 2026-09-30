@@ -58,7 +58,7 @@ The usability study itself (run with a Google Form and a moderator, no in-app st
   Never Flask's development server. `pull_web_code.sh` works like M2a's worker pull, but from `code-web/latest.zip`; it installs `requirements/web.txt` into `/opt/neurolens/venv` only when that file's hash has changed.
 - `infra/deploy_web_code.sh` (refuses uncommitted changes, like `deploy_code.sh`) does two things:
   1. **Server bundle:** `git archive` of `app.py`, `neurolens`, `pyproject.toml`, `requirements`, `infra/neurolens-web.service` and `infra/pull_web_code.sh` to `code-web/latest.zip` and `code-web/latest.revision`. The worker and web bundles never overwrite each other.
-  2. **Site files:** syncs `static/index.html` to `site/index.html`, `static/` to `site/static/`, and `data/samples.json`, `data/output/` and the local `data/videos/` (not in git) to `site/data/`, then invalidates the CloudFront cache (`/*`; the first 1,000 invalidation paths each month are free).
+  2. **Site files:** syncs `static/index.html` to `site/index.html`, `static/` to `site/static/`, and `data/samples.json`, `data/output/` and only the clips listed in `data/videos/SOURCES.md` (open-licensed; third-party ads are never published) to `site/data/`, then invalidates the CloudFront cache (`/*`; the first 1,000 invalidation paths each month are free).
 - UserData (templated, first boot):
   - Install Python 3.12 with `dnf` and create the venv.
   - Download `code-web/latest.zip` once, and install the service unit and `pull_web_code.sh` from it.
@@ -218,7 +218,7 @@ tests/                             MODIFIED: §9
 - CloudFront: free tier (1 TB out and 10 million requests a month).
 - Web `t4g.micro` and NAT `t4g.nano`: about $0.015 an hour together, only while started.
 - Load balancer: about $0.55 a day while it exists (it bills by the hour even when no server is behind it), from shortly before the study sessions until after the presentation (M4 §3).
-- S3 site files: a few hundred MB of sample videos, cents a month.
+- S3 site files: a few tens of MB of open-licensed sample clips, cents a month.
 - Parameter Store standard parameters: free.
 - Experiment 3 cloud leg: up to 1–2 GPU hours on Spot if Experiment 1 doesn't already cover it; flagged before running.
 

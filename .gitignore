@@ -32,6 +32,7 @@ hub/
 # directory itself must stay un-excluded.
 /data/videos/*
 !/data/videos/README.md
+!/data/videos/SOURCES.md
 
 # ─── Generated output ──────────────────────────────────────────────────────
 /output/

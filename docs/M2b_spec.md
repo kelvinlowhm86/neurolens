@@ -102,7 +102,7 @@ Replace the `setInterval`-based fake progress text in `analyseVideo()` with:
   - **`experiment-3`**: `runs.csv`: `environment` (`cloud` or `onprem`), `gpu, clip_seconds, run_index, wall_ms`. Cloud rows may be copied from an Experiment 1 series, named in the manifest's `source_series`.
   - **`study`**: see M4 §4.
   - `job_label` is a short label (`J1`, `J2`, …) unique within the run, never a job ID.
-- **Experiment 1 (latency)** covers the stages the report promises: upload → queue wait → processing stages → result fetch → client render, for 15 s, 30 s and 60 s test videos (at least 3 runs each).
+- **Experiment 1 (latency)** covers the stages the report promises: upload → queue wait → processing stages → result fetch → client render, for 15 s, 30 s and 60 s test videos (at least 3 runs each), cut with ffmpeg from open-licensed videos and listed in `data/videos/SOURCES.md`.
   - `experiments/latency_run.py <clip>` does one run like a browser would: presign, upload via the presigned POST (timed), poll status every 2 s until `done`, fetch the result (timed). It saves the upload and fetch times and the job's `stages` list.
   - Queue wait = first stage time − upload end. Processing stages come from `stages`.
   - Client render: the frontend records the time from receiving the result to the chart being drawn in `window.neurolensTimings.render_ms`; read it in the browser console on 3 runs per clip length and add it to the run's CSV by hand.

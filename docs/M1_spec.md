@@ -62,7 +62,7 @@ Place this comment above `max_duration` in `neurolens/settings.py`:
 Fake mode does **not** exercise model loading, so no single check proves it. Use all three:
 1. **Golden test (done in M0).** It must keep passing unchanged.
 2. **Real-import check (optional, laptop CPU).** In a separate venv with `requirements/model.txt` installed, call `neurolens.inference.load_model()` in real mode far enough to set the HF environment variables and run `TribeModel.from_pretrained(...)` (~1 GB checkpoint), without calling `predict()`. This exercises the fragile "set env vars before any HF import" ordering and the dependency pins M0 chose. `tribev2` on macOS/CPU is untested; if it will not install, skip this layer and rely on layer 3.
-3. **Real run (required, deferred to M2a).** On M2a's first GPU boot, run one real inference through S3 → SQS → worker on a sample video and compare the result with that video's entry in `data/samples.json` (produced by the original pipeline), allowing for small floating-point differences. This is the final proof.
+3. **Real run (required, deferred to M2a).** On M2a's first GPU boot, run one real inference through S3 → SQS → worker on a video with speech and check that the output is sane and repeatable (M2a §7). This is the final proof.
 
 ## 2. Configuration: shared settings in `config.json`, secrets and identifiers in `.env`
 One rule: **behaviour settings are shared; anything specific to a person or a deployment is not.**
@@ -254,7 +254,7 @@ requirements/       MODIFIED: boto3 (web, worker), moto (dev)
 13. `/api/analyse` is gone and the web tier no longer imports `neurolens.inference` (§7).
 14. `terraform destroy` (after emptying the bucket) removes every M1 resource; the Terraform state bucket remains.
 
-**Deferred to M2a (not an M1 gate):** on M2a's first GPU boot, one real-model job through S3 → SQS → worker on a sample video, compared against that video's entry in `data/samples.json` (§1b layer 3).
+**Deferred to M2a (not an M1 gate):** on M2a's first GPU boot, one real-model job through S3 → SQS → worker, checked as in M2a §7 (§1b layer 3).
 
 ## 10. Explicitly not in this milestone
 No auth, no billing/credit debiting, no GPU (all M1 work runs in fake mode), no GPU containerization/AMI, no ASG, no VPC or NAT, no Aurora, no result persistence beyond the local output folder, no DLQ, no job-status polling UI. All of these are named in M2a/M2b/M3 in the roadmap — don't let the agent pull them forward "for completeness."

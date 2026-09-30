@@ -31,7 +31,7 @@ Also run `aws ec2 describe-instance-type-offerings --location-type availability-
 
 **Build instance permissions:** its own IAM instance profile, `neurolens-build`: `ssm:GetParameter` on `/neurolens/hf_token`; `s3:GetObject` on `code/*` and `smoke/*`; `s3:PutObject` and `s3:GetObject` on `models/*`; `s3:ListBucket` limited to `models/`; the AWS-managed SSM core policy.
 
-The script (AWS CLI + shell), given the path of one local sample video that contains speech:
+The script (AWS CLI + shell), given the path of one local video that contains speech (§7: the open-licensed Sintel trailer):
 1. Uploads that clip to `s3://<bucket>/smoke/clip.mp4` (never expires; a few MB).
 2. Launches a temporary **`g6e.xlarge` on-demand** instance from the **AWS Deep Learning Base GPU AMI (Ubuntu 22.04)** (NVIDIA driver and CUDA, no preinstalled frameworks, so the image stays smaller), in the VPC's **public** subnet with a temporary public IP. It downloads ~20 GB from HuggingFace, which must not go through the small NAT instance. `torch` 2.6's PyPI wheels bundle their own CUDA 12.4 libraries, so only the NVIDIA driver version matters: confirm it supports CUDA 12.4.
 3. Uses SSM Run Command (no key pair) to:
@@ -147,11 +147,13 @@ From M2a on, the worker writes each result to `results/{job_id}.json` instead of
 - Results are read with `aws s3 cp` for now; M2b adds the web endpoints.
 
 ## 7. Real-model check (deferred from M1)
-On the first GPU boot, upload one sample video through the web app's presign flow, let the worker process it, and compare its `results/{job_id}.json` with that video's entry in `data/samples.json`:
-- `experiments/compare_with_samples.py <result.json> <sample_id>` reads `data/samples.json`, compares every `timesteps` column row by row, and prints the largest absolute difference per column. Exit code **0** if every column differs by at most **0.02**, **1** if any exceeds it (or the row counts differ), **2** for bad input (missing file, unknown sample ID).
-- Pick a sample with no `None` rows (e.g. `7 Apr_CHOPS-Luckin`), because for the others the stored auditory comparison columns were made with the notebooks' rescale-first maths and differ by design (M0 §2).
-- A difference above 0.02 is not automatically a bug (the stored samples may have come from a different `tribev2` or `numpy` version), but it must be explained in the build log before M2b starts.
-- Record the job's wall-clock time and peak GPU memory from the result's `gpu` field.
+On the first GPU boot, upload one video with speech that we have the rights to (the open-licensed Sintel trailer, about 52 s; record its title, URL and licence in `data/videos/SOURCES.md`) through the web app's presign flow and let the worker process it. There are no stored reference numbers to compare against, so the check is that the real pipeline ran and its output is sane and repeatable:
+- The job finishes: `results/{job_id}.json` exists, `fake_inference` is absent and `gpu` is present.
+- `duration_seconds` and the number of `timesteps` equal the clip's length rounded up; every value is between 0 and 1; `engagement_overall` and the five region columns are not constant (maximum above minimum).
+- The same clip run a second time agrees with the first run to within 0.001 on every value. A larger gap is not automatically a bug but must be explained in the build log before M2b starts.
+- The worker log shows all three encoders loaded (video, audio, and text including the gated Llama 3.2 model), as in §2 step 4.
+- Record the job's wall-clock time and the peak GPU memory from the `gpu` field, for the cost figures in M2b and M4.
+These are read by hand from the result files (a few lines of Python pasted into the build log is fine); no script is added to the repo.
 
 ## 8. Tests (`FAKE_INFERENCE=1 pytest`, moto)
 Add to M1's suite, written first:
@@ -159,7 +161,6 @@ Add to M1's suite, written first:
 - The worker publishes through `put_result`, never to the local output folder, returns `DUPLICATE` and deletes the message when `put_result` returns `False`. M1's "valid video" test is changed by the test-writing agent to read `results/` in moto instead of the local folder (a spec'd test change).
 - `run()` returns after `worker.idle_exit_minutes` with no messages (use a tiny value and a stubbed clock or short poll wait in the test), and never returns on idle when the setting is absent.
 - `resolve_paths` keeps absolute config paths (as UserData writes them) unchanged instead of joining them to the root.
-- `compare_with_samples.py`: a result file built from a sample's own `timesteps` exits 0 with zero differences; the same file with one value shifted by 0.05 exits 1; an unknown sample ID exits 2.
 
 ## 9. File layout additions
 ```
@@ -176,7 +177,6 @@ infra/
   stop_work.sh                      NEW: ASG to 0, stop NAT instance, confirm nothing running
 neurolens/storage.py                MODIFIED: put_result
 neurolens/worker.py                 MODIFIED: results to S3, Outcome.DUPLICATE, idle exit
-experiments/compare_with_samples.py NEW
 tests/                              MODIFIED: §8 tests
 ```
 
