@@ -1,41 +1,45 @@
 # NeuroLens — M2 Implementation Spec
-**Milestone:** GPU AMI Provisioning & Elastic Autoscaling (9 – 19 Oct)
-**Builds on:** M1 (S3 presign upload, SQS decoupling, local `worker.py` running `inference.py` synchronously on one machine, SQS queue provisioned with a 120s visibility timeout). M2 replaces the worker's execution environment with an autoscaled EC2 Spot fleet and adds real job-status tracking so the frontend can poll something true.
+**Milestone:** GPU Image, Networking & Elastic Autoscaling (9 – 19 Oct)
+**Builds on:** M1 (Terraform-managed S3 bucket and SQS queue in `us-east-1`, presigned-POST upload, `inference.py` with the `FAKE_INFERENCE` switch, `worker.py` running on a laptop, pytest + moto suite). M2 moves the worker onto autoscaled Spot GPU machines in a private network, and adds real job-status tracking so the frontend can poll something true.
+
+**Ground rules for all of M2:** region `us-east-1` (the `g6e` GPU family is not offered in Singapore). Python 3.11+ (required by the official `tribev2` repo). All infrastructure is Terraform in `infra/terraform/`, tagged `Project=neurolens`, `Milestone=M2`. Run AWS commands with the `neurolens` CLI profile only.
 
 ## 1. Scope
 ### In scope
-- AMI build script: base Deep Learning AMI + heavy deps (PyTorch/CUDA, `tribev2`, `ffmpeg`, model weights) baked in
-- A systemd unit that runs `worker.py` directly on the host, inside a pre-baked Python virtualenv, started automatically on boot
-- Launch Template + Auto Scaling Group on `g6e.2xlarge` Spot, CloudWatch target-tracking on SQS backlog
-- UserData script: pulls the two application files (`worker.py`, `inference.py`) from an S3 code bundle, places them where the systemd unit expects them, (re)starts the service
-- A `deploy_code.sh` convenience script (zip + `aws s3 cp` in one command) for pushing code updates without an AMI rebuild
-- SQS DLQ wiring after two total processing attempts (`maxReceiveCount=2`)
-- S3-based job-status mechanism so Flask can answer real status queries
-- Atomic per-job claim via S3 conditional writes, preventing duplicate GPU runs from SQS at-least-once delivery
-- **SQS visibility heartbeating and fast failure release** (§8) — replaces a single passive wait of up to the full 120s visibility timeout with an active, short-interval renewal, so a genuinely dead worker's job becomes retryable within roughly that same ~120s window instead of only being detectable after it silently lapses. Given NeuroLens's 'seconds to minutes' turnaround as a product claim, minimizing this detection latency matters directly to user experience.
-- Graceful Spot-interruption handling in `worker.py`, using the same proactive-release mechanism as general failure handling
-- Real client-side polling UI replacing the legacy fake progress timer
-- Per-stage latency instrumentation (Experiment 1) and a basic Locust script (Experiment 2)
+- GPU machine image (AMI) with software only; model weights stored once in S3 and copied to the machine's local NVMe disk at boot
+- VPC with private subnets for workers, a NAT instance for outbound traffic, and a free S3 gateway endpoint
+- Launch Template + Auto Scaling Group of Spot GPU workers, scaled on SQS backlog, standing at zero
+- systemd unit running `worker.py` from a pre-baked virtualenv; UserData that pulls code and weights on every boot
+- `deploy_code.sh` for code updates without an image rebuild
+- Dead-letter queue after two receive attempts
+- S3-based job status so Flask can answer real status queries
+- Duplicate-safe result publication via a conditional S3 write
+- SQS visibility heartbeat, fast failure release, and Spot-interruption handling
+- Start/stop scripts that keep idle cost near zero
+- Real client-side polling UI
+- Experiment 1 instrumentation and Experiment 2 (Locust) script
+- The real-model check deferred from M1
 
-### Out of scope (explicitly deferred to M3)
-- Aurora, real user accounts, credit balances/billing, SSO
-- EKS/Kubernetes, any container runtime, image registries
+### Out of scope (M3)
+- Aurora, user accounts, credits/billing, Google sign-in, the web tier's load balancer
+- EKS/Kubernetes, containers, image registries
 
-## 2. AMI build (`infra/build_ami.sh`)
+## 2. GPU image build (`infra/build_ami.sh`)
 A script (AWS CLI + shell) that:
-1. Launches a temporary `g6e.2xlarge` on-demand instance from an official AWS Deep Learning AMI (Ubuntu-based, NVIDIA driver + CUDA pre-installed — confirm the CUDA version matches what `torch` needs)
-2. Uses SSM Run Command (no key pair needed for a throwaway build instance) to:
-   - Create a Python virtualenv at a fixed path (e.g. `/opt/neurolens/venv`)
+1. Launches a temporary **`g6e.xlarge` on-demand** instance from an official AWS Deep Learning AMI (Ubuntu, NVIDIA driver + CUDA pre-installed — confirm the CUDA version matches what `torch` needs), in the VPC's **public** subnet with a temporary public IP. It downloads ~20 GB from HuggingFace, which must not go through the small NAT instance.
+2. Uses SSM Run Command (no key pair) to:
+   - Install Python 3.11 and create a virtualenv at `/opt/neurolens/venv`
    - Pin `numpy` **before** installing `tribev2`, exactly as `README.md`'s setup steps specify — do not reorder
    - Install `requirements.txt`, then `tribev2[plotting]` via the documented `git+https://...` install, then `ffmpeg` via apt
-   - Set the same `HF_HOME`/`HF_HUB_CACHE`/etc. env vars `inference.py` already sets, pointed at an on-instance directory (e.g. `/opt/neurolens/models`)
-   - Run a one-off Python invocation that imports enough of `inference.py` to trigger `TribeModel.from_pretrained(...)` and the Destrieux atlas download, so weights land on disk during the build, not at every boot. This step needs a valid `HF_TOKEN` — pass it via an SSM `SecureString` parameter read at build time; delete any file containing it before the AMI snapshot step
-3. Verifies the venv can run a short inference smoke test against a tiny sample clip
-4. Stops the instance, `aws ec2 create-image`, tags it with a version (`neurolens-worker-v{n}`)
-5. Terminates the temporary instance
-6. Prints the resulting AMI ID
+   - Install the systemd unit (§3), disabled
+3. **Uploads model weights to S3 once.** On the build instance, with `HF_TOKEN` read from the Parameter Store `SecureString` `/neurolens/hf_token`, set the same `HF_HOME`/`HF_HUB_CACHE`/etc. env vars `inference.py` sets, and `NILEARN_DATA`, all pointed inside one scratch directory (so the Destrieux atlas is synced too and never downloaded at boot); trigger `TribeModel.from_pretrained(...)`, the encoder downloads, and the Destrieux atlas fetch; then `aws s3 sync` that directory to `s3://<bucket>/models/`. The `models/` prefix is not covered by any expiry rule. Skip the download if `models/` is already populated (`--refresh-weights` forces it).
+4. Runs a short inference smoke test on a tiny sample clip and **records peak system RAM during model load and inference** (e.g. sample `free -m` / `/proc/meminfo` every second). Print it with the AMI ID. This decides the worker instance size (§4).
+5. Deletes the weights scratch directory and every file that held `HF_TOKEN`, so the image contains **software only**.
+6. Stops the instance, `aws ec2 create-image`, tags it `neurolens-worker-v{n}`, terminates the instance, prints the AMI ID.
 
-## 3. systemd unit (`infra/neurolens-worker.service`, baked into the AMI)
+**Comparison image (one-off).** `build_ami.sh --bake-weights` builds a second image that keeps the weights on the root disk. It is used once, for the cold-start comparison in §10, then deregistered with its snapshot. Reason: disks restored from a snapshot load lazily, so the first read of ~20 GB may be slow; the comparison measures whether copying from S3 is faster.
+
+## 3. systemd unit (`infra/neurolens-worker.service`, baked into the image)
 ```ini
 [Unit]
 Description=NeuroLens GPU worker
@@ -51,36 +55,47 @@ EnvironmentFile=/opt/neurolens/env.conf
 [Install]
 WantedBy=multi-user.target
 ```
-- Baked into the AMI as a **disabled** unit — do not enable it at build time. UserData (§4) writes both `config.json` and `env.conf`, then enables and starts the service only once both are confirmed present.
-- `env.conf` is created fresh by UserData on every boot, not baked — it holds instance-specific values (bucket name, queue URL, region). Never bake AWS resource identifiers into the AMI itself; that would force a rebuild every time a resource is recreated
+- Baked in **disabled**. UserData (§4c) writes `config.json` and `env.conf`, then enables and starts it.
+- `env.conf` is written fresh on every boot (bucket name, queue URL, region, `HF_HOME` and `NILEARN_DATA` under `/opt/neurolens/models`, `HF_HUB_OFFLINE=1`). Never bake AWS resource identifiers into the image.
 
-## 4. Launch Template + ASG (`infra/provision_m2.sh`, extends M1's provisioning script)
-- Launch Template referencing the AMI from §2, instance type `g6e.2xlarge`, Spot market options (max price = on-demand price as a safe default)
-- IAM instance profile scoped explicitly per-prefix, not just per-bucket:
-  - `s3:GetObject` on `uploads/*`, `code/*`, `claims/*`, `status/*`, and `results/*` (worker downloads videos, reads claims for staleness checks, and must check completed results before a duplicate claim; M3 also uses result reads for settlement reconciliation)
-  - `s3:PutObject` on `claims/*`, `status/*`, `results/*`, and `experiments/*` (worker writes claims, status updates, final conditional results, and versioned experiment artifacts)
-  - `s3:DeleteObject` on `claims/*` only (conditional release of the worker's own claim, §7/§8 — do not omit this)
-  - `sqs:ReceiveMessage`/`DeleteMessage`/`ChangeMessageVisibility` on the job queue
-  - `ssm:GetParameter` (plus `kms:Decrypt` on the relevant key, if the SecureString uses a customer-managed key) for `HF_TOKEN` and config retrieval
-- UserData script (bash, embedded in the Launch Template), run on every boot, in this order:
-  1. `set -euo pipefail`
-  2. `aws s3 cp s3://<bucket>/code/latest.zip /tmp/code.zip && unzip -o /tmp/code.zip -d /opt/neurolens/app`
-  3. Write `/opt/neurolens/env.conf` from instance tags or `aws ssm get-parameter` calls (bucket name, queue URL, region).
-  4. Construct `/opt/neurolens/app/config.json` (matching `config.sample.json`'s schema — paths, `model.repo_id`, `max_video_duration_seconds`, `hf_download_timeout`), populated from instance tags/SSM the same way `env.conf` is. Fetch `HF_TOKEN` via `aws ssm get-parameter --name <param> --with-decryption` and inject it into `config.json`'s `hf_token` field. Immediately run `chmod 600 /opt/neurolens/app/config.json`. Do not log `HF_TOKEN` or write it to any file other than `config.json`.
-  5. Verify `env.conf` and `config.json` before starting the worker: `test -s /opt/neurolens/env.conf` and `python3 -c "import json; json.load(open('/opt/neurolens/app/config.json'))"`. Exit non-zero with a clear log message if either check fails.
-  6. `systemctl enable --now neurolens-worker`. A later code-only redeploy via `deploy_code.sh` uses `systemctl restart` because the unit is already enabled.
-- ASG default configuration: min=0, max=1, desired=0. This is the standing configuration for normal development, correctness testing, and acceptance criteria 1, 4, 6, and 9; none require more than one concurrent GPU instance.
+## 4. Networking, Launch Template and Auto Scaling (Terraform)
 
-  Raise max to 5 only for the scheduled Experiment 2 saturation sub-test (§10), then reset max to 1 immediately afterward. Target tracking applies regardless of the current max.
+### 4a. Networking
+- One VPC with **two private subnets** (in two availability zones, for Spot capacity) for workers, and **one public subnet** for the NAT instance and the image-build instance.
+- **NAT instance:** a `t4g.nano` Amazon Linux 2023 instance in the public subnet, with an Elastic IP, IP forwarding and `iptables` masquerade set up in its user data, and source/destination check disabled. The private subnets' route table sends `0.0.0.0/0` to it. It carries only small API traffic (SQS, Parameter Store, CloudWatch). Tag it `Role=nat` so the start/stop scripts can find it.
+- **S3 gateway endpoint** (free) on the private route table, so video, code and weight downloads go straight to S3, not through the NAT instance.
+- **Worker security group:** no inbound rules; all outbound allowed. Workers have no public IP. Reason: servers with no public address can't be reached from the internet even if a firewall rule is later misconfigured.
 
-- **Ownership boundaries and convergent provisioning:** `provision_m1.sh` owns the S3 bucket, upload/task SQS queue, `uploads/` S3 notification, and its base queue policy. `provision_m2.sh` owns the DLQ/redrive policy, Launch Template, ASG/scaling policy, and worker IAM role/instance profile; it must never create or modify M1's bucket or the `uploads/` S3 notification configuration. The one exception is M1's upload queue's `RedrivePolicy` attribute: `provision_m2.sh` may set this (via `aws sqs set-queue-attributes`) to point at the new DLQ, but must first read the queue's current attributes with `get-queue-attributes`. If a `RedrivePolicy` already exists and points at a different DLQ ARN, the script must fail with a clear error rather than silently overwriting it — `SetQueueAttributes` replaces the entire `RedrivePolicy` value, it does not merge fields within it. No other attribute of M1's queue (e.g. `VisibilityTimeout`) may be touched.
+### 4b. Launch Template and Auto Scaling Group
+- Launch Template: the software-only AMI from §2; `instance_type` is a Terraform variable, default **`g6e.xlarge`**. Switch to `g6e.2xlarge` only if §2's peak-RAM measurement leaves less than ~4 GB free on the 32 GB `xlarge`; record the measurement and the choice in the build log. Spot market options (max price = on-demand price). No public IP; private subnets only.
+- IAM instance profile, scoped per prefix:
+  - `s3:GetObject` on `uploads/*`, `code/*`, `models/*`, `status/*`, `results/*`; `s3:ListBucket` limited to the `models/` prefix (for `aws s3 sync`)
+  - `s3:PutObject` on `status/*`, `results/*`, `experiments/*`
+  - `s3:DeleteObject` on `uploads/*` only (oversize rejection, M1 §4a)
+  - `sqs:ReceiveMessage`, `DeleteMessage`, `ChangeMessageVisibility`, `GetQueueAttributes` on the job queue
+  - `ssm:GetParameter` for `/neurolens/*` (plus `kms:Decrypt` if a customer-managed key is used)
+  - The AWS-managed SSM core policy, so instances can be reached with Session Manager (no SSH, no key pair)
+- Auto Scaling Group: standing configuration **min 0 / max 1 / desired 0**. Target tracking on SQS backlog (visible messages). Terraform `lifecycle { ignore_changes = [desired_capacity, min_size, max_size] }` so the start/stop scripts (§4d) and Terraform don't fight.
+- Confirm empirically that target tracking holds at 0 when the queue is empty; note it if a scheduled nudge is needed.
+- Queue changes (Terraform, on M1's queue): **visibility timeout 120 s** (the §8 heartbeat keeps long jobs invisible), and a **dead-letter queue** with `maxReceiveCount = 2`.
+- **Quota:** 2 × `g6e.xlarge` = 8 Spot vCPUs; 2 × `g6e.2xlarge` needs 16. Check the approved "All G and VT Spot Instance Requests" quota before raising max to 2.
 
-  `provision_m2.sh` must validate M1 resources by configured bucket name and queue URL/ARN, not tags: confirm the bucket and queue exist, and confirm `get-bucket-notification-configuration` contains exactly the `uploads/` prefix routed to the configured queue ARN. If not, fail with a clear M1-provisioning error; never call `put-bucket-notification-configuration` from M2, since that configuration is a single replaceable document.
+### 4c. UserData (bash, in the Launch Template, every boot, in order)
+1. `set -euo pipefail`; log every step with a timestamp to `/var/log/neurolens-boot.log` (Experiment 2 reads these).
+2. Format and mount the instance-store NVMe disk at `/opt/neurolens/models`.
+3. `aws s3 sync s3://<bucket>/models/ /opt/neurolens/models/` — log its duration.
+4. `aws s3 cp s3://<bucket>/code/latest.zip /tmp/code.zip && unzip -o /tmp/code.zip -d /opt/neurolens/app`
+5. Write `/opt/neurolens/env.conf` (§3) and `/opt/neurolens/app/config.json` (matching `config.sample.json`'s schema) from instance tags / Parameter Store. `chmod 600` both. No `HF_TOKEN` is needed at boot: weights come from S3 and `HF_HUB_OFFLINE=1` is set.
+6. Verify both files: `test -s /opt/neurolens/env.conf` and `python3 -c "import json; json.load(open('/opt/neurolens/app/config.json'))"`. Exit non-zero with a clear message if either fails.
+7. `systemctl enable --now neurolens-worker`.
 
-  `provision_m2.sh` must be convergent for M2-owned resources. It must work both from no M2 resources and after `teardown_m2.sh`: detect existing Launch Template, ASG, scaling policy, DLQ/redrive policy, and worker IAM role/instance profile by stable names/tags; reuse them without duplication; and update the ASG to min=0, desired=0, max=1 on each run.
+### 4d. Start/stop scripts (budget discipline)
+- `infra/start_work.sh`: start the NAT instance, wait until it is running, set the ASG to min 0 / max 1.
+- `infra/stop_work.sh`: set the ASG to min 0 / max 0 / desired 0, wait for workers to terminate, stop the NAT instance, and confirm with a tag-filtered `aws ec2 describe-instances` that no GPU or NAT instance is running. Print a clear "all stopped" line.
+- Run `stop_work.sh` at the end of every working session. Workers cannot reach SQS while the NAT instance is stopped, which is why the ASG max is 0 then.
 
-  Tag every M2-created Launch Template, ASG, IAM role/instance profile, CloudWatch alarm, and DLQ with `Project=neurolens` and `Milestone=M2` at creation time.
-- Confirm empirically that target tracking actually holds at 0 instances when the queue is empty; some configurations need a scheduled minimum nudge — note if this happens
+### 4e. Wiring rehearsal (before the first GPU boot)
+Set the Launch Template's `instance_type` to a small CPU type (e.g. `t3.large`, on-demand), with `FAKE_INFERENCE=1` in `env.conf`, and a software image without CUDA if the Deep Learning AMI won't boot on it. Use this to debug networking, UserData, the S3 syncs, the systemd unit and scaling for cents instead of dollars. Switch back to the GPU type for real runs.
 
 ## 5. Code deployment (`infra/deploy_code.sh`)
 ```bash
@@ -90,110 +105,111 @@ zip -j /tmp/code.zip worker.py inference.py
 aws s3 cp /tmp/code.zip s3://<bucket>/code/latest.zip
 echo "Deployed. Running instances pick this up on their next restart."
 ```
-A single-command way to push `worker.py`/`inference.py` updates without rebuilding the AMI. An optional `infra/rolling_restart.sh` that SSM-restarts the service on all currently-running instances is a nice-to-have, not required for acceptance.
+Pushes `worker.py`/`inference.py` updates without rebuilding the image. An optional `infra/rolling_restart.sh` that SSM-restarts the service on running instances is a nice-to-have.
 
 ## 6. Job status tracking
-Status objects at `status/{job_id}.json` in the same S3 bucket:
+Status objects at `status/{job_id}.json` in the same bucket:
 ```json
-{ "job_id": "...", "status": "queued|claimed|processing|done|failed",
+{ "job_id": "...", "status": "queued|processing|done|failed",
   "stage": "downloading|inference_full|stripping_audio|inference_noaudio|extracting_roi|null",
   "updated_at": "2026-10-14T03:22:10Z",
+  "stages": [{"stage": "downloading", "at": "2026-10-14T03:22:10Z"}],
   "error": null }
 ```
-- `job_id` reuses the UUID from the presign step
-- The worker writes `queued`→`claimed` immediately on receiving the SQS message, before starting any real work
-- Worker updates `stage` at each pipeline transition; also log these transitions with timestamps (CloudWatch or a local log) for Experiment 1's latency analysis
-- Results are written to `results/{job_id}.json` using a conditional `put_object` with `IfNoneMatch="*"`. This, not the `claims/` lease, is the canonical terminal-completion gate: a completed result is immutable, so a delayed duplicate delivery cannot publish a replacement.
-- Write order matters: attempt the conditional results write first. Only if it succeeds, write `status: "done"` to `status/{job_id}.json`. If the results write fails because the result already exists, abandon publication without error and do not overwrite status. A non-owner or retrying worker must never overwrite terminal `done` status.
-- New Flask endpoint: `GET /api/jobs/{job_id}/status` — first checks whether `results/{job_id}.json` exists. If it does, respond with `status: "done"` regardless of the status object. Only if no result exists does the endpoint read `status/{job_id}.json`; return 404 if neither exists (frontend treats 404 as "still queued," not an error). This makes the result object authoritative across a crash after result creation but before the status update.
+- `job_id` is the UUID from the presign step.
+- The worker writes `processing` as soon as it takes a message, before any real work, and updates `stage` at each pipeline transition, appending to `stages` (Experiment 1 reads it).
+- Results go to `results/{job_id}.json` with a conditional `put_object(..., IfNoneMatch="*")`. This is the completion gate: a completed result is immutable, so a duplicate delivery cannot replace it.
+- Write order: attempt the conditional result write first. Only if it succeeds, write `status: "done"`. If it fails because the result already exists, stop without error and do not touch status. Never overwrite a terminal `done`.
+- New Flask endpoint `GET /api/jobs/{job_id}/status`: if `results/{job_id}.json` exists, return `done` regardless of the status object; otherwise return `status/{job_id}.json`; return 404 if neither exists (the frontend treats 404 as "still queued").
+- New Flask endpoint `GET /api/jobs/{job_id}/result`: returns the result JSON from S3.
 
-## 7. Preventing duplicate GPU runs
-An S3 event notification delivered via SQS can contain multiple `Records` in one message. Parse every record independently: ignore records outside the `uploads/` prefix; for uploads, check for an existing `results/{job_id}.json` before claiming. If it exists, mark that record already handled and continue to the next record. Only delete the SQS message after every record is ignored, already complete, successfully processed, or has lost a claim race — never delete a whole message after inspecting only one record.
+## 7. Duplicate deliveries
+SQS may deliver a message more than once, and one S3 event message can hold several `Records`. For each message:
+- Handle every record independently. Ignore records outside `uploads/`.
+- If `results/{job_id}.json` already exists, the record is done: skip it.
+- Otherwise process it and publish with the conditional write (§6). If that write loses, another worker finished first: discard this output silently.
+- Delete the SQS message only after every record in it is ignored, skipped, or published (or lost the conditional write). Never delete a whole message after handling only one record.
 
-For each new upload record, atomically claim the job with a lease:
-```python
-s3.put_object(Bucket=..., Key=f"claims/{job_id}.json",
-              Body=json.dumps({"worker_id": ..., "claimed_at": ..., "lease_expires_at": ...}),
-              IfNoneMatch="*")
-```
-The ETag returned by a successful conditional write is the fencing token. Store it in memory as `claim_version`; timestamps and `worker_id` are informational only.
-
-Set `lease_expires_at` to now + 90 seconds, deliberately shorter than the queue's 120-second visibility timeout. On a precondition failure, read the existing claim and ETag:
-
-- If the lease is still live, another worker owns the job. Mark this record as a lost race and continue processing the remaining records.
-- If the lease is stale, attempt takeover with `put_object(..., IfMatch=<ETag just read>)`. Treat a conflict as a lost race. On success, replace the in-memory `claim_version` with the new ETag.
-
-Before publishing a result, re-read the claim and confirm its ETag still matches `claim_version`. If it does not, abandon publication. The conditional results write in §6 is the final authority: this protocol guarantees one committed result, not necessarily that only one GPU inference ever starts under SQS at-least-once delivery.
+With at most two workers, a duplicate that wastes one GPU run is rare and accepted; results and status are never duplicated. M3 adds a database lock that prevents the duplicate run itself. Do not add S3 lease or claim objects.
 
 ## 8. SQS visibility heartbeat and fast failure release
-The queue's base visibility timeout is 120s — comfortably longer than a single pipeline stage, but short enough that a genuinely dead worker's job becomes retryable quickly rather than sitting invisible for the better part of your entire target end-to-end latency.
+The queue's visibility timeout is 120 s: long enough to cover one heartbeat gap, short enough that a dead worker's job is retried within about two minutes.
 
-**Heartbeat, while a job is legitimately still processing:**
-- On a background thread or between pipeline stages, every 45–60 seconds: (a) call `sqs.change_message_visibility(QueueUrl=..., ReceiptHandle=..., VisibilityTimeout=120)`; and (b) renew the claim with `put_object(..., IfMatch=<current claim_version>)` and `lease_expires_at = now + 90s`. Update `claim_version` with the new returned ETag. Both renewals must occur together.
-- A silently dead worker stops both renewals; its lease expires within 90 seconds and the SQS message becomes visible within roughly 120 seconds.
+**Heartbeat while a job is legitimately processing:** a background thread calls `sqs.change_message_visibility(QueueUrl=..., ReceiptHandle=..., VisibilityTimeout=120)` every 45–60 s. A silently dead worker stops the heartbeat, and the message becomes visible again within about 120 s.
 
-**Fast release on any handled failure — do this instead of letting the timeout lapse passively:**
-- In the worker's top-level exception handler (any failure during download, ffprobe, inference, or ROI extraction): first conditionally delete its own claim with `delete_object(..., IfMatch=<current claim_version>)`, then call `sqs.change_message_visibility(QueueUrl=..., ReceiptHandle=..., VisibilityTimeout=0)`. Log a claim-delete conflict but still release visibility; do not delete the SQS message.
-- **Spot interruption** (background thread polling IMDSv2 for the interruption notice every ~5s): on notice, stop pulling new messages. If an in-flight job cannot plausibly finish in the two-minute warning, perform the same conditional claim delete followed by `VisibilityTimeout=0` release. This is the proactive-release behavior Experiment 2 must observe.
-- In both cases (general failure and Spot interruption bail-out), releasing rather than deleting is what makes the message eligible for immediate redelivery to a healthy worker, and eventually to the DLQ after 2 total receive attempts if the failure keeps recurring
+**Fast release on any handled failure** (download, ffprobe, inference, ROI extraction): in the top-level exception handler, write `status: "failed"` with the error only if no result exists, then call `change_message_visibility(..., VisibilityTimeout=0)` so the message is immediately retryable. Do not delete it; after two receives it moves to the dead-letter queue.
+
+**Spot interruption:** a background thread polls IMDSv2 for the interruption notice every ~5 s. On notice, stop taking new messages. If the in-flight job cannot plausibly finish within the two-minute warning, release it the same way (`VisibilityTimeout=0`). Experiment 2 must observe this proactive release.
 
 ## 9. Frontend: real polling
 Replace the `setInterval`-based fake progress text in `analyseVideo()` with:
-- After the presigned S3 POST succeeds (204 response), poll `GET /api/jobs/{job_id}/status` every 5s
-- Map `status`/`stage` to the existing spinner/detail-line UI — reuse the visual design, drive it from real values
-- On `status: "done"`: fetch results via a new `GET /api/jobs/{job_id}/result` endpoint reading from S3 (workers are remote, ephemeral instances, so results must land in S3, not local disk)
-- On `status: "failed"`: show the real `error` field instead of a generic `alert()`
-- Client-side polling timeout (e.g. 10 minutes with no `done`/`failed`) shows a "taking longer than expected" message — a UI safeguard only, not an authoritative backend timeout. With §8's faster recovery, this should rarely if ever actually trigger under normal failure conditions
+- After the presigned S3 POST succeeds (204), poll `GET /api/jobs/{job_id}/status` every 5 s.
+- Map `status`/`stage` to the existing spinner/detail-line UI — reuse the visual design, drive it from real values.
+- On `done`: fetch `GET /api/jobs/{job_id}/result` and render.
+- On `failed`: show the real `error` field instead of a generic `alert()`.
+- After 10 minutes without `done`/`failed`, show "taking longer than expected" (a UI safeguard only).
 
 ## 10. Experiments instrumentation
-- **Shared artifact contract:** Experiments 1–3 write durable, versioned artifacts to `experiments/<experiment>/<run_id>/` in the project S3 bucket. Each run includes a `manifest.json` with `experiment`, `run_id`, UTC timestamps, code/AMI revision, input clip identifiers, configuration, and output-file names. Experiment-specific CSV/JSON files live beside that manifest. This prefix is outside M1's transient 48-hour lifecycle rules and is the sole input location for M4's consolidation script; do not rely on CloudWatch discovery or an unspecified local path.
-- **Experiment 1:** append (not overwrite) stage transitions with timestamps to the status object or a parallel log, so a script can compute per-stage durations across 15s/30s/60s test videos
-- **Experiment 2:** `locustfile.py` that POSTs to `/api/uploads/presign`, then submits the fixed test video as a multipart form POST (using the returned `url` and `fields`, file field last) to match M1 §4a's presigned-POST upload mechanism, then polls status to completion, run as two distinct sub-tests using §4's temporary max=5 raise for this test only; the standing default is max=1 and is restored afterward.
-  - **Elasticity sub-test (1, 5 concurrent):** confirms ASG scaling, cold-start, and per-worker throughput. Timebox each run and use the 15-second clip for the first pass at each concurrency level before longer clips.
-  - **Saturation sub-test (10, 20 concurrent):** deliberately exceeds the temporarily raised five-instance ceiling to verify graceful queue backpressure, no dropped/duplicated jobs, and full drain after load subsides. This is not a scaling test.
+- **Shared artifact contract:** Experiments 1–3 write versioned artifacts to `experiments/<experiment>/<run_id>/` in the bucket. Each run has a `manifest.json` (`experiment`, `run_id`, UTC timestamps, code/AMI revision, instance type, input clip identifiers, configuration, output-file names), with experiment-specific CSV/JSON beside it. `experiments/*` never expires and is the sole input for M4's consolidation script.
+- **Experiment 1 (latency):** per-stage durations from the `stages` list in status objects, across 15 s / 30 s / 60 s test videos. Analysis script `experiments/latency_breakdown.py`.
+- **Experiment 2 (scaling):** `locustfile.py` POSTs to `/api/uploads/presign`, uploads the fixed test video via the presigned POST (fields first, file last), then polls status to completion.
+  - **Elasticity sub-test (1 and 2 concurrent):** ASG scaling from 0, cold start, per-worker throughput. Use the 15 s clip first.
+  - **Saturation sub-test (5 and 10 concurrent):** exceeds the 2-worker ceiling on purpose, to show the queue absorbing backlog, no dropped or duplicated results, and a full drain afterwards.
+  - Raise the ASG max to 2 only for these runs, then restore it to 1. Cross-reference CloudWatch ASG instance count over time. Inject one manual Spot interruption and confirm redelivery within about 120 s via proactive release.
+  - **Cold-start breakdown:** instance launch → UserData start; S3 weight sync (from the boot log); model load into GPU memory; first job ready. Plus one comparison boot from the `--bake-weights` image, measuring the first full read of the weights from the snapshot-restored disk. Report both; no target number is asserted in advance.
 
-  Cross-reference both sub-tests against CloudWatch ASG instance-count-over-time. The manual Spot-interruption injection must confirm §8's proactive release: redelivery within roughly 120 seconds, not a passive multi-minute lapse.
+## 10a. Tests (`FAKE_INFERENCE=1 pytest`, moto)
+Add to M1's suite:
+- The heartbeat thread calls `change_message_visibility` with 120 while a job runs, and stops when it ends.
+- A handled failure sets status `failed` and releases the message with `VisibilityTimeout=0` without deleting it.
+- A record whose result already exists is skipped with no inference.
+- A lost conditional result write leaves the existing result and `done` status untouched.
+- The status endpoint returns `done` when a result exists even if the status object says otherwise, and 404 when neither exists.
+- A multi-record message is deleted only after all its records are handled.
 
 ## 11. File layout additions
 ```
 neurolens/
 ├── infra/
-│   ├── provision_m1.sh          # (from M1)
-│   ├── build_ami.sh              # NEW
-│   ├── provision_m2.sh           # NEW — launch template, ASG, scaling policy, DLQ redrive
-│   ├── neurolens-worker.service   # NEW — systemd unit, baked into AMI
-│   ├── deploy_code.sh             # NEW
-│   └── teardown_m2.sh             # NEW — scales GPU ASG to 0 and preserves AMI/code bundle
-├── worker.py                      # MODIFIED — claim logic, status writes, visibility heartbeat + fast release (§8), S3 result output
-├── app.py                         # MODIFIED — new /api/jobs/{id}/status and /api/jobs/{id}/result endpoints; continues as M1's local/dev process with s3:GetObject scoped to status/* and results/*
+│   ├── terraform/                  # MODIFIED — VPC, NAT instance, S3 endpoint, DLQ, queue timeout, Launch Template, ASG, IAM
+│   ├── build_ami.sh                # NEW — software-only image; weights to S3; peak-RAM record; --bake-weights
+│   ├── neurolens-worker.service    # NEW — systemd unit, baked into the image
+│   ├── deploy_code.sh              # NEW
+│   ├── start_work.sh               # NEW — start NAT instance, ASG max 1
+│   └── stop_work.sh                # NEW — ASG to 0, stop NAT instance, confirm nothing running
+├── worker.py                       # MODIFIED — status writes, conditional result write, heartbeat + fast release, Spot handling, S3 results
+├── app.py                          # MODIFIED — /api/jobs/{id}/status and /api/jobs/{id}/result
 ├── locustfile.py                   # NEW
 ├── experiments/
-│   └── latency_breakdown.py        # NEW — Experiment 1 analysis script
-└── static/                         # MODIFIED — real polling replaces fake progress timer
+│   └── latency_breakdown.py        # NEW — Experiment 1 analysis
+├── tests/                          # MODIFIED — §10a tests
+└── static/                         # MODIFIED — real polling
 ```
 
 ## 12. Acceptance criteria
-1. `build_ami.sh` produces an AMI where, on boot with UserData supplying real code, `systemctl status neurolens-worker` shows the service running and successfully claiming/processing a real queued job — identical inference output to M1's local worker.
-2. Boot-to-processing-ready time is measured and broken down into its components (instance launch, UserData execution, model-load-to-VRAM), reported in Experiment 2's results — well under the 5–8 minute cold-dependency-pull baseline a from-scratch container/weights pull would require. No specific target number is asserted in advance.
-3. `deploy_code.sh` followed by a new instance launch (or `systemctl restart` on an existing one) picks up new code without any AMI rebuild.
-4. Submitting 2 identical SQS messages for the same job_id (simulate via manual re-send) results in exactly one committed result for that job — verify via the claim fencing token (claim_version/ETag) and final status/result objects, not by assuming GPU inference itself only ran once.
-5. ASG scales 0→N as queue depth increases and back to 0 when drained, observable in CloudWatch/console.
-6. **Killing a worker process mid-job (simulate a crash, e.g. `kill -9` the process) results in the job becoming visible for redelivery within roughly 120s, not 600s** — confirm via a second worker (or a manual `receive-message` call) picking it up shortly after the kill, not after a long wait. Confirm its takeover used a conditional `IfMatch` overwrite of the stale claim and that its claim_version contains the new ETag; if two workers race to take over, at most one succeeds.
-7. Manually terminating a Spot instance mid-job results in the job being picked up by another instance rather than lost, and — per §8 — this happens via a proactive release, not a passive timeout lapse; confirm the message's visibility was explicitly reset to 0 rather than just expiring naturally.
-8. Frontend shows real, changing status text driven by actual job progress, and the real error message on failure instead of a generic alert.
-9. DLQ receives a message after 2 failed processing attempts on the same job (force a worker exception on a test job to verify) — and confirm this now happens noticeably faster than it would have under the old fixed 600s timeout, since failures release proactively instead of waiting out the window.
-10. A freshly launched instance, with no `config.json` baked into the AMI, writes `config.json` through UserData, retrieves `HF_TOKEN` from SSM, and starts `neurolens-worker` without manual intervention; verify config mode 600.
-11. `neurolens-worker` is disabled by default in the AMI and becomes active only after UserData completes both config writes and `systemctl enable --now`; verify no premature start or crash loop.
-12. A delayed duplicate SQS delivery after successful completion is either rejected by the result-exists check or loses the conditional results write; it must not overwrite the result or status.
-13. Simulate a crash after the conditional results write succeeds but before status is marked done. `GET /api/jobs/{job_id}/status` must still return done from result existence, and a duplicate delivery must not reprocess the job.
-14. With the SQS queue empty (no visible or in-flight messages), run `provision_m2.sh`, then `teardown_m2.sh`, then `provision_m2.sh` again. The second provisioning run must validate—not recreate—M1's bucket, queue, and notification; restore the ASG to min=0, desired=0, max=1; create no duplicate DLQ, redrive-policy, or IAM resources; and then process one newly submitted test job end-to-end.
+1. `build_ami.sh` produces a software-only image and populates `s3://<bucket>/models/`; it prints the AMI ID and the peak RAM measured during the smoke test. The chosen worker `instance_type` is justified by that number.
+2. The wiring rehearsal (§4e) processes a job end-to-end in fake mode on a CPU instance: boot, S3 syncs, service start, status updates, result in `results/`.
+3. **Real-model check (deferred from M1):** on the first GPU boot, one real job through S3 → SQS → worker on a sample video produces a result that matches that video's entry in `data/samples.json`, within small floating-point differences.
+4. The boot log shows timestamps for every UserData step, including the S3 weight-sync duration.
+5. `deploy_code.sh` followed by a new launch (or `systemctl restart`) picks up new code without an image rebuild.
+6. Two identical SQS messages for one `job_id` (manual re-send) produce exactly one result object and one `done` status; the second delivery either skips (result exists) or loses the conditional write.
+7. The ASG scales 0 → 1 (and 0 → 2 during Experiment 2) as the queue fills, and back to 0 when drained, visible in CloudWatch.
+8. Killing the worker process mid-job (`kill -9`) makes the job visible for redelivery within about 120 s, and a second attempt completes it.
+9. Terminating a Spot instance mid-job gets the job picked up by another instance via proactive release (visibility explicitly set to 0), not a passive timeout.
+10. The frontend shows real, changing status text and the real error message on failure.
+11. A job forced to fail twice lands in the dead-letter queue.
+12. A fresh instance, with no `config.json` in the image, writes `config.json` and `env.conf` (mode 600) through UserData and starts `neurolens-worker` without manual steps; the service is disabled in the image and starts only after both files are verified.
+13. A crash after the result write but before the `done` status still reports `done` from `GET /api/jobs/{job_id}/status`, and a duplicate delivery does not reprocess.
+14. Workers have no public IP and no inbound rules, yet reach SQS and Parameter Store through the NAT instance and S3 through the gateway endpoint.
+15. `stop_work.sh` leaves zero GPU instances running and the NAT instance stopped; `start_work.sh` brings the system back and a new job completes.
+16. `terraform apply` run twice reports no changes the second time.
+17. `FAKE_INFERENCE=1 pytest` passes, including the §10a tests.
+18. The cold-start comparison (S3 copy vs baked-in weights) is recorded under `experiments/experiment-2/`, and the comparison image and its snapshot are deleted afterwards.
 
-## 13. Teardown
-
-Create `infra/teardown_m2.sh`:
-- Set the GPU ASG desired capacity and max to 0; do not delete the ASG, Launch Template, AMI, or `code/latest.zip`.
-- Delete only explicitly tagged disposable test artifacts, never a resource tagged `Milestone=M2`.
-- Confirm, with tag-filtered `aws ec2 describe-instances`, that zero GPU instances remain running.
+## 13. Between sessions and teardown
+- End every working session with `stop_work.sh`.
+- Keep the software-only image, `models/`, and `code/latest.zip`; M3 and M4 reuse them.
+- Final teardown (`terraform destroy`, deregistering images, deleting snapshots) happens only after M4's consolidation.
 
 ## 14. Explicitly not in this milestone
-No Aurora, no real user accounts/auth, no credit balances or billing/reservation logic, no refund handling, no SSO.
+No Aurora, no user accounts or sign-in, no credits, billing or refunds, no web-tier load balancer, no containers.
