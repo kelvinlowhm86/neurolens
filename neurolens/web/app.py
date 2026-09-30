@@ -3,7 +3,6 @@
 import json
 import logging
 import os
-import subprocess
 import tempfile
 import time
 from pathlib import Path
@@ -88,20 +87,7 @@ def create_app(load_model=True, data_dir=None):
             video_path = Path(tmp.name)
 
         try:
-            probe_result = subprocess.run(
-                [
-                    "ffprobe",
-                    "-v",
-                    "quiet",
-                    "-print_format",
-                    "json",
-                    "-show_format",
-                    str(video_path),
-                ],
-                capture_output=True,
-                text=True,
-            )
-            duration = float(json.loads(probe_result.stdout)["format"]["duration"])
+            duration = inference.probe_duration(video_path)
             if duration > max_seconds:
                 return (
                     jsonify({"error": f"Video too long ({duration:.0f}s). Max is {max_seconds}s."}),
@@ -123,7 +109,7 @@ def create_app(load_model=True, data_dir=None):
             preds_noaudio = inference.run_inference(noaudio_path)
             logger.info(f"  Video-only inference done. Shape: {preds_noaudio.shape}")
 
-            result = extract_engagement(preds_full, preds_noaudio, inference.roi_masks)
+            result = extract_engagement(preds_full, preds_noaudio, inference.roi_masks())
             result["filename"] = video_file.filename
             result["processing_time_seconds"] = round(time.time() - t0, 1)
 

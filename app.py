@@ -5,13 +5,11 @@ The code lives in the neurolens/ package; this file is kept so `python app.py` s
 
 import logging
 
+from neurolens.settings import HOST, PORT
 from neurolens.web.app import create_app
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("neurolens")
-
-HOST = "0.0.0.0"
-PORT = 5003
 
 if __name__ == "__main__":
     from neurolens import inference

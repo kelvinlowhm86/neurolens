@@ -1,6 +1,9 @@
 """Model + atlas loading and inference. Heavy libraries are imported inside functions only."""
 
+import json
 import logging
+import math
+import os
 import subprocess
 
 import numpy as np
@@ -10,14 +13,30 @@ from neurolens.engagement import build_roi_masks
 
 logger = logging.getLogger("neurolens")
 
+N_VERTICES = 20484
+
 # Filled by load_model().
 model = None
-roi_masks = None
+_roi_masks = None
+
+
+def fake_mode():
+    """True when FAKE_INFERENCE is 1/true/yes. Read from the environment at call time.
+
+    An environment variable only (no config field), so a stale config file can never leave a
+    real deployment in fake mode.
+    """
+    return os.environ.get("FAKE_INFERENCE", "").strip().lower() in ("1", "true", "yes")
+
+
+def roi_masks():
+    """The ROI masks built by load_model()."""
+    return _roi_masks
 
 
 def load_model(cfg=None):
-    """Load the TRIBE v2 model and the Destrieux atlas (once) and build the ROI masks."""
-    global model, roi_masks
+    """Load the TRIBE v2 model (skipped in fake mode) and the Destrieux atlas, build ROI masks."""
+    global model, _roi_masks
 
     root = settings.get_root()
     if cfg is None:
@@ -27,14 +46,17 @@ def load_model(cfg=None):
     # HF env vars must be set before anything imports huggingface_hub.
     settings.configure_env(cfg, paths)
 
-    logger.info("Loading TRIBE v2 model...")
-    from tribev2.demo_utils import TribeModel
+    if fake_mode():
+        logger.warning("FAKE_INFERENCE is ON — results are not real model output")
+    else:
+        logger.info("Loading TRIBE v2 model...")
+        from tribev2.demo_utils import TribeModel
 
-    model = TribeModel.from_pretrained(
-        cfg["model"]["repo_id"],
-        cache_folder=str(paths["models"]),
-    )
-    logger.info("TRIBE v2 loaded.")
+        model = TribeModel.from_pretrained(
+            cfg["model"]["repo_id"],
+            cache_folder=str(paths["models"]),
+        )
+        logger.info("TRIBE v2 loaded.")
 
     logger.info("Loading Destrieux atlas...")
     from nilearn import datasets as nl_datasets
@@ -45,12 +67,31 @@ def load_model(cfg=None):
     label_names = destrieux["labels"]
     labels_full = np.concatenate([labels_lh, labels_rh])
 
-    roi_masks = build_roi_masks(labels_full, label_names)
+    _roi_masks = build_roi_masks(labels_full, label_names)
     logger.info("Atlas and ROI masks ready.")
 
 
+def probe_duration(path):
+    """Video length in seconds, measured with ffprobe."""
+    result = subprocess.run(
+        ["ffprobe", "-v", "quiet", "-print_format", "json", "-show_format", str(path)],
+        capture_output=True,
+        text=True,
+    )
+    return float(json.loads(result.stdout)["format"]["duration"])
+
+
 def run_inference(video_path):
-    """Run TRIBE v2 inference on a video file. Returns (T, 20484) numpy array."""
+    """Run TRIBE v2 inference on a video file. Returns (T, 20484) numpy array.
+
+    In fake mode: seeded random numbers of the right shape, so the same video gives the same
+    output. Needs no model and no load_model() call.
+    """
+    if fake_mode():
+        rows = math.ceil(probe_duration(video_path))
+        rng = np.random.default_rng(os.path.getsize(video_path))
+        return rng.standard_normal((rows, N_VERTICES))
+
     logger.info(f"Building events from {video_path}...")
     events = model.get_events_dataframe(video_path=str(video_path))
     logger.info("Running predict()...")
@@ -71,7 +112,10 @@ def strip_audio(input_path, output_path):
 
 def gpu_info():
     """GPU name and peak memory use, or None when there is no CUDA GPU."""
-    import torch
+    try:
+        import torch
+    except ImportError:  # laptop / fake mode: torch is not installed
+        return None
 
     if not torch.cuda.is_available():
         return None

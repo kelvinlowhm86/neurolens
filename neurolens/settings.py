@@ -5,6 +5,11 @@ import os
 import sys
 from pathlib import Path
 
+# Local dev server address. 127.0.0.1 keeps it reachable from this machine only: the presign
+# endpoint has no sign-in until M3 (see M1 spec security note).
+HOST = "127.0.0.1"
+PORT = 5003
+
 
 def get_root():
     """Project root: NEUROLENS_ROOT if set, else the repo root (two folders above this file).
@@ -78,6 +83,13 @@ def configure_env(cfg, paths):
     os.environ["HF_HUB_HTTP_TIMEOUT"] = timeout
 
 
+# The max duration reflects the target use case (short-form pre-roll / social ad
+# creative) and bounds GPU job duration for predictable cost and to stay
+# within the SQS visibility-timeout window (900 s in M1; M2b adds a
+# heartbeat). This is a hard
+# product/cost constraint, independent of billing — it must be enforced
+# regardless of credit balance (see M3a §4a `verify`, which must check this
+# BEFORE any credit-adjustment logic, not instead of it).
 def max_duration(cfg):
     """Longest accepted video in seconds (120 when unset or when there is no config)."""
     if cfg is None:
