@@ -1,0 +1,22 @@
+# NeuroLens: rules for people and AI tools
+
+NeuroLens predicts brain activity for a video (TRIBE v2) and turns it into per-region "engagement" curves, served by a Flask web app. Course project: not for commercial use (the model is CC BY-NC).
+
+## Layout
+- `neurolens/` the package: `settings.py` (config + paths), `engagement.py` (pure maths, numpy only), `inference.py` (model + atlas loading, `run_inference`, `strip_audio`), `web/app.py` (`create_app()`, Flask routes).
+- `app.py` thin launcher (`python app.py`, port 5003). `static/` the page. `data/` samples, videos, thumbnails.
+- `notebooks/` the two `.ipynb` files (need a GPU). `requirements/` per-machine dependency lists. `infra/` AWS-only files (later milestones). `tests/` pytest. `docs/` specs.
+
+## Commands
+- Set up: `python3.12 -m venv .venv && source .venv/bin/activate && pip install -e . -r requirements/dev.txt`
+- Test: `pytest`. Lint: `ruff check .`. Format: `ruff format .`
+
+## Rules
+- Heavy imports (`torch`, `tribev2`, `nilearn`, `huggingface_hub`) only inside functions, never at module top of `neurolens/`.
+- The web code must not import `neurolens.inference` at module level (only inside `create_app` when `load_model=True`; removed in M1).
+- Read config only through `neurolens.settings`. Nothing runs at import time.
+- Never commit `config.json`, tokens or AWS keys. Never put them in Docker images.
+- Never edit a test to make it pass: stop and ask.
+- Do not change `extract_engagement` without updating `tests/fixtures/extract_engagement_golden.json` and saying so.
+- Normalisation rule, do not "fix": `extract_engagement` cuts the with-audio and no-audio auditory passes to their shared length first, then rescales each to 0-1. So `auditory` and `auditory_with_audio` can differ in the same row.
+- Work on branch `aws-josh`, not `main`. Specs in `docs/` describe the current design only; history lives in git.

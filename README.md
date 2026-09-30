@@ -244,12 +244,12 @@ TRIBE v2 itself (`facebook/tribev2`) is freely downloadable under CC BY-NC 4.0.
 
 ## Test Drive: Running the Exploration Notebook
 
-The `explore.ipynb` notebook validates the full NeuroLens pipeline end-to-end on a sample video. Follow these steps to run it on a Linux machine with GPU access.
+The `notebooks/explore.ipynb` notebook validates the full NeuroLens pipeline end-to-end on a sample video. Follow these steps to run it on a Linux machine with GPU access.
 
 ### Prerequisites
 
 - Linux (Ubuntu 22.04+ recommended)
-- Python 3.10+
+- Python 3.12 (not 3.13+: `tribev2` needs an older PyTorch)
 - NVIDIA GPU with 40 GB+ VRAM (A100 40 GB, or 2× RTX 4090)
 - CUDA 12.x + matching PyTorch
 - ffmpeg installed (`sudo apt install ffmpeg`)
@@ -261,26 +261,32 @@ The `explore.ipynb` notebook validates the full NeuroLens pipeline end-to-end on
 # 1. Clone or create your project directory
 mkdir neurolens && cd neurolens
 
-# 2. Create a virtual environment
-python3 -m venv .venv
+# 2. Create a virtual environment (Python 3.12)
+python3.12 -m venv .venv
 source .venv/bin/activate
 
-# 3. Pin NumPy FIRST (critical — must happen before tribev2 install)
-pip install "numpy>=1.26.4,<2.1.0"
+# 3. Install the project and everything the notebooks need, including TRIBE v2
+#    (requirements/ has one file per machine type; NumPy is pinned in base.txt)
+pip install -e . -r requirements/notebooks.txt
 
-# 4. Install remaining requirements
-pip install -r requirements.txt
+# 4. Copy the sample config and paste your HuggingFace token into config.json
+cp config.sample.json config.json
 
-# 5. Install TRIBE v2 from GitHub (separate step — uses git+https)
-pip install "tribev2[plotting] @ git+https://github.com/facebookresearch/tribev2.git"
-
-# 6. Authenticate with HuggingFace (one-time)
+# 5. Authenticate with HuggingFace (one-time)
 #    Make sure you've accepted the LLaMA 3.2-3B license at:
 #    https://huggingface.co/meta-llama/Llama-3.2-3B
 huggingface-cli login
 
-# 7. Launch Jupyter
-jupyter notebook explore.ipynb
+# 6. Launch Jupyter
+jupyter notebook notebooks/explore.ipynb
+```
+
+### Run the app and the tests
+
+```bash
+python app.py                                   # web app on http://localhost:5003 (needs config.json, the model and a GPU)
+pip install -e . -r requirements/dev.txt        # laptop: tests and lint only, no GPU or model needed
+pytest && ruff check . && ruff format --check .
 ```
 
 ### What the notebook does
@@ -326,7 +332,7 @@ If running on 2× RTX 4090 (48 GB total, 24 GB each) rather than a single A100:
 
 | Symptom | Cause | Fix |
 |---------|-------|-----|
-| `ImportError: cannot import name '_center'` | NumPy ≥ 2.1 | `pip install "numpy>=1.26.4,<2.1.0"` then restart kernel |
+| `ImportError: cannot import name '_center'` | NumPy ≥ 2.1 | NumPy is pinned in `requirements/base.txt` (2.2.6); reinstall from `requirements/` then restart kernel |
 | `ReadTimeout` during `model.predict()` | LLaMA download times out | Run the pre-download cell (Cell 4) first |
 | `CUDA out of memory` on `predict()` | Insufficient VRAM | Need 40 GB+ single GPU, or multi-GPU setup |
 | `ValueError` on `get_events_dataframe()` | Temp file not flushed | The notebook handles this — don't modify file I/O |
@@ -546,7 +552,7 @@ These issues were identified by the DataCamp tutorial and community usage:
 
 | Issue | Fix |
 |---|---|
-| **NumPy 2.x conflict** — `neuralset` (internal dependency) fails with `ImportError: cannot import name '_center' from 'numpy._core.umath'` | Pin `numpy>=1.26.4,<2.1.0` before installing tribev2 |
+| **NumPy 2.x conflict** — `neuralset` (internal dependency) fails with `ImportError: cannot import name '_center' from 'numpy._core.umath'` | NumPy is now pinned to `2.2.6` in `requirements/base.txt`, the version `tribev2` forces; if this error returns, revisit that pin |
 | **HuggingFace download timeout** — LLaMA 3.2-3B (~6 GB) download times out mid-inference with default 10s timeout | Set `HF_HUB_DOWNLOAD_TIMEOUT=300` and pre-download with `snapshot_download()` |
 | **Temp file race condition** — if you pass a temp file path to `get_events_dataframe()` before the file is flushed to disk, it reads an empty file | Always call `flush()` → `os.fsync()` → `close()` before passing the path |
 | **LLaMA is gated** — inference silently fails or throws auth errors if you haven't accepted the Meta license | Accept at [huggingface.co/meta-llama/Llama-3.2-3B](https://huggingface.co/meta-llama/Llama-3.2-3B), then `huggingface-cli login` |
