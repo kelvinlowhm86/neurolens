@@ -22,7 +22,7 @@ Also run `aws ec2 describe-instance-type-offerings --location-type availability-
 - A fake-mode wiring rehearsal on a cheap CPU instance, then the real-model check deferred from M1
 
 ### Out of scope
-- **M2b:** autoscaling, two workers, dead-letter queue, 120 s visibility timeout with heartbeat, fast failure release, Spot-interruption handling, job-status objects and endpoints, the polling UI, Experiments 1–2 and the baked-weights comparison image. Until M2b, a Spot interruption or crash simply means the message reappears after M1's 900 s visibility timeout.
+- **M2b:** autoscaling, two workers, dead-letter queue, 120 s visibility timeout with heartbeat, fast failure release, graceful shutdown on Spot interruption, job-status objects and endpoints, the polling UI, and Experiments 1–2. Until M2b, a Spot interruption or crash simply means the message reappears after M1's 900 s visibility timeout.
 - **M3:** Aurora, user accounts, credits/billing, Google sign-in, the web tier's load balancer.
 - EKS/Kubernetes, containers, image registries.
 
@@ -70,8 +70,8 @@ RestartSec=5
 WantedBy=multi-user.target
 ```
 - Baked in **disabled**. UserData (§4c) writes `config.json` and `env.conf`, then enables and starts it.
-- **`pull_code.sh`** runs before every start (boot, crash restart, or `systemctl restart`): downloads `code/latest.zip` and `code/latest.revision`, removes `/opt/neurolens/app/neurolens/`, unzips over `/opt/neurolens/app` (keeping `config.json`), and writes `/opt/neurolens/app/REVISION`. This is why a deploy reaches running machines with a plain restart; EC2 runs UserData only on an instance's first boot.
-- **`env.conf`** is written on first boot and holds only `NEUROLENS_ROOT=/opt/neurolens/app`, `NEUROLENS_BUCKET=<bucket>`, `HF_HUB_OFFLINE=1`, and `FAKE_INFERENCE=1` during the wiring rehearsal only. The HF/nilearn cache variables are **not** set here: `neurolens.settings.configure_env` sets them from `config.json` paths, so there is one source of truth. Never bake AWS resource identifiers into the image.
+- **`pull_code.sh`** runs before every start (boot, crash restart, or `systemctl restart`): downloads `code/latest.zip` and `code/latest.revision`, removes `/opt/neurolens/app/neurolens/`, unzips over `/opt/neurolens/app` (keeping `config.json`), and writes `/opt/neurolens/app/REVISION`. It also copies the bundle's `infra/pull_code.sh` and `infra/self_terminate.sh` to `/opt/neurolens/bin/`, so script changes reach machines with the next start too (changes to the two systemd unit files still need an image rebuild, since they are read before this script runs). This is why a deploy reaches running machines with a plain restart; EC2 runs UserData only on an instance's first boot.
+- **`env.conf`** is written on first boot and holds only `NEUROLENS_ROOT=/opt/neurolens/app`, `NEUROLENS_BUCKET=<bucket>`, `NEUROLENS_DEPLOYED=1` (M3b's guard against development settings on AWS), `HF_HUB_OFFLINE=1`, and `FAKE_INFERENCE=1` during the wiring rehearsal only. The HF/nilearn cache variables are **not** set here: `neurolens.settings.configure_env` sets them from `config.json` paths, so there is one source of truth. Never bake AWS resource identifiers into the image.
 - **Self-termination** (cost guard). `neurolens-self-terminate.service` is a oneshot unit running `self_terminate.sh`, which calls `aws autoscaling terminate-instance-in-auto-scaling-group --instance-id <own id> --should-decrement-desired-capacity`. Decrementing matters: a plain `shutdown` would make the ASG launch a replacement, which fails the same way, in a billing loop. It runs when:
   - the worker exits cleanly after `worker.idle_exit_minutes` (config, 30 on AWS) with no messages received (`OnSuccess`);
   - the worker crashes 3 times within 10 minutes (`OnFailure`), for example a broken model load;
@@ -117,6 +117,9 @@ Set the Launch Template's `instance_type` to a small CPU type (e.g. `t3.large`, 
 ### 4f. Long-running GPU alarm (Terraform)
 A CloudWatch alarm on the ASG's `GroupInServiceInstances` > 0 continuously for **3 hours** sends an email through an SNS topic to Josh's address (a variable; confirm the subscription email once). It catches the cases self-termination cannot, such as a worker stuck mid-job or an unreachable NAT instance. Cost: about $0.10 a month.
 
+### 4g. Configuration additions (`config.sample.json`)
+`worker.idle_exit_minutes` (absent means never exit on idle; UserData sets 30 on AWS).
+
 ## 5. Code deployment (`infra/deploy_code.sh`)
 ```bash
 #!/usr/bin/env bash
@@ -124,7 +127,8 @@ set -euo pipefail
 if [ -n "$(git status --porcelain)" ]; then
   echo "Uncommitted changes: commit first. Deploy ships the last commit only." >&2; exit 1
 fi
-git archive --format=zip -o /tmp/code.zip HEAD worker.py neurolens pyproject.toml requirements
+git archive --format=zip -o /tmp/code.zip HEAD worker.py neurolens pyproject.toml requirements \
+  infra/pull_code.sh infra/self_terminate.sh infra/neurolens-worker.service infra/neurolens-self-terminate.service
 git rev-parse --short HEAD > /tmp/code.revision
 aws s3 cp /tmp/code.zip      s3://<bucket>/code/latest.zip
 aws s3 cp /tmp/code.revision s3://<bucket>/code/latest.revision
@@ -182,7 +186,7 @@ tests/                              MODIFIED: §8 tests
 6. `deploy_code.sh` refuses to run with uncommitted changes; after a deploy, `restart_workers.sh` makes a running worker run the new commit, and `/opt/neurolens/app/REVISION` shows its ID.
 7. A fresh instance, with no `config.json` in the image, writes `config.json` and `env.conf` (mode 600) through UserData and starts `neurolens-worker` without manual steps; the service is disabled in the image and starts only after both files are verified.
 8. Self-termination works in all three cases, observed on the rehearsal instance: idle timeout, three crashes (e.g. a deliberately broken config), and a failing UserData step. Each time the ASG's desired capacity drops to 0 and no replacement launches.
-9. Workers have no public IP and no inbound rules, yet reach SQS, Parameter Store and Auto Scaling through the NAT instance and S3 through the gateway endpoint.
+9. Workers have no public IP and no inbound rules, yet reach SQS and Auto Scaling through the NAT instance and S3 through the gateway endpoint.
 10. `stop_work.sh` leaves zero GPU instances running and the NAT instance stopped; `start_work.sh --worker` brings the system back and a new job completes.
 11. The §4f alarm exists and its email subscription is confirmed.
 12. `terraform apply` run twice reports no changes the second time.

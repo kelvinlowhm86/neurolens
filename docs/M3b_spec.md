@@ -62,7 +62,7 @@ The usability study itself (run with a Google Form and a moderator, no in-app st
 - UserData (templated, first boot):
   - Install Python 3.12 with `dnf` and create the venv.
   - Download `code-web/latest.zip` once, and install the service unit and `pull_web_code.sh` from it.
-  - Write `env.conf` and `config.json` (mode 600, identifiers only, `auth.mode = "google"`, `public_base_url = https://<distribution>.cloudfront.net`), then enable and start the service.
+  - Write `env.conf` and `config.json` (mode 600, identifiers only): `auth.mode = "google"`, `auth.google_client_id`, `auth.redirect_uri`, `public_base_url = https://<distribution>.cloudfront.net`, `db.backend = "data_api"` with the `aws.db_*` values, `aws.region`, `aws.s3_bucket`, `max_upload_bytes`, `billing.starter_cents`. Then enable and start the service.
   - The same `ERR`-trap pattern as M2a logs failures; there is no self-termination for the web server.
   - UserData runs only on first boot, so the instance sets `user_data_replace_on_change = true` in Terraform: changing UserData replaces the instance, and the VPC origin follows it to the new one.
 - Web IAM role: `ssm:GetParameter` on `/neurolens/web/*` (with `kms:Decrypt` for the default key); the M3a `rds-data` and database-secret permissions; `s3:PutObject` on `uploads/*` (a presigned POST is signed with the server's own credentials, so the role must be allowed to write what it signs); `s3:GetObject` on `results/*` and `code-web/*`, with `s3:ListBucket` for those prefixes; the SSM core policy (Session Manager, no SSH).
@@ -110,7 +110,7 @@ Terraform ignores changes to Aurora's `min_capacity` so the scripts and Terrafor
   - **401:** the sign-in screen.
   - **503 `database_waking`:** "Starting up…", retrying (§2).
   - **Anything else:** the paused state (§3c).
-- **Samples** load from `/data/samples.json` (served by Flask locally, by S3 on AWS) instead of `/api/samples`, so they work in every state. The `/api/samples` route stays for compatibility.
+- **Samples** load from `/data/samples.json` (served by Flask locally, by S3 on AWS) instead of `/api/samples`, so they work in every state. The `/api/samples` route stays but, like every `/api/*` route, requires sign-in in Google mode; M0's samples test runs in dev mode (M3a §6 defaults) and is unaffected.
 - **Sign-in screen** (401): a "Sign in with Google" button linking to `/login`, with the sample browser still available below it. Uploads, the balance and history stay hidden until signed in. A "Sign out" control in the header.
 - **Balance** in the existing header area (`.header-meta`), formatted from cents, refreshed after each job ends.
 - **History** panel from `GET /api/jobs`: each row re-opens its result in the existing chart code (feeding it the stored JSON instead of a fresh one), links to the CSV, and says when results expire. The filename and `error_message` come from users, so they are inserted with `textContent`, never inside HTML template strings or `innerHTML` (the existing sample carousel's pattern), which would allow script injection.
@@ -121,6 +121,7 @@ Terraform ignores changes to Aurora's `min_capacity` so the scripts and Terrafor
   - `file_too_large`: "This file is larger than the upload limit."
   - `processing_failed`, `stalled`, `stuck_in_queue`: "Processing failed after retrying." plus the job's `error_message` when present.
   - `upload_not_received`: "The upload didn't finish. Please try again."
+  - `presign_failed`: "The upload couldn't be started. Please try again."
 
 ### 4c. Credit grants
 `infra/grant_credit.py <cents>`: prompts for the email (so participants' emails never land in shell history), then adds credit to an existing user through the Data API, in one transaction with a `grant` ledger row (migration `002_grant.sql` adds `grant` to the ledger `kind` check; the kind is passed as a parameter, since project SQL has no string literals). `cents` must be positive. `users.email` is not unique, so if the email matches zero users or more than one, it stops with an error listing the matches. Used for the team and study participants; it runs from a laptop with the `neurolens` profile, never from the web app.

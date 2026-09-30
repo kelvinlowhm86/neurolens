@@ -20,7 +20,7 @@ Google sign-in, the public HTTPS website (CloudFront), the web server on AWS, th
 ## 2. Development identity (until M3b)
 - Config `auth.mode`: `"dev"` in M3a. `auth.dev_user_id` and `auth.dev_email` give one fixed user.
 - `neurolens.web.auth.current_user() -> tuple[str, str] | None` returns `(user_id, email)`. In dev mode it always returns the dev user. M3b adds `"google"` mode behind the same function; nothing else in the web app reads identity directly.
-- `create_app` **refuses to start** in dev mode unless the configured host is `127.0.0.1`, raising `neurolens.settings.UnsafeConfigError`, so a development identity can never be exposed publicly.
+- `create_app` **refuses to start** in dev mode unless the configured `server.host` (§9) is `127.0.0.1`, raising `neurolens.settings.UnsafeConfigError`, so a development identity can never be exposed publicly.
 
 ## 3. Database
 ### 3a. Aurora (Terraform)
@@ -93,7 +93,7 @@ CREATE TABLE refunds (
 ### 3d. Database layer (`neurolens/db.py`)
 One small interface, two backends, identical SQL:
 - `Database.transaction()`: a context manager yielding a transaction object with `execute(sql: str, params: dict | None = None) -> list[dict]`. It commits on normal exit and rolls back on an exception.
-- SQL uses `:name` parameters, and casts are written as `CAST(:job_id AS uuid)` / `CAST(:stages AS jsonb)` (never `::`), so both backends parse them the same way. The PostgreSQL backend rewrites `:name` to `%(name)s`. To keep that rewrite trivial, project SQL never contains `%` or string literals; values always go in as parameters. The rewrite raises if it finds either.
+- SQL uses `:name` parameters, and casts are written as `CAST(:job_id AS uuid)` / `CAST(:stages AS jsonb)` (never `::`), so both backends parse them the same way. The PostgreSQL backend rewrites `:name` to `%(name)s`. To keep that rewrite trivial, application SQL never contains `%` or string literals; values, including status names such as `processing`, always go in as parameters, and the rewrite raises if it finds either. Migrations are the exception: `apply_schema.py` sends each migration statement as-is (CHECK constraints need literal values), never through the rewrite.
 - Both backends return the same Python types per column: `int`, `str`, `bool`, `None`, `datetime` (timezone-aware, UTC) for `timestamptz`, `str` for `uuid`, and parsed Python objects for `jsonb`. The Data API backend uses the result metadata (`includeResultMetadata=True`) to convert: it returns integers as `longValue`, and `timestamptz` (as a zone-less UTC string), `uuid` and `jsonb` as `stringValue`.
 - **`DataApiDatabase(rds_data_client, cluster_arn, secret_arn, database, resume_wait_s=60)`**: `begin_transaction` / `execute_statement(transactionId=...)` / `commit_transaction` / `rollback_transaction`. When the database is paused, the Data API raises `DatabaseResumingException`; `begin_transaction` and statements outside a transaction retry with backoff (1, 2, 4, 8, 16, … s) until `resume_wait_s` has passed, then raise `neurolens.db.DatabaseWaking`. Workers and Lambdas use the default 60 s; the web app uses a shorter budget (M3b) so a request never outlives its server's timeout. **Nothing else is retried**: in particular a failed `commit_transaction`, whose outcome is unknown, is raised to the caller, and the billing guards make the caller's retry safe. A Data API transaction left idle for 3 minutes is rolled back by AWS, which is far longer than any billing transaction.
 - `infra/db_smoke.py` (§8) reads back a full `jobs` row through the Data API and compares the Python type of every column with what the PostgreSQL backend returns, so a wrong guess about the Data API's formats is caught on AWS, not in production.
@@ -110,7 +110,7 @@ Every function takes a `Database` as its first argument and does its work in **o
 - `get_balance(db, user_id) -> dict`: `{"available_cents", "reserved_cents"}`.
 - `reserve(db, user_id, job_id, object_key, filename, client_duration_ms) -> int` — **Stage 1**. Price = `estimate_cost_cents(client_duration_ms / 1000)`. If `available_cents` is lower, raises `InsufficientCredit` and changes nothing. Otherwise moves the price from available to reserved, inserts the job (`status='queued'`, `reserved_cents`), writes a `reserve` ledger row, and returns the price.
 - `claim(db, job_id, stale_after_s=90) -> int | None`: the lock that stops two workers running the same job. In one statement:
-  `UPDATE jobs SET status='processing', attempt=attempt+1, stage=NULL, stages=jsonb_build_array(), updated_at=now() WHERE job_id=CAST(:job_id AS uuid) AND (status='queued' OR (status='processing' AND updated_at < now() - make_interval(secs => :stale))) RETURNING attempt`.
+  `UPDATE jobs SET status=:processing, attempt=attempt+1, stage=NULL, stages=jsonb_build_array(), updated_at=now() WHERE job_id=CAST(:job_id AS uuid) AND (status=:queued OR (status=:processing AND updated_at < now() - make_interval(secs => :stale))) RETURNING attempt`, with `:processing` also used in the `SET`.
   Returns the new `attempt`, or `None` if no row was updated. Each attempt starts with an empty `stages` list, so a retried job's timings describe its last attempt only. The staleness clause lets a crashed worker's job be re-claimed when SQS redelivers it: the heartbeat refreshes `updated_at` every ≤50 s while a worker is alive, and a redelivery arrives no sooner than 120 s after the last heartbeat, so 90 s separates "alive" from "dead" safely.
 - `job_state(db, job_id) -> dict | None`: `{"status", "updated_at", "attempt"}`, or `None` for an unknown job. The worker uses it to tell apart a lost claim on a finished job from one on a job another worker is running.
 - `touch(db, job_id, attempt) -> bool`: sets `updated_at = now()`. Called on every heartbeat. `False` means the claim was lost.
@@ -144,6 +144,11 @@ Refund reasons used across the system: `file_too_large`, `duration_exceeds_max_v
 - `BUSY` (**not final**): another worker holds a fresh claim on this job. `process_message` neither deletes nor releases the message; it becomes visible again after the 120 s visibility timeout, by which time the job is usually finished (and then `SKIPPED`).
 - `LOST_CLAIM` (final): this worker lost its claim part-way (a `False`/`"lost_claim"` from billing). It stops and does not touch money; whoever holds the job finishes or refunds it.
 
+**Worker interfaces from M3a on** (replace M2b §1a's; the tests are written against these):
+- `handle_record(bucket, key, *, s3, db, cfg, roi_masks, heartbeat, should_stop) -> Outcome`: as M2b, plus `db`. `heartbeat(on_beat)` now takes the `on_beat` callback and returns the `Heartbeat` for the current message. If anything raises after a successful `claim` (including `ShutdownRequested`), `handle_record` itself calls `release_for_retry(db, job_id, attempt, short_error)` (no error text for a shutdown) and re-raises, so the attempt number never has to leave the function.
+- `process_message(message, *, s3, sqs, db, cfg, roi_masks, should_stop) -> None`: as M2b, plus `db`. It deletes the message only when every record returned a **final** outcome (`BUSY` is not final); on an exception it calls M2b's SQS `release(...)` and does not delete; it no longer writes any status itself.
+- `run() -> None`: as M2b, and also builds the database with `neurolens.db.from_config(cfg)`.
+
 Order inside `handle_record` for each record (`job_id` from the key):
 1. **Unknown job** (`job_state` is `None`, e.g. a manual `aws s3 cp` or a pre-M3 upload): log and return `SKIPPED`.
 2. **Result already exists:** call `settle_success` (a no-op unless an earlier worker crashed between writing the result and settling) and return `SKIPPED`.
@@ -156,12 +161,14 @@ Order inside `handle_record` for each record (`job_id` from the key):
 
 Also:
 - `Heartbeat` gains an `on_beat: Callable[[], None] | None` parameter. Each beat **first** extends SQS visibility, **then** calls `on_beat`. The first beat happens after one interval, not immediately. An exception from `on_beat` is logged and does not stop the heartbeat thread. `worker.heartbeat_seconds` must be at most 50; `run()` refuses to start otherwise.
-- On any exception in a record, and on Spot interruption or `SIGTERM`: `release_for_retry(db, job_id, attempt, error)` and then M2b's SQS `release(...)`. After two receives SQS moves the message to the dead-letter queue, whose Lambda refunds it (§7).
+- On any exception in a record, and on shutdown (`SIGTERM`, including a Spot reclaim): `handle_record` calls `release_for_retry(db, job_id, attempt, error)`, then `process_message` calls M2b's SQS `release(...)`. After two receives SQS moves the message to the dead-letter queue, whose Lambda refunds it (§7).
 - **S3 status objects are retired:** remove `get_status`/`put_status`, their use in the worker, and `status/*` from the worker's IAM policy and `s3:ListBucket` prefix list. `result_exists`/`get_result` stay. Before this lands, Experiment 1's stage timings must already be saved under `experiments/experiment-1/` (M2b §8), because `status/` objects expire after 48 hours. Later runs read `jobs.stages` from Aurora.
 - Worker IAM additions: `rds-data:ExecuteStatement`, `BeginTransaction`, `CommitTransaction`, `RollbackTransaction` on the cluster ARN; `secretsmanager:GetSecretValue` on the database secret ARN. Data API calls go out through the NAT instance (small JSON requests).
 - No image rebuild: the Data API needs only `boto3`, already installed.
 
 ## 6. Web changes (still on the laptop, `127.0.0.1`)
+**`create_app` from M3a on:** `create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=None)`. Without `cfg`, it uses dev mode with a built-in dev user (`dev-user`, `dev@localhost`) and `server.host = 127.0.0.1`, so M0/M1's web tests keep working unchanged. `db` and `s3_client` may be passed in (tests hand in a PostgreSQL database and a stubbed or `moto` client); otherwise they are built from config. A route that needs a database or S3 client the app doesn't have returns 500 `{"error": "not_configured"}`.
+
 Every route below calls `current_user()`. `ensure_user` runs the first time each user ID is seen by this web process (a per-process set of known IDs), not on every request, so pages don't cost a database write each time.
 - **Presign interface change** (replaces M1's `presign_upload`; M1's presign tests are updated by the test-writing agent as a spec'd change):
   - `neurolens.storage.object_key(user_id, job_id, content_type) -> str`: `uploads/{user_id}/{job_id}{ext}`, extension from `content_type` as in M1. This retires `placeholder-user`.
@@ -203,10 +210,11 @@ Both use Python 3.12, `DataApiDatabase`, and only pure-Python modules (`neurolen
 5. One real GPU job, confirming the charged amount matches the verified duration.
 
 ## 9. Configuration additions (`config.sample.json`)
-`aws.db_cluster_arn`, `aws.db_secret_arn`, `aws.db_name`; `db.backend`, `db.dsn` (postgres only); `auth.mode`, `auth.dev_user_id`, `auth.dev_email`; `billing.starter_cents`. None of these are secrets: the database password lives only in Secrets Manager.
+`aws.db_cluster_arn`, `aws.db_secret_arn`, `aws.db_name`; `db.backend`, `db.dsn` (postgres only); `auth.mode`, `auth.dev_user_id`, `auth.dev_email`; `billing.starter_cents`; `server.host` (default `127.0.0.1`) and `server.port` (default 5003), which the root `app.py` launcher binds to and the dev-mode guard (§2) checks. None of these are secrets: the database password lives only in Secrets Manager.
+- The worker's templated UserData (M2a §4c) now also writes `db.backend = "data_api"` and the three `aws.db_*` values.
 
 ## 10. Tests (tests-first; `FAKE_INFERENCE=1 pytest`)
-Database tests run against a real **PostgreSQL 16**: a service container in CI, `docker run postgres:16` locally (`NEUROLENS_TEST_DSN`). Each test gets a fresh schema from `infra/migrations/`. `dev.txt` gains `psycopg[binary]`. Required:
+Database tests run against a real **PostgreSQL 16**: a service container in CI, `docker run postgres:16` locally. They connect through `NEUROLENS_TEST_DSN`, which CI sets; when it is unset they are skipped with a message saying how to start the container locally, except in CI (`CI=true`), where an unset DSN fails the run so the billing tests can never be silently skipped. Each test gets a fresh schema from `infra/migrations/`. `dev.txt` gains `psycopg[binary]`. Required:
 - **Invariants, checked after every test** in a shared fixture teardown, for every user:
   1. ledger sums equal the `balances` row;
   2. no balance is negative;
@@ -220,12 +228,7 @@ Database tests run against a real **PostgreSQL 16**: a service container in CI, 
 - **Refund guards:** a reaper-style `issue_refund(queued_before_s=3600)` on a job that a worker has just claimed returns `False`; the DLQ-style call on a freshly claimed `processing` job returns `False`, on a stale one succeeds.
 - **Concurrency, made deterministic:** a third connection holds `SELECT ... FOR UPDATE` on the job row; two threads then call `settle_success` and `issue_refund` (and, separately, two `claim`s); the lock is released and both finish. Exactly one terminal outcome, and exactly one claim returns an attempt.
 - **Claim staleness:** a `processing` job touched 30 s ago cannot be claimed; one touched 120 s ago can (set `updated_at` directly).
-- **Data API backend** with botocore's `Stubber`, using the response formats in §3d:
-  - parameters and `CAST` sent correctly;
-  - every column type converted to the same Python types as the PostgreSQL backend;
-  - `DatabaseResumingException` on `begin_transaction` retried and then succeeding;
-  - a failing `commit_transaction` raised, not retried;
-  - rollback on an exception.
+- **Data API backend:** no scripted-reply tests. Its type conversion is checked for real by `infra/db_smoke.py` against Aurora (§3d, §8), and its wake-up retry by M3b's database-waking test.
 - **SQL rewrite:** `%` or a string literal in SQL raises.
 - **Heartbeat:** visibility is extended before `on_beat`; an `on_beat` exception is logged and beats continue; no beat before the first interval.
 - **Worker** (moto + PostgreSQL): each §5 path gives the right outcome and money movement: unknown job, result exists, claim lost on a finished job (`SKIPPED`, message deleted), claim lost on a fresh `processing` job (`BUSY`, message neither deleted nor released), oversize, too long, insufficient for actual duration, `LOST_CLAIM` part-way, success, duplicate. A failing record calls `release_for_retry` and leaves money reserved.
@@ -242,7 +245,11 @@ Database tests run against a real **PostgreSQL 16**: a service container in CI, 
   - dev mode on a non-local host raises `UnsafeConfigError`;
   - `ensure_user` is called once per user per process.
 - **Import hygiene:** `neurolens.db`, `billing`, `pricing`, `storage`, `settings` and `neurolens.lambdas.*` import without `numpy`, `psycopg` or `neurolens.inference`.
-- **Replaced M2b tests** (a spec'd test change by the test-writing agent): `put_status` and its `stages` test; "a record that raises leads to status failed"; "a lost conditional write leaves the done status untouched"; "a record whose result exists is skipped with no status change"; the S3-backed status endpoint tests. Each gets its Aurora equivalent above.
+- **Earlier tests rewritten for M3a** (a spec'd test change by the test-writing agent; the behaviour each checks stays the same except where §5 changes it, e.g. a record with no job row is now `SKIPPED`):
+  - M1 §6a worker tests (oversize, too long, valid video, a raising record leaves the message), M2a §8 (`put_result` use, `DUPLICATE`, idle exit of `run()`) and M2b §9 (heartbeat, failure release, result-exists skip, duplicate, multi-record deletion, shutdown release): rewritten for the new signatures, each seeding a user and a `jobs` row first.
+  - Removed with their Aurora equivalents above: M2b's `put_status` and `stages` tests; "a record that raises leads to status failed"; "a lost conditional write leaves the done status untouched"; "a record whose result exists is skipped with no status change".
+  - M2b's status and result endpoint tests: rewritten against the Aurora-backed endpoints with a seeded, owned job.
+  - M0/M1 web tests keep working through `create_app`'s defaults (§6).
 
 **Break-it check** (mandatory), one change at a time, then undo:
 - remove the terminal-status guard **and** `FOR UPDATE` from `settle_success`: the concurrency and exclusivity tests fail;
@@ -258,7 +265,6 @@ neurolens/billing.py             NEW: §4 functions
 neurolens/lambdas/dlq_handler.py NEW
 neurolens/lambdas/reaper.py      NEW
 neurolens/web/auth.py            NEW: current_user() (dev mode)
-neurolens/pricing.py             MODIFIED: estimate_cost_cents
 neurolens/worker.py              MODIFIED: §5
 neurolens/storage.py             MODIFIED: status helpers removed
 neurolens/web/app.py             MODIFIED: §6

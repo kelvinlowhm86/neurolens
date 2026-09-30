@@ -15,7 +15,7 @@
 M0 already separated model loading from the web app. M1 adds:
 - **`neurolens/worker.py`**: the SQS poll loop (§5). Root **`worker.py`** is a launcher: `from neurolens.worker import run; run()`. The worker calls `neurolens.inference.load_model()` **once at startup**, not per job.
 - **`neurolens/storage.py`**: boto3 helpers used by both the web app and the worker. No `torch`, no `neurolens.inference` import.
-- **`neurolens/pricing.py`**: the cost formula (§4), so web and tests share one definition. M3 extends it.
+- **`neurolens/pricing.py`**: the cost formula (§4), so web, worker and billing share one definition.
 - `run_inference`, `strip_audio` and `extract_engagement` keep their M0 signatures.
 
 Place this comment above `max_duration` in `neurolens/settings.py`:
@@ -25,7 +25,7 @@ Place this comment above `max_duration` in `neurolens/settings.py`:
 # within the SQS visibility-timeout window (900 s in M1; M2b adds a
 # heartbeat). This is a hard
 # product/cost constraint, independent of billing — it must be enforced
-# regardless of credit balance (see M3 §4 Stage 2, which must check this
+# regardless of credit balance (see M3a §4a `verify`, which must check this
 # BEFORE any credit-adjustment logic, not instead of it).
 ```
 

@@ -12,7 +12,7 @@
 - S3-based job status and Flask status/result endpoints
 - Duplicate-safe processing of multi-record and repeated messages
 - Real client-side polling UI
-- Experiment 1 (latency) instrumentation and Experiment 2 (scaling, Locust), including the baked-weights cold-start comparison
+- Experiment 1 (latency) instrumentation and Experiment 2 (scaling, Locust), including the cold-start breakdown
 
 ### Out of scope (M3)
 - Aurora, user accounts, credits/billing, Google sign-in, the web tier's load balancer
@@ -28,8 +28,11 @@
   - `Outcome` gains `SKIPPED` (a result already existed before any work). The final outcomes are now `DONE`, `REJECTED`, `DUPLICATE`, `SKIPPED`.
   - `Heartbeat(sqs, queue_url, receipt_handle, *, interval_seconds, visibility_seconds=120)`: a context manager that starts a daemon thread calling `change_message_visibility(..., VisibilityTimeout=visibility_seconds)` every `interval_seconds`, and stops it on exit.
   - `release(sqs, queue_url, receipt_handle) -> None`: `change_message_visibility(..., VisibilityTimeout=0)`.
-  - `SpotWatcher(fetch_notice, *, poll_seconds=5)`: a daemon thread that calls `fetch_notice()` (default: an IMDSv2 read of `spot/instance-action`, returning `True` when a notice exists) and sets `SpotWatcher.interrupted` (a `threading.Event`). Injectable so tests need no IMDS.
-  - Config `worker.heartbeat_seconds` (default 50), so tests can use a fraction of a second.
+  - `ShutdownRequested`: an exception raised when the worker has been asked to stop.
+  - `handle_record(bucket, key, *, s3, cfg, roi_masks, heartbeat, should_stop) -> Outcome` (replaces M1's signature): `heartbeat` is a zero-argument callable returning a `Heartbeat` for the current message (built by `process_message`); the record's work after the result-exists check runs inside it. `should_stop()` is checked between pipeline stages; when it returns `True`, `handle_record` raises `ShutdownRequested`. It still never touches SQS itself.
+  - `process_message(message, *, s3, sqs, cfg, roi_masks, should_stop) -> None` (replaces M1's signature; the queue URL comes from `cfg`): runs every record, deletes the message only when every record returned a final outcome, and on any exception (including `ShutdownRequested`) handles it as §6 says, then re-raises `ShutdownRequested` so `run()` exits.
+  - `run() -> None`: installs a `SIGTERM` handler that sets a `threading.Event`, whose `is_set` is passed as `should_stop`, and stops polling once it is set.
+  - Config `worker.heartbeat_seconds` (default 50), so tests can use a fraction of a second; added to `config.sample.json`.
 - `neurolens.web.app` routes (the web tier still never imports `neurolens.inference`):
   - `job_id` must be a UUID; anything else returns 400 `{"error": "bad_job_id"}`.
   - `GET /api/jobs/<job_id>/status`: 200 with `{"job_id", "status": "done"}` if a result exists (whatever the status object says); otherwise 200 with the status object; otherwise 404 `{"error": "not_found"}` (the frontend treats 404 as "still queued").
@@ -71,14 +74,12 @@ SQS may deliver a message more than once, and one S3 event message can hold seve
 
 With at most two workers, a duplicate that wastes one GPU run is rare and accepted; results and status are never duplicated. M3 adds a database lock that prevents the duplicate run itself. Do not add S3 lease or claim objects.
 
-## 6. Heartbeat, fast release, Spot interruption and shutdown
+## 6. Heartbeat, fast release and shutdown
 **Heartbeat:** every record's processing runs inside `Heartbeat(..., interval_seconds=cfg worker.heartbeat_seconds)`. A silently dead worker stops the heartbeat, and the message becomes visible again within about 120 s.
 
 **Fast release on any failure** (download, ffprobe, inference, ROI extraction): `process_message` catches the exception, writes `status: "failed"` with the error only if no result exists, then calls `release(...)` so the message is immediately retryable. It does not delete it; after two receives it moves to the dead-letter queue.
 
-**Spot interruption:** a `SpotWatcher` runs for the life of the worker. When `interrupted` is set, the worker stops receiving new messages and **always** releases the in-flight message with `release(...)` (no guess about whether it would finish in two minutes), then exits cleanly.
-
-**Shutdown:** the worker handles `SIGTERM` (sent by `systemctl stop` and by ASG scale-in) the same way: release the in-flight message, then exit.
+**Shutdown, including Spot interruption:** when AWS reclaims a Spot worker, scales one in, or `systemctl stop` runs, the machine or service sends the worker `SIGTERM`. The worker stops taking messages; at the next stage boundary `handle_record` raises `ShutdownRequested`, and `process_message` releases the in-flight message with `release(...)` (no status change), so another worker picks it up at once. If the current stage runs longer than the shutdown allows (the service sets `TimeoutStopSec=110`), the process is killed; the heartbeat stops with it and the message becomes visible again within about 120 s anyway. There is no separate watcher for AWS's two-minute Spot warning: the shutdown path covers the same case with a little less head start.
 
 ## 7. Frontend: real polling
 Replace the `setInterval`-based fake progress text in `analyseVideo()` with:
@@ -97,8 +98,8 @@ Replace the `setInterval`-based fake progress text in `analyseVideo()` with:
     - `cloudwatch.csv`: `minute_utc, sqs_visible, sqs_in_flight, asg_in_service`.
     - `locust_stats.csv`: Locust's own `--csv` stats file, copied as is.
     - `reliability.csv`, one row per burst: `burst_size, submitted, results, duplicate_results, dead_lettered`.
-    - `spot_interruption.csv`, the FIS test: `injected_utc, released_utc, completed_utc, recovered`.
-    - `cold_start.csv`, one row per measured boot: `image` (`s3_copy` or `baked`), `alarm_to_launch_s, launch_to_userdata_s, weight_sync_s, model_load_s, first_job_ready_s`.
+    - `spot_interruption.csv`, the interruption test (a worker terminated mid-job): `injected_utc, released_utc, completed_utc, recovered`.
+    - `cold_start.csv`, one row per measured boot: `alarm_to_launch_s, launch_to_userdata_s, weight_sync_s, model_load_s, first_job_ready_s`.
   - **`experiment-3`**: `runs.csv`: `environment` (`cloud` or `onprem`), `gpu, clip_seconds, run_index, wall_ms`. Cloud rows may be copied from an Experiment 1 series, named in the manifest's `source_series`.
   - **`study`**: see M4 §4.
   - `job_label` is a short label (`J1`, `J2`, …) unique within the run, never a job ID.
@@ -113,9 +114,9 @@ Replace the `setInterval`-based fake progress text in `analyseVideo()` with:
   - About $1–2 of Spot GPU time in total; flag the estimate before running.
   - Each run saves the contract's `experiment-2` files: Locust's CSV output, per-job times, the reliability counts (results vs submissions, duplicates, dead-lettered jobs), and `experiments/export_cloudwatch.py <run_id> --start --end` for the one-minute SQS and ASG series. The Spot interruption test and the cold-start boots write their own files in the same format.
   - Restore the ASG max to 1 afterwards.
-  - **Spot interruption:** manually terminating an instance does **not** produce an interruption notice. Use AWS Fault Injection Service's `aws:ec2:send-spot-instance-interruptions` action on one worker mid-job (a one-off FIS experiment template in Terraform, with its own IAM role; FIS bills per action-minute, cents for one run). Confirm the worker releases the job and another attempt completes it within about 2 minutes.
+  - **Spot interruption (simulated):** terminate one worker mid-job (`aws ec2 terminate-instances`), which sends it the same shutdown a Spot reclaim does. Confirm the worker releases the job and another attempt completes it within about 2 minutes. The report describes this as a simulated interruption.
   - **Cold-start breakdown:** SQS metric delay → scale-out alarm; instance launch → UserData start; S3 weight sync (from the boot log); model load into GPU memory; first job ready. No target number is asserted in advance.
-- **Cold-start comparison image (one-off).** `build_ami.sh --bake-weights` builds a second image that keeps the weights on the root disk. Boot it once and measure the first full read of the weights from the snapshot-restored disk, then deregister it and delete its snapshot. Reason: disks restored from a snapshot load lazily, so the first read of ~20 GB may be slow; the comparison measures whether M2a's copy from S3 is faster. Report both.
+- **Fallback, only if cold start is too slow** (the S3 weight sync alone taking more than about 5 minutes): build a second image that keeps the weights on its disk and compare. Not planned; decide with Josh first.
 
 ## 9. Tests (`FAKE_INFERENCE=1 pytest`, moto)
 Add to the suite, written first against §1a:
@@ -125,18 +126,19 @@ Add to the suite, written first against §1a:
 - A lost conditional write returns `DUPLICATE` and leaves the existing result and `done` status untouched; `put_status` never changes a `done` object.
 - `put_status` appends to `stages` in order, with the injected `now`.
 - A multi-record message is deleted only after all its records have final outcomes.
-- `SpotWatcher` with a stub `fetch_notice` that returns `True` on its second call sets `interrupted`; the worker then releases the in-flight message and receives no more messages.
+- `should_stop` turning `True` mid-record makes `handle_record` raise `ShutdownRequested` at the next stage boundary; `process_message` releases the message (visibility 0), leaves status unchanged, does not delete it, and re-raises; `run()` then receives no more messages.
 - Status endpoint: `done` when a result exists even if the status object says `processing`; the status object otherwise; 404 when neither exists; 400 for a non-UUID `job_id`. Result endpoint: 200 with the stored JSON, 404 when missing.
 - Import hygiene still holds: the web app with the new endpoints never loads `neurolens.inference` or `torch`.
 
 ## 10. File layout additions
 ```
-infra/terraform/          MODIFIED: scale-out/in alarms and policies, DLQ, 120 s visibility, IAM additions, FIS template
-infra/build_ami.sh        MODIFIED: --bake-weights
-neurolens/worker.py       MODIFIED: status writes, SKIPPED, Heartbeat, release, SpotWatcher, SIGTERM
+infra/terraform/          MODIFIED: scale-out/in alarms and policies, DLQ, 120 s visibility, IAM additions
+neurolens/worker.py       MODIFIED: status writes, SKIPPED, Heartbeat, release, SIGTERM shutdown
 neurolens/storage.py      MODIFIED: result_exists, get_result, get_status, put_status
 neurolens/web/app.py      MODIFIED: /api/jobs/<id>/status and /api/jobs/<id>/result
 locustfile.py             NEW
+requirements/experiments.txt  NEW: locust, matplotlib (experiment scripts; M4's consolidation also uses matplotlib)
+requirements/dev.txt      MODIFIED: adds -r experiments.txt, so CI can run the experiment and consolidation tests
 experiments/latency_run.py         NEW: Experiment 1 single run
 experiments/latency_breakdown.py   NEW: Experiment 1 analysis
 experiments/export_cloudwatch.py   NEW: Experiment 2 CloudWatch series
@@ -148,13 +150,13 @@ static/                   MODIFIED: real polling
 1. The ASG scales 0 → 1 (and 0 → 2 during Experiment 2) as the queue fills, never terminates a worker mid-job, and returns to 0 after the queue has been fully empty for 15 minutes, visible in CloudWatch.
 2. Two identical SQS messages for one `job_id` (manual re-send) produce exactly one result object and one `done` status; the second delivery returns `SKIPPED` or `DUPLICATE`.
 3. Killing the worker process mid-job (`kill -9`) makes the job visible for redelivery within about 120 s, and a second attempt completes it.
-4. An FIS Spot interruption of a worker mid-job makes it release the job immediately (visibility set to 0), and another attempt completes it.
+4. Terminating a worker mid-job (the simulated Spot interruption) makes it release the job (visibility set to 0), and another attempt completes it within about 2 minutes.
 5. `systemctl stop neurolens-worker` mid-job releases the job immediately.
 5a. After `start_work.sh --worker`, the warm worker survives 45 minutes with an empty queue (no scale-in, no idle termination); `stop_work.sh` then removes it and leaves the ASG minimum at 0.
 6. The frontend shows real, changing status text and the real error message on failure.
 7. A job forced to fail twice lands in the dead-letter queue.
 8. A crash after the result write but before the `done` status still reports `done` from `GET /api/jobs/{job_id}/status`, and a duplicate delivery does not reprocess.
-9. Experiments 1 and 2 have manifests and data under `experiments/`, including the cold-start comparison, and the comparison image and its snapshot are deleted afterwards.
+9. Experiments 1 and 2 have manifests and data under `experiments/`, including the cold-start breakdown and the simulated interruption.
 10. `terraform apply` run twice reports no changes the second time.
 11. `FAKE_INFERENCE=1 pytest` passes locally and in CI, including the §9 tests, and the tests were committed before the implementation.
 
