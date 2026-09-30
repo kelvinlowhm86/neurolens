@@ -63,3 +63,6 @@ env/
 Thumbs.db
 .vscode/
 .idea/
+
+# ─── Personal files (Claude Code instructions, AI-use log) ─────────────────
+*.local.md
