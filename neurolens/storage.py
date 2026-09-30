@@ -29,7 +29,11 @@ def presign_upload(s3, bucket, content_type, max_bytes, expires_in=300):
     post = s3.generate_presigned_post(
         Bucket=bucket,
         Key=object_key,
-        Conditions=[["content-length-range", 1, max_bytes]],
+        Fields={"Content-Type": content_type},
+        Conditions=[
+            ["content-length-range", 1, max_bytes],
+            {"Content-Type": content_type},
+        ],
         ExpiresIn=expires_in,
     )
     return {

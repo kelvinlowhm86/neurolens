@@ -150,3 +150,11 @@ def test_presign_upload_policy_binds_bucket_and_key(aws):
     assert {"bucket": BUCKET} in conditions
     key = out["object_key"]
     assert {"key": key} in conditions or ["eq", "$key", key] in conditions
+
+
+@pytest.mark.parametrize("content_type", ["video/mp4", "video/quicktime", "video/webm"])
+def test_presign_upload_pins_the_content_type(aws, content_type):
+    """moto-limited: only the form and policy our code builds are checked."""
+    out = presign_upload(aws.s3, BUCKET, content_type, 1000)
+    assert out["fields"]["Content-Type"] == content_type
+    assert {"Content-Type": content_type} in policy_conditions(out["fields"])

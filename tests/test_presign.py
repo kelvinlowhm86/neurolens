@@ -198,6 +198,73 @@ def test_boto_failure_gives_presign_failed(client, patch_everywhere):
     assert resp.get_json()["error"] == "presign_failed"
 
 
+# ------------------------------------------------ input validation (hardening)
+
+
+def post_raw(client, raw):
+    return client.post("/api/uploads/presign", data=raw, content_type="application/json")
+
+
+@pytest.mark.parametrize("raw", ["[1]", '"x"', "null", "5", "true"])
+def test_body_that_is_not_an_object_is_invalid_request(client, raw):
+    resp = post_raw(client, raw)
+    assert resp.status_code == 400
+    assert resp.is_json
+    data = resp.get_json()
+    assert data["error"] == "invalid_request"
+    assert isinstance(data["message"], str) and data["message"]
+
+
+@pytest.mark.parametrize("token", ["NaN", "Infinity", "-Infinity"])
+def test_non_finite_duration_is_invalid_request(client, token):
+    raw = '{"content_type": "video/mp4", "client_duration_seconds": %s}' % token
+    resp = post_raw(client, raw)
+    assert resp.status_code == 400
+    assert resp.is_json
+    assert resp.get_json()["error"] == "invalid_request"
+
+
+def test_nan_declared_bytes_is_ignored_like_an_absent_one(client):
+    raw = (
+        '{"content_type": "video/mp4", "client_duration_seconds": 27.4,'
+        ' "client_declared_bytes": NaN}'
+    )
+    resp = post_raw(client, raw)
+    assert resp.status_code == 200
+    assert "fields" in resp.get_json()
+
+
+# ------------------------------------------------ missing size limit (hardening)
+
+
+def test_config_without_max_upload_bytes_cannot_presign(make_cfg, tmp_path):
+    cfg = make_cfg()
+    del cfg["max_upload_bytes"]
+    app = create_app(data_dir=tmp_path / "data", cfg=cfg)
+    app.config["TESTING"] = True
+    client = app.test_client()
+    resp = client.post("/api/uploads/presign", json=body())
+    assert resp.status_code == 500
+    data = resp.get_json()
+    assert data["error"] == "presign_failed"
+    assert "fields" not in data and "url" not in data
+    # the limits endpoint still answers, reporting the missing limit as null
+    limits = client.get("/api/limits")
+    assert limits.status_code == 200
+    assert limits.get_json()["max_upload_bytes"] is None
+
+
+# ------------------------------------------------ content type pinned (hardening)
+
+
+@pytest.mark.parametrize("content_type", ["video/mp4", "video/quicktime", "video/webm"])
+def test_route_fields_pin_the_content_type(client, content_type):
+    data = client.post("/api/uploads/presign", json=body(content_type=content_type)).get_json()
+    assert data["fields"]["Content-Type"] == content_type
+    conditions = json.loads(base64.b64decode(data["fields"]["policy"]))["conditions"]
+    assert {"Content-Type": content_type} in conditions
+
+
 # ---------------------------------------------------------------- create_app(cfg=...)
 
 

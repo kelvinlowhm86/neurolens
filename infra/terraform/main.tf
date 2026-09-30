@@ -61,7 +61,7 @@ resource "aws_s3_bucket_policy" "main" {
 }
 
 # Prefix-scoped expiry, not one blanket rule. Days are the smallest unit S3 lifecycle uses.
-#   uploads/ and status/  48 h   transient per-job files (the input videos are the big ones)
+#   uploads/ and status/  2 days (S3 rounds to midnight UTC: 2-3 days)   transient per-job files (the input videos are the big ones)
 #   results/              30 d   how long a result stays viewable / downloadable (product decision)
 #   code/ and experiments/ never expire: M2a's boot pulls code/latest.zip on every GPU launch
 #   (a 404 would stop the worker coming up) and M4 reads experiments/* for the final report.

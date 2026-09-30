@@ -2,6 +2,7 @@
 
 import json
 import logging
+import math
 from pathlib import Path
 
 from flask import Flask, jsonify, request, send_from_directory
@@ -13,7 +14,7 @@ logger = logging.getLogger("neurolens")
 
 
 def _is_number(value):
-    return isinstance(value, int | float) and not isinstance(value, bool)
+    return isinstance(value, int | float) and not isinstance(value, bool) and math.isfinite(value)
 
 
 def _error(code, message, status=400, **extra):
@@ -75,7 +76,9 @@ def create_app(data_dir=None, cfg=None):
     @app.route("/api/uploads/presign", methods=["POST"])
     def presign():
         """Give the browser a one-off signed form to upload a video straight to S3."""
-        data = request.get_json(silent=True) or {}
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict):
+            return _error("invalid_request", "The request body must be a JSON object.")
 
         content_type = data.get("content_type")
         if content_type not in storage.CONTENT_TYPE_EXTENSIONS:
@@ -107,6 +110,9 @@ def create_app(data_dir=None, cfg=None):
         try:
             if s3 is None:
                 raise RuntimeError("config.json has no aws block")
+            if max_bytes is None:
+                # a missing limit must never mean "unlimited"
+                raise RuntimeError("config.json has no max_upload_bytes")
             presigned = storage.presign_upload(s3, cfg["aws"]["s3_bucket"], content_type, max_bytes)
         except Exception:
             logger.exception("Presign failed")

@@ -358,10 +358,11 @@ def test_a_failing_inference_raises_instead_of_returning_an_outcome(
     assert not (Path(cfg["paths"]["output"]) / f"{job_id}.json").exists()
 
 
-def test_a_missing_object_raises(aws, make_cfg, roi_masks_small, new_key):
+def test_a_missing_object_is_gone_not_an_error(aws, make_cfg, roi_masks_small, new_key):
+    """Spec 1 and 6a: an object that no longer exists (duplicate or expired) is Outcome.GONE."""
     _, key = new_key()
-    with pytest.raises(Exception):  # noqa: B017 - any failure, the exact type is not specified
-        handle_record(aws.bucket, key, s3=aws.s3, cfg=make_cfg(), roi_masks=roi_masks_small)
+    outcome = handle_record(aws.bucket, key, s3=aws.s3, cfg=make_cfg(), roi_masks=roi_masks_small)
+    assert outcome is Outcome.GONE
 
 
 # ---------------------------------------------------------------- process_message

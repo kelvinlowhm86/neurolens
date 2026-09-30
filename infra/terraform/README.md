@@ -7,7 +7,7 @@ everything it created.
 **What it creates**
 
 - One S3 bucket: public access blocked, encrypted, HTTPS-only, ACLs disabled, browser upload (CORS)
-  allowed from `allowed_origins`, and prefix-scoped expiry (`uploads/` and `status/` after 48 h,
+  allowed from `allowed_origins`, and prefix-scoped expiry (`uploads/` and `status/` after 2 days, rounded to midnight UTC,
   `results/` after 30 days, `code/` and `experiments/` never).
 - One SQS queue (visibility timeout 900 s) and the wiring that sends a message to it whenever a file
   lands under `uploads/`.

@@ -77,15 +77,33 @@ class UnreadableVideo(ValueError):
 
 def probe_duration(path):
     """Video length in seconds, measured with ffprobe. Raises UnreadableVideo if unreadable."""
-    result = subprocess.run(
-        ["ffprobe", "-v", "quiet", "-print_format", "json", "-show_format", str(path)],
-        capture_output=True,
-        text=True,
-    )
     try:
-        duration = float(json.loads(result.stdout)["format"]["duration"])
-    except (ValueError, KeyError, TypeError) as err:  # JSONDecodeError is a ValueError
+        result = subprocess.run(
+            [
+                "ffprobe",
+                "-v",
+                "quiet",
+                "-print_format",
+                "json",
+                "-show_format",
+                "-show_streams",
+                str(path),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except subprocess.TimeoutExpired as err:
+        raise UnreadableVideo(f"ffprobe timed out on {path}") from err
+    try:
+        info = json.loads(result.stdout)
+        duration = float(info["format"]["duration"])
+        has_video = any(s.get("codec_type") == "video" for s in info.get("streams", []))
+    except (ValueError, KeyError, TypeError, AttributeError) as err:  # JSONDecodeError too
         raise UnreadableVideo(f"ffprobe could not read a duration from {path}") from err
+    if not has_video:
+        # e.g. an audio-only .mp4: it would pass the length check, then fail at strip_audio
+        raise UnreadableVideo(f"{path} has no video stream")
     if not math.isfinite(duration):
         raise UnreadableVideo(f"ffprobe gave a non-finite duration for {path}")
     return duration
@@ -115,6 +133,7 @@ def strip_audio(input_path, output_path):
         ["ffmpeg", "-y", "-i", str(input_path), "-an", "-c:v", "copy", str(output_path)],
         capture_output=True,
         text=True,
+        timeout=300,
     )
     if result.returncode != 0:
         raise RuntimeError(f"ffmpeg failed: {result.stderr}")
