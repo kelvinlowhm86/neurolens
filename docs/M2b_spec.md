@@ -86,7 +86,7 @@ Replace the `setInterval`-based fake progress text in `analyseVideo()` with:
 
 ## 8. Experiments instrumentation
 - **Shared artifact contract:** Experiments 1–3 write versioned artifacts to `experiments/<experiment>/<run_id>/` in the bucket. Each run has a `manifest.json` (`experiment`, `run_id`, UTC timestamps, code revision from `/opt/neurolens/app/REVISION`, AMI ID, instance type, input clip identifiers, configuration, output-file names), with experiment-specific CSV/JSON beside it. `experiments/*` never expires and is the sole input for M4's consolidation script.
-- **Experiment 1 (latency):** per-stage durations from the `stages` list in status objects, across 15 s / 30 s / 60 s test videos. Analysis script `experiments/latency_breakdown.py`.
+- **Experiment 1 (latency):** per-stage durations from the `stages` list in status objects, across 15 s / 30 s / 60 s test videos. Analysis script `experiments/latency_breakdown.py`. Copy each run's `stages` lists into its `experiments/experiment-1/<run_id>/` artifact straight away: `status/` objects expire after 48 hours, and M3a retires them.
 - **Experiment 2 (scaling):** `locustfile.py` POSTs to `/api/uploads/presign`, uploads the fixed test video via the presigned POST (fields first, file last), then polls status to completion.
   - **Elasticity sub-test (1 and 2 concurrent):** ASG scaling from 0, cold start, per-worker throughput. Use the 15 s clip first.
   - **Saturation sub-test (5 and 10 concurrent):** exceeds the 2-worker ceiling on purpose, to show the queue absorbing backlog, no dropped or duplicated results, and a full drain afterwards.

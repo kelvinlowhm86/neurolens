@@ -30,7 +30,7 @@ Place this comment above `max_duration` in `neurolens/settings.py`:
 ```
 
 ### Interfaces fixed by this spec (the §6a tests are written against exactly these)
-- `neurolens.pricing.estimate_cost_usd(duration_seconds: float) -> float`: `math.ceil(d / 30) * 0.90`.
+- `neurolens.pricing.estimate_cost_cents(duration_seconds: float) -> int`: `90 * max(1, ceil((d - 0.5) / 30))`, i.e. $0.90 per started 30-second block, with a half-second allowance so a 30.02 s ad is one block. `estimate_cost_usd(d) -> float` is `estimate_cost_cents(d) / 100`, for display.
 - `neurolens.storage`:
   - `presign_upload(s3, bucket, content_type, max_bytes, expires_in=300) -> dict` with keys `job_id`, `url`, `fields`, `object_key`, `expires_in`. Key is `uploads/placeholder-user/{job_id}{ext}`, where `ext` comes from `content_type` (`video/mp4` → `.mp4`, `video/quicktime` → `.mov`, `video/webm` → `.webm`), never from the user's filename.
   - `parse_s3_event(body: str) -> list[tuple[str, str]]`: `(bucket, key)` for every record, keys outside `uploads/` dropped. A body without `Records` (S3 sends `{"Event": "s3:TestEvent", ...}` once when the notification is created) returns `[]`.
@@ -169,7 +169,7 @@ Add `max_upload_bytes` to `config.json`/`config.sample.json` as a top-level fiel
 
 ## 6. Frontend (`static/`)
 - Add duration read via the browser's `<video>` element `loadedmetadata` event (client-side only, not authoritative — see §4)
-- Show estimated cost using the same `Math.ceil(duration/30)*0.90` formula as the backend, before calling `/api/uploads/presign`
+- Show estimated cost using the same formula as `estimate_cost_cents` (90 cents × `max(1, ceil((duration − 0.5) / 30))`), before calling `/api/uploads/presign`
 - Reject client-side (UI message only) if duration > 120s, `file.size > max_upload_bytes`, or file type is not in the accepted set; send `file.size` as `client_declared_bytes` in the presign request body alongside `client_duration_seconds`.
 - On confirm: `POST /api/uploads/presign` → construct a `FormData` object from the returned `url` and `fields`, appending every signed field before appending the file under the `file` key, then POST it to `url`.
 - Show upload progress via `XMLHttpRequest.upload.onprogress` (fetch doesn't expose upload progress in most browsers)
@@ -185,7 +185,7 @@ Add `max_upload_bytes` to `config.json`/`config.sample.json` as a top-level fiel
 **Automated tests** in `tests/`, run with `FAKE_INFERENCE=1 pytest` (CI sets the variable). `moto` fakes S3 and SQS in memory, so tests make no real AWS calls and cost nothing. Only the manual end-to-end check (§9) touches the real bucket and queue, using the `neurolens` profile. Tests that need a video generate a few-second clip with `ffmpeg -f lavfi` in a fixture (no binary files in git), so CI gains an `apt-get install ffmpeg` step. Worker tests pass tiny hand-made ROI masks to `handle_record`; nothing downloads the atlas.
 
 Required tests:
-- **Cost formula:** `estimate_cost_usd` for 0.5 s, 30 s, 30.1 s, 120 s. Note in a comment that `static/` mirrors this formula and must be changed together.
+- **Cost formula:** `estimate_cost_cents` for 0.2 s, 1 s, 30 s, 30.4 s (all 90), 30.6 s, 60 s (180) and 120 s (360). Note in a comment that `static/` mirrors this formula and must be changed together.
 - **Presign endpoint** (Flask test client + moto): rejects a bad content type, an over-long duration and an oversize file with the documented error codes; on success returns `job_id`, `url`, `fields`, and a key under `uploads/placeholder-user/` that contains the `job_id`.
 - **S3 event parsing:** a message with several `Records` is handled record by record; records outside `uploads/` are ignored; the `s3:TestEvent` body returns `[]` and its message is deleted.
 - **Presign key:** the object key's extension follows `content_type`, even when the filename says otherwise.
@@ -209,7 +209,7 @@ Do not delete it until acceptance criteria in §9 all pass — you want a known-
 ```
 neurolens/
   storage.py        NEW: presign, S3 event parsing, job IDs
-  pricing.py        NEW: estimate_cost_usd
+  pricing.py        NEW: estimate_cost_cents, estimate_cost_usd
   worker.py         NEW: SQS poll loop, size + ffprobe checks, writes <output>/{job_id}.json
   inference.py      MODIFIED: FAKE_INFERENCE, probe_duration, roi_masks()
   settings.py       MODIFIED: host 127.0.0.1, max-duration comment
