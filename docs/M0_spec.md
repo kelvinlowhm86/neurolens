@@ -24,18 +24,18 @@ neurolens/
 app.py                   thin launcher: create_app(); app.run(host, port)
 static/  data/           unchanged location
 notebooks/               explore.ipynb, batch_process.ipynb
-requirements/            base.txt, web.txt, worker.txt, notebooks.txt, dev.txt
+requirements/            base.txt, web.txt, worker.txt, model.txt, notebooks.txt, dev.txt
 infra/                   empty (M1 fills it)
 tests/  tests/fixtures/
 pyproject.toml  AGENTS.md  CLAUDE.md  .github/workflows/ci.yml
 ```
-Created later, in the milestone that needs them: `worker.py` and `neurolens/worker/` (M1), `neurolens/storage.py` (M1, with S3), `FAKE_INFERENCE` (M1 §1a), billing and database code (M3).
+Created later, in the milestone that needs them: `worker.py`, `neurolens/worker.py`, `neurolens/storage.py` and `neurolens/pricing.py` (M1), `FAKE_INFERENCE` (M1 §1a), billing and database code (M3).
 
 ## 2. Code split (a pure move, not a rewrite)
 | From `app.py` | To | Rules |
 |---|---|---|
 | `normalize_01`, `extract_engagement`, `ROI_LABEL_MAP` | `engagement.py` | Signature becomes `extract_engagement(preds_full, preds_noaudio, roi_masks)`: masks are passed in, not read from a global. Add pure `build_roi_masks(labels, label_names)` (the mask loop minus the atlas download). numpy only. |
-| Config load, HF/torch env vars, paths, `MAX_DURATION`, host/port | `settings.py` | `load_config()` runs when called, never at import. Root folder is `NEUROLENS_ROOT` if set, else two folders above the file. A missing `config.json` raises a clear error when config is requested. |
+| Config load, HF/torch env vars, paths, max video duration, host/port | `settings.py` | `load_config()` runs when called, never at import. Root folder is `NEUROLENS_ROOT` if set, else two folders above the file. A missing `config.json` raises a clear error when config is requested. |
 | Model loading, atlas download, `run_inference`, `strip_audio` | `inference.py` | `torch`, `tribev2`, `nilearn` are imported inside functions. HF env vars are set **before** any HF import (the current `huggingface_hub not in sys.modules` check is kept). Model and masks load once via `load_model()`. |
 | Flask routes | `web/app.py` | `create_app(load_model=True)`. `static_folder` is an absolute path under the root. Tests use `create_app(load_model=False)`. |
 | `app.run(...)` | root `app.py` | Same host and port as today. |
@@ -55,18 +55,19 @@ The web app still calls `inference` for `/api/analyse` in local use, as today. T
   - `load_config(root=None) -> dict`: raises `FileNotFoundError` mentioning `config.sample.json` when `config.json` is missing.
   - `resolve_paths(cfg, root) -> dict[str, Path]` with keys `models`, `data`, `output`. No side effects.
   - `configure_env(cfg, paths) -> None`: sets the HF/torch/nilearn env vars; raises if `huggingface_hub` was already imported.
+  - `max_duration(cfg: dict | None) -> int`: `cfg["max_video_duration_seconds"]`, default 120 when missing or when `cfg` is `None`. There is no module-level `MAX_DURATION` constant, because `settings` does no work at import.
   - `ensure_dirs(paths) -> None`: creates the three folders (today this happens at import; now it happens in `load_model()` and `create_app(load_model=True)`).
 - `neurolens.inference`: `load_model(cfg=None) -> None` fills module-level state; `run_inference(video_path)` and `strip_audio(input_path, output_path)` keep today's signatures (M1 forbids changing them); `gpu_info() -> dict | None` replaces the `torch.cuda` block currently inside the `/api/analyse` route.
 - `neurolens.web.app`: `create_app(load_model: bool = True, data_dir: Path | None = None) -> Flask`.
-  - With `data_dir` given and `load_model=False`, it needs no `config.json`, and `MAX_DURATION` defaults to 120 as today.
+  - With `data_dir` given and `load_model=False`, it needs no `config.json`, and the max duration is `max_duration(None)` = 120, as today.
   - `neurolens.web.app` must **not** import `neurolens.inference` at module level. It imports it inside `create_app` only when `load_model=True`. This is what lets the import-hygiene test pass while `/api/analyse` still works locally.
   - With `load_model=False`, `POST /api/analyse` with a file returns 503 `{"error": "Model not loaded"}` without calling ffprobe. With no file it returns 400, as today.
   - `CORS`, the route paths and the JSON shapes are unchanged.
 
 ## 3. Tooling
 - **`pyproject.toml`:** package `neurolens`, `requires-python >=3.12,<3.14`, no `dependencies` (the `requirements/` files are the single source), installed with `pip install -e .`. Ruff rules `E, F, I, B`, line length 100, `*.ipynb` excluded. pytest `testpaths = tests`.
-- **`requirements/`:** `base.txt` (`numpy==2.2.6`, the version `tribev2` forces, so web, worker and CI all run the same numpy. This replaces the README's old `numpy<2.1` pin, which guarded an `ImportError: _center` seen with an earlier `tribev2`; if that error reappears at the real-import check, revisit this pin), `web.txt` (`-r base.txt`, flask, flask-cors), `worker.txt` (`-r base.txt`, nilearn, `transformers>=4.45,<5`, and `tribev2`; comments give the `tribev2` install line), `notebooks.txt` (`-r worker.txt`, jupyter, ipykernel, ipywidgets, matplotlib, packaging), `dev.txt` (`-r web.txt`, pytest, ruff). The old `requirements.txt` is removed.
-- **`.gitignore` additions:** `.ruff_cache/`, `.pytest_cache/`, `.coverage`, `dist/`, `build/`, `outputs/`, `*.tfstate*`, `.terraform/`.
+- **`requirements/`:** `base.txt` (`numpy==2.2.6`, the version `tribev2` forces, so web, worker and CI all run the same numpy. This replaces the README's old `numpy<2.1` pin, which guarded an `ImportError: _center` seen with an earlier `tribev2`; if that error reappears at the real-import check, revisit this pin), `web.txt` (`-r base.txt`, flask, flask-cors), `worker.txt` (`-r base.txt`, nilearn: everything the worker needs *except* the model, so fake mode runs on a laptop), `model.txt` (`-r worker.txt`, `transformers>=4.45,<5`, `tribev2` via its `git+https` URL: only on the GPU machine or for the real-import check), `notebooks.txt` (`-r model.txt`, jupyter, ipykernel, ipywidgets, matplotlib, packaging), `dev.txt` (`-r web.txt`, `-r worker.txt`, pytest, ruff). Each file installs only what its machine needs: the web server never gets `torch`, the GPU machine never gets Jupyter. The old `requirements.txt` is removed.
+- **`.gitignore` additions:** `.ruff_cache/`, `.pytest_cache/`, `.coverage`, `dist/`, `build/`, `*.tfstate*`, `.terraform/`.
 - **Claude Code hook:** a ruff format/check PostToolUse hook in `.claude/settings.local.json` (personal). CI is what enforces the rules for everyone.
 
 ## 4. Notebooks
@@ -74,7 +75,9 @@ The web app still calls `inference` for `/api/analyse` in local use, as today. T
 
 ## 5. Tests (laptop only: no GPU, no `config.json`, no `torch`)
 **Tests come first, and the implementer may not touch them.** All tests below are written from this spec, against the interfaces in §2, before any code exists in `neurolens/`. They start red (failing because the package is missing), and the split in §8 step 4 must turn them green without editing a single test file. If a test looks wrong, the implementer stops and asks Josh instead of changing it. The tests are written by a separate fresh agent that sees only this spec and the original `app.py`, never the new code, so they cannot share the implementer's blind spots. Once green, the tests are sanity-checked by deliberately breaking the code (§8 step 7).
-1. **Golden test (written *before* the move).** Copy the original `normalize_01` and `extract_engagement` into a throwaway script, run them on seeded synthetic inputs (seed 0, `preds` shape `(T, 20484)`, hand-made boolean masks, one case where the no-audio pass is one step shorter), and save `tests/fixtures/extract_engagement_golden.json`. `test_engagement.py` compares the moved function against it and must pass unchanged after the move. This is M1 §1b layer 1.
+1. **Golden test (written *before* the move).** Copy the original `normalize_01` and `extract_engagement` into a throwaway script (setting the `roi_masks` and `ROI_LABEL_MAP` globals it reads), run them on the inputs below, and save `tests/fixtures/extract_engagement_golden.json` containing the outputs **and this recipe**, so the test rebuilds identical inputs:
+   - `rng = numpy.random.default_rng(0)`; draws in this order: `preds_full = rng.standard_normal((12, 20484))`, then `preds_noaudio = rng.standard_normal((12, 20484))` for case `equal`; for case `short`, a fresh `default_rng(0)` and shapes `(12, 20484)` then `(11, 20484)`.
+   - Masks: for the five ROIs in `ROI_LABEL_MAP` order, ROI `i` is `True` on vertices `[i*200, i*200 + 200)` and `False` elsewhere. `test_engagement.py` compares the moved function against it and must pass unchanged after the move. This is M1 §1b layer 1.
 2. `test_engagement.py` also checks: constant series gives zeros, output length and keys, `None` rows exactly where the shorter pass ends, `build_roi_masks` on a tiny fake atlas.
 3. `test_settings.py`: `NEUROLENS_ROOT` override; missing `config.json` error only when asked; `resolve_paths` with `config.sample.json` gives `<root>/models`, `<root>/data`, `<root>/output` and creates nothing; `configure_env` sets `HF_HOME` and `NILEARN_DATA` to the expected folders (use `monkeypatch`, so real env is untouched).
 4. `test_web.py` (`create_app(load_model=False, data_dir=<repo>/data)`): `GET /` serves `index.html`; `/api/samples` equals `data/samples.json`; a thumbnail under `/data/output/...` is served; a path-traversal request for `config.json` outside `data/` returns 404; `POST /api/analyse` with no file returns 400 and with a file returns 503.
