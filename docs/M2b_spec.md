@@ -89,12 +89,30 @@ Replace the `setInterval`-based fake progress text in `analyseVideo()` with:
 - After 10 minutes without `done`/`failed`, show "taking longer than expected" (a UI safeguard only).
 
 ## 8. Experiments instrumentation
-- **Shared artifact contract:** Experiments 1–3 write versioned artifacts to `experiments/<experiment>/<run_id>/` in the bucket. Each run has a `manifest.json` (`experiment`, `run_id`, UTC timestamps, code revision from `/opt/neurolens/app/REVISION`, AMI ID, instance type, input clip identifiers, configuration, output-file names), with experiment-specific CSV/JSON beside it. `experiments/*` never expires and is the sole input for M4's consolidation script.
-- **Experiment 1 (latency):** per-stage durations from the `stages` list in status objects, across 15 s / 30 s / 60 s test videos. Analysis script `experiments/latency_breakdown.py`. Copy each run's `stages` lists into its `experiments/experiment-1/<run_id>/` artifact straight away: `status/` objects expire after 48 hours, and M3a retires them.
-- **Experiment 2 (scaling):** `locustfile.py` POSTs to `/api/uploads/presign`, uploads the fixed test video via the presigned POST (fields first, file last), then polls status to completion.
-  - **Elasticity sub-test (1 and 2 concurrent):** ASG scaling from 0, cold start, per-worker throughput. Use the 15 s clip first.
-  - **Saturation sub-test (5 and 10 concurrent):** exceeds the 2-worker ceiling on purpose, to show the queue absorbing backlog, no dropped or duplicated results, and a full drain afterwards.
-  - Raise the ASG max to 2 only for these runs, then restore it to 1. Cross-reference CloudWatch ASG instance count over time.
+- **Shared artifact contract** (binding for Experiments 1–3 and M4's study export; M4's consolidation script and its tests are written against exactly this). Each run writes `experiments/<experiment>/<run_id>/` in the bucket (`experiment` is `experiment-1`, `experiment-2`, `experiment-3` or `study`). `experiments/*` never expires and is the sole input for M4's consolidation.
+  - **`manifest.json`, every run:** `experiment`, `run_id`, `series` (a name grouping runs that belong together, e.g. `exp1-final`; consolidation combines all runs of one series), `started_utc`, `finished_utc`, `code_revision` (the git short hash of the code used: `/opt/neurolens/app/REVISION` on AWS, `git rev-parse --short HEAD` elsewhere), `environment` (`{"type": "aws", "instance_type", "ami_id"}` or `{"type": "onprem", "host", "gpu"}`), `files` (the file names below, each of which must exist).
+  - **`experiment-1`**: `runs.csv`, one row per job: `clip_seconds, job_label, upload_ms, queue_wait_ms, downloading_ms, inference_full_ms, stripping_audio_ms, inference_noaudio_ms, extracting_roi_ms, result_fetch_ms, render_ms, peak_vram_gb`. `render_ms` may be empty (filled by hand for 3 runs per clip length); `peak_vram_gb` comes from the result's `gpu` field. A stage's duration is the next stage's start minus its own; the last stage ends at the job's `done` time.
+  - **`experiment-2`**:
+    - `jobs.csv`: `burst_size, job_label, submitted_utc, done_utc, status`.
+    - `cloudwatch.csv`: `minute_utc, sqs_visible, sqs_in_flight, asg_in_service`.
+    - `locust_stats.csv`: Locust's own `--csv` stats file, copied as is.
+    - `reliability.csv`, one row per burst: `burst_size, submitted, results, duplicate_results, dead_lettered`.
+    - `spot_interruption.csv`, the FIS test: `injected_utc, released_utc, completed_utc, recovered`.
+    - `cold_start.csv`, one row per measured boot: `image` (`s3_copy` or `baked`), `alarm_to_launch_s, launch_to_userdata_s, weight_sync_s, model_load_s, first_job_ready_s`.
+  - **`experiment-3`**: `runs.csv`: `environment` (`cloud` or `onprem`), `gpu, clip_seconds, run_index, wall_ms`. Cloud rows may be copied from an Experiment 1 series, named in the manifest's `source_series`.
+  - **`study`**: see M4 §4.
+  - `job_label` is a short label (`J1`, `J2`, …) unique within the run, never a job ID.
+- **Experiment 1 (latency)** covers the stages the report promises: upload → queue wait → processing stages → result fetch → client render, for 15 s, 30 s and 60 s test videos (at least 3 runs each).
+  - `experiments/latency_run.py <clip>` does one run like a browser would: presign, upload via the presigned POST (timed), poll status every 2 s until `done`, fetch the result (timed). It saves the upload and fetch times and the job's `stages` list.
+  - Queue wait = first stage time − upload end. Processing stages come from `stages`.
+  - Client render: the frontend records the time from receiving the result to the chart being drawn in `window.neurolensTimings.render_ms`; read it in the browser console on 3 runs per clip length and add it to the run's CSV by hand.
+  - Rows follow the contract's `experiment-1/runs.csv`. Everything goes into `experiments/experiment-1/<run_id>/` straight away (`status/` objects expire after 48 hours, and M3a retires them). Analysis script `experiments/latency_breakdown.py`.
+- **Experiment 2 (scaling):** `locustfile.py` POSTs to `/api/uploads/presign`, uploads the fixed 15 s test video via the presigned POST (fields first, file last), then polls status to completion. Burst sizes match the report: **1, 5, 10 and 20** simultaneous jobs, with the ASG max raised to 2 for these runs.
+  - **Lower bursts (1 and 5):** scaling from 0, cold start, and per-worker throughput as the pool grows to its 2-worker ceiling.
+  - **Higher bursts (10 and 20):** beyond the ceiling on purpose, to show the queue absorbing the backlog, no dropped or duplicated results, and a full drain afterwards.
+  - About $1–2 of Spot GPU time in total; flag the estimate before running.
+  - Each run saves the contract's `experiment-2` files: Locust's CSV output, per-job times, the reliability counts (results vs submissions, duplicates, dead-lettered jobs), and `experiments/export_cloudwatch.py <run_id> --start --end` for the one-minute SQS and ASG series. The Spot interruption test and the cold-start boots write their own files in the same format.
+  - Restore the ASG max to 1 afterwards.
   - **Spot interruption:** manually terminating an instance does **not** produce an interruption notice. Use AWS Fault Injection Service's `aws:ec2:send-spot-instance-interruptions` action on one worker mid-job (a one-off FIS experiment template in Terraform, with its own IAM role; FIS bills per action-minute, cents for one run). Confirm the worker releases the job and another attempt completes it within about 2 minutes.
   - **Cold-start breakdown:** SQS metric delay → scale-out alarm; instance launch → UserData start; S3 weight sync (from the boot log); model load into GPU memory; first job ready. No target number is asserted in advance.
 - **Cold-start comparison image (one-off).** `build_ami.sh --bake-weights` builds a second image that keeps the weights on the root disk. Boot it once and measure the first full read of the weights from the snapshot-restored disk, then deregister it and delete its snapshot. Reason: disks restored from a snapshot load lazily, so the first read of ~20 GB may be slow; the comparison measures whether M2a's copy from S3 is faster. Report both.
@@ -119,7 +137,9 @@ neurolens/worker.py       MODIFIED: status writes, SKIPPED, Heartbeat, release, 
 neurolens/storage.py      MODIFIED: result_exists, get_result, get_status, put_status
 neurolens/web/app.py      MODIFIED: /api/jobs/<id>/status and /api/jobs/<id>/result
 locustfile.py             NEW
+experiments/latency_run.py         NEW: Experiment 1 single run
 experiments/latency_breakdown.py   NEW: Experiment 1 analysis
+experiments/export_cloudwatch.py   NEW: Experiment 2 CloudWatch series
 tests/                    MODIFIED: §9 tests
 static/                   MODIFIED: real polling
 ```

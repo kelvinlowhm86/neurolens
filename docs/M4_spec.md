@@ -1,105 +1,162 @@
 # NeuroLens — M4 Implementation Spec
-**Milestone:** Usability Evaluation & Analysis (31 Oct – 13 Nov)
-**Builds on:** M1–M3 (a complete, authenticated, credit-accounting-enabled, autoscaled evaluation product; it does not collect real payments). M4 is different in character from M1–M3: most of the work is running a study and consolidating results, not building system components. The spec below separates the small amount of real engineering (lightweight event logging, a consolidation/analysis script) from the study design itself (which an AI coding agent should treat as fixed input, not something to redesign).
+**Milestone:** Usability study, results consolidation and teardown (31 Oct – 13 Nov; the final report and slides are due 13 Nov 23:59)
+**Builds on:** M1–M3b: a complete, signed-in, credit-accounting product running **on demand** (M3b §3c), with the page and sample results served from S3 through CloudFront. Experiments 1 and 2 (M2b §8) and Experiment 3 (M3b §6) write artifacts to `experiments/<experiment>/<run_id>/` in S3 following **M2b §8's artifact contract**. M4 is mostly running a study and turning measurements into report material; the engineering is small: a pseudonymised export, a withdrawal script, a consolidation script, and a teardown script.
+
+**Ground rules for all of M4:** region `us-east-1`; `neurolens` CLI profile. **Tests first, as in M0 §5,** for the §9 code. The study design (five participants, the task, SUS, the three open questions: report §5.2) is fixed input: don't redesign it. **No new product features:** usability problems the study finds are reported as future work.
 
 ## 1. Scope
-### In scope (things to build)
-- A lightweight, server-enforced in-app consent step and pseudonymous participant-code linkage for study participants (not anonymous — see §8a)
-- Minimal event logging for task-performance measurement, reusing M3's existing Aurora tables wherever possible rather than building new infrastructure
-- A results-consolidation script that pulls together Experiment 1 (latency), Experiment 2 (scaling/Locust), Experiment 3 (TCO), SUS scores, and task-performance data into the tables/figures needed for the Final Report
-### In scope (things to run, not build)
-- The actual 5-participant SUS study session, following the protocol in §3 — this is a human-facilitated activity, not something the coding agent executes
+### In scope
+- Study materials: a consent form, a questionnaire, the moderator script, the task sheet
+- Running five moderated sessions (plus one spare participant) with the on-demand system
+- A pseudonymised export of the participants' jobs, and a withdrawal script
+- A consolidation script that turns Experiments 1–3, the SUS responses and the task sheet into report-ready charts and tables
+- Removing the load balancer after the presentation
+- A teardown script that deletes everything, run only when Josh decides
+
 ### Out of scope
-- Any new product features. If the study surfaces usability problems, fixing them is explicitly scoped as post-submission future work per the report — a follow-up task, not part of this spec
-- Redesigning the study methodology (cohort size, instrument choice, task script) — those are fixed by the report's Section 5.2 and shouldn't be second-guessed by whoever implements this spec
+- Any in-app study code (no consent screen, participant flags, event tables or study buttons). Consent and questionnaires live in Google Forms; timing is done by the moderator; the app's own job timings supply the automated part. Study UI would change the interface being measured.
+- New features or UI fixes.
 
-## 2. Lightweight event logging
-Reuse what M3 already gives you rather than building a new analytics system. The moderator assigns each of the five invited accounts a random, pseudonymous participant code before the study; it is recorded in events and entered in the external SUS form, avoiding an email-based join. Add the study fields and one small event table:
-```sql
-ALTER TABLE users
-  ADD COLUMN study_participant BOOLEAN NOT NULL DEFAULT FALSE,
-  ADD COLUMN study_participant_code TEXT UNIQUE,
-  ADD COLUMN study_consent_at TIMESTAMPTZ;
+## 2. Study materials (`docs/study/`, committed)
+### 2a. Consent form (`consent_form.md`), completed **before** the participant signs in
+A Google Form with **email collection turned off**, containing:
+1. **Participant code** (P1–P6, given by the moderator).
+2. The consent text, in plain language:
+   - We are testing a prototype cloud service, not you.
+   - You will upload a short video ad: your own, or one we give you. Please don't upload footage showing private individuals who haven't agreed to it.
+   - You sign in with your Google account. The app's database then stores your email address, the uploaded file's name, and your jobs (times, processing stages and results). The video itself is stored for up to 48 hours and the results for 30 days. The system runs on Amazon Web Services in the United States. Your email is also added to our Google sign-in test-user list.
+   - The questionnaire stores your participant code and answers, not your name or email.
+   - Only the NeuroLens team sees the raw data. The final report and code repository contain only pseudonymous, aggregated results (for example "P3 scored 82.5"); your written answers are summarised, not quoted with your code.
+   - Taking part is voluntary. You can stop at any time, and you can withdraw your data until the final report is submitted on 13 November 2026 by telling the moderator.
+   - When we shut the project's cloud system down after the course is graded, your account data is deleted from it, and we delete our local link between your code and your email.
+3. A required **"I agree"** checkbox.
 
-CREATE TABLE study_events (
-  id            BIGSERIAL PRIMARY KEY,
-  user_id       TEXT NOT NULL REFERENCES users(user_id),
-  event_type    TEXT NOT NULL,   -- consent_given|task_started|chart_interaction|task_completed
-  job_id        UUID REFERENCES jobs(job_id),
-  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
-);
+The moderator checks the response has arrived before the participant signs in. No agreement, no sign-in: their email is never stored.
+
+### 2b. Questionnaire (`questionnaire.md`), completed **after** the task
+A second Google Form, email collection off: participant code; the standard 10 SUS items (Brooke, 1996), unmodified wording, 1–5 scale, "the system" meaning NeuroLens, **in the standard order** (the scoring depends on it); then the three open questions (report §5.2): (1) dashboard clarity and playhead responsiveness; (2) how well they understood the brain-region labels (faces, bodies, scenes, social/STS, auditory); (3) whether $0.90 per 30-second ad seems good value, and why.
+
+### 2c. Moderator script and task sheet
+- **`moderator_script.md`:** welcome; confirm the consent response; the participant signs in; the task wording: "Upload your ad (or this one we've given you), watch it process, then use the timeline to find one moment where predicted attention peaks and one where it drops off, and tell me what they are". **Start timing** when the participant first clicks the upload area. **Stop timing** when they have named both moments. **Success** means they named a plausible peak and drop-off without the moderator pointing to them. What the moderator may and may not say. Participants without their own ad **upload** one of the provided ads (from `data/videos/`), never the pre-computed sample browser, so every session exercises the upload and processing path the report describes.
+- **`task_sheet_template.csv`:** `participant_code, time_on_task_s, success, used_own_ad` (`yes`/`no`). The moderator times with a stopwatch and records only the duration: no dates or clock times, which could identify people in a group of five.
+- **Local only, never committed** (covered by the `*.local.*` pattern added to `.gitignore`): `mapping.local.csv` (`participant_code, email`), `notes.local.md` (moderator notes), and the questionnaire's full export `questionnaire.local.csv`.
+
+## 3. Running the sessions
+- **Timing:** hold all sessions by about **5–6 November**, batched back-to-back on one or two days so they share one start-up, leaving a week for export, consolidation and writing. The load balancer (`web_mode = "alb"`, M3b §3b) is switched on shortly before (about 2 November) and stays until the presentation: about $6–7 in total.
+- Before the sessions: add each participant as a Google test user (M3b §2); set up both forms from §2.
+- Each session follows M3b's `docs/session_checklist.md`: `start_work.sh --study` about 15 minutes ahead (once per batch); consent form; the participant signs in; `grant_credit.py 500` (it asks for the email); the task; the questionnaire; `stop_work.sh` after the batch.
+- A sixth participant is recruited as a spare, in case one withdraws or a session fails.
+
+## 4. Study data
+### 4a. Export (`experiments/export_study_jobs.py`)
+`python experiments/export_study_jobs.py --mapping docs/study/mapping.local.csv` reads, through the Data API, the jobs of the users whose emails are in the mapping, and writes **`experiments/data/study/<run_id>/`** (gitignored) with:
+- `jobs.csv`: `participant_code, job_label` (`J1`, `J2`, … per participant, in time order), `status, error_code, verified_duration_ms, created_to_first_stage_ms` (from presign to processing start, so it includes the upload and the queue wait), and one `<stage>_ms` column per stage (each stage's start to the next stage's start; the last stage ends at the job's `updated_at` when `done`, M3a §4a). A job with no stages (e.g. `upload_not_received`) has empty stage columns.
+- `manifest.json` following M2b §8 (`experiment: "study"`, `environment` of the web tier, `files: ["jobs.csv"]`).
+- No email, user ID, job ID, filename or clock time. Jobs of anyone not in the mapping are excluded. An email matching no user, or several, stops the export with an error.
+It then uploads the run to `s3://<bucket>/experiments/study/<run_id>/`. For each participant, consolidation uses their first `done` job.
+
+### 4b. Withdrawal (`infra/withdraw_participant.py <participant_code>`)
+Until 13 November, a participant can withdraw. The script looks up their email in the mapping, shows what it will delete, asks for confirmation, then:
+- in one transaction, deletes their `ledger`, `refunds`, `jobs`, `balances` and `users` rows, in that order (foreign keys);
+- deletes their objects under `uploads/{user_id}/` and `results/{job_id}.json` for each of their jobs;
+- removes their row from the mapping.
+It then prints the manual steps: delete their questionnaire response in Google Forms, remove them as a Google test user, and re-run the export and consolidation. Their consent-form response is kept as the record of consent and withdrawal. If a participant withdraws after sessions are done, the spare's data is used instead.
+
+## 5. Consolidation
+### 5a. Inputs
+- `experiments/pull_artifacts.sh` syncs `s3://<bucket>/experiments/` to `experiments/data/` (gitignored), and prints the object count in S3 and locally. From then on consolidation runs **offline**, so it still works after teardown.
+- `experiments/tco_assumptions.json` (committed): the Spot and on-demand hourly prices on the day measured, GPU TDP, electricity price, hardware purchase price and amortisation period, the report's $0.10-per-video model and the ~1,475 videos/month breakeven.
+- `docs/study/sus.csv` (committed): `participant_code, q1 … q10`, made from the questionnaire export by `experiments/form_to_sus.py docs/study/questionnaire.local.csv`, which takes the code column and the ten SUS columns **by position** (Google Forms uses the question text as the column header) and checks there are exactly ten 1–5 answers.
+- `docs/study/tasks.csv` (committed): the filled task sheet (§2c).
+
+### 5b. `experiments/consolidate_results.py`
+- For each experiment it combines **all runs of one series** (M2b §8), by default the most recent series, or the one named with `--series experiment-1=<name>`. A run whose manifest lacks a required field, or whose listed files are missing or have the wrong columns, is reported and skipped, never guessed at. A missing experiment is reported, and its outputs are skipped; the rest still run.
+- Outputs in `docs/results/`, committed and regenerated by one command:
+  - `exp1_latency.png`, `exp1_latency.csv`: mean per-stage time (upload, queue wait, each processing stage, result fetch, client render where recorded) for 15 s, 30 s and 60 s clips, and peak VRAM.
+  - `exp2_throughput.png`: jobs completed over time per burst size (1, 5, 10, 20). `exp2_queue.png`: queue depth and running GPU workers over time. `exp2_reliability.csv`: results vs submissions, duplicates, dead-lettered jobs per burst, and the Spot interruption recovery. `exp2_cold_start.csv`: the cold-start breakdown, including the S3-copy vs baked-image comparison.
+  - `exp3_tco.csv`, `exp3_tco.md`: measured runtimes and the scenario cost estimates for cloud and on-premise, compared with the breakeven, labelled as estimates from measured runtimes and stated assumptions, never as observed fully-loaded costs.
+  - `sus.csv`, `sus.png`: each participant's score and the mean, with the 80 ("Grade A") line.
+  - `tasks.csv`: success rate and time-on-task per participant and mean, with each participant's automated processing time from the export alongside.
+  - `README.md`: which series and run IDs were used, and the command that regenerates everything.
+- **SUS scoring:** odd items `response − 1`, even items `5 − response`, sum × 2.5, giving 0–100. A response outside 1–5 or a missing item stops the script with the participant code named.
+
+## 6. After the presentation
+Set `web_mode = "instance"` and apply, which removes the load balancer (about $0.55 a day), then run `stop_work.sh`. Until teardown, the idle cost is the GPU image snapshot, the stopped servers' disks, the S3 weights and files, Aurora's small storage and the Secrets Manager secret ($0.40 a month). `infra/idle_cost.sh` prints these sizes and a monthly estimate.
+
+## 7. Teardown (`infra/teardown.sh`): run only when Josh decides
+Nothing deletes on a date. The consent form promises deletion after grading, so Josh runs this once marks are out. The script is the "button":
+- **Safety checks first**, in every mode:
+  - `aws sts get-caller-identity` must match the expected account ID in `infra/teardown.conf`;
+  - `docs/results/README.md` must exist;
+  - the object count under `experiments/` in S3 must equal the local copy's, and `experiments/data/study/` must exist.
+  If any check fails, it explains what would be lost and stops unless `--force` is given.
+- **`--dry-run`:** lists everything it would delete (bucket object count, `terraform plan -destroy`, images and snapshots, Parameter Store names, the state bucket) and changes nothing.
+- **Real run:** asks Josh to type `delete neurolens`, then runs these steps in order. Each step checks whether it is already done and skips it, so a failed run can simply be re-run.
+  1. `stop_work.sh`.
+  2. Empty the bucket.
+  3. Build the Lambda zips if missing (Terraform needs them to plan).
+  4. `terraform destroy`, retried up to 3 times with 10-minute waits. The CloudFront VPC origin's AWS-created security group is removed asynchronously and can block the VPC's deletion for 15 minutes or more. Aurora is set to delete without a final snapshot and with its backups (M3a §3a), so participant emails are really gone.
+  5. Deregister every `neurolens-worker-*` image and delete its snapshots.
+  6. Delete Parameter Store entries under `/neurolens/`.
+  7. **Only if `terraform destroy` succeeded**, and after a second typed confirmation, delete the Terraform state bucket, including all object versions and delete markers.
+- **Final check:** it lists anything still tagged `Project=neurolens` and double-checks each with that service's own describe call, because the tagging API can briefly still list just-deleted resources.
+- It then prints the **manual steps**:
+  - delete the Google OAuth client and remove the test users in the Google Cloud console;
+  - revoke the HuggingFace token;
+  - delete both Google Forms after the report is graded (keep the exported CSVs' committed, pseudonymous parts);
+  - delete `docs/study/*.local.*`;
+  - optionally delete the budget alert (free to keep).
+
+## 8. Report handoff
+- Every figure and table in the final report comes from `docs/results/`, regenerated by one command.
+- The report's code section links the GitHub repository, which must stay accessible until marks are released, per the project brief. The report says the service ran on demand and was shut down after evaluation.
+- The AI-use declaration draws on `docs/ai_log.local.md`.
+
+## 9. Tests (tests-first; `pytest`)
+- **SUS scoring:** all 3s → 50; best possible answers → 100; worst → 0; one mixed set worked by hand in the test's comment, chosen so that swapping the odd- and even-item formulas gives a different score; out-of-range and missing answers raise with the participant code.
+- **`form_to_sus.py`:** a fixture shaped like a Google Forms export (question text as headers) converts to `q1 … q10` by position; a missing or non-numeric answer raises.
+- **Consolidation**, on fixture artifacts in `tests/fixtures/results/` that follow M2b §8 exactly:
+  - every §5b output is produced;
+  - two runs of one series are combined, and a second series is ignored unless named;
+  - a manifest missing a field, or a file with a wrong column, is skipped and reported;
+  - a missing experiment leaves the others' outputs intact.
+- **Export** (moto + local PostgreSQL, as in M3a):
+  - no email, user ID, job ID, filename or clock-time column;
+  - non-participants absent;
+  - stage durations correct from a known `stages` list, including the last stage ending at `updated_at`;
+  - a job with no stages gives empty stage columns;
+  - an unknown or duplicated email stops with an error;
+  - it writes under `experiments/data/`.
+- **Withdrawal** (moto + local PostgreSQL): all of one participant's rows and objects are gone, other users' are untouched, and M3a's ledger invariants still hold for everyone else.
+- **Privacy scan:** every committed file under `docs/results/` and `docs/study/*.csv` contains no `@`, no UUID, no 21-digit number (Google user IDs), and no cell longer than 30 characters.
+- The shell scripts are not unit-tested; the teardown dry run is an acceptance criterion.
+
+## 10. Acceptance criteria
+1. Five complete sessions (the spare used if needed), each with a consent response recorded **before** that participant's sign-in.
+2. `consolidate_results.py` regenerates every file in `docs/results/` from local data in one command, and each report figure and table traces to one of them.
+3. The privacy-scan test passes; no committed file holds an email, name, user ID, job ID, clock time or free-text answer.
+4. After the presentation, the load balancer is gone and `stop_work.sh` reports nothing running.
+5. Josh has reviewed `teardown.sh --dry-run`. When he later runs the real teardown, the final check lists nothing left (not a gate for submission).
+6. `pytest` passes locally and in CI, with the tests committed before the implementation.
+
+## 11. File layout additions
 ```
-- `study_participant` and `study_consent_at` are checked server-side before permitting the study flow. A query parameter may select study-only presentation, but must never grant study access or bypass consent.
-- `consent_given`: logged when the participant accepts the consent screen (§4)
-- `task_started`: logged when the moderator (or participant, if self-guided) marks the start of the end-to-end scenario
-- `chart_interaction`: logged on the existing chart `onClick` handler already in the frontend (it currently seeks the video — just add one line to also POST this event; no new UI needed)
-- `task_completed`: logged when the participant indicates they've identified a peak/drop-off moment — this can be as simple as a "Done — I found it" button added near the charts for the study build only. Study-mode presentation may use a query parameter, but server-side participant/consent state remains authoritative.
-Don't build anything more elaborate than this — a 5-participant qualitative study doesn't need a full analytics pipeline, and over-instrumenting risks changing the UI enough to affect the very usability being measured.
-
-## 3. SUS instrument
-Use the standard, unmodified 10-item System Usability Scale (Brooke, 1996) — don't build a custom in-app version of this. Two reasonable options, pick one:
-- **External form (recommended):** a Google Form or equivalent with the 10 standard SUS items, the structured qualitative questions from §3.2, and the assigned pseudonymous participant code. Do not collect email solely to join study data. This keeps the validated instrument's exact wording intact and avoids the product's own visual styling influencing responses.
-- **In-app form:** only if you want a single unified experience — a simple standalone page (not styled to match the product, deliberately, for the same neutrality reason above), gated behind auth, submitting to a new `sus_responses` table. More engineering for no real benefit at N=5; only worth it if external tools aren't an option for you.
-
-### 3.1 Scoring
-Standard SUS scoring: for odd-numbered items, score = response − 1; for even-numbered items, score = 5 − response; sum all 10, multiply by 2.5, giving 0–100. The report's target threshold is ≥80 ("Grade A"). Whatever collection method you pick, the consolidation script (§5) needs raw per-item responses, not just a pre-computed total, so it can recompute and sanity-check scores.
-
-### 3.2 Structured qualitative questions (append to whichever form you use)
-Per the report's Section 5.2, capture open-ended responses on:
-1. Dashboard clarity and playhead responsiveness
-2. Comprehension of the cortical ROI labels (FFA/EBA/PPA/STS/auditory) — this one matters particularly, since these labels are neuroscience jargon and the report's own competitor-differentiation argument rests on users actually understanding them
-3. Perceived commercial value of the $0.90/ad pricing model
-
-## 4. Consent flow
-A short in-app screen shown once, before a study participant's first upload:
-- Plain-language description of what's being tested; that they'll upload a self-selected ad creative; that their Google-authenticated account is linked, server-side, to logged session data for the purpose of measuring task performance (even though the separate SUS form collects no email or other direct identifier); that this linked data is accessible only to the project team, not published or shared externally; that the pseudonymized (participant-code-linked) task-performance metrics and SUS scores may be retained indefinitely as part of the project report and codebase, becoming fully de-identified once the email-to-code link is deleted by 14 November 2026; that the identifiable link between their account (email) and their participant code, and any raw database copy or snapshot containing that link, will be deleted by that same date; and that the session may be observed/logged.
-- A single "I consent" action, which logs `study_events(event_type='consent_given')`, sets `users.study_consent_at`, and unlocks the study flow
-- This appears only for server-flagged study participants. A query parameter may control study-only presentation but cannot opt a user into the study or bypass consent.
-
-## 5. Task protocol (fixed input — implement the logging hooks, don't redesign the task)
-Per Section 5.2's "End-to-End Creative Audit Scenario," each participant:
-1. Signs in (Google SSO, already built in M3)
-2. Uploads a self-selected ad creative (or picks a sample, if they don't have one on hand — the existing sample carousel already supports this)
-3. Observes real processing progress (M2's real polling UI)
-4. Explores the synced playhead timeline to identify attention peaks and drop-off moments
-5. Marks task completion (§2's `task_completed` event)
-Task success/failure is judged by the moderator observing whether the participant can articulate a peak and a drop-off moment they found, not purely by an automated signal — this is a qualitative judgment call appropriate for N=5, not something to over-automate.
-
-## 6. Consolidation & analysis script (`experiments/consolidate_results.py`)
-The one substantial piece of new code this milestone needs. It should:
-- Read Experiment 1–3 artifacts exclusively from `experiments/<experiment>/<run_id>/` and their `manifest.json` files (the shared contract defined in M2 §10); reject incomplete or schema-mismatched runs rather than guessing paths or discovering logs manually
-- Pull `jobs`/`study_events` timestamps to compute time-on-task per participant for the core scenario; use `task_started`/`task_completed` as the primary task interval, with `job_id` optional for sample-based sessions
-- Produce scenario-based cost estimates from measured Experiment 3 runtimes and stated assumptions, then compare them to the ~1,475 videos/month analytical breakeven using the report's fully-loaded $0.10/video model. Do not present these small benchmark runs as directly observed fully-loaded cost per video.
-- Take the SUS raw responses (CSV export from whichever form you used) and compute per-participant and mean SUS scores
-- Output: a small set of charts/tables (latency breakdown bar chart, throughput-vs-concurrency line chart, SUS score summary, TCO comparison table) in a format easy to drop into the Final Report — plain PNGs/CSVs are fine, no need for a polished dashboard here since this output is for the report, not the product
-
-## 7. File layout additions
-```
-neurolens/
-├── infra/
-│   ├── study_events_schema.sql     # NEW — study fields plus the event table from §2
-│   └── teardown_m4.sh              # NEW — final teardown after consolidation/exports
-├── static/                          # MODIFIED — consent screen, task-completion button, chart_interaction logging (study-mode only)
-├── experiments/
-│   └── consolidate_results.py       # NEW — pulls Experiments 1–3 + SUS + task data into report-ready output
-└── docs/
-    └── sus_form_questions.md         # NEW — exact SUS/qualitative text and pseudonymous participant-code instructions
+docs/study/consent_form.md, questionnaire.md, moderator_script.md, task_sheet_template.csv   NEW
+docs/study/sus.csv, tasks.csv                  NEW (after the sessions)
+docs/results/                                  NEW (generated)
+experiments/export_study_jobs.py               NEW
+experiments/form_to_sus.py                     NEW
+experiments/pull_artifacts.sh                  NEW
+experiments/consolidate_results.py             NEW
+experiments/tco_assumptions.json               NEW
+infra/withdraw_participant.py                  NEW
+infra/idle_cost.sh                             NEW
+infra/teardown.sh, teardown.conf               NEW
+tests/fixtures/results/                        NEW
+.gitignore                                     MODIFIED: *.local.*, experiments/data/
 ```
 
-## 8. Acceptance criteria
-1. Only a server-flagged study participant can enter the study flow; declining or not consenting leaves it inaccessible. A query parameter alone cannot grant access or bypass consent.
-2. Every study session produces a computable time-on-task figure from `task_started`/`task_completed` events, including a sample-based session with no new job.
-3. `consolidate_results.py` joins event data to an external SUS CSV using the pseudonymous participant code, reads only valid versioned Experiment 1–3 artifacts, and produces the charts/tables described in §6 without manual data wrangling.
-4. The SUS scoring in the consolidation script matches hand-calculated scores for a known test response set (verify against a worked example from Brooke's original paper or any standard reference before trusting it on real participant data).
-5. None of the study-mode-only UI additions (consent screen, task-completion button) appear for non-study users of the product.
-
-## 8a. Data pseudonymization and retention
-The 'required Aurora exports' referenced in §9 must be a pseudonymized export (retaining `study_participant_code` but excluding `users.email`): it may include `study_participant_code`, `study_events` rows, task timestamps, and SUS responses, but must exclude `users.email` and any other directly identifying field. Produce this pseudonymized export as part of `consolidate_results.py`'s output, before teardown.
-
-If `infra/teardown_m4.sh` takes an Aurora snapshot as a safety net before deleting the cluster (per §9), that snapshot contains the raw `users` table with real emails linked to participant codes, and is therefore identifiable data, not the pseudonymized export described above. This snapshot, and any other raw copy containing the email-to-participant-code link, must be deleted by 14 November 2026 — the same deadline promised to participants in §4. Once the email-to-code link is deleted by that date, the retained export becomes fully de-identified rather than merely pseudonymized: within retained project datasets and managed exports, no retained record maps the participant code back to identity. This does not extend to backups, logs, or infrastructure outside the project's own datasets and exports (e.g. AWS account-level logging or backups outside the team's control), which are out of scope for this claim.
-
-## 9. Final teardown and what happens after this milestone
-
-After `consolidate_results.py` has completed and its report-ready outputs plus required Aurora exports are retained, run `infra/teardown_m4.sh`. It deletes the Flask ASG, Launch Template, and ALB; snapshots then deletes Aurora if the retained export is sufficient; and confirms no Flask-tier or GPU instances remain. This is the only final teardown for the live M3/M4 product stack.
-
-This is the last milestone in the roadmap. Its output — consolidated benchmark results, SUS scores, and qualitative feedback — feeds directly into the Final Report, and any usability issues surfaced (per the report's own stated plan) are documented as findings and scoped as post-submission future work, not built blindly into this spec.
+## 12. Cost
+- Study sessions, batched on one or two days: a few hours of started system (web, NAT, one warm GPU, Aurora at 0.5 ACU): roughly $3–6 in total on Spot.
+- Load balancer: about $6–7 from about 2 November to the presentation.
+- Idle until teardown: a few dollars a month (printed by `idle_cost.sh`).

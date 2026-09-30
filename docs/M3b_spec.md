@@ -20,7 +20,7 @@
 - **Stretch, only after every other acceptance criterion passes:** a Stripe test-mode credit demo (§7)
 
 ### Out of scope (M4)
-The usability study itself, study consent and event logging, the results consolidation script, and final teardown.
+The usability study itself (run with a Google Form and a moderator, no in-app study code), the results consolidation script, and final teardown.
 
 ## 2. Google sign-in (`neurolens/web/auth.py`)
 - Config `auth.mode = "google"` on AWS; `"dev"` stays available for laptop work and tests (M3a §2, including its `127.0.0.1` guard). On AWS, the systemd units of the web server and the worker set `NEUROLENS_DEPLOYED=1`, and `create_app` raises `UnsafeConfigError` for dev mode whenever that variable is set, whatever the configured host. gunicorn binds to `0.0.0.0` regardless of the config's host, so the host check alone would not stop a mistyped config exposing the dev identity.
@@ -92,7 +92,7 @@ Terraform ignores changes to Aurora's `min_capacity` so the scripts and Terrafor
 **Before a demo or study session** (`docs/session_checklist.md`, one page):
 1. About 15 minutes ahead: `start_work.sh --study` and wait for "ready".
 2. Open the site, sign in, and check the balance loads.
-3. For a new participant: after they first sign in, `grant_credit.py <email> <cents>`.
+3. For a new participant: after they first sign in, `grant_credit.py <cents>` (it asks for the email).
 4. Afterwards: `stop_work.sh`, and check it reports everything stopped.
 
 **Paused state.** When the web server is off, the page still loads from S3. Its first `/api/me` call then fails with something other than a JSON response from Flask (a CloudFront or load-balancer error, or a network error). The page shows: "NeuroLens is paused between sessions to save cost. The sample results below are still available. To try an upload, contact the NeuroLens team." It hides the sign-in button and keeps the sample browser working (samples load from `/data/samples.json`). This is distinct from the 503 `database_waking` JSON (§2), which means the server is up and the page should retry.
@@ -123,7 +123,7 @@ Terraform ignores changes to Aurora's `min_capacity` so the scripts and Terrafor
   - `upload_not_received`: "The upload didn't finish. Please try again."
 
 ### 4c. Credit grants
-`infra/grant_credit.py <email> <cents>`: adds credit to an existing user through the Data API, in one transaction with a `grant` ledger row (migration `002_grant.sql` adds `grant` to the ledger `kind` check; the kind is passed as a parameter, since project SQL has no string literals). `cents` must be positive. `users.email` is not unique, so if the email matches zero users or more than one, it stops with an error listing the matches. Used for the team and study participants; it runs from a laptop with the `neurolens` profile, never from the web app.
+`infra/grant_credit.py <cents>`: prompts for the email (so participants' emails never land in shell history), then adds credit to an existing user through the Data API, in one transaction with a `grant` ledger row (migration `002_grant.sql` adds `grant` to the ledger `kind` check; the kind is passed as a parameter, since project SQL has no string literals). `cents` must be positive. `users.email` is not unique, so if the email matches zero users or more than one, it stops with an error listing the matches. Used for the team and study participants; it runs from a laptop with the `neurolens` profile, never from the web app.
 
 ## 5. Interfaces fixed by this spec (the §9 tests are written against exactly these)
 - `neurolens.web.auth`: `current_user() -> tuple[str, str] | None`; `login_required` decorator giving the 401 JSON above; `init_auth(app, cfg, ssm_client, *, server_metadata=None) -> None` registers the Google client and routes and sets the session secret. When `server_metadata` (a dict with `issuer`, `authorization_endpoint`, `token_endpoint`, `jwks_uri`) is given, Authlib uses it instead of downloading Google's OpenID configuration.
@@ -216,7 +216,7 @@ tests/                             MODIFIED: §9
 ## 12. Cost
 - CloudFront: free tier (1 TB out and 10 million requests a month).
 - Web `t4g.micro` and NAT `t4g.nano`: about $0.015 an hour together, only while started.
-- Load balancer: about $4 for the final week (it bills by the hour even when no server is behind it).
+- Load balancer: about $0.55 a day while it exists (it bills by the hour even when no server is behind it), from shortly before the study sessions until after the presentation (M4 §3).
 - S3 site files: a few hundred MB of sample videos, cents a month.
 - Parameter Store standard parameters: free.
 - Experiment 3 cloud leg: up to 1–2 GPU hours on Spot if Experiment 1 doesn't already cover it; flagged before running.
