@@ -15,7 +15,7 @@ KEY_RE = re.compile(r"^uploads/placeholder-user/([0-9a-f-]{36})(\.[a-z0-9]+)$")
 def client_for(make_cfg, tmp_path):
     def make(**cfg_overrides):
         cfg = make_cfg(**cfg_overrides)
-        app = create_app(load_model=False, data_dir=tmp_path / "data", cfg=cfg)
+        app = create_app(data_dir=tmp_path / "data", cfg=cfg)
         app.config["TESTING"] = True
         return app.test_client(), cfg
 
@@ -209,7 +209,7 @@ def test_create_app_with_cfg_needs_no_config_json(monkeypatch, tmp_path, make_cf
     data_dir = tmp_path / "data"
     data_dir.mkdir()
     (data_dir / "samples.json").write_text('{"samples": []}')
-    app = create_app(load_model=False, data_dir=data_dir, cfg=make_cfg())
+    app = create_app(data_dir=data_dir, cfg=make_cfg())
     resp = app.test_client().get("/api/samples")
     assert resp.status_code == 200
     assert resp.get_json() == {"samples": []}
@@ -220,5 +220,5 @@ def test_create_app_without_cfg_or_aws_block_still_serves_other_routes(tmp_path)
     data_dir = tmp_path / "data"
     data_dir.mkdir()
     (data_dir / "ok.txt").write_text("fine")
-    app = create_app(load_model=False, data_dir=data_dir)
+    app = create_app(data_dir=data_dir)
     assert app.test_client().get("/data/ok.txt").data == b"fine"

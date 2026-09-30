@@ -8,7 +8,7 @@
 
 ## 0. What exists today (after M0)
 - `neurolens/settings.py` (config, paths, env vars, `max_duration(cfg)`, host/port), `neurolens/engagement.py` (pure maths), `neurolens/inference.py` (`load_model()`, `run_inference`, `strip_audio`, `gpu_info`), `neurolens/web/app.py` (`create_app()`: `GET /`, `GET /api/samples`, `GET /data/<path>`, `POST /api/analyse`). The root `app.py` is a launcher.
-- `POST /api/analyse` still runs the model inside the web process (the temporary M0 exception) and does a real ffprobe duration check. **That check is different from M1's client-side estimate**; keep both, they serve different purposes (§4).
+- `POST /api/analyse` still runs the model inside the web process (the temporary M0 exception) and does a real ffprobe duration check. M1 replaces it with the worker's ffprobe check, which stays separate from the browser's estimate (§4), and removes the endpoint (§7).
 - The golden test, import-hygiene test and CI (ruff + pytest, no `torch`) already exist and must stay green.
 
 ## 1. Worker entry point and shared S3 helpers
@@ -36,18 +36,18 @@ Place this comment above `max_duration` in `neurolens/settings.py`:
   - `parse_s3_event(body: str) -> list[tuple[str, str]]`: `(bucket, key)` for every record, keys outside `uploads/` dropped. A body without `Records` (S3 sends `{"Event": "s3:TestEvent", ...}` once when the notification is created) returns `[]`.
   - `job_id_from_key(key: str) -> str`.
 - `neurolens.inference`:
-  - `probe_duration(path) -> float`: the ffprobe call currently inside `/api/analyse`, moved here so web and worker share it.
+  - `probe_duration(path) -> float`: measures a video's length with ffprobe (the worker's authoritative duration check). Raises `UnreadableVideo` (a `ValueError` subclass defined in `neurolens.inference`) when ffprobe cannot produce a duration: the file is not a video, is corrupt, or has no duration in its header.
   - `roi_masks() -> dict[str, ndarray]`: the masks loaded by `load_model()`.
   - `gpu_info() -> dict | None`: GPU name and peak memory, or `None` when there is no CUDA GPU **or `torch` is not installed** (a laptop in fake mode).
   - `fake_mode() -> bool`: reads `FAKE_INFERENCE` from the environment **at call time** (so tests can set it with `monkeypatch`). `"1"`, `"true"`, `"yes"` mean on.
 - `neurolens.worker`:
-  - `Outcome`: an enum of final record outcomes, `DONE` and `REJECTED` (oversize or too long; the object is deleted). M2a and M2b add values. Any failure is an exception, not an outcome.
+  - `Outcome`: an enum of final record outcomes, `DONE` and `REJECTED` (oversize, too long or unreadable; the object is deleted). M2a and M2b add values. Any failure is an exception, not an outcome.
   - `handle_record(bucket, key, *, s3, cfg, roi_masks) -> Outcome`: never touches SQS.
   - `process_message(message, *, s3, sqs, cfg, roi_masks) -> None`: calls `handle_record` for every record from `parse_s3_event`; deletes the message only if every record returned an `Outcome` (a message with zero records, such as the test event, is deleted). If any record raised, it logs the traceback, **stops at that record** (later records wait for the redelivery) and leaves the message for redelivery.
   - `run() -> None`: loads config and model, builds clients, polls forever.
   - AWS clients are passed in as parameters so tests can hand in `moto` clients.
 - **Result JSON** (M1 writes it locally, M2a to S3): `duration_seconds` and `timesteps` exactly as `extract_engagement` returns them, plus `job_id`, `processing_time_seconds`, `fake_inference` (present and `true` only in fake mode) and `gpu` (present only when `gpu_info()` returns a value). There is no `filename` field; the browser already knows it.
-- `neurolens.web.app.create_app(..., cfg: dict | None = None)`: when `cfg` is given it is used instead of reading `config.json`, so tests need no config file. It also serves `GET /api/limits` (§4). The S3 client (and the presign route's ability to succeed) exists only when the config has an `aws` block; without one, `/api/uploads/presign` returns 500 `presign_failed`, and the M0 web tests keep working unchanged.
+- `neurolens.web.app.create_app(data_dir: Path | None = None, cfg: dict | None = None)`: it never reads `config.json` itself, so tests need no config file. The launcher `app.py` loads the config and passes it: `create_app(cfg=settings.load_config())`. With `cfg=None` the max duration is 120 and there is no S3 client. It also serves `GET /api/limits` (§4). The S3 client (and the presign route's ability to succeed) exists only when the config has an `aws` block; without one, `/api/uploads/presign` returns 500 `presign_failed`, and the M0 web tests keep working unchanged.
 
 ### 1a. Fake-model switch (`FAKE_INFERENCE`)
 `neurolens.inference` checks `fake_mode()` (an environment variable only; there is no config field, so a stale config file can never leave a real deployment in fake mode). When it is on:
@@ -115,7 +115,7 @@ Terraform does **not** create IAM users or configure credentials. Run it with th
 **Teardown:** `terraform destroy`. S3 refuses to delete a non-empty bucket, so the README documents emptying it first (`aws s3 rm s3://<bucket> --recursive`) once results and experiment files are no longer needed.
 
 ## 4. Flask: presigned URL endpoint
-Add to `neurolens/web/app.py`, using `neurolens.storage.presign_upload` (do not remove `/api/analyse` yet — see §7):
+Add to `neurolens/web/app.py`, using `neurolens.storage.presign_upload` (`/api/analyse` no longer exists, §7):
 ```
 POST /api/uploads/presign
 Body: { "filename": "ad_variant_1.mp4", "content_type": "video/mp4", "client_duration_seconds": 27.4, "client_declared_bytes": 52428800 }
@@ -168,8 +168,8 @@ Add `max_upload_bytes` to `config.json`/`config.sample.json` as a top-level fiel
 - Parses the S3 event from the message body with `parse_s3_event` (the SQS message body **is** the raw S3 event JSON when S3 publishes directly to SQS — don't assume an SNS wrapper unless one was added)
 - Before downloading, call `s3.head_object(Bucket=..., Key=...)` and reject immediately if `ContentLength > max_upload_bytes`: log, delete the object, return `Outcome.REJECTED`, and never call `download_file`, ffprobe, or inference.
 - Downloads the object via `s3.download_file(bucket, key, local_tmp_path)` only after that size check passes.
-- Runs `neurolens.inference.probe_duration` on the downloaded file (the real, authoritative duration check) and returns `Outcome.REJECTED` (log, delete the object, no inference) if it exceeds `max_duration(cfg)`
-- Calls `run_inference` → `strip_audio` → `run_inference` (no-audio pass) → `extract_engagement`, exactly mirroring the current `/api/analyse` sequence
+- Runs `neurolens.inference.probe_duration` on the downloaded file (the real, authoritative duration check) and returns `Outcome.REJECTED` (log, delete the object, no inference) if it exceeds `max_duration(cfg)` **or if `probe_duration` raises `UnreadableVideo`** (a corrupt or non-video upload can never succeed, so retrying it would only loop until M2b's dead-letter queue)
+- Calls `run_inference` → `strip_audio` → `run_inference` (no-audio pass) → `extract_engagement`, the same sequence the pre-M1 `/api/analyse` used
 - Writes the result JSON (keys in §1) to `<output dir>/{job_id}.json`, where the output dir is `paths.output` from config (already gitignored), and returns `Outcome.DONE`. A local folder is fine for M1; M2a moves results to S3
 - `process_message` deletes the message once every record has an outcome
 - On any exception: log full traceback, do **not** delete the message (let SQS redeliver after the visibility timeout — no DLQ wiring required this milestone; the `# TODO(M2b)` sits on the Terraform queue resource, §3)
@@ -199,22 +199,17 @@ Required tests:
 - **Presign endpoint** (Flask test client + moto): rejects a bad content type, an over-long duration and an oversize file with the documented error codes; on success returns `job_id`, `url`, `fields`, and a key under `uploads/placeholder-user/` that contains the `job_id`.
 - **S3 event parsing:** a message with several `Records` is handled record by record; records outside `uploads/` are ignored; the `s3:TestEvent` body returns `[]` and its message is deleted.
 - **Presign key:** the object key's extension follows `content_type`, even when the filename says otherwise.
-- **Worker handling** (moto): an object over `max_upload_bytes` returns `REJECTED`, is deleted along with its message, and `download_file` / inference are never called; a video whose ffprobe duration exceeds `max_duration(cfg)` returns `REJECTED` without inference; a valid video returns `DONE` and produces a result JSON with exactly the §1 keys, including `"fake_inference": true`; a record that raises leaves the message undeleted.
+- **Worker handling** (moto): an object over `max_upload_bytes` returns `REJECTED`, is deleted along with its message, and `download_file` / inference are never called; a video whose ffprobe duration exceeds `max_duration(cfg)` returns `REJECTED` without inference; a file ffprobe cannot read (for example plain text saved as `.mp4`) returns `REJECTED`, the object and the message are deleted, and inference is never called; a valid video returns `DONE` and produces a result JSON with exactly the §1 keys, including `"fake_inference": true`; a record that raises leaves the message undeleted.
 - **Limits endpoint:** `GET /api/limits` returns both numbers from the config (changing the config changes the answer), and `max_upload_bytes` is `null` for a config without it.
 - **Fake switch:** `fake_mode()` follows `monkeypatch.setenv`/`delenv` within one process.
 - **Import hygiene** (extends M0's test): `neurolens.storage`, `neurolens.pricing` and `neurolens.worker` import without `torch`; `neurolens.storage` and `neurolens.pricing` also without `neurolens.inference`.
 - **Golden test** for `extract_engagement` (M0) still passes unchanged.
 
-## 7. Migration of the old endpoint
-Keep `/api/analyse` working through M1 (don't break the existing notebook-validated demo path) but mark it clearly as deprecated:
-```python
-# TODO(M1-cleanup): remove this endpoint once the presign+SQS+worker path
-# is verified end-to-end (see M1 spec §9 acceptance criteria). Do not
-# maintain both paths past this milestone.
-```
-Do not delete it until acceptance criteria in §9 all pass — you want a known-good fallback while debugging the new path.
-
-**Final M1 commit, after §9 passes:** remove `/api/analyse`, the `load_model` parameter of `create_app`, and the lazy `neurolens.inference` import inside it. From then on the web tier never imports `neurolens.inference` (the M0 temporary exception ends). In the same commit, the test-writing agent removes the tests for `/api/analyse`, drops the `load_model=False` argument from every `create_app` call in the suite, and extends the import-hygiene test to assert that importing and calling `create_app` never loads `neurolens.inference`. This is a spec'd test change, not the implementer editing tests.
+## 7. The old endpoint is gone
+`POST /api/analyse`, the `load_model` parameter of `create_app`, and the lazy `neurolens.inference` import inside it no longer exist. **The web tier never imports `neurolens.inference`** (nor `torch`): analysis happens only in the worker. Consequences:
+- `create_app(data_dir=None, cfg=None)` (§1); the launcher `app.py` loads the config, builds the app and runs it on `settings.HOST`/`PORT`. It does not log GPU information, since the web machine has no GPU.
+- The test suite has no tests for `/api/analyse`, never passes `load_model` to `create_app`, and the import-hygiene test asserts that importing `neurolens.web.app` and calling `create_app` never loads `neurolens.inference`.
+- `AGENTS.md` states the rule without the M0 exception.
 
 ## 8. File layout after M1 (additions to M0)
 ```
@@ -240,7 +235,7 @@ requirements/       MODIFIED: boto3 (web, worker), moto (dev)
 4. Selecting a video in the browser shows duration + estimated cost; files >120s or wrong MIME are rejected before any network call.
 5. `POST /api/uploads/presign` returns a working presigned POST (`url` + `fields`); a browser form POST using those fields lands the object in the real S3 bucket, visible via `aws s3 ls`.
 6. That S3 upload produces a visible SQS message within seconds (`aws sqs receive-message` manually, or watch `worker.py`'s logs).
-7. `FAKE_INFERENCE=1 python worker.py`, left running, picks up that message, runs ffprobe + both (fake) inference passes, and writes a result JSON to the output folder matching the schema `/api/analyse` already returns, plus `"fake_inference": true`.
+7. `FAKE_INFERENCE=1 python worker.py`, left running, picks up that message, runs ffprobe + both (fake) inference passes, and writes a result JSON to the output folder with the §1 keys, including `"fake_inference": true`.
 8. A video whose real (ffprobe-measured) duration exceeds 120s is rejected by the worker even if the client-side estimate was under 120s (proves the two checks are independent, per §4).
 9. Lifecycle rules match §3: `uploads/` and `status/` 48 h, `results/` 30 days, no expiry on `code/` or `experiments/` — inspect with `aws s3api get-bucket-lifecycle-configuration`.
 10. The account-wide $40 budget with 50/80/100% alerts was confirmed to exist before the first `terraform apply`.

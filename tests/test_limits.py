@@ -7,7 +7,7 @@ from neurolens.web.app import create_app
 @pytest.fixture
 def get_limits(tmp_path):
     def get(**kwargs):
-        app = create_app(load_model=False, data_dir=tmp_path / "data", **kwargs)
+        app = create_app(data_dir=tmp_path / "data", **kwargs)
         app.config["TESTING"] = True
         return app.test_client().get("/api/limits")
 

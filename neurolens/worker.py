@@ -45,7 +45,11 @@ def handle_record(bucket, key, *, s3, cfg, roi_masks):
         s3.download_file(bucket, key, str(local))
 
         # The authoritative duration check (the browser's estimate can be wrong or spoofed).
-        duration = inference.probe_duration(local)
+        try:
+            duration = inference.probe_duration(local)
+        except inference.UnreadableVideo:
+            # Not a video, corrupt, or no duration: it can never succeed, so do not retry it.
+            return _reject(s3, bucket, key, "not a readable video")
         if duration > settings.max_duration(cfg):
             return _reject(s3, bucket, key, f"{duration:.1f}s exceeds the maximum duration")
 

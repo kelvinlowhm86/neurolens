@@ -1,17 +1,13 @@
-"""Flask routes. Built by create_app() so tests can run without the model."""
+"""Flask routes. The web tier never runs the model: analysis happens in the worker."""
 
 import json
 import logging
-import os
-import tempfile
-import time
 from pathlib import Path
 
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 
 from neurolens import pricing, settings, storage
-from neurolens.engagement import extract_engagement
 
 logger = logging.getLogger("neurolens")
 
@@ -24,30 +20,18 @@ def _error(code, message, status=400, **extra):
     return jsonify({"error": code, "message": message, **extra}), status
 
 
-def create_app(load_model=True, data_dir=None, cfg=None):
+def create_app(data_dir=None, cfg=None):
     """Build the Flask app.
 
-    load_model=True loads config.json, the model and the atlas (needs a GPU machine).
-    load_model=False needs none of that: /api/analyse answers 503.
-    cfg, when given, is used instead of reading config.json (tests need no config file).
+    Never reads config.json itself (the launcher app.py loads it and passes cfg), so tests
+    need no config file. With cfg=None the max duration is 120 and there is no S3 client.
     """
     root = settings.get_root()
-    inference = None
-
-    if load_model:
-        # TEMPORARY (removed at the end of M1): local use still analyses videos in this
-        # process. The web tier must never import inference otherwise.
-        from neurolens import inference
-
-        if cfg is None:
-            cfg = settings.load_config(root)
-        paths = settings.resolve_paths(cfg, root)
-        settings.ensure_dirs(paths)
-        inference.load_model(cfg)
-        if data_dir is None:
-            data_dir = paths["data"]
-    elif data_dir is None:
-        data_dir = root / "data"
+    if data_dir is None:
+        if cfg is not None and "paths" in cfg:
+            data_dir = settings.resolve_paths(cfg, root)["data"]
+        else:
+            data_dir = root / "data"
 
     data_dir = Path(data_dir)
     # The S3 client exists only when the config has an aws block (M0-style tests have none).
@@ -130,70 +114,5 @@ def create_app(load_model=True, data_dir=None, cfg=None):
 
         presigned["estimated_cost_usd"] = pricing.estimate_cost_usd(duration)
         return jsonify(presigned)
-
-    # TODO(M1-cleanup): remove this endpoint once the presign+SQS+worker path
-    # is verified end-to-end (see M1 spec §9 acceptance criteria). Do not
-    # maintain both paths past this milestone.
-    @app.route("/api/analyse", methods=["POST"])
-    def analyse():
-        if "video" not in request.files:
-            return jsonify({"error": "No video file provided"}), 400
-
-        video_file = request.files["video"]
-        if not video_file.filename:
-            return jsonify({"error": "Empty filename"}), 400
-
-        if inference is None:
-            return jsonify({"error": "Model not loaded"}), 503
-
-        suffix = Path(video_file.filename).suffix or ".mp4"
-        with tempfile.NamedTemporaryFile(suffix=suffix, dir="/tmp", delete=False) as tmp:
-            video_file.save(tmp)
-            tmp.flush()
-            os.fsync(tmp.fileno())
-            video_path = Path(tmp.name)
-
-        try:
-            duration = inference.probe_duration(video_path)
-            if duration > max_seconds:
-                return (
-                    jsonify({"error": f"Video too long ({duration:.0f}s). Max is {max_seconds}s."}),
-                    400,
-                )
-
-            logger.info(f"Analysing video: {video_file.filename} ({duration:.1f}s)")
-            t0 = time.time()
-
-            logger.info("Running inference — full video with audio...")
-            preds_full = inference.run_inference(video_path)
-            logger.info(f"  Full inference done. Shape: {preds_full.shape}")
-
-            noaudio_path = video_path.with_suffix(".noaudio" + suffix)
-            logger.info("Stripping audio...")
-            inference.strip_audio(video_path, noaudio_path)
-
-            logger.info("Running inference — video only, no audio...")
-            preds_noaudio = inference.run_inference(noaudio_path)
-            logger.info(f"  Video-only inference done. Shape: {preds_noaudio.shape}")
-
-            result = extract_engagement(preds_full, preds_noaudio, inference.roi_masks())
-            result["filename"] = video_file.filename
-            result["processing_time_seconds"] = round(time.time() - t0, 1)
-
-            gpu = inference.gpu_info()
-            if gpu is not None:
-                result["gpu"] = gpu
-
-            logger.info(f"Analysis complete in {result['processing_time_seconds']}s")
-            return jsonify(result)
-
-        except Exception as e:
-            logger.exception("Analysis failed")
-            return jsonify({"error": str(e)}), 500
-
-        finally:
-            video_path.unlink(missing_ok=True)
-            noaudio_path = video_path.with_suffix(".noaudio" + suffix)
-            noaudio_path.unlink(missing_ok=True)
 
     return app

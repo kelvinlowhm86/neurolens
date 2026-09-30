@@ -71,14 +71,24 @@ def load_model(cfg=None):
     logger.info("Atlas and ROI masks ready.")
 
 
+class UnreadableVideo(ValueError):
+    """ffprobe could not produce a duration: not a video, corrupt, or no duration in the header."""
+
+
 def probe_duration(path):
-    """Video length in seconds, measured with ffprobe."""
+    """Video length in seconds, measured with ffprobe. Raises UnreadableVideo if unreadable."""
     result = subprocess.run(
         ["ffprobe", "-v", "quiet", "-print_format", "json", "-show_format", str(path)],
         capture_output=True,
         text=True,
     )
-    return float(json.loads(result.stdout)["format"]["duration"])
+    try:
+        duration = float(json.loads(result.stdout)["format"]["duration"])
+    except (ValueError, KeyError, TypeError) as err:  # JSONDecodeError is a ValueError
+        raise UnreadableVideo(f"ffprobe could not read a duration from {path}") from err
+    if not math.isfinite(duration):
+        raise UnreadableVideo(f"ffprobe gave a non-finite duration for {path}")
+    return duration
 
 
 def run_inference(video_path):

@@ -3,7 +3,7 @@
 NeuroLens predicts brain activity for a video (TRIBE v2) and turns it into per-region "engagement" curves, served by a Flask web app. Course project: not for commercial use (the model is CC BY-NC).
 
 ## Layout
-- `neurolens/` the package: `settings.py` (config + paths), `engagement.py` (pure maths, numpy only), `inference.py` (model + atlas loading, `run_inference`, `strip_audio`), `web/app.py` (`create_app()`, Flask routes).
+- `neurolens/` the package: `settings.py` (config + paths), `engagement.py` (pure maths, numpy only), `inference.py` (model + atlas loading, `run_inference`, `strip_audio`, `probe_duration`, fake mode), `pricing.py`, `storage.py` (S3 helpers), `worker.py` (SQS poll loop), `web/app.py` (`create_app()`, Flask routes).
 - `app.py` thin launcher (`python app.py`, port 5003). `static/` the page. `data/` samples, videos, thumbnails.
 - `notebooks/` the two `.ipynb` files (need a GPU). `requirements/` per-machine dependency lists. `infra/` AWS-only files (later milestones). `tests/` pytest. `docs/` specs.
 
@@ -13,7 +13,7 @@ NeuroLens predicts brain activity for a video (TRIBE v2) and turns it into per-r
 
 ## Rules
 - Heavy imports (`torch`, `tribev2`, `nilearn`, `huggingface_hub`) only inside functions, never at module top of `neurolens/`.
-- The web code must not import `neurolens.inference` at module level (only inside `create_app` when `load_model=True`; removed in M1).
+- The web code never imports `neurolens.inference` (nor `torch`): analysis happens only in the worker (`python worker.py`; set `FAKE_INFERENCE=1` on a laptop). `create_app(data_dir=None, cfg=None)` never reads `config.json`; the launcher `app.py` loads it.
 - Read config only through `neurolens.settings`. Nothing runs at import time.
 - Never commit `config.json`, tokens or AWS keys. Never put them in Docker images.
 - Never edit a test to make it pass: stop and ask.

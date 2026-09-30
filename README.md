@@ -146,6 +146,8 @@ Expected output schema:
 
 ### Phase 1B: Flask API (`app.py`)
 
+> **Note (M1):** `POST /api/analyse` described below was replaced by direct browser upload to S3, a queue and a separate worker. The web app no longer runs the model. See `docs/M1_spec.md`.
+
 A Flask application exposing a single endpoint:
 
 ```
@@ -284,7 +286,8 @@ jupyter notebook notebooks/explore.ipynb
 ### Run the app and the tests
 
 ```bash
-python app.py                                   # web app on http://localhost:5003 (needs config.json, the model and a GPU)
+python app.py                                   # web app on http://127.0.0.1:5003 (needs config.json; it never runs the model)
+FAKE_INFERENCE=1 python worker.py               # the worker: analyses uploads (fake model on a laptop; real model needs a GPU)
 pip install -e . -r requirements/dev.txt        # laptop: tests and lint only, no GPU or model needed
 pytest && ruff check . && ruff format --check .
 ```
