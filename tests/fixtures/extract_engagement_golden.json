@@ -1,0 +1,341 @@
+{
+  "recipe": {
+    "generated_from": "original app.py extract_engagement, before the M0 split",
+    "n_vertices": 20484,
+    "roi_order": [
+      "ffa_faces",
+      "eba_bodies",
+      "ppa_scenes",
+      "sts_social",
+      "auditory"
+    ],
+    "masks": "ROI i is True on vertices [i*200, i*200+200), False elsewhere",
+    "equal": "rng=default_rng(0); preds_full=standard_normal((12,20484)); preds_noaudio=standard_normal((12,20484))",
+    "short": "rng=default_rng(0) (fresh); preds_full=standard_normal((12,20484)); preds_noaudio=standard_normal((11,20484))",
+    "numpy": "2.2.6"
+  },
+  "cases": {
+    "equal": {
+      "duration_seconds": 12,
+      "timesteps": [
+        {
+          "t": 0,
+          "engagement_overall": 0.0304,
+          "regions": {
+            "ffa_faces": 0.2227,
+            "eba_bodies": 0.6701,
+            "ppa_scenes": 0.4181,
+            "sts_social": 0.2981,
+            "auditory": 0.0
+          },
+          "auditory_with_audio": 0.0,
+          "auditory_without_audio": 0.3986
+        },
+        {
+          "t": 1,
+          "engagement_overall": 0.1741,
+          "regions": {
+            "ffa_faces": 0.1839,
+            "eba_bodies": 0.4284,
+            "ppa_scenes": 0.0,
+            "sts_social": 1.0,
+            "auditory": 0.4092
+          },
+          "auditory_with_audio": 0.4092,
+          "auditory_without_audio": 0.4537
+        },
+        {
+          "t": 2,
+          "engagement_overall": 1.0,
+          "regions": {
+            "ffa_faces": 0.7869,
+            "eba_bodies": 0.404,
+            "ppa_scenes": 1.0,
+            "sts_social": 0.1816,
+            "auditory": 1.0
+          },
+          "auditory_with_audio": 1.0,
+          "auditory_without_audio": 0.0514
+        },
+        {
+          "t": 3,
+          "engagement_overall": 0.3081,
+          "regions": {
+            "ffa_faces": 0.4821,
+            "eba_bodies": 0.0063,
+            "ppa_scenes": 0.328,
+            "sts_social": 0.3484,
+            "auditory": 0.9125
+          },
+          "auditory_with_audio": 0.9125,
+          "auditory_without_audio": 0.4813
+        },
+        {
+          "t": 4,
+          "engagement_overall": 0.2129,
+          "regions": {
+            "ffa_faces": 0.7469,
+            "eba_bodies": 0.0,
+            "ppa_scenes": 0.1906,
+            "sts_social": 0.6114,
+            "auditory": 0.5859
+          },
+          "auditory_with_audio": 0.5859,
+          "auditory_without_audio": 0.1036
+        },
+        {
+          "t": 5,
+          "engagement_overall": 0.4035,
+          "regions": {
+            "ffa_faces": 0.5731,
+            "eba_bodies": 0.5408,
+            "ppa_scenes": 0.2606,
+            "sts_social": 0.5025,
+            "auditory": 0.6221
+          },
+          "auditory_with_audio": 0.6221,
+          "auditory_without_audio": 0.2484
+        },
+        {
+          "t": 6,
+          "engagement_overall": 0.4518,
+          "regions": {
+            "ffa_faces": 0.7441,
+            "eba_bodies": 0.4349,
+            "ppa_scenes": 0.5442,
+            "sts_social": 0.552,
+            "auditory": 0.3049
+          },
+          "auditory_with_audio": 0.3049,
+          "auditory_without_audio": 1.0
+        },
+        {
+          "t": 7,
+          "engagement_overall": 0.0104,
+          "regions": {
+            "ffa_faces": 0.0517,
+            "eba_bodies": 0.3447,
+            "ppa_scenes": 0.4199,
+            "sts_social": 0.3402,
+            "auditory": 0.2398
+          },
+          "auditory_with_audio": 0.2398,
+          "auditory_without_audio": 0.0215
+        },
+        {
+          "t": 8,
+          "engagement_overall": 0.6376,
+          "regions": {
+            "ffa_faces": 0.5079,
+            "eba_bodies": 0.6225,
+            "ppa_scenes": 0.4665,
+            "sts_social": 0.6138,
+            "auditory": 0.6615
+          },
+          "auditory_with_audio": 0.6615,
+          "auditory_without_audio": 0.4191
+        },
+        {
+          "t": 9,
+          "engagement_overall": 0.0,
+          "regions": {
+            "ffa_faces": 0.3041,
+            "eba_bodies": 0.1299,
+            "ppa_scenes": 0.1689,
+            "sts_social": 0.0145,
+            "auditory": 0.8308
+          },
+          "auditory_with_audio": 0.8308,
+          "auditory_without_audio": 0.0119
+        },
+        {
+          "t": 10,
+          "engagement_overall": 0.4992,
+          "regions": {
+            "ffa_faces": 1.0,
+            "eba_bodies": 0.6267,
+            "ppa_scenes": 0.2966,
+            "sts_social": 0.0,
+            "auditory": 0.8858
+          },
+          "auditory_with_audio": 0.8858,
+          "auditory_without_audio": 0.0
+        },
+        {
+          "t": 11,
+          "engagement_overall": 0.7417,
+          "regions": {
+            "ffa_faces": 0.0,
+            "eba_bodies": 1.0,
+            "ppa_scenes": 0.5601,
+            "sts_social": 0.5408,
+            "auditory": 0.7593
+          },
+          "auditory_with_audio": 0.7593,
+          "auditory_without_audio": 0.2469
+        }
+      ]
+    },
+    "short": {
+      "duration_seconds": 12,
+      "timesteps": [
+        {
+          "t": 0,
+          "engagement_overall": 0.0304,
+          "regions": {
+            "ffa_faces": 0.2227,
+            "eba_bodies": 0.6701,
+            "ppa_scenes": 0.4181,
+            "sts_social": 0.2981,
+            "auditory": 0.0
+          },
+          "auditory_with_audio": 0.0,
+          "auditory_without_audio": 0.3986
+        },
+        {
+          "t": 1,
+          "engagement_overall": 0.1741,
+          "regions": {
+            "ffa_faces": 0.1839,
+            "eba_bodies": 0.4284,
+            "ppa_scenes": 0.0,
+            "sts_social": 1.0,
+            "auditory": 0.4092
+          },
+          "auditory_with_audio": 0.4092,
+          "auditory_without_audio": 0.4537
+        },
+        {
+          "t": 2,
+          "engagement_overall": 1.0,
+          "regions": {
+            "ffa_faces": 0.7869,
+            "eba_bodies": 0.404,
+            "ppa_scenes": 1.0,
+            "sts_social": 0.1816,
+            "auditory": 1.0
+          },
+          "auditory_with_audio": 1.0,
+          "auditory_without_audio": 0.0514
+        },
+        {
+          "t": 3,
+          "engagement_overall": 0.3081,
+          "regions": {
+            "ffa_faces": 0.4821,
+            "eba_bodies": 0.0063,
+            "ppa_scenes": 0.328,
+            "sts_social": 0.3484,
+            "auditory": 0.9125
+          },
+          "auditory_with_audio": 0.9125,
+          "auditory_without_audio": 0.4813
+        },
+        {
+          "t": 4,
+          "engagement_overall": 0.2129,
+          "regions": {
+            "ffa_faces": 0.7469,
+            "eba_bodies": 0.0,
+            "ppa_scenes": 0.1906,
+            "sts_social": 0.6114,
+            "auditory": 0.5859
+          },
+          "auditory_with_audio": 0.5859,
+          "auditory_without_audio": 0.1036
+        },
+        {
+          "t": 5,
+          "engagement_overall": 0.4035,
+          "regions": {
+            "ffa_faces": 0.5731,
+            "eba_bodies": 0.5408,
+            "ppa_scenes": 0.2606,
+            "sts_social": 0.5025,
+            "auditory": 0.6221
+          },
+          "auditory_with_audio": 0.6221,
+          "auditory_without_audio": 0.2484
+        },
+        {
+          "t": 6,
+          "engagement_overall": 0.4518,
+          "regions": {
+            "ffa_faces": 0.7441,
+            "eba_bodies": 0.4349,
+            "ppa_scenes": 0.5442,
+            "sts_social": 0.552,
+            "auditory": 0.3049
+          },
+          "auditory_with_audio": 0.3049,
+          "auditory_without_audio": 1.0
+        },
+        {
+          "t": 7,
+          "engagement_overall": 0.0104,
+          "regions": {
+            "ffa_faces": 0.0517,
+            "eba_bodies": 0.3447,
+            "ppa_scenes": 0.4199,
+            "sts_social": 0.3402,
+            "auditory": 0.2398
+          },
+          "auditory_with_audio": 0.2398,
+          "auditory_without_audio": 0.0215
+        },
+        {
+          "t": 8,
+          "engagement_overall": 0.6376,
+          "regions": {
+            "ffa_faces": 0.5079,
+            "eba_bodies": 0.6225,
+            "ppa_scenes": 0.4665,
+            "sts_social": 0.6138,
+            "auditory": 0.6615
+          },
+          "auditory_with_audio": 0.6615,
+          "auditory_without_audio": 0.4191
+        },
+        {
+          "t": 9,
+          "engagement_overall": 0.0,
+          "regions": {
+            "ffa_faces": 0.3041,
+            "eba_bodies": 0.1299,
+            "ppa_scenes": 0.1689,
+            "sts_social": 0.0145,
+            "auditory": 0.8308
+          },
+          "auditory_with_audio": 0.8308,
+          "auditory_without_audio": 0.0119
+        },
+        {
+          "t": 10,
+          "engagement_overall": 0.4992,
+          "regions": {
+            "ffa_faces": 1.0,
+            "eba_bodies": 0.6267,
+            "ppa_scenes": 0.2966,
+            "sts_social": 0.0,
+            "auditory": 0.8858
+          },
+          "auditory_with_audio": 0.8858,
+          "auditory_without_audio": 0.0
+        },
+        {
+          "t": 11,
+          "engagement_overall": 0.7417,
+          "regions": {
+            "ffa_faces": 0.0,
+            "eba_bodies": 1.0,
+            "ppa_scenes": 0.5601,
+            "sts_social": 0.5408,
+            "auditory": 0.7593
+          },
+          "auditory_with_audio": null,
+          "auditory_without_audio": null
+        }
+      ]
+    }
+  }
+}
