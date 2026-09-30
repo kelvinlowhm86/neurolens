@@ -1,17 +1,8 @@
-# NeuroLens — M1 Implementation Spec (v3)
+# NeuroLens — M1 Implementation Spec
 **Milestone:** Cloud Storage & Task Queue Decoupling (29 Sept – 8 Oct)
 **Grounded in:** actual current `app.py` (300 lines), `config.sample.json`, `requirements.txt` from `kelvinlowhm86/neurolens` as of this spec's writing. If the repo has changed since, re-verify assumptions below before implementing.
 
-**Changes since v2 (30 Sep 2026)** — from the architecture review; each item departs from the Preliminary report:
-- **Region `us-east-1`, not `ap-southeast-1`.** The `g6e` GPU family the design depends on is not offered in Singapore.
-- **Terraform replaces bash provisioning** (`infra/terraform/`), with shared remote state so teammates can work on the same infrastructure. `terraform destroy` is the teardown.
-- **Fake-model switch (`FAKE_INFERENCE`) and automated tests.** All M1 plumbing is built and tested on a laptop without a GPU; see §1 for what this does and does not prove.
-- **Results kept 30 days** (uploads still 48 h), so M3's job history keeps working.
-- **No `claims/` prefix.** M2 no longer builds the S3 lease protocol; duplicate protection is the conditional result write, then a database lock in M3.
-- **SQS visibility timeout 900 s** until M2 adds the heartbeat.
-- **Budget:** an account-wide $40 budget with 50/80/100% alerts replaces the $10/$20 alerts.
-- **Python 3.11+.** The official `facebookresearch/tribev2` repo requires it; README's "3.10+" is out of date.
-- **Real-GPU checks deferred to M2's first GPU boot** (§9).
+**Ground rules for all of M1:** everything runs in AWS region `us-east-1` (the `g6e` GPU family used from M2 onward is not offered in Singapore, so do not "correct" the region). All M1 work runs without a GPU, in fake-model mode (§1a). Python 3.11+ (required by the official `tribev2` repo).
 
 ## 0. What exists today (do not re-derive this — read the actual file first)
 `app.py` currently:
@@ -115,7 +106,7 @@ The configuration:
    - `uploads/*` and `status/*` expire after 48 h — transient per-job artifacts. Input videos are the large objects, so this keeps storage small.
    - `results/*` expires after **30 days**. This is a product decision: how long a user's analysis stays viewable in M3's job history and downloadable as CSV. Result files are a few KB, so the cost is negligible.
    - `code/*` and `experiments/*` never expire. M2's boot flow pulls `code/latest.zip` on every GPU launch (a 404 would stop the worker coming up), and M4 reads `experiments/*` for the final report.
-4. Sets a CORS configuration allowing `POST` from `allowed_origins`. Terraform owns the whole CORS document, so there is no read-merge-write step: to add an origin later (M3's HTTPS domain), add it to the variable and apply. S3 CORS applies per bucket, not per prefix; the `uploads/` restriction is enforced by the `key` condition in the signed POST policy.
+4. Sets a CORS configuration allowing `POST` from `allowed_origins`. Terraform owns the whole CORS document: to add an origin later (M3's HTTPS domain), add it to the variable and apply. S3 CORS applies per bucket, not per prefix; the `uploads/` restriction is enforced by the `key` condition in the signed POST policy.
 5. Creates the SQS queue (`queue_name`), visibility timeout **900 s**. M1's worker has no heartbeat, and two inference passes can take several minutes; with a shorter timeout a long job's message reappears mid-processing. M2 §8 adds the heartbeat and may lower this. Leave `# TODO(M2): add DLQ redrive policy` next to the queue resource.
 6. Wires S3 `ObjectCreated:*` → the SQS queue, filtered to the `uploads/` prefix only, with the SQS queue policy that lets the bucket send messages (S3→SQS needs an explicit queue access policy; this is a common gotcha). Add `depends_on` so the notification is created after the queue policy. The prefix filter is required: later milestones write `status/`, `results/`, `code/` and `experiments/` objects to the same bucket, and an unfiltered notification would enqueue them as spurious jobs.
 7. Outputs the bucket name and queue URL for `config.json`.
@@ -154,11 +145,9 @@ Error 500 (S3/boto3 failure): { "error": "presign_failed", "message": "..." }
 - Use `boto3.client('s3', region_name=CFG['aws']['region']).generate_presigned_post(...)`.
 
 ## 4a. Upload size limit via presigned POST
-`/api/uploads/presign` switches from generating a presigned PUT URL to generating a **presigned POST** (`s3_client.generate_presigned_post(...)`), because S3's hard, server-enforced byte-size cap (`content-length-range`) is only available as a condition embedded in a POST policy — there is no equivalent bucket-policy mechanism that caps the size of an arbitrary presigned PUT. Reference: AWS's presigned-POST policy documentation.
+`/api/uploads/presign` generates a **presigned POST** (`s3_client.generate_presigned_post(...)`), never a presigned PUT: S3's server-enforced byte-size cap (`content-length-range`) exists only as a condition in a POST policy. Reference: AWS's presigned-POST policy documentation.
 
 Add `max_upload_bytes` to `config.json`/`config.sample.json` as a top-level field alongside `max_video_duration_seconds` (e.g. 300000000 for ~300 MB, comfortably above the report's stated 50–250 MB creative range).
-
-This subsection supersedes and replaces the PUT-based instructions elsewhere in this spec. The response schema in §4 uses `url` and `fields`, not `upload_url`; the presign implementation uses `generate_presigned_post(...)`; and the frontend uses the multipart form POST described below. Do not leave both the old PUT instructions and this section's POST instructions in the document — an implementer reading either in isolation must land on one consistent flow.
 
 1. **Presign endpoint response shape.** Return `url` (the bucket endpoint to POST to) and a `fields` object containing the signed form fields — including `policy`, signature, and `key` — with the policy embedding the `content-length-range` condition that bounds the upload to `max_upload_bytes`.
 2. **CORS.** The §3 CORS configuration permits `POST` from every origin in `allowed_origins`.
