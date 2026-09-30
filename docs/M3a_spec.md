@@ -209,7 +209,7 @@ Both use Python 3.12, `DataApiDatabase`, and only pure-Python modules (`neurolen
 4. Force the failure paths once each: an over-long video (refund before inference), a job failing twice (dead-letter refund), a worker stopped mid-job (redelivery re-claims via staleness).
 5. One real GPU job, confirming the charged amount matches the verified duration.
 
-## 9. Configuration additions (`config.sample.json`)
+## 9. Configuration additions (`config.json`, and `.env` / `env.conf` for deployment-specific identifiers such as the database ARNs, M1 §2)
 `aws.db_cluster_arn`, `aws.db_secret_arn`, `aws.db_name`; `db.backend`, `db.dsn` (postgres only); `auth.mode`, `auth.dev_user_id`, `auth.dev_email`; `billing.starter_cents`; `server.host` (default `127.0.0.1`) and `server.port` (default 5003), which the root `app.py` launcher binds to and the dev-mode guard (§2) checks. None of these are secrets: the database password lives only in Secrets Manager.
 - The worker's templated UserData (M2a §4c) now also writes `db.backend = "data_api"` and the three `aws.db_*` values.
 

@@ -1,5 +1,6 @@
 """Config and paths. Nothing here runs at import time: call the functions when needed."""
 
+import copy
 import json
 import os
 import sys
@@ -28,11 +29,61 @@ def load_config(root=None):
     config_path = root / "config.json"
     if not config_path.exists():
         raise FileNotFoundError(
-            f"{config_path} not found. Run: cp config.sample.json config.json  "
-            "(config.json is gitignored: it holds your HuggingFace token.)"
+            f"{config_path} not found. It is committed in the repository: "
+            "restore it with `git checkout config.json`."
         )
     with open(config_path) as f:
         return json.load(f)
+
+
+def load_dotenv(root=None):
+    """Read `<root>/.env` (KEY=VALUE lines) into os.environ. A missing file is not an error.
+
+    A variable that is already set is left alone, so a real environment variable always wins
+    over the file. Blank lines and `#` comments are ignored; one pair of quotes around a value
+    is removed; only the first `=` splits, so values may contain `=`.
+    """
+    path = (Path(root) if root is not None else get_root()) / ".env"
+    if not path.exists():
+        return
+    for line in path.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key, value = key.strip(), value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+            value = value[1:-1]
+        if key and key not in os.environ:
+            os.environ[key] = value
+
+
+def apply_env(cfg):
+    """A copy of cfg with person- and deployment-specific values taken from the environment.
+
+    HF_TOKEN -> hf_token; NEUROLENS_AWS_REGION / NEUROLENS_S3_BUCKET / NEUROLENS_SQS_QUEUE_URL
+    -> aws.region / aws.s3_bucket / aws.sqs_queue_url. Only variables that are set and
+    non-empty change anything. The input is never modified.
+    """
+    out = copy.deepcopy(cfg)
+    token = os.environ.get("HF_TOKEN")
+    if token:
+        out["hf_token"] = token
+    for var, key in (
+        ("NEUROLENS_AWS_REGION", "region"),
+        ("NEUROLENS_S3_BUCKET", "s3_bucket"),
+        ("NEUROLENS_SQS_QUEUE_URL", "sqs_queue_url"),
+    ):
+        value = os.environ.get(var)
+        if value:
+            out.setdefault("aws", {})[key] = value
+    return out
+
+
+def load_settings(root=None):
+    """What entry points use: `.env` into the environment, then config.json plus the overlay."""
+    load_dotenv(root)
+    return apply_env(load_config(root))
 
 
 def resolve_paths(cfg, root):
@@ -62,7 +113,10 @@ def configure_env(cfg, paths):
     models = Path(paths["models"])
     data = Path(paths["data"])
 
-    os.environ["HF_TOKEN"] = cfg["hf_token"]
+    # The token is optional here: it normally arrives through the environment (.env), and fake
+    # mode needs none.
+    if cfg.get("hf_token"):
+        os.environ["HF_TOKEN"] = cfg["hf_token"]
 
     # HF_HOME is the root the other HF caches derive from; the rest are set explicitly
     # so they survive anyone overriding HF_HOME downstream.

@@ -29,7 +29,7 @@ ENV_VARS = [
 
 @pytest.fixture
 def sample_cfg():
-    return json.loads((REPO_ROOT / "config.sample.json").read_text())
+    return json.loads((REPO_ROOT / "config.json").read_text())
 
 
 @pytest.fixture
@@ -64,7 +64,7 @@ def test_load_config_uses_env_root_when_no_root_given(clean_env, tmp_path, sampl
 
 
 def test_load_config_missing_file_raises_clear_error(tmp_path):
-    with pytest.raises(FileNotFoundError, match=r"config\.sample\.json"):
+    with pytest.raises(FileNotFoundError, match=r"config\.json"):
         settings.load_config(root=tmp_path)
 
 

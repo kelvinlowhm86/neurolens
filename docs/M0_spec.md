@@ -52,7 +52,7 @@ The web app still calls `inference` for `/api/analyse` in local use, as today. T
   - `extract_engagement(preds_full, preds_noaudio, roi_masks) -> {"duration_seconds": int, "timesteps": [...]}`, same dict shape as today.
 - `neurolens.settings`:
   - `get_root() -> Path`: `NEUROLENS_ROOT` if set, else the repo root.
-  - `load_config(root=None) -> dict`: raises `FileNotFoundError` mentioning `config.sample.json` when `config.json` is missing.
+  - `load_config(root=None) -> dict`: raises `FileNotFoundError` mentioning `config.json` when it is missing.
   - `resolve_paths(cfg, root) -> dict[str, Path]` with keys `models`, `data`, `output`. No side effects.
   - `configure_env(cfg, paths) -> None`: sets the HF/torch/nilearn env vars; raises if `huggingface_hub` was already imported.
   - `max_duration(cfg: dict | None) -> int`: `cfg["max_video_duration_seconds"]`, default 120 when missing or when `cfg` is `None`. There is no module-level `MAX_DURATION` constant, because `settings` does no work at import.
@@ -79,7 +79,7 @@ The web app still calls `inference` for `/api/analyse` in local use, as today. T
    - `rng = numpy.random.default_rng(0)`; draws in this order: `preds_full = rng.standard_normal((12, 20484))`, then `preds_noaudio = rng.standard_normal((12, 20484))` for case `equal`; for case `short`, a fresh `default_rng(0)` and shapes `(12, 20484)` then `(11, 20484)`; for case `short_edge`, a fresh `default_rng(1)` and the same shapes as `short` (its dropped last row is the minimum or maximum of the auditory series, so cut-then-rescale and rescale-then-cut give different numbers; seed 0 cannot tell them apart).
    - Masks: for the five ROIs in `ROI_LABEL_MAP` order, ROI `i` is `True` on vertices `[i*200, i*200 + 200)` and `False` elsewhere. `test_engagement.py` compares the moved function against it and must pass unchanged after the move. This is M1 §1b layer 1.
 2. `test_engagement.py` also checks: constant series gives zeros, output length and keys, `None` rows exactly where the shorter pass ends, `build_roi_masks` on a tiny fake atlas.
-3. `test_settings.py`: `NEUROLENS_ROOT` override; missing `config.json` error only when asked; `resolve_paths` with `config.sample.json` gives `<root>/models`, `<root>/data`, `<root>/output` and creates nothing; `configure_env` sets `HF_HOME` and `NILEARN_DATA` to the expected folders (use `monkeypatch`, so real env is untouched).
+3. `test_settings.py`: `NEUROLENS_ROOT` override; missing `config.json` error only when asked; `resolve_paths` with the committed `config.json` gives `<root>/models`, `<root>/data`, `<root>/output` and creates nothing; `configure_env` sets `HF_HOME` and `NILEARN_DATA` to the expected folders (use `monkeypatch`, so real env is untouched).
 4. `test_web.py` (`create_app(load_model=False, data_dir=<repo>/data)`): `GET /` serves `index.html`; `/api/samples` equals `data/samples.json`; a thumbnail under `/data/output/...` is served; a path-traversal request for `config.json` outside `data/` returns 404; `POST /api/analyse` with no file returns 400 and with a file returns 503.
 5. `test_import_hygiene.py`: in a fresh subprocess, import `neurolens`, `neurolens.engagement`, `neurolens.settings`, `neurolens.web.app`; assert `torch`, `huggingface_hub` and `nilearn` are **not** in `sys.modules`.
 6. `test_samples_schema.py`: `data/samples.json` keeps the keys the frontend reads.

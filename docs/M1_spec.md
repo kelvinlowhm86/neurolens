@@ -64,24 +64,29 @@ Fake mode does **not** exercise model loading, so no single check proves it. Use
 2. **Real-import check (optional, laptop CPU).** In a separate venv with `requirements/model.txt` installed, call `neurolens.inference.load_model()` in real mode far enough to set the HF environment variables and run `TribeModel.from_pretrained(...)` (~1 GB checkpoint), without calling `predict()`. This exercises the fragile "set env vars before any HF import" ordering and the dependency pins M0 chose. `tribev2` on macOS/CPU is untested; if it will not install, skip this layer and rely on layer 3.
 3. **Real run (required, deferred to M2a).** On M2a's first GPU boot, run one real inference through S3 → SQS → worker on a sample video and compare the result with that video's entry in `data/samples.json` (produced by the original pipeline), allowing for small floating-point differences. This is the final proof.
 
-## 2. Config approach
-Extend `config.json` / `config.sample.json` (same gitignored-secrets pattern already in use) with a new top-level `"aws"` block:
-```json
-{
-  "hf_token": "...",
-  "paths": { "...": "..." },
-  "model": { "...": "..." },
-  "aws": {
-    "region": "us-east-1",
-    "s3_bucket": "REPLACE_ME",
-    "sqs_queue_url": "REPLACE_ME"
-  },
-  "hf_download_timeout": 300,
-  "max_video_duration_seconds": 120,
-  "max_upload_bytes": 300000000
-}
-```
-**Do not put AWS access keys in this file.** boto3 must use the default credential chain (`~/.aws/credentials`, `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` env vars, or an instance role in later milestones) — only resource identifiers (bucket name, queue URL, region) go in config. Update `config.sample.json` with placeholder values so the schema is documented; actual values go only in the gitignored `config.json`, which I will fill in myself after the resources exist (copy them from `terraform output`).
+## 2. Configuration: shared settings in `config.json`, secrets and identifiers in `.env`
+One rule: **behaviour settings are shared; anything specific to a person or a deployment is not.**
+- **`config.json`** is committed, holds no secrets, and teammates may edit it: paths, model names, limits, timeouts and behaviour switches.
+  ```json
+  {
+    "paths": { "...": "..." },
+    "model": { "...": "..." },
+    "aws": { "region": "us-east-1" },
+    "hf_download_timeout": 300,
+    "max_video_duration_seconds": 120,
+    "max_upload_bytes": 300000000
+  }
+  ```
+- **`.env`** is gitignored and per person (`.env.example` is committed, with placeholders). `KEY=VALUE` lines; blank lines and `#` comments ignored; one pair of surrounding quotes around a value is removed. It holds `HF_TOKEN`, `NEUROLENS_S3_BUCKET`, `NEUROLENS_SQS_QUEUE_URL` and optionally `NEUROLENS_AWS_REGION`. Josh copies the bucket and queue from `terraform output`. Later milestones' deployment-specific identifiers follow the same rule (environment variables: `.env` on a laptop, `env.conf` on AWS).
+
+**Loading (`neurolens.settings`).** Entry points (the launcher `app.py`, the worker's `run()`, and `inference.load_model(cfg=None)`) call `load_settings`; `load_config` stays file-only.
+- `load_dotenv(root=None) -> None`: reads `<root>/.env` if it exists (no file is not an error) and sets each variable in `os.environ` **only if it is not already set**, so a real environment variable always wins over the file.
+- `apply_env(cfg: dict) -> dict`: returns a copy of `cfg` with `HF_TOKEN` as `hf_token`, `NEUROLENS_AWS_REGION` as `aws.region`, `NEUROLENS_S3_BUCKET` as `aws.s3_bucket` and `NEUROLENS_SQS_QUEUE_URL` as `aws.sqs_queue_url`, for each of those variables that is set and non-empty (creating the `aws` dict if needed). It never changes its input and adds nothing for an unset variable.
+- `load_settings(root=None) -> dict`: `load_dotenv(root)`, then `apply_env(load_config(root))`.
+- `configure_env(cfg, paths)`: `hf_token` in `cfg` is optional; when it is absent `HF_TOKEN` is left as it is (fake mode needs no token).
+- `load_config` raises `FileNotFoundError` naming `config.json` when it is missing.
+
+**Do not put AWS access keys anywhere in the project.** boto3 uses the default credential chain (`~/.aws/credentials`, `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` env vars, or an instance role in later milestones). The worker's startup check (§5) names any missing setting.
 
 The fake-model switch (§1a) is an environment variable, not a config field, so a real deployment can never be left in fake mode by a stale config file.
 
@@ -156,7 +161,7 @@ Returns `settings.max_duration(cfg)` and `cfg["max_upload_bytes"]` (`null` when 
 ## 4a. Upload size limit via presigned POST
 `/api/uploads/presign` generates a **presigned POST** (`s3_client.generate_presigned_post(...)`), never a presigned PUT: S3's server-enforced byte-size cap (`content-length-range`) exists only as a condition in a POST policy. Reference: AWS's presigned-POST policy documentation.
 
-Add `max_upload_bytes` to `config.json`/`config.sample.json` as a top-level field alongside `max_video_duration_seconds` (e.g. 300000000 for ~300 MB, comfortably above the report's stated 50–250 MB creative range).
+Add `max_upload_bytes` to `config.json` as a top-level field alongside `max_video_duration_seconds` (e.g. 300000000 for ~300 MB, comfortably above the report's stated 50–250 MB creative range).
 
 1. **Presign endpoint response shape.** Return `url` (the bucket endpoint to POST to) and a `fields` object containing the signed form fields — including `policy`, signature, and `key` — with the policy embedding the `content-length-range` condition that bounds the upload to between 1 byte and `max_upload_bytes` (an empty file is refused, since it could only fail in the worker and be retried until the M2b dead-letter queue).
 2. **CORS.** The §3 CORS configuration permits `POST` from every origin in `allowed_origins`.
@@ -226,7 +231,8 @@ neurolens/
 worker.py           NEW launcher
 infra/terraform/    NEW: bucket, queue, notification, lifecycle, CORS; README with state bootstrap + teardown
 tests/              MODIFIED: §6a tests
-config.sample.json  MODIFIED: "aws" block, max_upload_bytes
+config.json         COMMITTED, shared settings only (no secrets): "aws.region", max_upload_bytes
+.env.example        NEW: placeholders for HF_TOKEN, NEUROLENS_S3_BUCKET, NEUROLENS_SQS_QUEUE_URL (config.sample.json is removed)
 static/             MODIFIED: presign + direct-upload flow
 requirements/       MODIFIED: boto3 (web, worker), moto (dev)
 ```

@@ -40,7 +40,7 @@ def load_model(cfg=None):
 
     root = settings.get_root()
     if cfg is None:
-        cfg = settings.load_config(root)
+        cfg = settings.load_settings(root)
     paths = settings.resolve_paths(cfg, root)
     settings.ensure_dirs(paths)
     # HF env vars must be set before anything imports huggingface_hub.

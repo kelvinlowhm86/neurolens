@@ -173,7 +173,7 @@ def run():
     """Validate config, load the model once, then poll the queue forever."""
     import boto3
 
-    cfg = settings.load_config()
+    cfg = settings.load_settings()
     validate_config(cfg)  # before anything slow: a bad config fails fast, not after a model load
     inference.load_model(cfg)  # in real mode this takes minutes on first run
     roi_masks = inference.roi_masks()

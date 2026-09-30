@@ -1,8 +1,9 @@
 # ─── Secrets ────────────────────────────────────────────────────────────────
-# config.json holds a live HuggingFace token. Copy config.sample.json instead.
-config.json
+# .env holds the HuggingFace token and deployment identifiers. Copy .env.example instead.
+# (config.json is committed: shared settings only, no secrets.)
 .env
 .env.*
+!.env.example
 
 # ─── Model weights & HF caches ─────────────────────────────────────────────
 # Everything TRIBE v2 pulls lands under ./models (HF_HOME points here):

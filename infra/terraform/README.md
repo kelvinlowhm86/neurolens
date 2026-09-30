@@ -64,9 +64,9 @@ terraform apply
 terraform apply                                 # again: should report "No changes"
 ```
 
-`terraform output` prints `bucket_name` and `queue_url`. Put them in the `aws` block of the
-gitignored `config.json` (`s3_bucket`, `sqs_queue_url`). Only those identifiers go in that file,
-never access keys.
+`terraform output` prints `bucket_name` and `queue_url`. Put them in the gitignored `.env` at the
+repo root as `NEUROLENS_S3_BUCKET` and `NEUROLENS_SQS_QUEUE_URL` (see `.env.example`). The committed
+`config.json` holds no account-specific values, and access keys never go in the project at all.
 
 ## 3. Check it
 

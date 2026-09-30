@@ -30,6 +30,29 @@ def aws_env(monkeypatch, tmp_path_factory):
     monkeypatch.delenv("AWS_PROFILE", raising=False)
 
 
+ENV_SETTING_VARS = [
+    "HF_TOKEN",
+    "NEUROLENS_AWS_REGION",
+    "NEUROLENS_S3_BUCKET",
+    "NEUROLENS_SQS_QUEUE_URL",
+]
+
+
+@pytest.fixture(autouse=True)
+def isolate_env_settings(monkeypatch):
+    """The developer's real .env and environment must never leak into a test.
+
+    Removes the settings variables and turns neurolens.settings.load_dotenv into a no-op
+    (load_settings and run() look it up by its module-global name). Tests of the real
+    load_dotenv put the real function back themselves (tests/test_env_settings.py).
+    """
+    from neurolens import settings
+
+    for name in ENV_SETTING_VARS:
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setattr(settings, "load_dotenv", lambda *a, **kw: None, raising=False)
+
+
 @pytest.fixture
 def aws():
     """A moto S3 bucket and SQS queue, plus boto3 clients for them."""
@@ -46,7 +69,7 @@ def aws():
 
 @pytest.fixture
 def make_cfg(aws, tmp_path):
-    """Build a config dict like config.sample.json, pointing at the moto resources."""
+    """Build a config dict like config.json plus the .env values, pointing at the moto resources."""
     (tmp_path / "output").mkdir(exist_ok=True)
 
     def make(with_aws=True, **overrides):

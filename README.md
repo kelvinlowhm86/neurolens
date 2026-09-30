@@ -271,8 +271,9 @@ source .venv/bin/activate
 #    (requirements/ has one file per machine type; NumPy is pinned in base.txt)
 pip install -e . -r requirements/notebooks.txt
 
-# 4. Copy the sample config and paste your HuggingFace token into config.json
-cp config.sample.json config.json
+# 4. Put your secrets in .env (git-ignored): HuggingFace token, and later the AWS bucket/queue names.
+#    Shared settings live in the committed config.json.
+cp .env.example .env    # then edit .env
 
 # 5. Authenticate with HuggingFace (one-time)
 #    Make sure you've accepted the LLaMA 3.2-3B license at:
@@ -286,7 +287,7 @@ jupyter notebook notebooks/explore.ipynb
 ### Run the app and the tests
 
 ```bash
-python app.py                                   # web app on http://127.0.0.1:5003 (needs config.json; it never runs the model)
+python app.py                                   # web app on http://127.0.0.1:5003 (reads config.json and .env; it never runs the model)
 FAKE_INFERENCE=1 python worker.py               # the worker: analyses uploads (fake model on a laptop; real model needs a GPU)
 pip install -e . -r requirements/dev.txt        # laptop: tests and lint only, no GPU or model needed
 pytest && ruff check . && ruff format --check .

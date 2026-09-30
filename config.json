@@ -1,5 +1,4 @@
 {
-  "hf_token": "hf_REPLACE_ME",
   "paths": {
     "models": "./models",
     "data": "./data",
@@ -11,9 +10,7 @@
     "pre_download_llama": false
   },
   "aws": {
-    "region": "us-east-1",
-    "s3_bucket": "REPLACE_ME",
-    "sqs_queue_url": "REPLACE_ME"
+    "region": "us-east-1"
   },
   "hf_download_timeout": 300,
   "max_video_duration_seconds": 120,

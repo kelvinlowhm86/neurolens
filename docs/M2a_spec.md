@@ -40,7 +40,7 @@ The script (AWS CLI + shell), given the path of one local sample video that cont
    - Install `ffmpeg` via apt
    - Install `infra/neurolens-worker.service`, `infra/neurolens-self-terminate.service`, `infra/pull_code.sh` and `infra/self_terminate.sh` (§3), with the worker service disabled
    - Mount the instance's NVMe disk at `/opt/neurolens/cache`, so the ~20 GB download never lands on the root disk that becomes the image
-4. **Downloads everything through the worker's own code.** Write a build-time `/opt/neurolens/app/config.json` with `hf_token` read from Parameter Store (`/neurolens/hf_token`, a `SecureString`), `paths.models = /opt/neurolens/cache/models` and `paths.data = /opt/neurolens/cache/data`. Then run the full pipeline once on `smoke/clip.mp4`: `load_model()`, `run_inference`, `strip_audio`, `run_inference` again, `extract_engagement`. Using the same code as the worker guarantees the same environment-variable order and cache layout, and both passes on a clip with speech trigger every lazily loaded encoder (video, audio, text including the gated Llama 3.2 model).
+4. **Downloads everything through the worker's own code.** Write a build-time `/opt/neurolens/app/.env` with `HF_TOKEN` read from Parameter Store (`/neurolens/hf_token`, a `SecureString`), and a build-time `/opt/neurolens/app/config.json` with `paths.models = /opt/neurolens/cache/models` and `paths.data = /opt/neurolens/cache/data`. Then run the full pipeline once on `smoke/clip.mp4`: `load_model()`, `run_inference`, `strip_audio`, `run_inference` again, `extract_engagement`. Using the same code as the worker guarantees the same environment-variable order and cache layout, and both passes on a clip with speech trigger every lazily loaded encoder (video, audio, text including the gated Llama 3.2 model).
 5. **Proves the cache is complete:** run the same pipeline again in a fresh process with `HF_HUB_OFFLINE=1`. If anything is missing, this fails now instead of on the first real job.
 6. **Records peak system RAM and peak GPU memory** during step 4 (sample `/proc/meminfo` every second; `gpu_info()` for VRAM). Print both with the AMI ID. The RAM figure decides the worker instance size (§4b).
 7. `aws s3 sync /opt/neurolens/cache/ s3://<bucket>/models/ --exclude "models/xet/*"`. The xet folder is a download-deduplication cache that can be as large as the weights themselves and is not needed offline. The `models/` prefix is not covered by any expiry rule. If `models/` is already populated, skip steps 4 and 7 (`--refresh-weights` forces them) and instead sync `models/` down to the cache and run step 5.
@@ -102,7 +102,7 @@ WantedBy=multi-user.target
 1. `set -euo pipefail`; an `ERR` trap that logs the failing line and calls `self_terminate.sh` (§3); log every step with a timestamp to `/var/log/neurolens-boot.log` (M2b's Experiment 2 reads these).
 2. Format and mount the instance-store NVMe disk at `/opt/neurolens/cache`. If no instance-store disk exists (the CPU rehearsal instance, §4e), use a folder on the root disk instead.
 3. `aws s3 sync s3://<bucket>/models/ /opt/neurolens/cache/`. Log its duration.
-4. Write `/opt/neurolens/env.conf` (§3) and `/opt/neurolens/app/config.json`, matching `config.sample.json`'s schema, with the `aws` block from the templated values and absolute paths: `paths.models = /opt/neurolens/cache/models`, `paths.data = /opt/neurolens/cache/data`, `paths.output = /opt/neurolens/output`; `worker.idle_exit_minutes = 30`. `chmod 600` both. No `HF_TOKEN` is needed: weights come from S3 and `HF_HUB_OFFLINE=1` is set.
+4. Write `/opt/neurolens/env.conf` (§3), which also carries `NEUROLENS_S3_BUCKET`, `NEUROLENS_SQS_QUEUE_URL` and `NEUROLENS_AWS_REGION` from the templated values, and `/opt/neurolens/app/config.json` (the shared file's schema) with absolute paths: `paths.models = /opt/neurolens/cache/models`, `paths.data = /opt/neurolens/cache/data`, `paths.output = /opt/neurolens/output`; `worker.idle_exit_minutes = 30`. `chmod 600` both. No `HF_TOKEN` is needed: weights come from S3 and `HF_HUB_OFFLINE=1` is set.
 5. Run `pull_code.sh` once, then verify: `test -s /opt/neurolens/env.conf` and `/opt/neurolens/venv/bin/python -c "from neurolens.settings import load_config; load_config()"` run from `/opt/neurolens/app` with `NEUROLENS_ROOT` set. A failure trips the `ERR` trap.
 6. `systemctl enable --now neurolens-worker`.
 
@@ -117,7 +117,7 @@ Set the Launch Template's `instance_type` to a small CPU type (e.g. `t3.large`, 
 ### 4f. Long-running GPU alarm (Terraform)
 A CloudWatch alarm on the ASG's `GroupInServiceInstances` > 0 continuously for **3 hours** sends an email through an SNS topic to Josh's address (a variable; confirm the subscription email once). It catches the cases self-termination cannot, such as a worker stuck mid-job or an unreachable NAT instance. Cost: about $0.10 a month.
 
-### 4g. Configuration additions (`config.sample.json`)
+### 4g. Configuration additions (`config.json`)
 `worker.idle_exit_minutes` (absent means never exit on idle; UserData sets 30 on AWS).
 
 ### 4h. Retry cap (dead-letter queue, Terraform on M1's queue)

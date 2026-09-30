@@ -15,7 +15,7 @@ NeuroLens predicts brain activity for a video (TRIBE v2) and turns it into per-r
 - Heavy imports (`torch`, `tribev2`, `nilearn`, `huggingface_hub`) only inside functions, never at module top of `neurolens/`.
 - The web code never imports `neurolens.inference` (nor `torch`): analysis happens only in the worker (`python worker.py`; set `FAKE_INFERENCE=1` on a laptop). `create_app(data_dir=None, cfg=None)` never reads `config.json`; the launcher `app.py` loads it.
 - Read config only through `neurolens.settings`. Nothing runs at import time.
-- Never commit `config.json`, tokens or AWS keys. Never put them in Docker images.
+- Settings: `config.json` is committed and shared (behaviour settings only, no secrets). Secrets and deployment-specific values (`HF_TOKEN`, `NEUROLENS_S3_BUCKET`, `NEUROLENS_SQS_QUEUE_URL`) go in `.env` (git-ignored; copy `.env.example`) and are read through `settings.load_settings`. Never commit `.env`, tokens or AWS keys, and never put them in Docker images.
 - Never edit a test to make it pass: stop and ask.
 - Do not change `extract_engagement` without updating `tests/fixtures/extract_engagement_golden.json` and saying so.
 - Normalisation rule, do not "fix": `extract_engagement` cuts the with-audio and no-audio auditory passes to their shared length first, then rescales each to 0-1. So `auditory` and `auditory_with_audio` can differ in the same row.

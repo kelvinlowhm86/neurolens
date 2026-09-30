@@ -31,7 +31,7 @@
   - `handle_record(bucket, key, *, s3, cfg, roi_masks, heartbeat, should_stop) -> Outcome` (replaces M1's signature): `heartbeat` is a zero-argument callable returning a `Heartbeat` for the current message (built by `process_message`); the record's work after the result-exists check runs inside it. `should_stop()` is checked between pipeline stages; when it returns `True`, `handle_record` raises `ShutdownRequested`. It still never touches SQS itself.
   - `process_message(message, *, s3, sqs, cfg, roi_masks, should_stop) -> None` (replaces M1's signature; the queue URL comes from `cfg`): runs every record, deletes the message only when every record returned a final outcome, and on any exception (including `ShutdownRequested`) handles it as §6 says, then re-raises `ShutdownRequested` so `run()` exits.
   - `run() -> None`: installs a `SIGTERM` handler that sets a `threading.Event`, whose `is_set` is passed as `should_stop`, and stops polling once it is set.
-  - Config `worker.heartbeat_seconds` (default 50), so tests can use a fraction of a second; added to `config.sample.json`.
+  - Config `worker.heartbeat_seconds` (default 50), so tests can use a fraction of a second; added to `config.json`.
 - `neurolens.web.app` routes (the web tier still never imports `neurolens.inference`):
   - `job_id` must be a UUID; anything else returns 400 `{"error": "bad_job_id"}`.
   - `GET /api/jobs/<job_id>/status`: 200 with `{"job_id", "status": "done"}` if a result exists (whatever the status object says); otherwise 200 with the status object; otherwise 404 `{"error": "not_found"}` (the frontend treats 404 as "still queued").

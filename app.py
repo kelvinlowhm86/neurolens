@@ -6,14 +6,14 @@ The web app never runs the model: start the worker (`python worker.py`) for anal
 
 import logging
 
-from neurolens.settings import HOST, PORT, load_config
+from neurolens.settings import HOST, PORT, load_settings
 from neurolens.web.app import create_app
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("neurolens")
 
 if __name__ == "__main__":
-    app = create_app(cfg=load_config())
+    app = create_app(cfg=load_settings())
     samples_json = app.config["SAMPLES_JSON"]
     logger.info(f"Starting NeuroLens web app on http://{HOST}:{PORT}")
     logger.info(f"Max video duration: {app.config['MAX_DURATION']}s")
