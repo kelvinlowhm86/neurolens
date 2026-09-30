@@ -1,0 +1,4 @@
+# Web server: no torch, no model.
+-r base.txt
+flask>=3.0.0
+flask-cors>=4.0.0

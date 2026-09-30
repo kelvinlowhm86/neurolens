@@ -1,0 +1,5 @@
+# Laptop and CI: tests and lint. No torch, no tribev2.
+-r web.txt
+-r worker.txt
+pytest>=8.0
+ruff>=0.6

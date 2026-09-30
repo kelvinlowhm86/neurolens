@@ -1,0 +1,3 @@
+# Everything the worker needs EXCEPT the model, so fake mode runs on a laptop.
+-r base.txt
+nilearn>=0.10.3

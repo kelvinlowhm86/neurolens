@@ -1,0 +1,7 @@
+# For running the .ipynb files (needs the model too).
+-r model.txt
+jupyter>=1.0.0
+ipykernel>=6.0.0
+ipywidgets>=8.0.0
+matplotlib>=3.7.0
+packaging>=23.0

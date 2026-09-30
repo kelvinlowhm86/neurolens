@@ -66,3 +66,14 @@ Thumbs.db
 
 # ─── Personal files (Claude Code instructions, AI-use log) ─────────────────
 *.local.md
+
+# ─── Tooling caches & build output ─────────────────────────────────────────
+.ruff_cache/
+.pytest_cache/
+.coverage
+dist/
+build/
+
+# ─── Terraform (later milestones) ──────────────────────────────────────────
+*.tfstate*
+.terraform/

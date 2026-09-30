@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "neurolens"
+version = "0.1.0"
+description = "Video engagement analysis via predicted brain activity"
+requires-python = ">=3.12,<3.14"
+# No dependencies here on purpose: the files in requirements/ are the single source.
+# Install with: pip install -e .
+
+[tool.setuptools.packages.find]
+include = ["neurolens*"]
+
+[tool.ruff]
+line-length = 100
+extend-exclude = ["*.ipynb"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
