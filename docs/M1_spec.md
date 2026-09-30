@@ -38,15 +38,16 @@ Place this comment above `max_duration` in `neurolens/settings.py`:
 - `neurolens.inference`:
   - `probe_duration(path) -> float`: the ffprobe call currently inside `/api/analyse`, moved here so web and worker share it.
   - `roi_masks() -> dict[str, ndarray]`: the masks loaded by `load_model()`.
+  - `gpu_info() -> dict | None`: GPU name and peak memory, or `None` when there is no CUDA GPU **or `torch` is not installed** (a laptop in fake mode).
   - `fake_mode() -> bool`: reads `FAKE_INFERENCE` from the environment **at call time** (so tests can set it with `monkeypatch`). `"1"`, `"true"`, `"yes"` mean on.
 - `neurolens.worker`:
   - `Outcome`: an enum of final record outcomes, `DONE` and `REJECTED` (oversize or too long; the object is deleted). M2a and M2b add values. Any failure is an exception, not an outcome.
   - `handle_record(bucket, key, *, s3, cfg, roi_masks) -> Outcome`: never touches SQS.
-  - `process_message(message, *, s3, sqs, cfg, roi_masks) -> None`: calls `handle_record` for every record from `parse_s3_event`; deletes the message only if every record returned an `Outcome` (a message with zero records, such as the test event, is deleted). If any record raised, it logs the traceback and leaves the message for redelivery.
+  - `process_message(message, *, s3, sqs, cfg, roi_masks) -> None`: calls `handle_record` for every record from `parse_s3_event`; deletes the message only if every record returned an `Outcome` (a message with zero records, such as the test event, is deleted). If any record raised, it logs the traceback, **stops at that record** (later records wait for the redelivery) and leaves the message for redelivery.
   - `run() -> None`: loads config and model, builds clients, polls forever.
   - AWS clients are passed in as parameters so tests can hand in `moto` clients.
 - **Result JSON** (M1 writes it locally, M2a to S3): `duration_seconds` and `timesteps` exactly as `extract_engagement` returns them, plus `job_id`, `processing_time_seconds`, `fake_inference` (present and `true` only in fake mode) and `gpu` (present only when `gpu_info()` returns a value). There is no `filename` field; the browser already knows it.
-- `neurolens.web.app.create_app(..., cfg: dict | None = None)`: when `cfg` is given it is used instead of reading `config.json`, so tests need no config file. The S3 client (and the presign route's ability to succeed) exists only when the config has an `aws` block; without one, `/api/uploads/presign` returns 500 `presign_failed`, and the M0 web tests keep working unchanged.
+- `neurolens.web.app.create_app(..., cfg: dict | None = None)`: when `cfg` is given it is used instead of reading `config.json`, so tests need no config file. It also serves `GET /api/limits` (§4). The S3 client (and the presign route's ability to succeed) exists only when the config has an `aws` block; without one, `/api/uploads/presign` returns 500 `presign_failed`, and the M0 web tests keep working unchanged.
 
 ### 1a. Fake-model switch (`FAKE_INFERENCE`)
 `neurolens.inference` checks `fake_mode()` (an environment variable only; there is no config field, so a stale config file can never leave a real deployment in fake mode). When it is on:
@@ -129,6 +130,7 @@ Success 200: {
 }
 
 Error 400 (bad content_type): { "error": "unsupported_content_type", "message": "..." }
+Error 400 (client_duration_seconds missing, not a number, or not positive): { "error": "invalid_request", "message": "..." }
 Error 400 (duration too long): { "error": "duration_exceeds_max_estimated", "message": "...", "max_seconds": 120 }
 Error 400 (file too large): { "error": "file_too_large", "message": "...", "max_bytes": <max_upload_bytes> }
 Error 500 (S3/boto3 failure): { "error": "presign_failed", "message": "..." }
@@ -142,12 +144,19 @@ Error 500 (S3/boto3 failure): { "error": "presign_failed", "message": "..." }
 - Object key: `uploads/placeholder-user/{uuid4()}{ext}` (extension from `content_type`, §1) — the `placeholder-user` segment is a literal TODO marker; when M3 adds auth, this becomes the real user ID. Leave a `# TODO(M3): replace placeholder-user with authenticated user_id` comment at the exact line
 - `create_app` builds one `boto3.client('s3', region_name=cfg['aws']['region'])` and `presign_upload` calls `generate_presigned_post(...)` on it.
 
+### Limits endpoint
+```
+GET /api/limits
+200: { "max_video_duration_seconds": 120, "max_upload_bytes": 300000000 }
+```
+Returns `settings.max_duration(cfg)` and `cfg["max_upload_bytes"]` (`null` when the config has none). The numbers are public and need no sign-in. **The page reads them when it loads, so `config.json` is the only place these two limits are set** and `static/` holds no copy of them. (The price formula is still mirrored in `static/` and `neurolens/pricing.py`, §6.)
+
 ## 4a. Upload size limit via presigned POST
 `/api/uploads/presign` generates a **presigned POST** (`s3_client.generate_presigned_post(...)`), never a presigned PUT: S3's server-enforced byte-size cap (`content-length-range`) exists only as a condition in a POST policy. Reference: AWS's presigned-POST policy documentation.
 
 Add `max_upload_bytes` to `config.json`/`config.sample.json` as a top-level field alongside `max_video_duration_seconds` (e.g. 300000000 for ~300 MB, comfortably above the report's stated 50–250 MB creative range).
 
-1. **Presign endpoint response shape.** Return `url` (the bucket endpoint to POST to) and a `fields` object containing the signed form fields — including `policy`, signature, and `key` — with the policy embedding the `content-length-range` condition that bounds the upload to `max_upload_bytes`.
+1. **Presign endpoint response shape.** Return `url` (the bucket endpoint to POST to) and a `fields` object containing the signed form fields — including `policy`, signature, and `key` — with the policy embedding the `content-length-range` condition that bounds the upload to between 1 byte and `max_upload_bytes` (an empty file is refused, since it could only fail in the worker and be retried until the M2b dead-letter queue).
 2. **CORS.** The §3 CORS configuration permits `POST` from every origin in `allowed_origins`.
 3. **Frontend upload.** After receiving `{ url, fields }` from presign, construct a `FormData` object, append every key from `fields` first (the file field must be appended last), append the file itself under the `file` key, and POST that `FormData` to `url`. Update the upload-progress wiring (`XMLHttpRequest.upload.onprogress`, per §6) to work against this POST request. Treat a `204` response as success.
 4. **Worker-side backstop.** Before calling `s3.download_file`, call `s3.head_object(Bucket=..., Key=...)` and check its `ContentLength` against `max_upload_bytes`. If it exceeds the cap, reject immediately — log, delete the object, return `Outcome.REJECTED` (so `process_message` deletes the message) — and never call `download_file`, ffprobe, or inference. This remains necessary as a backstop even with the POST policy's `content-length-range` enforcement, in case that condition is ever misconfigured or bypassed.
@@ -170,7 +179,8 @@ Add `max_upload_bytes` to `config.json`/`config.sample.json` as a top-level fiel
 ## 6. Frontend (`static/`)
 - Add duration read via the browser's `<video>` element `loadedmetadata` event (client-side only, not authoritative — see §4)
 - Show estimated cost using the same formula as `estimate_cost_cents` (90 cents × `max(1, ceil((duration − 0.5) / 30))`), before calling `/api/uploads/presign`
-- Reject client-side (UI message only) if duration > 120s, `file.size > max_upload_bytes`, or file type is not in the accepted set; send `file.size` as `client_declared_bytes` in the presign request body alongside `client_duration_seconds`.
+- On load, `GET /api/limits` for `max_video_duration_seconds` and `max_upload_bytes`; if the page cannot get them it refuses uploads with a message.
+- Reject client-side (UI message only) if duration > `max_video_duration_seconds`, `file.size > max_upload_bytes`, or file type is not in the accepted set; send `file.size` as `client_declared_bytes` in the presign request body alongside `client_duration_seconds`.
 - On confirm: `POST /api/uploads/presign` → construct a `FormData` object from the returned `url` and `fields`, appending every signed field before appending the file under the `file` key, then POST it to `url`.
 - Show upload progress via `XMLHttpRequest.upload.onprogress` (fetch doesn't expose upload progress in most browsers)
 - On POST success (S3 returns 204 with empty body): show "Uploaded — processing" static message, no polling (M2 adds job status polling)
@@ -190,6 +200,7 @@ Required tests:
 - **S3 event parsing:** a message with several `Records` is handled record by record; records outside `uploads/` are ignored; the `s3:TestEvent` body returns `[]` and its message is deleted.
 - **Presign key:** the object key's extension follows `content_type`, even when the filename says otherwise.
 - **Worker handling** (moto): an object over `max_upload_bytes` returns `REJECTED`, is deleted along with its message, and `download_file` / inference are never called; a video whose ffprobe duration exceeds `max_duration(cfg)` returns `REJECTED` without inference; a valid video returns `DONE` and produces a result JSON with exactly the §1 keys, including `"fake_inference": true`; a record that raises leaves the message undeleted.
+- **Limits endpoint:** `GET /api/limits` returns both numbers from the config (changing the config changes the answer), and `max_upload_bytes` is `null` for a config without it.
 - **Fake switch:** `fake_mode()` follows `monkeypatch.setenv`/`delenv` within one process.
 - **Import hygiene** (extends M0's test): `neurolens.storage`, `neurolens.pricing` and `neurolens.worker` import without `torch`; `neurolens.storage` and `neurolens.pricing` also without `neurolens.inference`.
 - **Golden test** for `extract_engagement` (M0) still passes unchanged.
@@ -213,7 +224,7 @@ neurolens/
   worker.py         NEW: SQS poll loop, size + ffprobe checks, writes <output>/{job_id}.json
   inference.py      MODIFIED: FAKE_INFERENCE, probe_duration, roi_masks()
   settings.py       MODIFIED: host 127.0.0.1, max-duration comment
-  web/app.py        MODIFIED: /api/uploads/presign; /api/analyse removed at the end of M1
+  web/app.py        MODIFIED: /api/uploads/presign, /api/limits; /api/analyse removed at the end of M1
 worker.py           NEW launcher
 infra/terraform/    NEW: bucket, queue, notification, lifecycle, CORS; README with state bootstrap + teardown
 tests/              MODIFIED: §6a tests

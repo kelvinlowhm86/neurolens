@@ -78,6 +78,11 @@ def create_app(load_model=True, data_dir=None, cfg=None):
                 return jsonify(json.load(f))
         return jsonify({"samples": []})
 
+    @app.route("/api/limits")
+    def get_limits():
+        """The upload limits, so the page holds no copy of them (config.json is the one place)."""
+        return jsonify({"max_video_duration_seconds": max_seconds, "max_upload_bytes": max_bytes})
+
     @app.route("/data/<path:filename>")
     def serve_data(filename):
         """Serve video files and thumbnails from the data directory."""

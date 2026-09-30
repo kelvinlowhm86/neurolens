@@ -102,6 +102,22 @@
   .processing-text { font-size: 14px; font-weight: 600; }
   .processing-detail { font-size: 12px; color: var(--text-muted); font-family: 'JetBrains Mono', monospace; }
 
+  /* Upload confirm / progress */
+  .upload-note { font-size: 12px; color: var(--red); min-height: 0; }
+  .upload-note:empty { display: none; }
+  .upload-panel { display: none; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 20px; box-shadow: var(--shadow-sm); }
+  .upload-panel.active { display: flex; flex-direction: column; gap: 8px; }
+  .upload-panel-title { font-size: 14px; font-weight: 600; word-break: break-all; }
+  .upload-panel-line { font-size: 12px; color: var(--text-secondary); }
+  .upload-panel-msg { font-size: 12px; color: var(--text-secondary); }
+  .upload-panel-msg.error { color: var(--red); }
+  .upload-progress { display: none; height: 6px; background: var(--bg-hover); border-radius: 3px; overflow: hidden; }
+  .upload-progress.active { display: block; }
+  .upload-bar { height: 100%; width: 0; background: var(--accent); transition: width 0.15s; }
+  .upload-actions { display: flex; gap: 8px; margin-top: 4px; }
+  .btn-primary { background: var(--accent); color: #FFF; border: none; border-radius: var(--radius-sm); padding: 8px 16px; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; }
+  .btn-primary:disabled { opacity: 0.5; cursor: default; }
+
   /* Charts */
   .charts-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 12px; color: var(--text-muted); font-size: 14px; }
   .charts-empty svg { width: 48px; height: 48px; opacity: 0.3; }
@@ -146,8 +162,22 @@
     <div class="upload-zone hidden" id="uploadZone">
       <div class="upload-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>
       <div class="upload-title">Upload a video for analysis</div>
-      <div class="upload-subtitle">MP4, MOV, or WebM — max 120 seconds</div>
-      <input type="file" accept="video/*" id="fileInput">
+      <div class="upload-subtitle" id="limitsText">MP4, MOV, or WebM</div>
+      <input type="file" accept="video/mp4,video/quicktime,video/webm" id="fileInput">
+    </div>
+    <div class="upload-note" id="uploadNote"></div>
+
+    <!-- Upload: confirm, progress, result -->
+    <div class="upload-panel" id="uploadPanel">
+      <div class="upload-panel-title" id="upFileName"></div>
+      <div class="upload-panel-line" id="upDetail"></div>
+      <div class="upload-panel-line" id="upCost"></div>
+      <div class="upload-progress" id="upProgress"><div class="upload-bar" id="upBar"></div></div>
+      <div class="upload-panel-msg" id="upMsg"></div>
+      <div class="upload-actions">
+        <button class="btn-primary" id="upConfirm">Upload</button>
+        <button class="btn-new" id="upCancel">Cancel</button>
+      </div>
     </div>
 
     <!-- Samples carousel -->
@@ -331,51 +361,136 @@ function loadSample(idx) {
 loadSamples();
 
 // ─── Upload handling ────────────────────────────────────────────────────────
+// The length and size limits come from the server (GET /api/limits), so config.json is the
+// one place to change them. The price formula mirrors neurolens/pricing.py
+// estimate_cost_cents: change them together.
+// These are UX checks only; the server (S3's size cap, the worker's ffprobe) enforces them.
+let limits = null;
+async function loadLimits() {
+  try {
+    const res = await fetch('/api/limits');
+    if (!res.ok) return;
+    limits = await res.json();
+    $('limitsText').textContent = `MP4, MOV, or WebM — max ${limits.max_video_duration_seconds} seconds`;
+  } catch (e) { /* handled in handleFile */ }
+}
+loadLimits();
+const ACCEPTED_TYPES = ['video/mp4', 'video/quicktime', 'video/webm'];
+function estimateCostCents(d) { return 90 * Math.max(1, Math.ceil((d - 0.5) / 30)); }
+
 const uploadZone = $('uploadZone'), fileInput = $('fileInput');
+let pendingFile = null, pendingDuration = 0;
 ['dragenter','dragover'].forEach(e => uploadZone.addEventListener(e, ev => { ev.preventDefault(); uploadZone.classList.add('dragover'); }));
 ['dragleave','drop'].forEach(e => uploadZone.addEventListener(e, ev => { ev.preventDefault(); uploadZone.classList.remove('dragover'); }));
-uploadZone.addEventListener('drop', ev => { const f = ev.dataTransfer.files; if (f.length && f[0].type.startsWith('video/')) handleFile(f[0]); });
+uploadZone.addEventListener('drop', ev => { const f = ev.dataTransfer.files; if (f.length) handleFile(f[0]); });
 fileInput.addEventListener('change', ev => { if (ev.target.files.length) handleFile(ev.target.files[0]); });
 
 $('btnNew').addEventListener('click', resetUI);
+$('upConfirm').addEventListener('click', startUpload);
+$('upCancel').addEventListener('click', resetUpload);
 
-function handleFile(file) {
-  videoFile = file;
-  $('uploadZone').classList.add('hidden');
+function rejectFile(message) { $('uploadNote').textContent = message; fileInput.value = ''; }
+
+// Read the length in the browser (not authoritative: the worker measures it again).
+function readDuration(file) {
+  return new Promise((resolve, reject) => {
+    const v = document.createElement('video'), url = URL.createObjectURL(file);
+    v.preload = 'metadata';
+    v.onloadedmetadata = () => { URL.revokeObjectURL(url); resolve(v.duration); };
+    v.onerror = () => { URL.revokeObjectURL(url); reject(new Error('unreadable')); };
+    v.src = url;
+  });
+}
+
+async function handleFile(file) {
+  $('uploadNote').textContent = '';
+  if (!ACCEPTED_TYPES.includes(file.type)) return rejectFile('Unsupported file type. Use MP4, MOV or WebM.');
+  if (!limits) await loadLimits();
+  if (!limits) return rejectFile("Couldn't reach the server to check the upload limits. Try again.");
+  const maxBytes = limits.max_upload_bytes, maxSeconds = limits.max_video_duration_seconds;
+  if (maxBytes != null && file.size > maxBytes) return rejectFile(`File is too large (max ${Math.round(maxBytes / 1e6)} MB).`);
+  let duration;
+  try { duration = await readDuration(file); } catch (e) { return rejectFile("Couldn't read this video."); }
+  if (!Number.isFinite(duration) || duration <= 0) return rejectFile("Couldn't read this video's length.");
+  if (duration > maxSeconds) return rejectFile(`Video is too long (${duration.toFixed(0)}s). The maximum is ${maxSeconds}s.`);
+  showConfirm(file, duration);
+}
+
+function showConfirm(file, duration) {
+  pendingFile = file; pendingDuration = duration;
+  uploadZone.classList.add('hidden');
   $('samplesSection').style.display = 'none';
-  $('processing').classList.add('active');
-  $('headerMeta').textContent = `Processing: ${file.name}`;
-  video.src = URL.createObjectURL(file);
-  analyseVideo(file);
+  $('upFileName').textContent = file.name;
+  $('upDetail').textContent = `${duration.toFixed(1)} s · ${(file.size / 1e6).toFixed(1)} MB`;
+  $('upCost').textContent = `Estimated cost: $${(estimateCostCents(duration) / 100).toFixed(2)} (for information: nothing is charged yet)`;
+  $('upMsg').textContent = ''; $('upMsg').classList.remove('error');
+  $('upProgress').classList.remove('active'); $('upBar').style.width = '0';
+  $('upConfirm').disabled = false; $('upConfirm').style.display = '';
+  $('upCancel').textContent = 'Cancel';
+  $('uploadPanel').classList.add('active');
+  $('headerMeta').textContent = `Ready to upload: ${file.name}`;
 }
 
-async function analyseVideo(file) {
-  const detail = $('processingDetail');
-  const steps = ['Uploading video...','Extracting audio and transcribing speech...','Running V-JEPA2 video encoder...','Running Wav2Vec-BERT audio encoder...','Predicting brain activity (full video)...','Stripping audio for comparison run...','Predicting brain activity (video only)...','Computing ROI engagement scores...'];
-  let stepIdx = 0;
-  const timer = setInterval(() => { stepIdx = Math.min(stepIdx+1, steps.length-1); detail.textContent = steps[stepIdx]; }, 8000);
+function uploadFailed(message) {
+  $('upMsg').textContent = message; $('upMsg').classList.add('error');
+  $('upProgress').classList.remove('active');
+  $('upConfirm').disabled = false; $('upConfirm').style.display = '';
+  $('upCancel').textContent = 'Cancel';
+}
 
+async function startUpload() {
+  const file = pendingFile, duration = pendingDuration;
+  $('upConfirm').disabled = true;
+  $('upMsg').classList.remove('error'); $('upMsg').textContent = 'Preparing upload...';
+
+  let presign;
   try {
-    const fd = new FormData(); fd.append('video', file);
-    const res = await fetch('/api/analyse', { method: 'POST', body: fd });
-    clearInterval(timer);
-    if (!res.ok) { const err = await res.json(); throw new Error(err.error || `HTTP ${res.status}`); }
-    analysisData = await res.json();
-    showUploadResults();
-  } catch (err) { clearInterval(timer); alert(`Analysis failed: ${err.message}`); resetUI(); }
+    const res = await fetch('/api/uploads/presign', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        filename: file.name, content_type: file.type,
+        client_duration_seconds: duration, client_declared_bytes: file.size,
+      }),
+    });
+    presign = await res.json();
+    if (!res.ok) throw new Error(presign.message || presign.error || `HTTP ${res.status}`);
+  } catch (err) { return uploadFailed(`Couldn't start the upload: ${err.message}`); }
+
+  // Every signed field first; the file goes last, under the key "file".
+  const fd = new FormData();
+  Object.entries(presign.fields).forEach(([k, v]) => fd.append(k, v));
+  fd.append('file', file);
+
+  const xhr = new XMLHttpRequest();
+  xhr.open('POST', presign.url);
+  xhr.upload.onprogress = ev => {
+    if (!ev.lengthComputable) return;
+    $('upBar').style.width = `${Math.round(100 * ev.loaded / ev.total)}%`;
+  };
+  xhr.onload = () => {
+    if (xhr.status === 204) {  // S3 answers 204 with an empty body on success
+      $('upBar').style.width = '100%';
+      $('upMsg').textContent = `Uploaded — processing (job ${presign.job_id})`;
+      $('upConfirm').style.display = 'none';
+      $('upCancel').textContent = 'Upload another';
+      $('headerMeta').textContent = `Uploaded: ${file.name}`;
+    } else { uploadFailed(`Upload failed (HTTP ${xhr.status}).`); }
+  };
+  xhr.onerror = () => uploadFailed('Upload failed: network error.');
+  $('upMsg').textContent = 'Uploading...';
+  $('upProgress').classList.add('active');
+  xhr.send(fd);
 }
 
-function showUploadResults() {
-  $('processing').classList.remove('active');
-  $('videoContainer').classList.add('active');
-  $('chartsEmpty').style.display = 'none';
-  $('chartsContainer').classList.add('active');
-  $('videoFilename').textContent = analysisData.filename;
-  $('videoDuration').textContent = `${analysisData.duration_seconds}s`;
-  $('videoProcessTime').textContent = `${analysisData.processing_time_seconds}s`;
-  $('headerMeta').textContent = `${analysisData.filename} — ${analysisData.duration_seconds}s — ${analysisData.timesteps.length} timesteps`;
-  renderStats();
-  buildCharts();
+function resetUpload() {
+  pendingFile = null; pendingDuration = 0;
+  $('uploadPanel').classList.remove('active');
+  $('uploadNote').textContent = '';
+  fileInput.value = '';
+  if (hasPass) uploadZone.classList.remove('hidden');
+  $('samplesSection').style.display = '';
+  $('headerMeta').textContent = hasPass ? 'Upload a video or select a sample' : 'Select a video to view analysis';
 }
 
 function renderStats() {
@@ -459,7 +574,7 @@ function resetUI() {
   $('chartsEmpty').style.display = '';
   $('chartsContainer').classList.remove('active');
   $('headerMeta').textContent = hasPass ? 'Upload a video or select a sample' : 'Select a video to view analysis';
-  fileInput.value = '';
+  resetUpload();
   document.querySelectorAll('.sample-card').forEach(c => c.classList.remove('active'));
 }
 </script>
