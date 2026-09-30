@@ -10,28 +10,37 @@ from pathlib import Path
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 
-from neurolens import settings
+from neurolens import pricing, settings, storage
 from neurolens.engagement import extract_engagement
 
 logger = logging.getLogger("neurolens")
 
 
-def create_app(load_model=True, data_dir=None):
+def _is_number(value):
+    return isinstance(value, int | float) and not isinstance(value, bool)
+
+
+def _error(code, message, status=400, **extra):
+    return jsonify({"error": code, "message": message, **extra}), status
+
+
+def create_app(load_model=True, data_dir=None, cfg=None):
     """Build the Flask app.
 
     load_model=True loads config.json, the model and the atlas (needs a GPU machine).
     load_model=False needs none of that: /api/analyse answers 503.
+    cfg, when given, is used instead of reading config.json (tests need no config file).
     """
     root = settings.get_root()
-    cfg = None
     inference = None
 
     if load_model:
-        # TEMPORARY (removed in M1): local use still analyses videos in this process.
-        # The web tier must never import inference otherwise.
+        # TEMPORARY (removed at the end of M1): local use still analyses videos in this
+        # process. The web tier must never import inference otherwise.
         from neurolens import inference
 
-        cfg = settings.load_config(root)
+        if cfg is None:
+            cfg = settings.load_config(root)
         paths = settings.resolve_paths(cfg, root)
         settings.ensure_dirs(paths)
         inference.load_model(cfg)
@@ -41,6 +50,13 @@ def create_app(load_model=True, data_dir=None):
         data_dir = root / "data"
 
     data_dir = Path(data_dir)
+    # The S3 client exists only when the config has an aws block (M0-style tests have none).
+    s3 = None
+    if cfg is not None and "aws" in cfg:
+        import boto3
+
+        s3 = boto3.client("s3", region_name=cfg["aws"]["region"])
+    max_bytes = cfg.get("max_upload_bytes") if cfg else None
     max_seconds = settings.max_duration(cfg)
     samples_json = data_dir / "samples.json"
     static_dir = root / "static"
@@ -67,6 +83,52 @@ def create_app(load_model=True, data_dir=None):
         """Serve video files and thumbnails from the data directory."""
         return send_from_directory(str(data_dir), filename)
 
+    @app.route("/api/uploads/presign", methods=["POST"])
+    def presign():
+        """Give the browser a one-off signed form to upload a video straight to S3."""
+        data = request.get_json(silent=True) or {}
+
+        content_type = data.get("content_type")
+        if content_type not in storage.CONTENT_TYPE_EXTENSIONS:
+            return _error(
+                "unsupported_content_type",
+                "Only MP4, MOV or WebM videos are accepted.",
+            )
+
+        # UX checks only: the browser's numbers can be wrong or spoofed. The real checks are
+        # S3's size cap and the worker's head_object / ffprobe checks.
+        duration = data.get("client_duration_seconds")
+        if not _is_number(duration) or duration <= 0:
+            return _error("invalid_request", "client_duration_seconds must be a positive number.")
+        if duration > max_seconds:
+            return _error(
+                "duration_exceeds_max_estimated",
+                f"Video is too long. The maximum is {max_seconds} seconds.",
+                max_seconds=max_seconds,
+            )
+
+        declared = data.get("client_declared_bytes")
+        if max_bytes is not None and _is_number(declared) and declared > max_bytes:
+            return _error(
+                "file_too_large",
+                f"File is too large. The maximum is {max_bytes} bytes.",
+                max_bytes=max_bytes,
+            )
+
+        try:
+            if s3 is None:
+                raise RuntimeError("config.json has no aws block")
+            presigned = storage.presign_upload(s3, cfg["aws"]["s3_bucket"], content_type, max_bytes)
+        except Exception:
+            logger.exception("Presign failed")
+            return _error("presign_failed", "Could not prepare the upload.", status=500)
+
+        presigned["estimated_cost_usd"] = pricing.estimate_cost_usd(duration)
+        return jsonify(presigned)
+
+    # TODO(M1-cleanup): remove this endpoint once the presign+SQS+worker path
+    # is verified end-to-end (see M1 spec §9 acceptance criteria). Do not
+    # maintain both paths past this milestone.
     @app.route("/api/analyse", methods=["POST"])
     def analyse():
         if "video" not in request.files:
