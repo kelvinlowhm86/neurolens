@@ -39,8 +39,12 @@
 Scale on the whole queue, including messages being worked on. Scaling only on *visible* messages would be wrong: a running job's message is invisible, so the queue would look empty mid-job and the ASG could terminate the worker doing it.
 - **Scale out:** a CloudWatch alarm on `ApproximateNumberOfMessagesVisible` ≥ 1 for 1 minute triggers a step policy that adds 1 instance (cooldown 5 minutes, roughly one cold start), up to the ASG max.
 - **Scale in:** a CloudWatch metric-math alarm on `ApproximateNumberOfMessagesVisible + ApproximateNumberOfMessagesNotVisible` = 0 for 15 consecutive minutes triggers a policy that sets capacity to 0. M2a's 30-minute idle self-termination stays as a backstop.
-- SQS publishes these metrics about once a minute, and after a long idle period they can take several minutes to resume. That delay is part of the measured cold start (§8); for a live demo, pre-warm with `start_work.sh --worker`.
+- SQS publishes these metrics about once a minute, and after a long idle period they can take several minutes to resume. That delay is part of the measured cold start (§8); for a live demo or study session, hold a worker warm (below).
 - Standing configuration stays **min 0 / max 1 / desired 0**. Max 2 only during Experiment 2, then back to 1.
+- **Warm hold.** `start_work.sh --worker` now sets the ASG's **minimum** to 1 (and desired to 1), so neither the scale-in alarm nor M2a's idle self-termination can remove the warm worker before the demo. `stop_work.sh` sets the minimum back to 0 along with everything else. A worker that could reach the ASG minimum can't also decrement below it, so `self_terminate.sh` changes:
+  - **Idle exit** (`OnSuccess`): if the ASG minimum is 1 or more, it restarts the worker service instead of terminating (the hold is deliberate).
+  - **Repeated crashes** (`OnFailure`) or a UserData failure: it first sets the ASG minimum to 0 and then terminates with a decrement, so a broken warm worker is not replaced in a billing loop.
+  - IAM additions to the worker profile: `autoscaling:DescribeAutoScalingGroups` (not resource-scoped by AWS) and `autoscaling:UpdateAutoScalingGroup` on this ASG only.
 - IAM additions to M2a's worker profile: `s3:GetObject` and `s3:PutObject` on `status/*`; `status/` added to the `s3:ListBucket` prefix condition (so a missing status object reads as 404, not 403); `s3:PutObject` on `experiments/*`; `sqs:ChangeMessageVisibility` on the job queue.
 
 ## 3. Queue changes (Terraform, on M1's queue)
@@ -126,6 +130,7 @@ static/                   MODIFIED: real polling
 3. Killing the worker process mid-job (`kill -9`) makes the job visible for redelivery within about 120 s, and a second attempt completes it.
 4. An FIS Spot interruption of a worker mid-job makes it release the job immediately (visibility set to 0), and another attempt completes it.
 5. `systemctl stop neurolens-worker` mid-job releases the job immediately.
+5a. After `start_work.sh --worker`, the warm worker survives 45 minutes with an empty queue (no scale-in, no idle termination); `stop_work.sh` then removes it and leaves the ASG minimum at 0.
 6. The frontend shows real, changing status text and the real error message on failure.
 7. A job forced to fail twice lands in the dead-letter queue.
 8. A crash after the result write but before the `done` status still reports `done` from `GET /api/jobs/{job_id}/status`, and a duplicate delivery does not reprocess.
