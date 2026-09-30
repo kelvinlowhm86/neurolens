@@ -1,0 +1,7 @@
+# Copy to terraform.tfvars (gitignored) and fill in.
+# S3 bucket names are unique across ALL of AWS, so make yours distinctive.
+bucket_name = "neurolens-REPLACE-ME"
+
+# Optional:
+# queue_name      = "neurolens-jobs"
+# allowed_origins = ["http://localhost:5003", "http://127.0.0.1:5003"]

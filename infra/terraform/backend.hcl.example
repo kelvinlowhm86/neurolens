@@ -1,0 +1,3 @@
+# Copy to backend.hcl (gitignored) and fill in the name of the state bucket you created by hand
+# (see README.md, step 2). It is passed at init time so it is not committed.
+bucket = "neurolens-tfstate-REPLACE-WITH-YOUR-ACCOUNT-ID"
