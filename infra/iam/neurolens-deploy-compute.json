@@ -1,0 +1,127 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "Ec2ReadAnything",
+      "Effect": "Allow",
+      "Action": ["ec2:Describe*", "ec2:GetLaunchTemplateData", "ec2:GetConsoleOutput"],
+      "Resource": "*"
+    },
+    {
+      "Sid": "Ec2CreateOnlyIfTaggedNeurolens",
+      "Effect": "Allow",
+      "Action": [
+        "ec2:CreateVpc", "ec2:CreateSubnet", "ec2:CreateInternetGateway", "ec2:CreateRouteTable",
+        "ec2:CreateSecurityGroup", "ec2:CreateVpcEndpoint", "ec2:CreateLaunchTemplate"
+      ],
+      "Resource": "*",
+      "Condition": {"StringEquals": {"aws:RequestTag/Project": "neurolens"}}
+    },
+    {
+      "Sid": "Ec2LaunchOnlyAllowedTypesTaggedNeurolens",
+      "Effect": "Allow",
+      "Action": "ec2:RunInstances",
+      "Resource": "arn:aws:ec2:us-east-1:*:instance/*",
+      "Condition": {
+        "StringEquals": {
+          "aws:RequestTag/Project": "neurolens",
+          "ec2:InstanceType": ["g6e.xlarge", "g6e.2xlarge", "t3.large", "t4g.nano"]
+        }
+      }
+    },
+    {
+      "Sid": "Ec2LaunchUsesTheseResources",
+      "Effect": "Allow",
+      "Action": "ec2:RunInstances",
+      "Resource": [
+        "arn:aws:ec2:us-east-1::image/*",
+        "arn:aws:ec2:us-east-1:*:subnet/*",
+        "arn:aws:ec2:us-east-1:*:security-group/*",
+        "arn:aws:ec2:us-east-1:*:network-interface/*",
+        "arn:aws:ec2:us-east-1:*:volume/*",
+        "arn:aws:ec2:us-east-1:*:launch-template/*",
+        "arn:aws:ec2:us-east-1:*:spot-instances-request/*"
+      ]
+    },
+    {
+      "Sid": "Ec2ImageFromOwnInstance",
+      "Effect": "Allow",
+      "Action": "ec2:CreateImage",
+      "Resource": "arn:aws:ec2:us-east-1:*:instance/*",
+      "Condition": {"StringEquals": {"ec2:ResourceTag/Project": "neurolens"}}
+    },
+    {
+      "Sid": "Ec2ImageOutputsTaggedNeurolens",
+      "Effect": "Allow",
+      "Action": "ec2:CreateImage",
+      "Resource": ["arn:aws:ec2:us-east-1::image/*", "arn:aws:ec2:us-east-1:*:snapshot/*"],
+      "Condition": {"StringEquals": {"aws:RequestTag/Project": "neurolens"}}
+    },
+    {
+      "Sid": "Ec2TagWhileCreating",
+      "Effect": "Allow",
+      "Action": "ec2:CreateTags",
+      "Resource": "*",
+      "Condition": {"Null": {"ec2:CreateAction": "false"}}
+    },
+    {
+      "Sid": "Ec2ChangeOrDeleteOnlyNeurolens",
+      "Effect": "Allow",
+      "Action": [
+        "ec2:Delete*", "ec2:Modify*", "ec2:CreateTags",
+        "ec2:CreateRoute", "ec2:ReplaceRoute",
+        "ec2:AssociateRouteTable", "ec2:DisassociateRouteTable",
+        "ec2:AttachInternetGateway", "ec2:DetachInternetGateway",
+        "ec2:AuthorizeSecurityGroupIngress", "ec2:AuthorizeSecurityGroupEgress",
+        "ec2:RevokeSecurityGroupIngress", "ec2:RevokeSecurityGroupEgress",
+        "ec2:CreateLaunchTemplateVersion",
+        "ec2:StartInstances", "ec2:StopInstances", "ec2:RebootInstances", "ec2:TerminateInstances",
+        "ec2:DeregisterImage"
+      ],
+      "Resource": "*",
+      "Condition": {"StringEquals": {"ec2:ResourceTag/Project": "neurolens"}}
+    },
+    {
+      "Sid": "RolesOnlyNeurolensAndOnlyInsideTheBoundary",
+      "Effect": "Allow",
+      "Action": [
+        "iam:CreateRole", "iam:PutRolePolicy", "iam:DeleteRolePolicy",
+        "iam:AttachRolePolicy", "iam:DetachRolePolicy"
+      ],
+      "Resource": "arn:aws:iam::*:role/neurolens-*",
+      "Condition": {
+        "StringEquals": {
+          "iam:PermissionsBoundary": "arn:aws:iam::${aws:PrincipalAccount}:policy/neurolens-role-boundary"
+        }
+      }
+    },
+    {
+      "Sid": "RolesAndProfilesOnlyNeurolens",
+      "Effect": "Allow",
+      "Action": [
+        "iam:GetRole", "iam:DeleteRole", "iam:TagRole", "iam:UntagRole", "iam:UpdateAssumeRolePolicy",
+        "iam:GetRolePolicy", "iam:ListRolePolicies", "iam:ListAttachedRolePolicies",
+        "iam:ListInstanceProfilesForRole",
+        "iam:CreateInstanceProfile", "iam:DeleteInstanceProfile", "iam:GetInstanceProfile",
+        "iam:TagInstanceProfile", "iam:AddRoleToInstanceProfile", "iam:RemoveRoleFromInstanceProfile"
+      ],
+      "Resource": ["arn:aws:iam::*:role/neurolens-*", "arn:aws:iam::*:instance-profile/neurolens-*"]
+    },
+    {
+      "Sid": "HandRolesOnlyToEc2",
+      "Effect": "Allow",
+      "Action": "iam:PassRole",
+      "Resource": "arn:aws:iam::*:role/neurolens-*",
+      "Condition": {"StringEquals": {"iam:PassedToService": "ec2.amazonaws.com"}}
+    },
+    {
+      "Sid": "AwsHelperRolesForAutoScalingAndSpot",
+      "Effect": "Allow",
+      "Action": "iam:CreateServiceLinkedRole",
+      "Resource": "arn:aws:iam::*:role/aws-service-role/*",
+      "Condition": {
+        "StringEquals": {"iam:AWSServiceName": ["autoscaling.amazonaws.com", "spot.amazonaws.com"]}
+      }
+    }
+  ]
+}

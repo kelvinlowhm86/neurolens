@@ -1,0 +1,47 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "NeurolensBucketsOnly",
+      "Effect": "Allow",
+      "Action": "s3:*",
+      "Resource": ["arn:aws:s3:::neurolens-*", "arn:aws:s3:::neurolens-*/*"]
+    },
+    {
+      "Sid": "NeurolensQueuesOnly",
+      "Effect": "Allow",
+      "Action": "sqs:*",
+      "Resource": "arn:aws:sqs:us-east-1:*:neurolens-*"
+    },
+    {
+      "Sid": "NeurolensParametersOnly",
+      "Effect": "Allow",
+      "Action": ["ssm:GetParameter", "ssm:GetParameters"],
+      "Resource": "arn:aws:ssm:us-east-1:*:parameter/neurolens/*"
+    },
+    {
+      "Sid": "DecryptParametersThroughParameterStoreOnly",
+      "Effect": "Allow",
+      "Action": "kms:Decrypt",
+      "Resource": "*",
+      "Condition": {"StringEquals": {"kms:ViaService": "ssm.us-east-1.amazonaws.com"}}
+    },
+    {
+      "Sid": "SelfTerminateOnlyNeurolensGroups",
+      "Effect": "Allow",
+      "Action": "autoscaling:TerminateInstanceInAutoScalingGroup",
+      "Resource": "arn:aws:autoscaling:us-east-1:*:autoScalingGroup:*:autoScalingGroupName/neurolens-*"
+    },
+    {
+      "Sid": "SessionManagerAgent",
+      "Effect": "Allow",
+      "Action": [
+        "ssm:UpdateInstanceInformation", "ssm:UpdateInstanceAssociationStatus",
+        "ssm:ListInstanceAssociations", "ssm:ListAssociations", "ssm:DescribeAssociation",
+        "ssm:GetDocument", "ssm:DescribeDocument", "ssm:PutInventory",
+        "ssmmessages:*", "ec2messages:*"
+      ],
+      "Resource": "*"
+    }
+  ]
+}

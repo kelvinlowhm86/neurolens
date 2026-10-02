@@ -1,0 +1,96 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "NeurolensBucketsOnly",
+      "Effect": "Allow",
+      "Action": "s3:*",
+      "Resource": ["arn:aws:s3:::neurolens-*", "arn:aws:s3:::neurolens-*/*"]
+    },
+    {
+      "Sid": "NeurolensQueuesOnly",
+      "Effect": "Allow",
+      "Action": "sqs:*",
+      "Resource": "arn:aws:sqs:us-east-1:*:neurolens-*"
+    },
+    {
+      "Sid": "AutoScalingRead",
+      "Effect": "Allow",
+      "Action": "autoscaling:Describe*",
+      "Resource": "*"
+    },
+    {
+      "Sid": "AutoScalingGroupsOnlyNeurolens",
+      "Effect": "Allow",
+      "Action": "autoscaling:*",
+      "Resource": "arn:aws:autoscaling:us-east-1:*:autoScalingGroup:*:autoScalingGroupName/neurolens-*"
+    },
+    {
+      "Sid": "AlarmsRead",
+      "Effect": "Allow",
+      "Action": ["cloudwatch:DescribeAlarms", "cloudwatch:GetMetricData", "cloudwatch:ListMetrics"],
+      "Resource": "*"
+    },
+    {
+      "Sid": "AlarmsOnlyNeurolens",
+      "Effect": "Allow",
+      "Action": [
+        "cloudwatch:PutMetricAlarm", "cloudwatch:DeleteAlarms",
+        "cloudwatch:TagResource", "cloudwatch:UntagResource", "cloudwatch:ListTagsForResource"
+      ],
+      "Resource": "arn:aws:cloudwatch:us-east-1:*:alarm:neurolens-*"
+    },
+    {
+      "Sid": "EmailTopicsOnlyNeurolens",
+      "Effect": "Allow",
+      "Action": "sns:*",
+      "Resource": "arn:aws:sns:us-east-1:*:neurolens-*"
+    },
+    {
+      "Sid": "ParametersOnlyUnderNeurolens",
+      "Effect": "Allow",
+      "Action": [
+        "ssm:PutParameter", "ssm:GetParameter", "ssm:GetParameters", "ssm:DeleteParameter",
+        "ssm:AddTagsToResource", "ssm:RemoveTagsFromResource", "ssm:ListTagsForResource"
+      ],
+      "Resource": "arn:aws:ssm:us-east-1:*:parameter/neurolens/*"
+    },
+    {
+      "Sid": "PublicAwsParametersLikeLatestImageIds",
+      "Effect": "Allow",
+      "Action": ["ssm:GetParameter", "ssm:GetParameters"],
+      "Resource": "arn:aws:ssm:us-east-1::parameter/aws/service/*"
+    },
+    {
+      "Sid": "RemoteCommandsAndSessionsOnlyOnNeurolensMachines",
+      "Effect": "Allow",
+      "Action": ["ssm:SendCommand", "ssm:StartSession"],
+      "Resource": "arn:aws:ec2:us-east-1:*:instance/*",
+      "Condition": {"StringEquals": {"ssm:resourceTag/Project": "neurolens"}}
+    },
+    {
+      "Sid": "OnlyTheShellDocuments",
+      "Effect": "Allow",
+      "Action": ["ssm:SendCommand", "ssm:StartSession"],
+      "Resource": [
+        "arn:aws:ssm:us-east-1::document/AWS-RunShellScript",
+        "arn:aws:ssm:us-east-1:*:document/SSM-SessionManagerRunShell"
+      ]
+    },
+    {
+      "Sid": "OwnSessions",
+      "Effect": "Allow",
+      "Action": ["ssm:TerminateSession", "ssm:ResumeSession"],
+      "Resource": "arn:aws:ssm:*:*:session/${aws:username}-*"
+    },
+    {
+      "Sid": "CommandResultsAndParameterList",
+      "Effect": "Allow",
+      "Action": [
+        "ssm:GetCommandInvocation", "ssm:ListCommands", "ssm:ListCommandInvocations",
+        "ssm:DescribeInstanceInformation", "ssm:DescribeParameters"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
