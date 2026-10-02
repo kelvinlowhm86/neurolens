@@ -5,7 +5,8 @@
 #       t3.large (about 8 cents an hour): installs the software only (§2 step 3), prints success
 #       or the failing step, and always terminates. No token, no weights, no image.
 #   infra/build_ami.sh <clip.mp4> [--refresh-weights]
-#       g6e.xlarge on-demand ($1.86 an hour, about an hour): full build, weights to S3 models/,
+#       g6e.xlarge on-demand ($1.86 an hour, about an hour; g6e.2xlarge at $2.24 if the smaller
+#       size is sold out in every zone): full build, weights to S3 models/,
 #       then the software-only image. Prints the AMI ID, snapshot size, peak RAM and VRAM.
 #
 # Needs: terraform applied (network, roles), and infra/deploy_code.sh run (code/latest.zip).
@@ -45,7 +46,10 @@ else
   AMI_PARAM=/aws/service/deeplearning/ami/x86_64/base-oss-nvidia-driver-gpu-ubuntu-22.04/latest/ami-id
 fi
 BASE_AMI=$(aws ssm get-parameter --name "$AMI_PARAM" --query Parameter.Value --output text)
-if [ "$REHEARSAL" = 1 ]; then TYPE=t3.large; else TYPE=g6e.xlarge; fi
+# Tried in order. g6e.2xlarge has the same GPU (more RAM and CPU, $2.24 an hour): only a fallback
+# when the smaller size is sold out everywhere. The image works on either; workers use the Terraform
+# worker_instance_type, whatever built the image.
+if [ "$REHEARSAL" = 1 ]; then TYPES=t3.large; else TYPES="g6e.xlarge g6e.2xlarge"; fi
 
 # ─── Remote steps (run on the instance as root through SSM Run Command) ────────────────────────
 
@@ -304,12 +308,13 @@ if [ "$REHEARSAL" = 0 ]; then
   aws s3 cp "$CLIP" "s3://$BUCKET/smoke/clip.mp4" --only-show-errors
 fi
 
-say "launching $TYPE from $(aws ec2 describe-images --image-ids "$BASE_AMI" --query 'Images[0].Name' --output text)"
+say "launching ($TYPES) from $(aws ec2 describe-images --image-ids "$BASE_AMI" --query 'Images[0].Name' --output text)"
 # Dead-man switch: the instance shuts itself down after 4 hours, and a shutdown from inside means
 # terminate. The script's own stop-instances call (before the image) is an API stop, not affected.
 # A GPU type can be sold out in one zone: try the next zone's subnet on InsufficientInstanceCapacity
 # only; any other error stops here.
-for SUBNET in $SUBNETS; do
+for TYPE in $TYPES; do
+ for SUBNET in $SUBNETS; do
   if OUT=$(aws ec2 run-instances --image-id "$BASE_AMI" --instance-type "$TYPE" \
       --subnet-id "$SUBNET" --security-group-ids "$SG" --iam-instance-profile "Name=$PROFILE" \
       --metadata-options HttpTokens=required --instance-initiated-shutdown-behavior terminate \
@@ -319,15 +324,16 @@ for SUBNET in $SUBNETS; do
         'ResourceType=volume,Tags=[{Key=Project,Value=neurolens},{Key=Name,Value=neurolens-build}]' \
       --query 'Instances[0].[InstanceId,Placement.AvailabilityZone]' --output text 2>&1); then
     read -r INSTANCE ZONE <<<"$OUT"
-    break
+    break 2
   fi
   case "$OUT" in
     *InsufficientInstanceCapacity*) say "no $TYPE capacity in subnet $SUBNET's zone; trying the next" ;;
     *) echo "$OUT" >&2; exit 1 ;;
   esac
+ done
 done
-[ -n "$INSTANCE" ] || { say "FAILED: no zone has $TYPE capacity right now; try again later"; exit 1; }
-say "instance $INSTANCE launched in $ZONE (billed from now); waiting for Session Manager"
+[ -n "$INSTANCE" ] || { say "FAILED: no zone has capacity for $TYPES right now; try again later"; exit 1; }
+say "instance $INSTANCE ($TYPE) launched in $ZONE (billed from now); waiting for Session Manager"
 aws ec2 wait instance-running --instance-ids "$INSTANCE"
 for i in $(seq 1 60); do
   [ "$(aws ssm describe-instance-information --filters "Key=InstanceIds,Values=$INSTANCE" \
