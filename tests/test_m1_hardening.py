@@ -359,8 +359,8 @@ def test_poll_once_processes_a_waiting_message(
     ok = worker.poll_once(s3=aws.s3, sqs=ShortPollSqs(aws.sqs), cfg=cfg, roi_masks=roi_masks_small)
 
     assert ok is True
-    result = json.loads((Path(cfg["paths"]["output"]) / f"{job_id}.json").read_text())
-    assert result["job_id"] == job_id
+    body = aws.s3.get_object(Bucket=aws.bucket, Key=f"results/{job_id}.json")["Body"]
+    assert json.loads(body.read())["job_id"] == job_id  # M2a: the result is published to S3
     assert remaining() == []
 
 

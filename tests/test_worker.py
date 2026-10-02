@@ -103,10 +103,13 @@ def object_exists(aws, key):
     return True
 
 
-def read_result(cfg, job_id):
-    path = Path(cfg["paths"]["output"]) / f"{job_id}.json"
-    assert path.exists(), f"no result file at {path}"
-    return json.loads(path.read_text())
+def read_result(aws, job_id):
+    """The result as published to S3 (M2a: results/{job_id}.json, not the local folder)."""
+    try:
+        body = aws.s3.get_object(Bucket=aws.bucket, Key=f"results/{job_id}.json")["Body"]
+    except ClientError as err:
+        raise AssertionError(f"no result object results/{job_id}.json in S3") from err
+    return json.loads(body.read())
 
 
 def never_inference(patch_everywhere):
@@ -138,7 +141,7 @@ def test_valid_video_is_done_and_writes_result_json(
     outcome = handle_record(aws.bucket, key, s3=aws.s3, cfg=cfg, roi_masks=roi_masks_small)
 
     assert outcome is Outcome.DONE
-    result = read_result(cfg, job_id)
+    result = read_result(aws, job_id)
     assert set(result) == SECTION_1_KEYS  # exactly these: no filename, no gpu
     assert result["job_id"] == job_id
     assert result["fake_inference"] is True
@@ -171,14 +174,14 @@ def test_duration_and_timesteps_are_exactly_what_extract_engagement_returned(
     job_id, key = new_key()
     upload_clip(aws, key, clip_path)
     handle_record(aws.bucket, key, s3=aws.s3, cfg=cfg, roi_masks=roi_masks_small)
-    result = read_result(cfg, job_id)
+    result = read_result(aws, job_id)
     assert len(calls["extract"]) == 1
     expected = json.loads(json.dumps(calls["extract"][0]))
     assert result["duration_seconds"] == expected["duration_seconds"]
     assert result["timesteps"] == expected["timesteps"]
 
 
-def test_result_is_written_under_paths_output_as_job_id_json(
+def test_result_goes_to_s3_as_results_job_id_json_and_not_to_the_local_output_folder(
     aws, make_cfg, roi_masks_small, new_key, clip_path, tmp_path
 ):
     out_dir = tmp_path / "elsewhere" / "results_here"
@@ -187,7 +190,8 @@ def test_result_is_written_under_paths_output_as_job_id_json(
     job_id, key = new_key(".mov")
     upload_clip(aws, key, clip_path)
     handle_record(aws.bucket, key, s3=aws.s3, cfg=cfg, roi_masks=roi_masks_small)
-    assert [p.name for p in out_dir.iterdir()] == [f"{job_id}.json"]
+    assert list(out_dir.iterdir()) == []  # M2a: nothing is written locally
+    assert object_exists(aws, f"results/{job_id}.json")
 
 
 def test_pipeline_runs_inference_then_strip_audio_then_inference_without_audio(
@@ -240,7 +244,7 @@ def test_result_has_gpu_only_when_gpu_info_returns_a_value(
     job_id, key = new_key()
     upload_clip(aws, key, clip_path)
     handle_record(aws.bucket, key, s3=aws.s3, cfg=cfg, roi_masks=roi_masks_small)
-    result = read_result(cfg, job_id)
+    result = read_result(aws, job_id)
     assert set(result) == SECTION_1_KEYS | {"gpu"}
     assert result["gpu"] == gpu
 
@@ -263,7 +267,7 @@ def test_fake_inference_key_is_absent_when_fake_mode_is_off(
     upload_clip(aws, key, clip_path)
     outcome = handle_record(aws.bucket, key, s3=aws.s3, cfg=cfg, roi_masks=roi_masks_small)
     assert outcome is Outcome.DONE
-    result = read_result(cfg, job_id)
+    result = read_result(aws, job_id)
     assert "fake_inference" not in result
     assert set(result) == SECTION_1_KEYS - {"fake_inference"}
 
@@ -475,7 +479,7 @@ def test_valid_upload_end_to_end_deletes_message_and_writes_result(
         roi_masks=roi_masks_small,
     )
     assert remaining() == []
-    assert read_result(cfg, job_id)["job_id"] == job_id
+    assert read_result(aws, job_id)["job_id"] == job_id
 
 
 def test_oversize_upload_end_to_end_deletes_object_and_message(
