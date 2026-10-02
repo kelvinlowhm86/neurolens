@@ -50,7 +50,7 @@ The usability study itself (run with a Google Form and a moderator, no in-app st
 - **Terraform ordering for the VPC origin** (medium-high confidence in these details; check on first apply): CloudFront creates the security group `CloudFront-VPCOrigins-Service-SG` itself when the first VPC origin is deployed. The server's inbound rule therefore looks that group up by name (a `data` source with `depends_on` the VPC origin). Creating or changing a VPC origin takes about 10–15 minutes. At teardown the VPC can only be deleted after CloudFront has removed that group.
 - **Service `infra/neurolens-web.service`:**
   - `WorkingDirectory=/opt/neurolens/app`
-  - `EnvironmentFile=/opt/neurolens/env.conf` (`NEUROLENS_ROOT=/opt/neurolens/app`, `NEUROLENS_DEPLOYED=1`, `NEUROLENS_BUCKET=<bucket>`)
+  - `EnvironmentFile=/opt/neurolens/env.conf` (`NEUROLENS_ROOT=/opt/neurolens/app`, `NEUROLENS_DEPLOYED=1`, and the identifiers listed under UserData below, including `NEUROLENS_S3_BUCKET`)
   - `ExecStartPre=/opt/neurolens/bin/pull_web_code.sh`
   - `ExecStart=/opt/neurolens/venv/bin/gunicorn --workers 2 --timeout 90 --bind 0.0.0.0:8000 "neurolens.web.app:create_app()"`
   - `Restart=on-failure`

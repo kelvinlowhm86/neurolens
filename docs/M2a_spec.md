@@ -47,6 +47,10 @@ The script (AWS CLI + shell), given the path of one local video that contains sp
 8. Deletes `/opt/neurolens/app/` and every file that held `HF_TOKEN` (the cache is on the NVMe disk, which is not part of the image), so the image contains **software only**.
 9. Stops the instance, `aws ec2 create-image`, tags it `neurolens-worker-v{n}`, terminates the instance, prints the AMI ID and the size of its snapshot (it is billed while it exists).
 
+**CPU rehearsal (`build_ami.sh --cpu-rehearsal`), run once before the first GPU build.** It launches a `t3.large` (on-demand, about $0.08 an hour) from the same base image in the public subnet with the `neurolens-build` profile, runs step 3 only (the NVMe mount falls back to a folder on the root disk, as in §4c step 2), prints success or the step that failed, and always terminates the instance. It reads no token, downloads no weights and creates no image. Reason: install and script mistakes are then fixed at CPU prices, not at the GPU's $1.86 an hour. If the base image will not boot on a `t3.large`, use the plain Ubuntu 22.04 image instead (the install steps are the same apart from the NVIDIA driver).
+
+**Build log:** the measurements and choices this milestone asks to record (AMI IDs, snapshot size, peak RAM and VRAM, the chosen instance type, the §7 numbers) go in `docs/M2a_build_log.md`. It holds identifiers and numbers only, never account IDs or secrets.
+
 ## 3. Worker service on the machine (baked into the image)
 `infra/neurolens-worker.service`:
 ```ini
@@ -71,7 +75,7 @@ WantedBy=multi-user.target
 ```
 - Baked in **disabled**. UserData (§4c) writes `config.json` and `env.conf`, then enables and starts it.
 - **`pull_code.sh`** runs before every start (boot, crash restart, or `systemctl restart`): downloads `code/latest.zip` and `code/latest.revision`, removes `/opt/neurolens/app/neurolens/`, unzips over `/opt/neurolens/app` (keeping `config.json`), and writes `/opt/neurolens/app/REVISION`. It also copies the bundle's `infra/pull_code.sh` and `infra/self_terminate.sh` to `/opt/neurolens/bin/`, so script changes reach machines with the next start too (changes to the two systemd unit files still need an image rebuild, since they are read before this script runs). This is why a deploy reaches running machines with a plain restart; EC2 runs UserData only on an instance's first boot.
-- **`env.conf`** is written on first boot and holds only `NEUROLENS_ROOT=/opt/neurolens/app`, `NEUROLENS_BUCKET=<bucket>`, `NEUROLENS_DEPLOYED=1` (M3b's guard against development settings on AWS), `HF_HUB_OFFLINE=1`, and `FAKE_INFERENCE=1` during the wiring rehearsal only. The HF/nilearn cache variables are **not** set here: `neurolens.settings.configure_env` sets them from `config.json` paths, so there is one source of truth. Never bake AWS resource identifiers into the image.
+- **`env.conf`** is written on first boot and holds only `NEUROLENS_ROOT=/opt/neurolens/app`, the deployment identifiers `NEUROLENS_S3_BUCKET`, `NEUROLENS_SQS_QUEUE_URL` and `NEUROLENS_AWS_REGION` (the names `settings.load_settings` reads; `pull_code.sh` uses the same bucket variable), `NEUROLENS_DEPLOYED=1` (M3b's guard against development settings on AWS), `HF_HUB_OFFLINE=1`, and `FAKE_INFERENCE=1` during the wiring rehearsal only. The HF/nilearn cache variables are **not** set here: `neurolens.settings.configure_env` sets them from `config.json` paths, so there is one source of truth. Never bake AWS resource identifiers into the image.
 - **Self-termination** (cost guard). `neurolens-self-terminate.service` is a oneshot unit running `self_terminate.sh`, which calls `aws autoscaling terminate-instance-in-auto-scaling-group --instance-id <own id> --should-decrement-desired-capacity`. Decrementing matters: a plain `shutdown` would make the ASG launch a replacement, which fails the same way, in a billing loop. It runs when:
   - the worker exits cleanly after `worker.idle_exit_minutes` (config, 30 on AWS) with no messages received (`OnSuccess`);
   - the worker crashes 3 times within 10 minutes (`OnFailure`), for example a broken model load;
@@ -102,7 +106,7 @@ WantedBy=multi-user.target
 1. `set -euo pipefail`; an `ERR` trap that logs the failing line and calls `self_terminate.sh` (§3); log every step with a timestamp to `/var/log/neurolens-boot.log` (M2b's Experiment 2 reads these).
 2. Format and mount the instance-store NVMe disk at `/opt/neurolens/cache`. If no instance-store disk exists (the CPU rehearsal instance, §4e), use a folder on the root disk instead.
 3. `aws s3 sync s3://<bucket>/models/ /opt/neurolens/cache/`. Log its duration.
-4. Write `/opt/neurolens/env.conf` (§3), which also carries `NEUROLENS_S3_BUCKET`, `NEUROLENS_SQS_QUEUE_URL` and `NEUROLENS_AWS_REGION` from the templated values, and `/opt/neurolens/app/config.json` (the shared file's schema) with absolute paths: `paths.models = /opt/neurolens/cache/models`, `paths.data = /opt/neurolens/cache/data`, `paths.output = /opt/neurolens/output`; `worker.idle_exit_minutes = 30`. `chmod 600` both. No `HF_TOKEN` is needed: weights come from S3 and `HF_HUB_OFFLINE=1` is set.
+4. Write `/opt/neurolens/env.conf` (§3), with `NEUROLENS_S3_BUCKET`, `NEUROLENS_SQS_QUEUE_URL` and `NEUROLENS_AWS_REGION` from the templated values, and `/opt/neurolens/app/config.json` (the shared file's schema) with absolute paths: `paths.models = /opt/neurolens/cache/models`, `paths.data = /opt/neurolens/cache/data`, `paths.output = /opt/neurolens/output`; `worker.idle_exit_minutes = 30`. `chmod 600` both. No `HF_TOKEN` is needed: weights come from S3 and `HF_HUB_OFFLINE=1` is set.
 5. Run `pull_code.sh` once, then verify: `test -s /opt/neurolens/env.conf` and `/opt/neurolens/venv/bin/python -c "from neurolens.settings import load_config; load_config()"` run from `/opt/neurolens/app` with `NEUROLENS_ROOT` set. A failure trips the `ERR` trap.
 6. `systemctl enable --now neurolens-worker`.
 
@@ -166,7 +170,7 @@ Add to M1's suite, written first:
 ```
 infra/
   terraform/                        MODIFIED: VPC, NAT instance, S3 endpoint, Launch Template, ASG, IAM, alarm
-  build_ami.sh                      NEW: software-only image; weights to S3; peak RAM/VRAM record
+  build_ami.sh                      NEW: software-only image; weights to S3; peak RAM/VRAM record; --cpu-rehearsal
   neurolens-worker.service          NEW: systemd unit, baked into the image
   neurolens-self-terminate.service  NEW
   pull_code.sh                      NEW: runs before every worker start
@@ -178,6 +182,7 @@ infra/
 neurolens/storage.py                MODIFIED: put_result
 neurolens/worker.py                 MODIFIED: results to S3, Outcome.DUPLICATE, idle exit
 tests/                              MODIFIED: §8 tests
+docs/M2a_build_log.md               NEW: measurements and choices (§2)
 ```
 
 ## 10. Acceptance criteria
