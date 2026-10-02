@@ -12,6 +12,9 @@ OnSuccess=neurolens-self-terminate.service
 [Service]
 WorkingDirectory=/opt/neurolens/app
 EnvironmentFile=/opt/neurolens/env.conf
+# The image build ran the pipeline as root with HOME=/root; anything the libraries keep under
+# ~/.cache must be found here too (systemd sets no HOME for a root service).
+Environment=HOME=/root
 ExecStartPre=/opt/neurolens/bin/pull_code.sh
 ExecStart=/opt/neurolens/venv/bin/python worker.py
 Restart=on-failure

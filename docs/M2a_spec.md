@@ -41,11 +41,14 @@ The script (AWS CLI + shell), given the path of one local video that contains sp
    - Install `infra/neurolens-worker.service`, `infra/neurolens-self-terminate.service`, `infra/pull_code.sh` and `infra/self_terminate.sh` (§3), with the worker service disabled
    - Mount the instance's NVMe disk at `/opt/neurolens/cache`, so the ~20 GB download never lands on the root disk that becomes the image
 4. **Downloads everything through the worker's own code.** Write a build-time `/opt/neurolens/app/.env` with `HF_TOKEN` read from Parameter Store (`/neurolens/hf_token`, a `SecureString`), and a build-time `/opt/neurolens/app/config.json` with `paths.models = /opt/neurolens/cache/models` and `paths.data = /opt/neurolens/cache/data`. Then run the full pipeline once on `smoke/clip.mp4`: `load_model()`, `run_inference`, `strip_audio`, `run_inference` again, `extract_engagement`. Using the same code as the worker guarantees the same environment-variable order and cache layout, and both passes on a clip with speech trigger every lazily loaded encoder (video, audio, text including the gated Llama 3.2 model).
-5. **Proves the cache is complete:** run the same pipeline again in a fresh process with `HF_HUB_OFFLINE=1`. If anything is missing, this fails now instead of on the first real job.
+   The step fails if the with-audio pass logs `whisperx failed`: the clip has speech, so that would mean the text features (and the Llama download) were silently skipped. The token is passed as an environment variable of that one process, never written to a file.
+5. **Proves the cache is complete:** run the same pipeline again in a fresh process with `HF_HUB_OFFLINE=1`, no token, on a re-muxed copy of the clip under a new name (so no per-video feature cache can stand in for the models). If anything is missing, this fails now instead of on the first real job.
 6. **Records peak system RAM and peak GPU memory** during step 4 (sample `/proc/meminfo` every second; `gpu_info()` for VRAM). Print both with the AMI ID. The RAM figure decides the worker instance size (§4b).
 7. `aws s3 sync /opt/neurolens/cache/ s3://<bucket>/models/ --exclude "models/xet/*"`. The xet folder is a download-deduplication cache that can be as large as the weights themselves and is not needed offline. The `models/` prefix is not covered by any expiry rule. If `models/` is already populated, skip steps 4 and 7 (`--refresh-weights` forces them) and instead sync `models/` down to the cache and run step 5.
 8. Deletes `/opt/neurolens/app/` and every file that held `HF_TOKEN` (the cache is on the NVMe disk, which is not part of the image), so the image contains **software only**.
-9. Stops the instance, `aws ec2 create-image`, tags it `neurolens-worker-v{n}`, terminates the instance, prints the AMI ID and the size of its snapshot (it is billed while it exists).
+9. Stops the instance, `aws ec2 create-image`, tags it `neurolens-worker-v{n}` (n = highest existing + 1), terminates the instance, prints the AMI ID and the size of its snapshot (it is billed while it exists).
+
+**Money guards:** the script terminates the build instance on any exit (including Ctrl-C, and an instance launched just before one); every remote step has a deadline; and the instance is launched with `shutdown -h +240` in its user data and shutdown behaviour `terminate`, so it ends itself after 4 hours even if the Mac sleeps. Step output goes to `/var/log/neurolens-build.log` on the instance; on failure the last 40 lines come back to the Mac.
 
 **CPU rehearsal (`build_ami.sh --cpu-rehearsal`), run once before the first GPU build.** It launches a `t3.large` (on-demand, about $0.08 an hour) from the same base image in the public subnet with the `neurolens-build` profile, runs step 3 only (the NVMe mount falls back to a folder on the root disk, as in §4c step 2), prints success or the step that failed, and always terminates the instance. It reads no token, downloads no weights and creates no image. Reason: install and script mistakes are then fixed at CPU prices, not at the GPU's $1.86 an hour. If the base image will not boot on a `t3.large`, use the plain Ubuntu 22.04 image instead (the install steps are the same apart from the NVIDIA driver).
 
@@ -65,6 +68,7 @@ OnSuccess=neurolens-self-terminate.service
 [Service]
 WorkingDirectory=/opt/neurolens/app
 EnvironmentFile=/opt/neurolens/env.conf
+Environment=HOME=/root
 ExecStartPre=/opt/neurolens/bin/pull_code.sh
 ExecStart=/opt/neurolens/venv/bin/python worker.py
 Restart=on-failure
