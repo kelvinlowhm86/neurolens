@@ -18,3 +18,36 @@ variable "allowed_origins" {
   type        = list(string)
   default     = ["http://localhost:5003", "http://127.0.0.1:5003"]
 }
+
+variable "zones" {
+  description = <<-EOT
+    Two availability zones that offer g6e.xlarge (check with `aws ec2 describe-instance-type-offerings
+    --location-type availability-zone --filters Name=instance-type,Values=g6e.xlarge`). The first also
+    holds the public subnet, so the image-build GPU instance can launch there.
+  EOT
+  type        = list(string)
+  default     = ["us-east-1a", "us-east-1b"]
+}
+
+variable "alert_email" {
+  description = "Where the 3-hour GPU alarm is emailed. Set in terraform.tfvars (git-ignored)."
+  type        = string
+}
+
+variable "worker_ami_id" {
+  description = "The software-only image from infra/build_ami.sh. Empty: no Launch Template or Auto Scaling group yet."
+  type        = string
+  default     = ""
+}
+
+variable "worker_instance_type" {
+  description = "g6e.xlarge, or g6e.2xlarge if the build's peak-RAM rule says so; t3.large for the wiring rehearsal."
+  type        = string
+  default     = "g6e.xlarge"
+}
+
+variable "worker_fake_inference" {
+  description = "True only for the wiring rehearsal on a CPU instance: FAKE_INFERENCE=1 in env.conf."
+  type        = bool
+  default     = false
+}

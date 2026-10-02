@@ -5,3 +5,11 @@ bucket_name = "neurolens-REPLACE-ME"
 # Optional:
 # queue_name      = "neurolens-jobs"
 # allowed_origins = ["http://localhost:5003", "http://127.0.0.1:5003"]
+
+# Required from M2a: where the 3-hour GPU alarm emails you.
+alert_email = "you@example.com"
+
+# Set after infra/build_ami.sh prints the image ID (M2a):
+# worker_ami_id         = "ami-..."
+# worker_instance_type  = "g6e.xlarge"
+# worker_fake_inference = false      # true only for the CPU wiring rehearsal

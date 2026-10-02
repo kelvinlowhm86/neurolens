@@ -128,7 +128,20 @@ resource "aws_sqs_queue" "jobs" {
 
   sqs_managed_sse_enabled = true
 
-  # TODO(M2b): add DLQ redrive policy
+  # Retry cap (M2a §4h): a message received twice without being deleted is parked in the
+  # dead-letter queue instead of rerunning paid GPU inference every 900 s.
+  redrive_policy = jsonencode({
+    deadLetterTargetArn = aws_sqs_queue.jobs_dlq.arn
+    maxReceiveCount     = 2
+  })
+}
+
+# Parked jobs wait here for 14 days. Inspect with `aws sqs receive-message`; retry after a fix with
+# the console's "Start DLQ redrive". SQS moves messages itself, so the worker needs no access.
+resource "aws_sqs_queue" "jobs_dlq" {
+  name                      = "${var.queue_name}-dlq"
+  message_retention_seconds = 1209600
+  sqs_managed_sse_enabled   = true
 }
 
 # S3 may only send to the queue with an explicit queue policy (a common gotcha). Scoped to

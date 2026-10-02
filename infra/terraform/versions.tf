@@ -13,7 +13,7 @@ terraform {
   # one laptop. The bucket name is passed at init time so it is not committed:
   #   terraform init -backend-config=backend.hcl      (see README.md)
   backend "s3" {
-    key          = "m1/terraform.tfstate"
+    key          = "m1/terraform.tfstate" # one state for the whole project; the name stays so nothing is orphaned
     region       = "us-east-1"
     use_lockfile = true
   }
@@ -26,7 +26,7 @@ provider "aws" {
   default_tags {
     tags = {
       Project   = "neurolens"
-      Milestone = "M1"
+      Milestone = "M2a"
     }
   }
 }

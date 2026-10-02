@@ -1,0 +1,88 @@
+#!/bin/bash
+# NeuroLens worker first boot (M2a §4c). Rendered by Terraform: region, bucket, queue URL and the
+# fake-inference switch are filled in. Runs once per instance; pull_code.sh runs on every start.
+set -euo pipefail
+
+LOG=/var/log/neurolens-boot.log
+log() { echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) $*" | tee -a "$LOG"; }
+on_error() {
+  log "FAILED at line $1; ending this machine"
+  /opt/neurolens/bin/self_terminate.sh || true
+}
+trap 'on_error $LINENO' ERR
+
+log "boot start"
+
+# 2. Weights live on the fast local NVMe disk (instance store), never on the root disk.
+CACHE=/opt/neurolens/cache
+mkdir -p "$CACHE"
+DISK=$(lsblk -dno NAME,MODEL | awk '/Instance Storage/ {print "/dev/" $1; exit}')
+if [ -n "$DISK" ]; then
+  mkfs.ext4 -q -F "$DISK"
+  mount "$DISK" "$CACHE"
+  log "mounted $DISK at $CACHE"
+else
+  log "no instance-store disk (CPU rehearsal): using a folder on the root disk"
+fi
+
+# 3. Weights from S3 (through the free gateway endpoint).
+log "weight sync start"
+SECONDS=0
+aws s3 sync "s3://${bucket}/models/" "$CACHE/" --region "${region}" --only-show-errors
+log "weight sync done in $SECONDS s"
+
+# 4. Settings. env.conf: deployment identifiers only, no secrets. config.json: the shared file's
+# settings with absolute paths; keep in step with the committed config.json.
+mkdir -p /opt/neurolens/app /opt/neurolens/output
+umask 077
+cat > /opt/neurolens/env.conf <<EOF
+NEUROLENS_ROOT=/opt/neurolens/app
+NEUROLENS_S3_BUCKET=${bucket}
+NEUROLENS_SQS_QUEUE_URL=${queue_url}
+NEUROLENS_AWS_REGION=${region}
+NEUROLENS_DEPLOYED=1
+HF_HUB_OFFLINE=1
+%{ if fake_inference ~}
+FAKE_INFERENCE=1
+%{ endif ~}
+EOF
+cat > /opt/neurolens/app/config.json <<'EOF'
+{
+  "paths": {
+    "models": "/opt/neurolens/cache/models",
+    "data": "/opt/neurolens/cache/data",
+    "output": "/opt/neurolens/output"
+  },
+  "model": {
+    "repo_id": "facebook/tribev2",
+    "llama_repo_id": "meta-llama/Llama-3.2-3B",
+    "pre_download_llama": false
+  },
+  "aws": {
+    "region": "us-east-1"
+  },
+  "hf_download_timeout": 300,
+  "max_video_duration_seconds": 120,
+  "max_upload_bytes": 300000000,
+  "worker": {
+    "idle_exit_minutes": 30
+  }
+}
+EOF
+chmod 600 /opt/neurolens/env.conf /opt/neurolens/app/config.json
+umask 022
+log "settings written"
+
+# 5. Code, then check the settings load before the service is allowed to start.
+set -a
+. /opt/neurolens/env.conf
+set +a
+/opt/neurolens/bin/pull_code.sh
+test -s /opt/neurolens/env.conf
+(cd /opt/neurolens/app && /opt/neurolens/venv/bin/python -c \
+  "from neurolens.settings import load_config; load_config()")
+log "code $(cat /opt/neurolens/app/REVISION) pulled and settings verified"
+
+# 6. Start the worker (disabled in the image until now).
+systemctl enable --now neurolens-worker
+log "worker started"
