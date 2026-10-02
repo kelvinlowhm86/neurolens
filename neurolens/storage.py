@@ -5,6 +5,8 @@ import uuid
 from pathlib import PurePosixPath
 from urllib.parse import unquote_plus
 
+from botocore.exceptions import ClientError
+
 # The extension of the stored object comes from the declared content type, never from the
 # user's filename.
 CONTENT_TYPE_EXTENSIONS = {
@@ -63,3 +65,26 @@ def parse_s3_event(body):
 
 def job_id_from_key(key):
     return PurePosixPath(key).stem
+
+
+def put_result(s3, bucket, job_id, result):
+    """Publish results/<job_id>.json, never replacing an existing result.
+
+    True if written; False if a result already exists (S3 answers 412 to a conditional write
+    with IfNoneMatch="*"). Any other error is raised so the caller retries the job.
+    """
+    try:
+        s3.put_object(
+            Bucket=bucket,
+            Key=f"results/{job_id}.json",
+            Body=json.dumps(result).encode(),
+            ContentType="application/json",
+            IfNoneMatch="*",
+        )
+    except ClientError as err:
+        if err.response.get("ResponseMetadata", {}).get("HTTPStatusCode") == 412 or (
+            err.response.get("Error", {}).get("Code") == "PreconditionFailed"
+        ):
+            return False
+        raise
+    return True

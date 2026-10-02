@@ -5,7 +5,6 @@ so tests can hand in moto (fake S3/SQS) clients.
 """
 
 import enum
-import json
 import logging
 import tempfile
 import time
@@ -35,6 +34,7 @@ class Outcome(enum.Enum):
     DONE = "done"
     REJECTED = "rejected"  # oversize, too long or unreadable; the object is deleted
     GONE = "gone"  # the object no longer exists (duplicate notice or expired): nothing to do
+    DUPLICATE = "duplicate"  # a result for this job already exists; it is left unchanged
 
 
 def _reject(s3, bucket, key, reason):
@@ -116,8 +116,11 @@ def handle_record(bucket, key, *, s3, cfg, roi_masks):
     if gpu is not None:
         result["gpu"] = gpu
 
-    # A local folder is fine for M1; M2a moves results to S3.
-    (out_dir / f"{job_id}.json").write_text(json.dumps(result))
+    # Publish to S3 without ever replacing an earlier result (a redelivered notice must not
+    # overwrite the first answer).
+    if not storage.put_result(s3, bucket, job_id, result):
+        logger.warning(f"Duplicate {job_id}: a result already exists, left unchanged")
+        return Outcome.DUPLICATE
     logger.info(f"Done {job_id} in {result['processing_time_seconds']}s")
     return Outcome.DONE
 
@@ -151,11 +154,11 @@ def process_message(message, *, s3, sqs, cfg, roi_masks):
         logger.exception("Could not delete a finished message; it will be redelivered")
 
 
-def poll_once(*, s3, sqs, cfg, roi_masks):
+def _poll(*, s3, sqs, cfg, roi_masks):
     """Long-poll for at most one message and handle it.
 
-    True if the receive call worked (even with no message); False if it failed. The error is
-    logged and never escapes.
+    The number of messages received (0 for an empty queue), or None if the receive call failed.
+    The error is logged and never escapes.
     """
     try:
         resp = sqs.receive_message(
@@ -163,10 +166,16 @@ def poll_once(*, s3, sqs, cfg, roi_masks):
         )
     except Exception:
         logger.exception("Could not receive from the queue")
-        return False
-    for message in resp.get("Messages", []):
+        return None
+    messages = resp.get("Messages", [])
+    for message in messages:
         process_message(message, s3=s3, sqs=sqs, cfg=cfg, roi_masks=roi_masks)
-    return True
+    return len(messages)
+
+
+def poll_once(*, s3, sqs, cfg, roi_masks):
+    """True if the receive call worked (even with no message); False if it failed."""
+    return _poll(s3=s3, sqs=sqs, cfg=cfg, roi_masks=roi_masks) is not None
 
 
 def run():
@@ -181,12 +190,22 @@ def run():
     s3 = boto3.client("s3", region_name=aws["region"])
     sqs = boto3.client("sqs", region_name=aws["region"])
 
+    # Absent means never exit; on AWS the machine shuts itself down once the worker returns.
+    idle_minutes = cfg.get("worker", {}).get("idle_exit_minutes")
+
     logger.info(f"Worker ready. Polling {aws['sqs_queue_url']}")
     delay = 0
+    last_activity = time.monotonic()
     while True:
-        if poll_once(s3=s3, sqs=sqs, cfg=cfg, roi_masks=roi_masks):
-            delay = 0
-        else:
+        received = _poll(s3=s3, sqs=sqs, cfg=cfg, roi_masks=roi_masks)
+        if received is None:
             delay = min(max(delay * 2, 2), 30)  # back off: an outage neither kills nor spins
             logger.warning(f"Retrying the queue in {delay}s")
             time.sleep(delay)
+        else:
+            delay = 0
+            if received:
+                last_activity = time.monotonic()  # after the job, so its run time is not idle
+        if idle_minutes is not None and time.monotonic() - last_activity >= idle_minutes * 60:
+            logger.info(f"No messages for {idle_minutes} minutes; exiting")
+            return
