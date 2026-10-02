@@ -80,4 +80,5 @@ build/
 *.tfstate*
 .terraform/
 terraform.tfvars
+*.tfplan
 backend.hcl
