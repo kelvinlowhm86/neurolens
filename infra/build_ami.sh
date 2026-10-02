@@ -189,7 +189,7 @@ run_pipeline() {  # $1 clip, $2 its own output file. Fails if speech was not tra
 
 if [ "$REFRESH" = 0 ] && [ -n "$(aws s3 ls "s3://$BUCKET/models/" | head -n 1)" ]; then
   log "[weights] models/ already in S3: syncing it down instead of downloading (--refresh-weights redoes it)"
-  aws s3 sync "s3://$BUCKET/models/" "$CACHE/" --only-show-errors
+  aws s3 sync "s3://$BUCKET/models/" "$CACHE/" --only-show-errors --exclude "*/blobs/*"
   DOWNLOADED=0
 else
   log "[weights] full pipeline with the HuggingFace token (downloads ~20 GB)"
@@ -233,9 +233,11 @@ if [ "$DOWNLOADED" = 1 ]; then
   HIT=$(find "$CACHE" -type f -size -1M -print0 | xargs -0 grep -lsF -- "$T" || true)
   unset T
   if [ -n "$HIT" ]; then log "[weights] FAILED: the token is in the cache: $HIT"; exit 1; fi
-  log "[weights] weights to s3://$BUCKET/models/ (no xet download cache, no token files)"
+  # The sync follows HuggingFace's snapshot symlinks, so snapshots/ holds full copies; blobs/ would
+  # be the same bytes again.
+  log "[weights] weights to s3://$BUCKET/models/ (no xet download cache, no blobs, no token files)"
   aws s3 sync "$CACHE/" "s3://$BUCKET/models/" --only-show-errors \
-    --exclude "models/xet/*" --exclude "uv/*" --exclude "lost+found/*" \
+    --exclude "models/xet/*" --exclude "uv/*" --exclude "lost+found/*" --exclude "*/blobs/*" \
     --exclude "*/token" --exclude "*/stored_tokens"
 fi
 log "[weights] cache: $(du -sh "$CACHE/models" "$CACHE/data" 2>/dev/null | tr '\n\t' '  ')"

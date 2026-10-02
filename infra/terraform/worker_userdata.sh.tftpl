@@ -33,7 +33,9 @@ fi
 # 3. Weights from S3 (through the free gateway endpoint).
 log "weight sync start"
 SECONDS=0
-aws s3 sync "s3://${bucket}/models/" "$CACHE/" --region "${region}" --only-show-errors
+# Skip HuggingFace's blobs/: the snapshots/ files are full copies where offline loading looks, so
+# blobs/ (also uploaded, as the S3 sync followed the snapshot symlinks) would double the download.
+aws s3 sync "s3://${bucket}/models/" "$CACHE/" --region "${region}" --only-show-errors --exclude "*/blobs/*"
 log "weight sync done in $SECONDS s"
 
 # 4. Settings. env.conf: deployment identifiers only, no secrets. config.json: the shared file's
