@@ -5,7 +5,8 @@
 #   S3 gateway endpoint on both route tables: S3 traffic never goes through the NAT instance
 #
 # One NAT instance, not one per zone: a zone outage during short work sessions is unlikely, and a
-# second NAT doubles the moving parts. A production system would use a managed NAT Gateway per zone.
+# second NAT doubles the moving parts. For zone resilience AWS recommends a managed NAT Gateway per
+# zone; a single NAT is the usual trade-off when rare downtime is acceptable.
 
 resource "aws_vpc" "main" {
   cidr_block           = "10.20.0.0/16"
