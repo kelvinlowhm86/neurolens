@@ -81,6 +81,7 @@ WantedBy=multi-user.target
   - the worker crashes 3 times within 10 minutes (`OnFailure`), for example a broken model load;
   - UserData fails (an `ERR` trap in UserData calls `self_terminate.sh`).
   If the API call itself fails (for example the NAT instance is down), `self_terminate.sh` logs and does nothing more; the §4f alarm is the backstop.
+  `systemctl restart` (used by `restart_workers.sh`) also stops the worker for a moment, which fires `OnSuccess`. So when the unit calls it (`--after-worker-stop`), `self_terminate.sh` first waits 15 s and stands down if the worker is active or activating again. To debug a worker by hand, `systemctl mask neurolens-self-terminate` first, or stopping the service ends the machine.
 
 ## 4. Networking, Launch Template and Auto Scaling Group (Terraform)
 

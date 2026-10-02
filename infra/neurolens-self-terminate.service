@@ -1,0 +1,10 @@
+# Ends this worker machine when the worker service stops for good (M2a §3). Started by the worker
+# unit's OnSuccess=/OnFailure=, never enabled on its own.
+# To debug a worker by hand without losing the machine: `systemctl mask neurolens-self-terminate`
+# first, `systemctl unmask` after.
+[Unit]
+Description=NeuroLens: terminate this worker through Auto Scaling (no replacement)
+
+[Service]
+Type=oneshot
+ExecStart=/opt/neurolens/bin/self_terminate.sh --after-worker-stop

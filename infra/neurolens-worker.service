@@ -1,0 +1,21 @@
+# NeuroLens GPU worker (M2a §3). Baked into the image disabled; UserData enables and starts it.
+# OnSuccess= needs systemd 249+ (Ubuntu 22.04 ships 249).
+[Unit]
+Description=NeuroLens GPU worker
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=600
+StartLimitBurst=3
+OnFailure=neurolens-self-terminate.service
+OnSuccess=neurolens-self-terminate.service
+
+[Service]
+WorkingDirectory=/opt/neurolens/app
+EnvironmentFile=/opt/neurolens/env.conf
+ExecStartPre=/opt/neurolens/bin/pull_code.sh
+ExecStart=/opt/neurolens/venv/bin/python worker.py
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
