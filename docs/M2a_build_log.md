@@ -35,6 +35,22 @@ only: no account IDs, no secrets.
   workers need it, and the worker unit sets `HOME=/root` for that reason), `/root/.cache/pip`
   (408 MB), and two small library caches.
 
+## Wiring rehearsal (2026-10-03, `t3.large` Spot, fake model)
+
+| Step | Result |
+|---|---|
+| First worker | Ran out of disk: the image's software uses 66 of its 75 GB root disk, and a CPU machine has no instance-store disk for the weights. The boot script's error trap self-terminated it, and the group went from 1 to 0 with no replacement. Fix: 100 GB worker root disk. |
+| Boot (second worker) | Reached Session Manager through the NAT in about 20 s. Weight sync of about 18 GB onto the root disk took 538 s, then code `203ecee` pulled and settings verified. |
+| Worker start | About 2 min from service start to "Worker ready" (library and atlas loading from a freshly restored disk) |
+| Job | `uploads/` → S3 event → queue → worker in a private subnet → `results/` in S3 (`fake_inference: true`); message deleted |
+| Deploy | `deploy_code.sh` then `restart_workers.sh`: the worker ran `ab6ce4d`. The self-terminate guard logged "worker is active again (a restart); not terminating". |
+| Clean stop | `systemctl stop neurolens-worker` led to self-termination about 17 s later, and the group shrank from 1 to 0. |
+| `stop_work.sh` | ALL STOPPED |
+
+Not covered: a `start_work.sh --worker` after a full stop. Chunk 7's GPU run starts that way.
+These timings are from a small CPU machine. Measure them again on the GPU worker (local NVMe
+disk, faster network).
+
 ## Worker instance type: `g6e.xlarge`
 
 Peak RAM was 14.8 GB. That leaves about 17 GB free on the `xlarge`'s 32 GB, well above the spec's
