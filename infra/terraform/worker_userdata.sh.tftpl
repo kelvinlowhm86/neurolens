@@ -16,13 +16,18 @@ log "boot start"
 # 2. Weights live on the fast local NVMe disk (instance store), never on the root disk.
 CACHE=/opt/neurolens/cache
 mkdir -p "$CACHE"
+# Keep in step with build_ami.sh. The Deep Learning base image mounts the instance-store disk
+# itself at boot (so mkfs is refused): reuse that mount when there is one.
 DISK=$(lsblk -dno NAME,MODEL | awk '/Instance Storage/ {print "/dev/" $1; exit}')
-if [ -n "$DISK" ]; then
-  mkfs.ext4 -q -F "$DISK"
-  mount "$DISK" "$CACHE"
-  log "mounted $DISK at $CACHE"
-else
+if [ -z "$DISK" ]; then
   log "no instance-store disk (CPU rehearsal): using a folder on the root disk"
+elif MNT=$(lsblk -nro MOUNTPOINT "$DISK" | grep -m1 .); then
+  mount --bind "$MNT" "$CACHE"
+  log "$DISK already mounted at $MNT by the base image: bound to $CACHE"
+elif mkfs.ext4 -q -F "$DISK" && mount "$DISK" "$CACHE"; then
+  log "formatted and mounted $DISK at $CACHE"
+else
+  log "could not use $DISK: using a folder on the root disk (slower)"
 fi
 
 # 3. Weights from S3 (through the free gateway endpoint).

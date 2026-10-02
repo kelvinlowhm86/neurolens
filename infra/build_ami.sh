@@ -92,12 +92,21 @@ if ! command -v aws >/dev/null; then
 fi
 
 mkdir -p /opt/neurolens/cache /opt/neurolens/bin
+# Keep in step with worker_userdata.sh.tftpl. The Deep Learning base image mounts the instance-store
+# disk itself at boot (so mkfs is refused): reuse that mount when there is one.
+lsblk -o NAME,MODEL,SIZE,TYPE,MOUNTPOINT
 DISK=$(lsblk -dno NAME,MODEL | awk '/Instance Storage/ {print "/dev/" $1; exit}')
-if [ -n "$DISK" ]; then
-  mountpoint -q /opt/neurolens/cache || { mkfs.ext4 -q -F "$DISK"; mount "$DISK" /opt/neurolens/cache; }
-  log "[install] fast local disk $DISK mounted at /opt/neurolens/cache"
-else
+if mountpoint -q /opt/neurolens/cache; then
+  log "[install] /opt/neurolens/cache already mounted"
+elif [ -z "$DISK" ]; then
   log "[install] no instance-store disk: /opt/neurolens/cache is a folder on the root disk"
+elif MNT=$(lsblk -nro MOUNTPOINT "$DISK" | grep -m1 .); then
+  mount --bind "$MNT" /opt/neurolens/cache
+  log "[install] fast local disk $DISK already mounted at $MNT by the base image: bound to /opt/neurolens/cache"
+elif mkfs.ext4 -q -F "$DISK" && mount "$DISK" /opt/neurolens/cache; then
+  log "[install] fast local disk $DISK formatted and mounted at /opt/neurolens/cache"
+else
+  log "[install] could not use $DISK: /opt/neurolens/cache is a folder on the root disk (slower)"
 fi
 
 log "[install] Python 3.12 (uv) and the virtualenv"
