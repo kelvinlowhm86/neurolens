@@ -30,6 +30,24 @@ resource "aws_subnet" "public" {
   tags = { Name = "neurolens-public" }
 }
 
+# More public subnets, used only by infra/build_ami.sh: a GPU type can be sold out in one zone
+# (InsufficientInstanceCapacity), so the build tries each zone in turn. Free; nothing runs in them.
+resource "aws_subnet" "public_build" {
+  count                   = length(var.build_extra_zones)
+  vpc_id                  = aws_vpc.main.id
+  cidr_block              = "10.20.${1 + count.index}.0/24"
+  availability_zone       = var.build_extra_zones[count.index]
+  map_public_ip_on_launch = true
+
+  tags = { Name = "neurolens-public-build-${count.index}" }
+}
+
+resource "aws_route_table_association" "public_build" {
+  count          = length(var.build_extra_zones)
+  subnet_id      = aws_subnet.public_build[count.index].id
+  route_table_id = aws_route_table.public.id
+}
+
 resource "aws_subnet" "private" {
   count             = 2
   vpc_id            = aws_vpc.main.id

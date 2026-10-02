@@ -29,6 +29,12 @@ variable "zones" {
   default     = ["us-east-1a", "us-east-1b"]
 }
 
+variable "build_extra_zones" {
+  description = "Further zones offering g6e.xlarge, each with a public subnet the image build can fall back to when the first zone has no capacity."
+  type        = list(string)
+  default     = ["us-east-1b", "us-east-1c", "us-east-1d"]
+}
+
 variable "alert_email" {
   description = "Where the 3-hour GPU alarm is emailed. Set in terraform.tfvars (git-ignored)."
   type        = string

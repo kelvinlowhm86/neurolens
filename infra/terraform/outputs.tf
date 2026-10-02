@@ -18,8 +18,12 @@ output "dlq_url" {
 }
 
 output "public_subnet_id" {
-  description = "Where infra/build_ami.sh launches the image-build instance."
-  value       = aws_subnet.public.id
+  value = aws_subnet.public.id
+}
+
+output "build_subnet_ids" {
+  description = "Public subnets infra/build_ami.sh tries in order, one per zone (space-separated)."
+  value       = join(" ", concat([aws_subnet.public.id], aws_subnet.public_build[*].id))
 }
 
 output "no_inbound_security_group_id" {

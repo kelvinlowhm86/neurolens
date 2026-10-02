@@ -33,7 +33,7 @@ fi
 
 say() { echo "$(date +%H:%M:%S) $*"; }
 tf() { terraform -chdir=infra/terraform output -raw "$1"; }
-BUCKET=$(tf bucket_name); SUBNET=$(tf public_subnet_id)
+BUCKET=$(tf bucket_name); SUBNETS=$(tf build_subnet_ids)
 SG=$(tf no_inbound_security_group_id); PROFILE=$(tf build_instance_profile)
 
 aws s3api head-object --bucket "$BUCKET" --key code/latest.zip >/dev/null 2>&1 \
@@ -307,15 +307,27 @@ fi
 say "launching $TYPE from $(aws ec2 describe-images --image-ids "$BASE_AMI" --query 'Images[0].Name' --output text)"
 # Dead-man switch: the instance shuts itself down after 4 hours, and a shutdown from inside means
 # terminate. The script's own stop-instances call (before the image) is an API stop, not affected.
-INSTANCE=$(aws ec2 run-instances --image-id "$BASE_AMI" --instance-type "$TYPE" \
-  --subnet-id "$SUBNET" --security-group-ids "$SG" --iam-instance-profile "Name=$PROFILE" \
-  --metadata-options HttpTokens=required --instance-initiated-shutdown-behavior terminate \
-  --user-data $'#!/bin/bash\nshutdown -h +240 "neurolens build: 4-hour limit"' \
-  --tag-specifications \
-    'ResourceType=instance,Tags=[{Key=Project,Value=neurolens},{Key=Name,Value=neurolens-build},{Key=Role,Value=build}]' \
-    'ResourceType=volume,Tags=[{Key=Project,Value=neurolens},{Key=Name,Value=neurolens-build}]' \
-  --query 'Instances[0].InstanceId' --output text)
-say "instance $INSTANCE launched (billed from now); waiting for Session Manager"
+# A GPU type can be sold out in one zone: try the next zone's subnet on InsufficientInstanceCapacity
+# only; any other error stops here.
+for SUBNET in $SUBNETS; do
+  if OUT=$(aws ec2 run-instances --image-id "$BASE_AMI" --instance-type "$TYPE" \
+      --subnet-id "$SUBNET" --security-group-ids "$SG" --iam-instance-profile "Name=$PROFILE" \
+      --metadata-options HttpTokens=required --instance-initiated-shutdown-behavior terminate \
+      --user-data $'#!/bin/bash\nshutdown -h +240 "neurolens build: 4-hour limit"' \
+      --tag-specifications \
+        'ResourceType=instance,Tags=[{Key=Project,Value=neurolens},{Key=Name,Value=neurolens-build},{Key=Role,Value=build}]' \
+        'ResourceType=volume,Tags=[{Key=Project,Value=neurolens},{Key=Name,Value=neurolens-build}]' \
+      --query 'Instances[0].[InstanceId,Placement.AvailabilityZone]' --output text 2>&1); then
+    read -r INSTANCE ZONE <<<"$OUT"
+    break
+  fi
+  case "$OUT" in
+    *InsufficientInstanceCapacity*) say "no $TYPE capacity in subnet $SUBNET's zone; trying the next" ;;
+    *) echo "$OUT" >&2; exit 1 ;;
+  esac
+done
+[ -n "$INSTANCE" ] || { say "FAILED: no zone has $TYPE capacity right now; try again later"; exit 1; }
+say "instance $INSTANCE launched in $ZONE (billed from now); waiting for Session Manager"
 aws ec2 wait instance-running --instance-ids "$INSTANCE"
 for i in $(seq 1 60); do
   [ "$(aws ssm describe-instance-information --filters "Key=InstanceIds,Values=$INSTANCE" \
