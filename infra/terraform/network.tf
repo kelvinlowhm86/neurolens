@@ -168,7 +168,9 @@ resource "aws_instance" "nat" {
   tags = { Name = "neurolens-nat", Role = "nat" }
 
   lifecycle {
-    # A newer Amazon Linux release must not replace a working NAT instance.
-    ignore_changes = [ami]
+    # A newer Amazon Linux release must not replace a working NAT instance. A stopped instance
+    # reports no public IP, which would otherwise force a replacement on every apply between
+    # sessions (the subnet assigns a new one on each start).
+    ignore_changes = [ami, associate_public_ip_address]
   }
 }
