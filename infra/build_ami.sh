@@ -200,6 +200,16 @@ else
 fi
 
 # A changed copy under a new name, so no per-video feature cache can stand in for the models.
+# Positive evidence that the text features ran: the Llama model's weights are in the cache (sturdier
+# than the absence of a log message, whose wording a tribev2 update could change).
+LLAMA=$("$PY" -c 'import json, sys; print(json.load(open(sys.argv[1]))["model"]["llama_repo_id"])' "$APP/config.json")
+LLAMA_DIR="$CACHE/models/hub/models--${LLAMA//\//--}"
+if ! find "$LLAMA_DIR" -name "*.safetensors" 2>/dev/null | grep -q .; then
+  log "[weights] FAILED: no $LLAMA weights in $LLAMA_DIR: the text features did not run"
+  exit 1
+fi
+log "[weights] $LLAMA weights present: $(du -sh "$LLAMA_DIR" | cut -f1)"
+
 log "[weights] offline proof: fresh process, HF_HUB_OFFLINE=1, no token, a different file"
 ffmpeg -y -loglevel error -i /tmp/neurolens-clip.mp4 -c copy -metadata comment=offline-proof /tmp/neurolens-offline.mp4
 ( unset HF_TOKEN; export HF_HUB_OFFLINE=1
