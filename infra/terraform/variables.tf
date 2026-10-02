@@ -21,12 +21,13 @@ variable "allowed_origins" {
 
 variable "zones" {
   description = <<-EOT
-    Two availability zones that offer g6e.xlarge (check with `aws ec2 describe-instance-type-offerings
-    --location-type availability-zone --filters Name=instance-type,Values=g6e.xlarge`). The first also
-    holds the public subnet, so the image-build GPU instance can launch there.
+    Availability zones that offer g6e.xlarge (check with `aws ec2 describe-instance-type-offerings
+    --location-type availability-zone --filters Name=instance-type,Values=g6e.xlarge`), one private
+    worker subnet each: more zones give the worker group more places to find a GPU. The first also
+    holds the public subnet (NAT instance).
   EOT
   type        = list(string)
-  default     = ["us-east-1a", "us-east-1b"]
+  default     = ["us-east-1a", "us-east-1b", "us-east-1c", "us-east-1d"]
 }
 
 variable "build_extra_zones" {

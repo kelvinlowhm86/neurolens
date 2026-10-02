@@ -1,7 +1,7 @@
 # ─── Private network for the GPU workers (M2a §4a) ─────────────────────────
 #
-#   public subnet  (zone A): NAT instance, image-build instance; route to the internet gateway
-#   private subnets (zones A and B): workers, no public IP; route to the NAT instance
+#   public subnets (zone A + build-only b, c, d): NAT instance, image builds; route to the internet gateway
+#   private subnets (zones A-D): workers, no public IP; route to the NAT instance
 #   S3 gateway endpoint on both route tables: S3 traffic never goes through the NAT instance
 #
 # One NAT instance, not one per zone: a zone outage during short work sessions is unlikely, and a
@@ -49,7 +49,7 @@ resource "aws_route_table_association" "public_build" {
 }
 
 resource "aws_subnet" "private" {
-  count             = 2
+  count             = length(var.zones)
   vpc_id            = aws_vpc.main.id
   cidr_block        = "10.20.${10 + count.index}.0/24"
   availability_zone = var.zones[count.index]
@@ -85,7 +85,7 @@ resource "aws_route_table" "private" {
 }
 
 resource "aws_route_table_association" "private" {
-  count          = 2
+  count          = length(var.zones)
   subnet_id      = aws_subnet.private[count.index].id
   route_table_id = aws_route_table.private.id
 }
