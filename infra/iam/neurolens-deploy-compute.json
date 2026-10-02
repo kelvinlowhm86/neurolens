@@ -18,6 +18,13 @@
       "Condition": {"StringEquals": {"aws:RequestTag/Project": "neurolens"}}
     },
     {
+      "Sid": "Ec2CreateOnlyInsideNeurolensNetwork",
+      "Effect": "Allow",
+      "Action": ["ec2:CreateSubnet", "ec2:CreateRouteTable", "ec2:CreateSecurityGroup", "ec2:CreateVpcEndpoint"],
+      "Resource": ["arn:aws:ec2:us-east-1:*:vpc/*", "arn:aws:ec2:us-east-1:*:route-table/*"],
+      "Condition": {"StringEquals": {"ec2:ResourceTag/Project": "neurolens"}}
+    },
+    {
       "Sid": "Ec2LaunchOnlyAllowedTypesTaggedNeurolens",
       "Effect": "Allow",
       "Action": "ec2:RunInstances",
