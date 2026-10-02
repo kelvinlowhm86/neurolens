@@ -216,7 +216,7 @@ tests/                             MODIFIED: §9
 
 ## 12. Cost
 - CloudFront: free tier (1 TB out and 10 million requests a month).
-- Web `t4g.micro` and NAT `t4g.nano`: about $0.015 an hour together, only while started.
+- Web `t4g.micro` and NAT `t4g.micro`: about $0.017 an hour together, only while started.
 - Load balancer: about $0.55 a day while it exists (it bills by the hour even when no server is behind it), from shortly before the study sessions until after the presentation (M4 §3).
 - S3 site files: a few tens of MB of open-licensed sample clips, cents a month.
 - Parameter Store standard parameters: free.

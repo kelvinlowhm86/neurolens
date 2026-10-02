@@ -132,7 +132,7 @@ data "aws_ssm_parameter" "al2023_arm64" {
 
 resource "aws_instance" "nat" {
   ami                    = data.aws_ssm_parameter.al2023_arm64.value
-  instance_type          = "t4g.nano"
+  instance_type          = "t4g.micro"
   subnet_id              = aws_subnet.public.id
   vpc_security_group_ids = [aws_security_group.nat.id]
   iam_instance_profile   = aws_iam_instance_profile.nat.name

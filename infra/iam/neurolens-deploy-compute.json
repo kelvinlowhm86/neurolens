@@ -32,7 +32,7 @@
       "Condition": {
         "StringEquals": {
           "aws:RequestTag/Project": "neurolens",
-          "ec2:InstanceType": ["g6e.xlarge", "g6e.2xlarge", "t3.large", "t4g.nano"]
+          "ec2:InstanceType": ["g6e.xlarge", "g6e.2xlarge", "t3.large", "t4g.micro"]
         }
       }
     },

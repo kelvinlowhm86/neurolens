@@ -6,7 +6,7 @@ account (other projects' buckets or machines, for example). Three policy files:
 | File | Attached to | What it allows |
 |---|---|---|
 | `neurolens-deploy-services.json` | the deploy user | S3 buckets and SQS queues named `neurolens-*`; Auto Scaling groups, alarms and email topics named `neurolens-*`; Parameter Store under `/neurolens/`; remote commands and sessions only on machines tagged `Project=neurolens` |
-| `neurolens-deploy-compute.json` | the deploy user | EC2 and networking: anything may be *read*; new things may be created only if tagged `Project=neurolens`; only things already tagged `Project=neurolens` may be changed, stopped or deleted. Machines only of the types the project uses (`g6e.xlarge`, `g6e.2xlarge`, `t3.large`, `t4g.nano`). Roles and instance profiles named `neurolens-*`, handed only to EC2 |
+| `neurolens-deploy-compute.json` | the deploy user | EC2 and networking: anything may be *read*; new things may be created only if tagged `Project=neurolens`; only things already tagged `Project=neurolens` may be changed, stopped or deleted. Machines only of the types the project uses (`g6e.xlarge`, `g6e.2xlarge`, `t3.large`, `t4g.micro`). Roles and instance profiles named `neurolens-*`, handed only to EC2 |
 | `neurolens-role-boundary.json` | nobody directly (a *permissions boundary*) | The most any `neurolens-*` role may ever do, whatever is written into it |
 
 **Why the boundary.** The deploy user creates the roles that machines use. Without a limit, someone holding
