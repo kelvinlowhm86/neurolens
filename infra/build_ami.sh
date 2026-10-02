@@ -312,6 +312,16 @@ ssm_run() {  # $1 label, $2 deadline in seconds; stdin: the step script; env lin
   [ "$status" = Success ] || { say "FAILED at step: $label ($status)"; exit 1; }
 }
 
+# A build machine that is still shutting down (e.g. a failed run moments ago) bills nothing but still
+# counts against the vCPU quota (VcpuLimitExceeded): wait for it first.
+OLD=$(aws ec2 describe-instances --filters Name=tag:Project,Values=neurolens Name=tag:Role,Values=build \
+      Name=instance-state-name,Values=shutting-down --query 'Reservations[].Instances[].InstanceId' --output text)
+if [ -n "$OLD" ]; then
+  say "waiting for the previous build machine to finish terminating (it holds the vCPU quota): $OLD"
+  # shellcheck disable=SC2086
+  aws ec2 wait instance-terminated --instance-ids $OLD
+fi
+
 if [ "$REHEARSAL" = 0 ]; then
   say "uploading the smoke clip to s3://$BUCKET/smoke/clip.mp4"
   aws s3 cp "$CLIP" "s3://$BUCKET/smoke/clip.mp4" --only-show-errors
