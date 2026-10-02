@@ -19,6 +19,18 @@ resource "aws_launch_template" "worker" {
 
   vpc_security_group_ids = [aws_security_group.no_inbound.id]
 
+  # The image's software fills 66 GB of its 75 GB root disk. 100 GB leaves room for videos and logs
+  # (and, on a CPU rehearsal with no instance-store disk, the ~18 GB of weights). Billed only while
+  # a worker exists.
+  block_device_mappings {
+    device_name = "/dev/sda1"
+    ebs {
+      volume_size           = 100
+      volume_type           = "gp3"
+      delete_on_termination = true
+    }
+  }
+
   # Spot, capped at the on-demand price (no max_price given).
   instance_market_options {
     market_type = "spot"
