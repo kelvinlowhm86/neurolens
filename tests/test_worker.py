@@ -1,5 +1,7 @@
-"""Tests for neurolens.worker (moto, fake inference). Written from docs/M1_spec.md 1, 4a, 5, 6a."""
+"""Tests for neurolens.worker (moto, fake inference). Written from docs/M1_spec.md 1, 4a, 5, 6a
+and docs/M2a_spec.md 7a, 8."""
 
+import inspect
 import json
 import math
 import subprocess
@@ -53,37 +55,82 @@ def has_audio(path):
 
 @pytest.fixture
 def calls(patch_everywhere):
-    """Spies on the inference-side functions. Each wraps the real (fake-mode) function."""
-    log = {"run_inference": [], "strip_audio": [], "probe_duration": [], "extract": []}
-    real_run = inference.run_inference
-    real_strip = inference.strip_audio
+    """Spies on the inference-side functions. Each wraps the real (fake-mode) function.
+
+    `order` records every call by name, in the order the worker made them.
+    """
+    log = {
+        "order": [],
+        "build_events": [],
+        "without_audio": [],
+        "predict": [],
+        "probe_duration": [],
+        "extract": [],
+        "extract_args": [],
+        "files_at_extract": [],  # the job's working folder, as it is when extraction starts
+    }
+    real_build = inference.build_events
+    real_without = inference.without_audio
+    real_predict = inference.predict
     real_probe = inference.probe_duration
     from neurolens import engagement
 
     real_extract = engagement.extract_engagement
 
-    def run(path, *a, **kw):
-        log["run_inference"].append((str(path), has_audio(path)))
-        return real_run(path, *a, **kw)
+    def build(path, *a, **kw):
+        log["order"].append("build_events")
+        events = real_build(path, *a, **kw)
+        log["build_events"].append((str(path), has_audio(path), Path(path).read_bytes(), events))
+        return events
 
-    def strip(src, dst, *a, **kw):
-        log["strip_audio"].append((str(src), str(dst)))
-        return real_strip(src, dst, *a, **kw)
+    def without(events, *a, **kw):
+        log["order"].append("without_audio")
+        out = real_without(events, *a, **kw)
+        log["without_audio"].append((events, out))
+        return out
+
+    def predict(events, duration, *a, **kw):
+        log["order"].append("predict")
+        preds = real_predict(events, duration, *a, **kw)
+        log["predict"].append((events, duration, preds))
+        return preds
 
     def probe(path, *a, **kw):
         log["probe_duration"].append(str(path))
         return real_probe(path, *a, **kw)
 
     def extract(*a, **kw):
+        log["order"].append("extract_engagement")
+        bound = inspect.signature(real_extract).bind(*a, **kw)
+        log["extract_args"].append(list(bound.arguments.values()))
+        if log["build_events"]:
+            folder = Path(log["build_events"][0][0]).parent
+            log["files_at_extract"].extend(p.name for p in folder.iterdir())
         result = real_extract(*a, **kw)
         log["extract"].append(result)
         return result
 
-    patch_everywhere("run_inference", run, *MODULES)
-    patch_everywhere("strip_audio", strip, *MODULES)
+    patch_everywhere("build_events", build, *MODULES)
+    patch_everywhere("without_audio", without, *MODULES)
+    patch_everywhere("predict", predict, *MODULES)
     patch_everywhere("probe_duration", probe, *MODULES)
     patch_everywhere("extract_engagement", extract, "neurolens.engagement", "neurolens.worker")
     return log
+
+
+@pytest.fixture
+def ffmpeg_runs(monkeypatch):
+    """Records every ffmpeg (not ffprobe) command run through subprocess, then runs it."""
+    seen = []
+    real = subprocess.run
+
+    def spy(cmd, *a, **kw):
+        if isinstance(cmd, list | tuple) and cmd and Path(str(cmd[0])).name == "ffmpeg":
+            seen.append(list(cmd))
+        return real(cmd, *a, **kw)
+
+    monkeypatch.setattr(subprocess, "run", spy)
+    return seen
 
 
 def upload(aws, key, data):
@@ -116,8 +163,9 @@ def never_inference(patch_everywhere):
     def boom(*a, **kw):
         raise AssertionError("inference must not run")
 
-    patch_everywhere("run_inference", boom, *MODULES)
-    patch_everywhere("strip_audio", boom, *MODULES)
+    patch_everywhere("build_events", boom, *MODULES)
+    patch_everywhere("without_audio", boom, *MODULES)
+    patch_everywhere("predict", boom, *MODULES)
 
 
 # ---------------------------------------------------------------- Outcome
@@ -194,20 +242,105 @@ def test_result_goes_to_s3_as_results_job_id_json_and_not_to_the_local_output_fo
     assert object_exists(aws, f"results/{job_id}.json")
 
 
-def test_pipeline_runs_inference_then_strip_audio_then_inference_without_audio(
+def test_pipeline_runs_build_events_predict_without_audio_predict_extract_in_order(
     aws, make_cfg, roi_masks_small, new_key, clip_path, calls
 ):
     cfg = make_cfg()
     _, key = new_key()
     upload_clip(aws, key, clip_path)
     handle_record(aws.bucket, key, s3=aws.s3, cfg=cfg, roi_masks=roi_masks_small)
-    assert len(calls["strip_audio"]) == 1
-    assert len(calls["run_inference"]) == 2
-    (first_path, first_audio), (second_path, second_audio) = calls["run_inference"]
-    assert first_audio is True  # the full video, with its audio
-    assert second_audio is False  # the stripped copy
-    assert second_path == calls["strip_audio"][0][1]
-    assert first_path == calls["strip_audio"][0][0]
+    assert calls["order"] == [
+        "build_events",
+        "predict",
+        "without_audio",
+        "predict",
+        "extract_engagement",
+    ]
+
+
+def test_pipeline_passes_events_and_predictions_along(
+    aws, make_cfg, roi_masks_small, new_key, clip_path, calls
+):
+    """build_events gets the downloaded video (with its audio); the first predict gets those
+    events, without_audio gets them too, the second predict gets what without_audio returned,
+    both get the measured duration, and extract_engagement gets (with-audio, no-audio, masks)."""
+    cfg = make_cfg()
+    _, key = new_key()
+    upload_clip(aws, key, clip_path)
+    handle_record(aws.bucket, key, s3=aws.s3, cfg=cfg, roi_masks=roi_masks_small)
+
+    [(_, audio, content, events)] = calls["build_events"]
+    assert audio is True  # the downloaded video itself, with its soundtrack
+    assert content == clip_path.read_bytes()
+    [(given, stripped)] = calls["without_audio"]
+    assert given is events
+    (first_events, first_duration, full), (second_events, second_duration, noaudio) = calls[
+        "predict"
+    ]
+    assert first_events is events
+    assert second_events is stripped
+    expected_duration = inference.probe_duration(clip_path)
+    assert first_duration == pytest.approx(expected_duration)
+    assert second_duration == pytest.approx(expected_duration)
+    [args] = calls["extract_args"]
+    assert args[0] is full
+    assert args[1] is noaudio
+    assert args[2] is roi_masks_small
+
+
+def test_pipeline_writes_no_noaudio_file_and_runs_no_ffmpeg(
+    aws, make_cfg, roi_masks_small, new_key, clip_path, calls, ffmpeg_runs
+):
+    """The no-audio pass reuses the same video file: no audio-free copy is made."""
+    cfg = make_cfg()
+    _, key = new_key()
+    upload_clip(aws, key, clip_path)
+    outcome = handle_record(aws.bucket, key, s3=aws.s3, cfg=cfg, roi_masks=roi_masks_small)
+
+    assert outcome is Outcome.DONE
+    seen_files = calls["files_at_extract"]
+    assert seen_files, "extract_engagement was not reached"
+    assert not [name for name in seen_files if "noaudio" in name]
+    assert ffmpeg_runs == []
+
+
+def test_a_timeline_error_from_predict_is_a_failure_not_an_outcome(
+    aws, make_cfg, roi_masks_small, new_key, clip_path, patch_everywhere
+):
+    def misaligned(*a, **kw):
+        raise inference.TimelineError("starts are not 0, 1, 2, ...")
+
+    patch_everywhere("predict", misaligned, *MODULES)
+    cfg = make_cfg()
+    job_id, key = new_key()
+    upload_clip(aws, key, clip_path)
+    with pytest.raises(inference.TimelineError):
+        handle_record(aws.bucket, key, s3=aws.s3, cfg=cfg, roi_masks=roi_masks_small)
+    assert object_exists(aws, key)  # a failure is not a rejection: nothing is deleted
+    assert not object_exists(aws, f"results/{job_id}.json")
+
+
+def test_a_timeline_error_end_to_end_leaves_the_message_for_retry(
+    aws, make_cfg, roi_masks_small, new_key, clip_path, queue_message, remaining, patch_everywhere
+):
+    """An ordinary failure: the message stays, so SQS retries it and later dead-letters it."""
+
+    def misaligned(*a, **kw):
+        raise inference.TimelineError("starts are not 0, 1, 2, ...")
+
+    patch_everywhere("predict", misaligned, *MODULES)
+    job_id, key = new_key()
+    upload_clip(aws, key, clip_path)
+    process_message(
+        queue_message(s3_event((aws.bucket, key))),
+        s3=aws.s3,
+        sqs=aws.sqs,
+        cfg=make_cfg(),
+        roi_masks=roi_masks_small,
+    )
+    assert len(remaining()) == 1
+    assert object_exists(aws, key)
+    assert not object_exists(aws, f"results/{job_id}.json")
 
 
 def test_size_check_uses_head_object_before_download_file(
@@ -252,15 +385,23 @@ def test_result_has_gpu_only_when_gpu_info_returns_a_value(
 def test_fake_inference_key_is_absent_when_fake_mode_is_off(
     aws, make_cfg, roi_masks_small, new_key, clip_path, patch_everywhere, monkeypatch
 ):
-    """fake_inference is present (and true) only in fake mode. The real model is replaced by a
-    stand-in that returns random numbers, so this runs with no torch."""
+    """fake_inference is present (and true) only in fake mode. The real model is replaced by
+    stand-ins (events record the path; predict returns random numbers), so this runs with no
+    torch or tribev2."""
     import numpy as np
 
-    def stand_in(path):
-        rows = math.ceil(inference.probe_duration(path))
-        return np.random.default_rng(0).random((rows, 20484))
+    def build_stand_in(path):
+        return {"path": str(path), "audio": True}
 
-    patch_everywhere("run_inference", stand_in, *MODULES)
+    def without_stand_in(events):
+        return {**events, "audio": False}
+
+    def predict_stand_in(events, duration):
+        return np.random.default_rng(0).random((math.ceil(duration), 20484))
+
+    patch_everywhere("build_events", build_stand_in, *MODULES)
+    patch_everywhere("without_audio", without_stand_in, *MODULES)
+    patch_everywhere("predict", predict_stand_in, *MODULES)
     monkeypatch.delenv("FAKE_INFERENCE")
     cfg = make_cfg()
     job_id, key = new_key()
@@ -302,8 +443,9 @@ def test_oversize_rejection_never_runs_ffprobe_or_inference(
     outcome = handle_record(aws.bucket, key, s3=aws.s3, cfg=cfg, roi_masks=roi_masks_small)
     assert outcome is Outcome.REJECTED
     assert calls["probe_duration"] == []
-    assert calls["run_inference"] == []
-    assert calls["strip_audio"] == []
+    assert calls["build_events"] == []
+    assert calls["without_audio"] == []
+    assert calls["predict"] == []
 
 
 def test_over_long_video_is_rejected_without_inference(
@@ -316,8 +458,9 @@ def test_over_long_video_is_rejected_without_inference(
     outcome = handle_record(aws.bucket, key, s3=aws.s3, cfg=cfg, roi_masks=roi_masks_small)
 
     assert outcome is Outcome.REJECTED
-    assert calls["run_inference"] == []
-    assert calls["strip_audio"] == []
+    assert calls["build_events"] == []
+    assert calls["without_audio"] == []
+    assert calls["predict"] == []
     assert not object_exists(aws, key)
     assert not (Path(cfg["paths"]["output"]) / f"{job_id}.json").exists()
 
@@ -349,10 +492,10 @@ def test_duration_check_uses_probe_duration_of_the_downloaded_file(
 def test_a_failing_inference_raises_instead_of_returning_an_outcome(
     aws, make_cfg, roi_masks_small, new_key, clip_path, patch_everywhere
 ):
-    def boom(path):
+    def boom(*a, **kw):
         raise RuntimeError("GPU exploded")
 
-    patch_everywhere("run_inference", boom, *MODULES)
+    patch_everywhere("predict", boom, *MODULES)
     cfg = make_cfg()
     job_id, key = new_key()
     upload_clip(aws, key, clip_path)
@@ -505,10 +648,10 @@ def test_oversize_upload_end_to_end_deletes_object_and_message(
 def test_failing_upload_end_to_end_leaves_the_message(
     aws, make_cfg, roi_masks_small, new_key, clip_path, queue_message, remaining, patch_everywhere
 ):
-    def boom(path):
+    def boom(*a, **kw):
         raise RuntimeError("model crashed")
 
-    patch_everywhere("run_inference", boom, *MODULES)
+    patch_everywhere("predict", boom, *MODULES)
     _, key = new_key()
     upload_clip(aws, key, clip_path)
     process_message(

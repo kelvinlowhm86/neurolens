@@ -1,4 +1,5 @@
-"""Tests for FAKE_INFERENCE mode in neurolens.inference. Written from docs/M1_spec.md 1 and 1a."""
+"""Tests for FAKE_INFERENCE mode in neurolens.inference. Written from docs/M1_spec.md 1 and 1a
+and docs/M2a_spec.md 7a."""
 
 import json
 import math
@@ -57,7 +58,10 @@ def test_probe_duration_returns_a_float(clip_path):
     assert isinstance(inference.probe_duration(clip_path), float)
 
 
-# ---------------------------------------------------------------- fake run_inference
+# ---------------------------------------------------------------- fake build_events / predict
+# M2a section 7a: run_inference and strip_audio are replaced by build_events, without_audio and
+# predict. In fake mode predict gives seeded random numbers of shape (ceil(duration), 20484),
+# seeded from the file's size (plus 1 for the no-audio pass).
 
 
 @pytest.fixture
@@ -65,46 +69,72 @@ def fake_on(monkeypatch):
     monkeypatch.setenv("FAKE_INFERENCE", "1")
 
 
-def test_fake_run_inference_shape(fake_on, clip_path):
-    preds = inference.run_inference(clip_path)
-    expected_rows = math.ceil(inference.probe_duration(clip_path))
-    assert isinstance(preds, np.ndarray)
-    assert preds.shape == (expected_rows, 20484)
-    assert np.isfinite(preds).all()
+def fake_passes(path, duration=None):
+    """(with-audio, no-audio) predictions for a file, as the worker makes them."""
+    if duration is None:
+        duration = inference.probe_duration(path)
+    events = inference.build_events(path)
+    full = inference.predict(events, duration)
+    noaudio = inference.predict(inference.without_audio(events), duration)
+    return full, noaudio
 
 
-def test_fake_run_inference_is_deterministic_for_the_same_file(fake_on, clip_path):
-    first = inference.run_inference(clip_path)
-    second = inference.run_inference(clip_path)
-    np.testing.assert_array_equal(first, second)
+def test_fake_predict_shape(fake_on, clip_path):
+    duration = inference.probe_duration(clip_path)
+    full, noaudio = fake_passes(clip_path, duration)
+    for preds in (full, noaudio):
+        assert isinstance(preds, np.ndarray)
+        assert preds.shape == (math.ceil(duration), 20484)
+        assert np.isfinite(preds).all()
 
 
-def test_fake_run_inference_is_seeded_from_file_size_not_path(fake_on, clip_path, tmp_path):
+@pytest.mark.parametrize("duration,rows", [(52.2, 53), (119.01, 120), (5.0, 5)])
+def test_fake_predict_has_ceil_duration_rows(fake_on, clip_path, duration, rows):
+    events = inference.build_events(clip_path)
+    assert inference.predict(events, duration).shape == (rows, 20484)
+
+
+def test_fake_predict_is_repeatable_for_the_same_file(fake_on, clip_path):
+    first_full, first_noaudio = fake_passes(clip_path)
+    second_full, second_noaudio = fake_passes(clip_path)
+    np.testing.assert_array_equal(first_full, second_full)
+    np.testing.assert_array_equal(first_noaudio, second_noaudio)
+
+
+def test_fake_no_audio_pass_differs_from_the_with_audio_pass(fake_on, clip_path):
+    full, noaudio = fake_passes(clip_path)
+    assert full.shape == noaudio.shape
+    assert not np.array_equal(full, noaudio)
+
+
+def test_fake_predict_is_seeded_from_file_size_not_path(fake_on, clip_path, tmp_path):
     copy = tmp_path / "another_name.mp4"
     copy.write_bytes(clip_path.read_bytes())
-    np.testing.assert_array_equal(inference.run_inference(clip_path), inference.run_inference(copy))
+    for a, b in zip(fake_passes(clip_path), fake_passes(copy), strict=True):
+        np.testing.assert_array_equal(a, b)
 
 
-def test_fake_run_inference_differs_between_different_videos(fake_on, clip_path, clip2_path):
+def test_fake_predict_differs_between_different_videos(fake_on, clip_path, clip2_path):
     assert clip_path.stat().st_size != clip2_path.stat().st_size
-    a = inference.run_inference(clip_path)
-    b = inference.run_inference(clip2_path)
-    assert a.shape != b.shape or not np.array_equal(a, b)
+    a, _ = fake_passes(clip_path, 3.0)
+    b, _ = fake_passes(clip2_path, 3.0)
+    assert not np.array_equal(a, b)
 
 
-def test_fake_run_inference_needs_no_load_model(fake_on, clip_path, monkeypatch):
+def test_fake_passes_need_no_load_model(fake_on, clip_path, monkeypatch):
     """No atlas, no model: the module-level model is still empty and nothing tries to use it."""
     monkeypatch.setattr(inference, "model", None, raising=False)
-    assert inference.run_inference(clip_path).shape[1] == 20484
+    full, noaudio = fake_passes(clip_path)
+    assert full.shape[1] == noaudio.shape[1] == 20484
 
 
 def test_fake_output_feeds_extract_engagement(fake_on, clip_path, roi_masks_small):
     from neurolens.engagement import extract_engagement
 
-    preds = inference.run_inference(clip_path)
-    result = extract_engagement(preds, preds, roi_masks_small)
-    assert result["duration_seconds"] == preds.shape[0]
-    assert len(result["timesteps"]) == preds.shape[0]
+    full, noaudio = fake_passes(clip_path)
+    result = extract_engagement(full, noaudio, roi_masks_small)
+    assert result["duration_seconds"] == full.shape[0]
+    assert len(result["timesteps"]) == full.shape[0]
 
 
 # ---------------------------------------------------------------- load_model() in fake mode

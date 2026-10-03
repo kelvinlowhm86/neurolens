@@ -29,19 +29,18 @@ def no_gpu(patch_everywhere):
 
 @pytest.fixture
 def inference_calls(patch_everywhere):
-    """Records any call to run_inference or strip_audio (neither may happen)."""
-    log = {"run_inference": [], "strip_audio": []}
+    """Records any call to build_events, without_audio or predict (none may happen)."""
+    log = {"build_events": [], "without_audio": [], "predict": []}
 
-    def run(path, *a, **kw):
-        log["run_inference"].append(str(path))
-        raise AssertionError("run_inference must not be called for an unreadable video")
+    def refuse(name):
+        def fn(*a, **kw):
+            log[name].append(a)
+            raise AssertionError(f"{name} must not be called for an unreadable video")
 
-    def strip(src, dst, *a, **kw):
-        log["strip_audio"].append(str(src))
-        raise AssertionError("strip_audio must not be called for an unreadable video")
+        return fn
 
-    patch_everywhere("run_inference", run, *MODULES)
-    patch_everywhere("strip_audio", strip, *MODULES)
+    for name in log:
+        patch_everywhere(name, refuse(name), *MODULES)
     return log
 
 
@@ -104,8 +103,7 @@ def test_unreadable_upload_is_rejected_deleted_and_not_inferred(
     assert outcome is Outcome.REJECTED
     assert not object_exists(aws, key)
     assert not (Path(cfg["paths"]["output"]) / f"{job_id}.json").exists()
-    assert inference_calls["run_inference"] == []
-    assert inference_calls["strip_audio"] == []
+    assert inference_calls == {"build_events": [], "without_audio": [], "predict": []}
 
 
 def test_empty_object_passing_size_check_is_also_rejected(
@@ -116,7 +114,7 @@ def test_empty_object_passing_size_check_is_also_rejected(
     outcome = handle_record(aws.bucket, key, s3=aws.s3, cfg=make_cfg(), roi_masks=roi_masks_small)
     assert outcome is Outcome.REJECTED
     assert not object_exists(aws, key)
-    assert inference_calls["run_inference"] == []
+    assert inference_calls == {"build_events": [], "without_audio": [], "predict": []}
 
 
 # ---------------------------------------------------------------- process_message
@@ -140,8 +138,7 @@ def test_unreadable_upload_end_to_end_deletes_object_and_message(
     assert remaining() == []
     assert not object_exists(aws, key)
     assert not (Path(cfg["paths"]["output"]) / f"{job_id}.json").exists()
-    assert inference_calls["run_inference"] == []
-    assert inference_calls["strip_audio"] == []
+    assert inference_calls == {"build_events": [], "without_audio": [], "predict": []}
 
 
 def test_a_genuine_inference_failure_is_still_not_a_rejection(
@@ -149,10 +146,10 @@ def test_a_genuine_inference_failure_is_still_not_a_rejection(
 ):
     """Only unreadable uploads are rejected; a real failure raises and keeps the message."""
 
-    def boom(path):
+    def boom(*a, **kw):
         raise RuntimeError("model crashed")
 
-    patch_everywhere("run_inference", boom, *MODULES)
+    patch_everywhere("predict", boom, *MODULES)
     _, key = new_key()
     aws.s3.upload_file(str(clip_path), aws.bucket, key)
 

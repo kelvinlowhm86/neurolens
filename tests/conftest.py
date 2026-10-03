@@ -156,7 +156,7 @@ def new_key():
 def patch_everywhere(monkeypatch):
     """Replace a function wherever the implementation might look it up.
 
-    The spec names the functions by module (for example neurolens.inference.run_inference) but
+    The spec names the functions by module (for example neurolens.inference.predict) but
     not how the worker imports them, so patch the module attribute and, if present, the copy
     in the worker / web modules.
     """

@@ -50,8 +50,9 @@ def never_inference(patch_everywhere):
     def boom(*a, **kw):
         raise AssertionError("inference must not run")
 
-    patch_everywhere("run_inference", boom, *MODULES)
-    patch_everywhere("strip_audio", boom, *MODULES)
+    patch_everywhere("build_events", boom, *MODULES)
+    patch_everywhere("without_audio", boom, *MODULES)
+    patch_everywhere("predict", boom, *MODULES)
 
 
 def client_error(code, operation="GetObject"):
@@ -422,19 +423,3 @@ def test_probe_duration_timeout_is_an_unreadable_video(clip_path, monkeypatch):
     monkeypatch.setattr(inference.subprocess, "run", timeout)
     with pytest.raises(inference.UnreadableVideo):
         inference.probe_duration(clip_path)
-
-
-def test_strip_audio_runs_ffmpeg_with_a_300_second_timeout(clip_path, tmp_path, run_spy):
-    inference.strip_audio(clip_path, tmp_path / "noaudio.mp4")
-    assert run_spy
-    assert all(kwargs.get("timeout") == 300 for _, kwargs in run_spy)
-
-
-def test_strip_audio_timeout_propagates(clip_path, tmp_path, monkeypatch):
-    def timeout(*args, **kwargs):
-        raise subprocess.TimeoutExpired(cmd="ffmpeg", timeout=300)
-
-    monkeypatch.setattr(inference.subprocess, "run", timeout)
-    with pytest.raises(Exception) as info:  # noqa: B017 - propagates as an ordinary failure
-        inference.strip_audio(clip_path, tmp_path / "noaudio.mp4")
-    assert not isinstance(info.value, inference.UnreadableVideo)
