@@ -128,3 +128,5 @@ difference 0.0000 (53 rows, 585.8 s, peak GPU memory 11.16 GB), 119.01 s loop ma
 (120 rows, 490.9 s, 19.94 GB). The video, audio and text encoders ran on the new image and driver
 (13.5 GB in use during video encoding). First-job WhisperX: 5 min 41 s (v1 image: 8 min 3 s); second
 job 14 s. Session about $0.90.
+
+v1 (`ami-02401490feb3d139f`) deregistered and its snapshot deleted on 2026-10-03 after v2 passed; v2 is the only worker image.
