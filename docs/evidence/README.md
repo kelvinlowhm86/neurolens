@@ -89,11 +89,11 @@ One run per clip per type, in us-east-1. "Warm" leaves out the one-time WhisperX
 | On-demand $/h | 1.861 | 1.212 | 0.978 |
 | 52 s trailer, warm job | about 259 s, **$0.134** | 521 s, **$0.175** | 655 s, **$0.178** |
 | 119 s loop, warm job | 491 s, **$0.254** | about 1,184 s, **$0.399** | about 1,540 s, **$0.418** |
-| Video encoding, 52 s / 119 s | 211 s / 453 s | 492 s / 1,121 s (2.3x / 2.5x) | 636 s / 1,457 s (3.0x / 3.2x) |
+| Video encoding, 52 s / 119 s | about 215 s / 470 s (`g6e.2xlarge`: 211 s / 453 s) | 492 s / 1,121 s (2.3x / 2.5x) | 636 s / 1,457 s (3.0x / 3.2x) |
 | Cost per second of video (119 s) | $0.0021 | $0.0034 | $0.0035 |
 | Peak GPU memory (`gpu` field) | 19.94 GB of 45.8 | 19.94 of 22.9 | 19.94 of 22.9 |
 | Results vs `g6e` | reference | within 0.0003 | within 0.0001 |
-| `g6e.2xlarge` (fallback, same L40S, $2.24/h) | 119 s loop 485 s (code `b1fb933`, image v1): same speed, about $0.30 a job | | |
+| `g6e.2xlarge` (fallback, same L40S, $2.24/h) | 119 s loop 485 s (code `b1fb933`, image v1): 1-3% faster than `xlarge`, about $0.30 a job (17-19% more) | | |
 | First job of a worker (119 s) | | 1,528 s | 1,880 s (over the 1,800 s queue timeout) |
 
 **Decision: `g6e.xlarge` stays** (then `g6e.2xlarge` when sold out). The two cheaper GPUs cost 1.3-1.6 times more per video and make people wait 2.3-3.2 times longer. The best cheaper type (A10G) is 31-57% dearer per video than `g6e`, outside the 20% re-run band, so no re-run was needed.
