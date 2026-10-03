@@ -102,10 +102,9 @@ def handle_record(bucket, key, *, s3, cfg, roi_masks):
 
         logger.info(f"Analysing {key} ({duration:.1f}s)")
         t0 = time.time()
-        preds_full = inference.run_inference(local)
-        noaudio = Path(tmp) / f"{job_id}.noaudio{suffix}"
-        inference.strip_audio(local, noaudio)
-        preds_noaudio = inference.run_inference(noaudio)
+        events = inference.build_events(local)
+        preds_full = inference.predict(events, duration)
+        preds_noaudio = inference.predict(inference.without_audio(events), duration)
         result = engagement.extract_engagement(preds_full, preds_noaudio, roi_masks)
 
     result["job_id"] = job_id

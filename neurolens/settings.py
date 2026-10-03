@@ -138,10 +138,10 @@ def configure_env(cfg, paths):
 
 
 # The max duration reflects the target use case (short-form pre-roll / social ad
-# creative) and bounds GPU job duration for predictable cost and to stay
-# within the SQS visibility-timeout window (900 s in M1; M2b adds a
-# heartbeat). This is a hard
-# product/cost constraint, independent of billing — it must be enforced
+# creative). The GPU was chosen for it: memory and job time grow with video length
+# and were measured only up to 120 s, and a job must finish within the SQS
+# visibility timeout (1800 s until M2b's heartbeat). This is a hard
+# product constraint, independent of billing — it must be enforced
 # regardless of credit balance (see M3a §4a `verify`, which must check this
 # BEFORE any credit-adjustment logic, not instead of it).
 def max_duration(cfg):
