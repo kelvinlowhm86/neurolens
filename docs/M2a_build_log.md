@@ -134,3 +134,25 @@ v1 (`ami-02401490feb3d139f`) deregistered and its snapshot deleted on 2026-10-03
 Stale features removed from S3 (2026-10-04): the three `models/models/neuralset.extractors.*` folders
 (22 objects, 72 MB) deleted after the build fix (`3a7d14a`); `models/` now holds weights only
 (`hub/`, `torch/`, `data/nilearn/`): 56 objects, 16.72 GB.
+
+## 4K check (2026-10-04, `g6e.xlarge` us-east-1b, image v2, code `b1fb933`)
+
+Clip: Big Buck Bunny, 3840x2160 30 fps, 55 s, H.264 at 38 Mbit/s, 263 MB (`data/videos/SOURCES.md`).
+The worker group had found no `g6e` in any zone for about 40 minutes first (17:32-18:11 UTC).
+
+| | 4K, 55 s | 480p trailer, 52 s (same GPU) |
+|---|---|---|
+| Result | 55 rows, all checks passed | 53 rows |
+| Video encoding | 1,000 s (18.2 s per second of video) | about 215 s (4.1 s per second of video) |
+| Whole job | 1,427 s (about 1,080 s without the first-job warm-up) | about 259 s warm |
+| GPU busy during video encoding | 15% on average (busy in 29 of 192 samples) | about 90% |
+| CPU during video encoding | 54% of 4 cores on average | |
+| Peak RAM / GPU memory | 14.6 GB of 32 / 19.07 GB | 13.7 GB (119 s clip) / 19.94 GB |
+
+- **4K works and memory holds** (frames are read a few at a time, as expected from the code).
+- **But 4K is about 4.4 times slower,** and the GPU mostly waits: the job becomes limited by decoding the
+  4K frames on the CPU, not by the model. The model only looks at a 256 x 256 centre square of each
+  frame, so a downscale before the model (for example to 720p with ffmpeg) would likely remove most of
+  this cost; whether it changes the results measurably has to be checked first. Decision deferred
+  (M2b, with the warm-up fix): a 1-minute 4K ad currently costs about $0.55 and takes about 20 minutes warm.
+- Session cost about $1.10.
