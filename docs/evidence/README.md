@@ -37,3 +37,34 @@ The zone comes from the `Details` field. The group's ARN, which contains the acc
 
 ## Conclusion
 Spot saved 1-9% a month and was often unavailable. Spot capacity is AWS's unused on-demand capacity, so for a GPU in this much demand there is little spare, which keeps both the discount and the availability low. On-demand is never taken back mid-job and costs about the same. If on-demand is sold out as well, Spot is too, so the group has no Spot fallback: it tries `g6e.xlarge`, then `g6e.2xlarge`, and keeps retrying.
+
+# Evidence: choice of GPU
+
+## Candidates
+Every GPU instance type in us-east-1 (AWS price list and `aws ec2 describe-instance-types`, 2026-10-03), filtered by four requirements:
+
+1. **GPU memory of at least about 22 GB usable.** The real pipeline peaked at 19.8 GB of GPU memory on a 119 s clip (first GPU run, 2026-10-03, `nvidia-smi` total including WhisperX).
+2. **Runs our software:** x86 processor and a GPU that PyTorch below 2.7 supports (tribev2 requires `torch<2.7`).
+3. **One GPU:** tribev2 runs on a single GPU, so more GPUs cost more without speeding a job up.
+4. **Smallest size with at least 32 GB RAM** (peak 13.7 GB). Larger sizes have the same GPU; the GPU was about 90% busy during video encoding, so extra CPU and RAM would not help.
+
+| Type | GPU | GPU memory usable | RAM | On-demand $/h | Result |
+|---|---|---|---|---|---|
+| g4dn.2xlarge | T4 | 16 GB | 32 GB | 0.752 | Out: GPU memory (1) |
+| g6f.* | part of an L4 | up to 11 GB | | from 0.202 | Out: GPU memory (1) |
+| g5g.* | T4G, ARM | 16 GB | | from 0.420 | Out: GPU memory (1), ARM (2) |
+| g7e.2xlarge | RTX PRO 6000 (Blackwell) | 96 GB | 64 GB | 3.363 | Out: needs PyTorch 2.7 or newer (2) |
+| p4d, p5 and multi-GPU g sizes | A100, H100, ... | | | 4.6 and up | Out: several GPUs (3) |
+| g6.xlarge, g5.xlarge | L4, A10G | 22.9 GB | 16 GB | 0.805, 1.006 | Out: RAM (4) |
+| gr6.4xlarge | L4 | 22.9 GB | 128 GB | 1.539 | Out: same GPU as g6.2xlarge, dearer (4) |
+| **g6.2xlarge** | **L4** | 22.9 GB | 32 GB | **0.978** | **Tested** |
+| **g5.2xlarge** | **A10G** | 22.9 GB | 32 GB | **1.212** | **Tested** |
+| **g6e.xlarge** | **L40S** | 45.8 GB | 32 GB | **1.861** | **Tested (current choice)** |
+
+Scope: AWS only; other GPU clouds were not considered.
+
+## Test
+On each tested type, after the timeline and double-encoding fixes: the 52 s Sintel trailer first (it carries the cold start), then the 119 s loop (warm rate and worst-case memory, since 120 s is the upload limit). Recorded per type: GPU memory peak, job times, cost per second of video, and wait for a 120 s video. Rule: a cheaper type wins only if it fits in memory at 119 s and its wait stays acceptable.
+
+## Results
+(to be added after the run)
