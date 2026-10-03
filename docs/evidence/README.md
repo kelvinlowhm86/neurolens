@@ -64,19 +64,19 @@ Every GPU instance type in us-east-1 (AWS price list and `aws ec2 describe-insta
 Scope: AWS only; other GPU clouds were not considered.
 
 ## Not tested: a faster GPU
-The only faster single GPU on AWS that runs PyTorch below 2.7 is the H100 (`p5.4xlarge`, $6.88/h on demand in us-east-1), 3.7 times the price of `g6e.xlarge`, so it would have to finish a job 3.7 times faster to cost the same per job. The pipeline runs at full 32-bit precision (tribev2 loads the video and text models without a reduced-precision setting, and reduced precision is not used, to keep the features the brain model was trained on). NVIDIA's published figures:
+The only faster single GPU on AWS that runs PyTorch below 2.7 is the H100 (`p5.4xlarge`, $6.88/h on demand in us-east-1), 3.7 times the price of `g6e.xlarge`, so it would have to finish a job 3.7 times faster to cost the same per job. The pipeline is expected to run at full 32-bit precision: tribev2 loads the video and text models without a reduced-precision setting, and we deliberately add none, to keep the features the brain model was trained on (to be confirmed on the worker in the next GPU run). NVIDIA's published figures:
 
-| | L40S (`g6e`) | H100 SXM (`p5`) | H100 / L40S |
+| | L40S (`g6e`) | H100 SXM (`p5`, assumed to be the SXM version) | H100 / L40S |
 |---|---|---|---|
 | FP32 compute | 91.6 TFLOPS | 67 TFLOPS | 0.73 |
-| TF32 tensor compute (dense) | 183 TFLOPS | about 495 TFLOPS | 2.7 |
+| TF32 tensor compute (dense) | 183 TFLOPS | about 495 TFLOPS (half the published 989 "with sparsity") | 2.7 |
 | BF16 tensor compute (dense) | 362 TFLOPS | 989 TFLOPS | 2.7 |
 | Memory bandwidth | 864 GB/s | 3,350 GB/s | 3.9 |
 
-At 32-bit the H100 has less raw compute; only memory bandwidth is far higher. A 3.7-fold overall speed-up is therefore very unlikely, so it was not tested. Sources: NVIDIA L40S and H100 datasheets (for example the vendor copies at supermicro.com/datasheet/datasheet_NVIDIA_L40S_Systems.pdf and cisco.com's nvidia-h100-80-gpu.pdf).
+At 32-bit the H100 has less raw compute; only memory bandwidth is far higher, and that helps only the parts of a job limited by moving data. A 3.7-fold overall speed-up is therefore very unlikely, so it was not tested: this exclusion is an argument from published specifications, not a measurement. Sources: NVIDIA L40S and H100 datasheets (for example the vendor copies at supermicro.com/datasheet/datasheet_NVIDIA_L40S_Systems.pdf and cisco.com's nvidia-h100-80-gpu.pdf).
 
 ## Test
-On each tested type, after the timeline and double-encoding fixes: the 52 s Sintel trailer first (it carries the cold start), then the 119 s loop (warm rate and worst-case memory, since 120 s is the upload limit). Recorded per type: GPU memory peak, job times, cost per second of video, and wait for a 120 s video. Rule: a cheaper type wins only if it fits in memory at 119 s and its wait stays acceptable.
+On each tested type, after the timeline and double-encoding fixes: the 52 s Sintel trailer first (it carries the cold start), then the 119 s loop (warm rate and worst-case memory, since 120 s is the upload limit). Recorded per type: GPU memory peak, job times, cost per second of video, and wait for a 120 s video. Rule: a cheaper type wins only if it fits in memory at 119 s and its wait stays acceptable. One run per clip per type; if the two best types are within 20% of each other on cost per second of video, the close ones are re-run before deciding, so run-to-run variation cannot decide the choice. Also recorded on the worker: the precision the video and text models actually run at.
 
 ## Results
 (to be added after the run)
