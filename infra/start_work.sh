@@ -4,7 +4,7 @@
 #   infra/start_work.sh --worker   also start one on-demand GPU worker ($1.86 an hour; $2.24 if only a 2xlarge is free)
 # End every session with infra/stop_work.sh.
 set -euo pipefail
-export AWS_PROFILE="${NEUROLENS_AWS_PROFILE:-neurolens}" AWS_REGION=us-east-1
+source "$(dirname "$0")/aws_env.sh"   # AWS_PROFILE, AWS_REGION (M2a §4i)
 ASG=neurolens-workers
 
 WORKER=0

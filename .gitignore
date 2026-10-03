@@ -80,5 +80,10 @@ build/
 *.tfstate*
 .terraform/
 terraform.tfvars
+# Per-region copies kept by infra/move_region.sh (they hold the same values as the originals)
+terraform.tfvars.*
+!terraform.tfvars.example
 *.tfplan
 backend.hcl
+backend.hcl.*
+!backend.hcl.example

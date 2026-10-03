@@ -2,7 +2,7 @@
 # Ships the last commit to S3 as the worker code bundle (M2a §5). Running workers pick it up on
 # their next restart (infra/restart_workers.sh); new ones on start.
 set -euo pipefail
-export AWS_PROFILE="${NEUROLENS_AWS_PROFILE:-neurolens}" AWS_REGION=us-east-1
+source "$(dirname "$0")/aws_env.sh"   # AWS_PROFILE, AWS_REGION (M2a §4i)
 cd "$(git rev-parse --show-toplevel)"
 
 if [ -n "$(git status --porcelain)" ]; then

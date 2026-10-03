@@ -2,7 +2,7 @@
 # Ends a work session (M2a §4d): worker group to zero, waits for workers to go, stops the NAT
 # instance, then checks that no neurolens machine is left running. Run at the end of every session.
 set -euo pipefail
-export AWS_PROFILE="${NEUROLENS_AWS_PROFILE:-neurolens}" AWS_REGION=us-east-1
+source "$(dirname "$0")/aws_env.sh"   # AWS_PROFILE, AWS_REGION (M2a §4i)
 ASG=neurolens-workers
 
 live_instances() {  # $1: extra filters, e.g. Name=tag:Role,Values=worker

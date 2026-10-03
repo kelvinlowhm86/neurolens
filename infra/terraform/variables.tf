@@ -19,6 +19,12 @@ variable "allowed_origins" {
   default     = ["http://localhost:5003", "http://127.0.0.1:5003"]
 }
 
+variable "region" {
+  description = "AWS region for everything except the Terraform state bucket (M2a §4i). Changing it means a move: use infra/move_region.sh."
+  type        = string
+  default     = "us-east-1"
+}
+
 variable "zones" {
   description = <<-EOT
     Availability zones that offer g6e.xlarge (check with `aws ec2 describe-instance-type-offerings
@@ -27,13 +33,21 @@ variable "zones" {
     holds the public subnet (NAT instance).
   EOT
   type        = list(string)
-  default     = ["us-east-1a", "us-east-1b", "us-east-1c", "us-east-1d"]
+
+  validation {
+    condition     = length(var.zones) > 0 && alltrue([for z in var.zones : startswith(z, var.region)])
+    error_message = "zones must be non-empty and all in var.region (set them in terraform.tfvars)."
+  }
 }
 
 variable "build_extra_zones" {
   description = "Further zones offering g6e.xlarge, each with a public subnet the image build can fall back to when the first zone has no capacity."
   type        = list(string)
-  default     = ["us-east-1b", "us-east-1c", "us-east-1d"]
+
+  validation {
+    condition     = alltrue([for z in var.build_extra_zones : startswith(z, var.region)])
+    error_message = "build_extra_zones must all be in var.region (set them in terraform.tfvars)."
+  }
 }
 
 variable "alert_email" {

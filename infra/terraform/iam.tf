@@ -5,11 +5,14 @@
 # here without it.
 
 locals {
-  account_id     = data.aws_caller_identity.current.account_id
-  boundary_arn   = "arn:aws:iam::${local.account_id}:policy/neurolens-role-boundary"
-  ssm_core_arn   = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
-  worker_asg     = "neurolens-workers"
-  worker_asg_arn = "arn:aws:autoscaling:us-east-1:${local.account_id}:autoScalingGroup:*:autoScalingGroupName/${local.worker_asg}"
+  account_id   = data.aws_caller_identity.current.account_id
+  boundary_arn = "arn:aws:iam::${local.account_id}:policy/neurolens-role-boundary"
+  ssm_core_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+  worker_asg   = "neurolens-workers"
+  # IAM names are global (shared by every region): a deployment in another region (M2a §4i) adds
+  # its region to them. us-east-1 keeps the original names, so its live roles are not replaced.
+  iam_suffix     = var.region == "us-east-1" ? "" : "-${var.region}"
+  worker_asg_arn = "arn:aws:autoscaling:${var.region}:${local.account_id}:autoScalingGroup:*:autoScalingGroupName/${local.worker_asg}"
 }
 
 data "aws_iam_policy_document" "ec2_assume" {
@@ -25,7 +28,7 @@ data "aws_iam_policy_document" "ec2_assume" {
 # ─── Image-build instance ──────────────────────────────────────────────────
 
 resource "aws_iam_role" "build" {
-  name                 = "neurolens-build"
+  name                 = "neurolens-build${local.iam_suffix}"
   assume_role_policy   = data.aws_iam_policy_document.ec2_assume.json
   permissions_boundary = local.boundary_arn
 }
@@ -41,7 +44,7 @@ resource "aws_iam_role_policy" "build" {
         Sid      = "ReadHuggingFaceToken"
         Effect   = "Allow"
         Action   = "ssm:GetParameter"
-        Resource = "arn:aws:ssm:us-east-1:${local.account_id}:parameter/neurolens/hf_token"
+        Resource = "arn:aws:ssm:${var.region}:${local.account_id}:parameter/neurolens/hf_token"
       },
       {
         Sid      = "DecryptItThroughParameterStore"
@@ -49,7 +52,7 @@ resource "aws_iam_role_policy" "build" {
         Action   = "kms:Decrypt"
         Resource = "*"
         Condition = {
-          StringEquals = { "kms:ViaService" = "ssm.us-east-1.amazonaws.com" }
+          StringEquals = { "kms:ViaService" = "ssm.${var.region}.amazonaws.com" }
         }
       },
       {
@@ -84,14 +87,14 @@ resource "aws_iam_role_policy_attachment" "build_ssm" {
 }
 
 resource "aws_iam_instance_profile" "build" {
-  name = "neurolens-build"
+  name = "neurolens-build${local.iam_suffix}"
   role = aws_iam_role.build.name
 }
 
 # ─── GPU workers ───────────────────────────────────────────────────────────
 
 resource "aws_iam_role" "worker" {
-  name                 = "neurolens-worker"
+  name                 = "neurolens-worker${local.iam_suffix}"
   assume_role_policy   = data.aws_iam_policy_document.ec2_assume.json
   permissions_boundary = local.boundary_arn
 }
@@ -153,14 +156,14 @@ resource "aws_iam_role_policy_attachment" "worker_ssm" {
 }
 
 resource "aws_iam_instance_profile" "worker" {
-  name = "neurolens-worker"
+  name = "neurolens-worker${local.iam_suffix}"
   role = aws_iam_role.worker.name
 }
 
 # ─── NAT instance (Session Manager only, for debugging it without SSH) ─────
 
 resource "aws_iam_role" "nat" {
-  name                 = "neurolens-nat"
+  name                 = "neurolens-nat${local.iam_suffix}"
   assume_role_policy   = data.aws_iam_policy_document.ec2_assume.json
   permissions_boundary = local.boundary_arn
 }
@@ -171,6 +174,6 @@ resource "aws_iam_role_policy_attachment" "nat_ssm" {
 }
 
 resource "aws_iam_instance_profile" "nat" {
-  name = "neurolens-nat"
+  name = "neurolens-nat${local.iam_suffix}"
   role = aws_iam_role.nat.name
 }

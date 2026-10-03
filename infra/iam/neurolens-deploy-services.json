@@ -8,6 +8,12 @@
       "Resource": ["arn:aws:s3:::neurolens-*", "arn:aws:s3:::neurolens-*/*"]
     },
     {
+      "Sid": "ReadServiceQuotas",
+      "Effect": "Allow",
+      "Action": "servicequotas:GetServiceQuota",
+      "Resource": "*"
+    },
+    {
       "Sid": "NeurolensQueuesOnly",
       "Effect": "Allow",
       "Action": "sqs:*",

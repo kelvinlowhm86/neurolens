@@ -2,7 +2,7 @@
 # Restarts the worker service on every running worker through SSM Run Command (M2a §5), so a
 # deploy reaches them without new machines. Prints the code revision each one now runs.
 set -euo pipefail
-export AWS_PROFILE="${NEUROLENS_AWS_PROFILE:-neurolens}" AWS_REGION=us-east-1
+source "$(dirname "$0")/aws_env.sh"   # AWS_PROFILE, AWS_REGION (M2a §4i)
 
 IDS=$(aws ec2 describe-instances \
   --filters Name=tag:Project,Values=neurolens Name=tag:Role,Values=worker Name=instance-state-name,Values=running \

@@ -6,6 +6,14 @@ bucket_name = "neurolens-REPLACE-ME"
 # queue_name      = "neurolens-jobs"
 # allowed_origins = ["http://localhost:5003", "http://127.0.0.1:5003"]
 
+# Region and its zones (M2a §4i). List the zones that offer g6e.xlarge:
+#   aws ec2 describe-instance-type-offerings --location-type availability-zone \
+#     --filters Name=instance-type,Values=g6e.xlarge --region <region>
+# The first zone also holds the public subnet (NAT instance); the others get build fallback subnets.
+region            = "us-east-1"
+zones             = ["us-east-1a", "us-east-1b", "us-east-1c", "us-east-1d"]
+build_extra_zones = ["us-east-1b", "us-east-1c", "us-east-1d"]
+
 # Required from M2a: where the 3-hour GPU alarm emails you.
 alert_email = "you@example.com"
 

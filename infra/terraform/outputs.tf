@@ -37,3 +37,8 @@ output "build_instance_profile" {
 output "nat_instance_id" {
   value = aws_instance.nat.id
 }
+
+output "region" {
+  description = "The region everything runs in (M2a §4i); the scripts in infra/ read it from here."
+  value       = var.region
+}

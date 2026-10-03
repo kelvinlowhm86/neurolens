@@ -39,7 +39,7 @@ resource "aws_launch_template" "worker" {
   }
 
   user_data = base64encode(templatefile("${path.module}/worker_userdata.sh.tftpl", {
-    region         = "us-east-1"
+    region         = var.region
     bucket         = aws_s3_bucket.main.bucket
     queue_url      = aws_sqs_queue.jobs.url
     fake_inference = var.worker_fake_inference

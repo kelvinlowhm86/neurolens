@@ -13,15 +13,19 @@ terraform {
   # one laptop. The bucket name is passed at init time so it is not committed:
   #   terraform init -backend-config=backend.hcl      (see README.md)
   backend "s3" {
-    key          = "m1/terraform.tfstate" # one state for the whole project; the name stays so nothing is orphaned
+    # One state per region. us-east-1 keeps "m1/terraform.tfstate" (the name stays so nothing is
+    # orphaned); another region passes -backend-config=key=<region>/terraform.tfstate at init
+    # (infra/move_region.sh does).
+    key          = "m1/terraform.tfstate"
     region       = "us-east-1"
     use_lockfile = true
   }
 }
 
-# us-east-1 on purpose: the g6e GPU family used from M2a onward is not offered in Singapore.
+# The region is one setting (M2a §4i): us-east-1 by default, because the g6e GPU family used from
+# M2a onward is not offered in Singapore. The state bucket above stays in us-east-1 whatever this is.
 provider "aws" {
-  region = "us-east-1"
+  region = var.region
 
   default_tags {
     tags = {

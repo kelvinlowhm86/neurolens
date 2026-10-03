@@ -1,35 +1,38 @@
 #!/usr/bin/env bash
 # Builds the GPU worker image (M2a §2). Run from your Mac.
 #
-#   infra/build_ami.sh --cpu-rehearsal [--plain-ubuntu]
-#       t3.large (about 8 cents an hour): installs the software only (§2 step 3), prints success
-#       or the failing step, and always terminates. No token, no weights, no image.
-#   infra/build_ami.sh <clip.mp4> [--refresh-weights]
+#   infra/build_ami.sh --cpu-rehearsal [--dlami]
+#       t3.large (about 8 cents an hour): installs the NVIDIA driver (with its reboot) and the
+#       software only (§2 steps 3-4), prints success or the failing step, and always terminates.
+#       No token, no weights, no image.
+#   infra/build_ami.sh <clip.mp4> [--refresh-weights] [--dlami]
 #       g6e.xlarge on-demand ($1.86 an hour, about an hour; g6e.2xlarge at $2.24 if the smaller
 #       size is sold out in every zone): full build, weights to S3 models/,
 #       then the software-only image. Prints the AMI ID, snapshot size, peak RAM and VRAM.
 #
+# Base image: plain Ubuntu 22.04 plus the NVIDIA server driver (§2). --dlami builds from the AWS
+# Deep Learning Base GPU image instead (driver preinstalled, much larger): a fallback only.
 # Needs: terraform applied (network, roles), and infra/deploy_code.sh run (code/latest.zip).
 # Money guards: the build instance is terminated when this script exits (errors and Ctrl-C too);
 # every remote step has a deadline; and the instance shuts itself down (= terminates) after 4 hours
 # even if this Mac sleeps or loses its connection.
 # The HuggingFace token never touches this Mac: the instance reads it from Parameter Store.
 set -euo pipefail
-export AWS_PROFILE="${NEUROLENS_AWS_PROFILE:-neurolens}" AWS_REGION=us-east-1
+source "$(dirname "$0")/aws_env.sh"   # AWS_PROFILE, AWS_REGION (M2a §4i)
 cd "$(git rev-parse --show-toplevel)"
 
-REHEARSAL=0; PLAIN=0; REFRESH=0; CLIP=""
+REHEARSAL=0; DLAMI=0; REFRESH=0; CLIP=""
 for arg in "$@"; do
   case "$arg" in
     --cpu-rehearsal) REHEARSAL=1 ;;
-    --plain-ubuntu) PLAIN=1 ;;
+    --dlami) DLAMI=1 ;;
     --refresh-weights) REFRESH=1 ;;
     -*) echo "unknown option $arg" >&2; exit 2 ;;
     *) CLIP="$arg" ;;
   esac
 done
 if [ "$REHEARSAL" = 0 ] && [ ! -f "$CLIP" ]; then
-  echo "usage: $0 --cpu-rehearsal [--plain-ubuntu]  |  $0 <clip.mp4> [--refresh-weights]" >&2; exit 2
+  echo "usage: $0 --cpu-rehearsal [--dlami]  |  $0 <clip.mp4> [--refresh-weights] [--dlami]" >&2; exit 2
 fi
 
 say() { echo "$(date +%H:%M:%S) $*"; }
@@ -40,12 +43,18 @@ SG=$(tf no_inbound_security_group_id); PROFILE=$(tf build_instance_profile)
 aws s3api head-object --bucket "$BUCKET" --key code/latest.zip >/dev/null 2>&1 \
   || { echo "s3://$BUCKET/code/latest.zip missing: run infra/deploy_code.sh first." >&2; exit 1; }
 
-if [ "$PLAIN" = 1 ]; then
-  AMI_PARAM=/aws/service/canonical/ubuntu/server/22.04/stable/current/amd64/hvm/ebs-gp2/ami-id
-else
+if [ "$DLAMI" = 1 ]; then
   AMI_PARAM=/aws/service/deeplearning/ami/x86_64/base-oss-nvidia-driver-gpu-ubuntu-22.04/latest/ami-id
+else
+  AMI_PARAM=/aws/service/canonical/ubuntu/server/22.04/stable/current/amd64/hvm/ebs-gp2/ami-id
 fi
 BASE_AMI=$(aws ssm get-parameter --name "$AMI_PARAM" --query Parameter.Value --output text)
+# Root disk: 50 GB gp3 (the base image's own 8 GB is too small; this size becomes the image's), or
+# the base image's size if larger (the Deep Learning image's is). It must be the image's root device.
+read -r ROOT_DEV BASE_GB <<<"$(aws ec2 describe-images --image-ids "$BASE_AMI" \
+  --query 'Images[0].[RootDeviceName,BlockDeviceMappings[0].Ebs.VolumeSize]' --output text)"
+[[ "$BASE_GB" =~ ^[0-9]+$ ]] || { echo "cannot read the base image's root disk size ($BASE_GB)" >&2; exit 1; }
+ROOT_GB=$(( BASE_GB > 50 ? BASE_GB : 50 ))
 # Tried in order. g6e.2xlarge has the same GPU (more RAM and CPU, $2.24 an hour): only a fallback
 # when the smaller size is sold out everywhere. The image works on either; workers use the Terraform
 # worker_instance_types, whatever built the image.
@@ -59,7 +68,7 @@ if [ "$REHEARSAL" = 1 ]; then TYPES=t3.large; else TYPES="g6e.xlarge g6e.2xlarge
 step_preamble() {
   cat <<'EOF'
 set -euo pipefail
-export HOME=/root AWS_DEFAULT_REGION=us-east-1
+export HOME=/root AWS_DEFAULT_REGION=$REGION
 LOG=/var/log/neurolens-build.log
 exec 3>&1 >>"$LOG" 2>&1
 log() { echo "$(date -u +%H:%M:%S) $*" | tee /dev/fd/3; }
@@ -74,12 +83,62 @@ trap on_exit EXIT
 EOF
 }
 
-# §2 step 3: software. Same for the rehearsal and the real build.
+# §2 step 3: the NVIDIA driver, from Ubuntu's own packages: prebuilt, signed kernel modules for the
+# AWS kernel (no DKMS compile) and the headless user-space libraries plus nvidia-smi. Branch 570
+# supports CUDA 12.4, which torch 2.6's wheels bring with them. The modules package may pull a
+# newer kernel; the reboot that follows starts it.
+step_driver() {
+  cat <<'EOF'
+export DEBIAN_FRONTEND=noninteractive
+cloud-init status --wait >/dev/null || true
+APT="apt-get -q -y -o DPkg::Lock::Timeout=600"
+BRANCH=570
+log "[driver] apt: NVIDIA $BRANCH-server driver (prebuilt modules for the AWS kernel), running kernel $(uname -r)"
+$APT update
+$APT install "linux-modules-nvidia-$BRANCH-server-aws" "nvidia-headless-no-dkms-$BRANCH-server" \
+  "nvidia-utils-$BRANCH-server"
+# The kernel the reboot will start must have the module, or the GPU would be missing after it.
+NEWEST=$(ls -1 /lib/modules | sort -V | tail -n 1)
+find "/lib/modules/$NEWEST" -name 'nvidia.ko*' | grep -q . \
+  || { log "[driver] FAILED: no nvidia module for kernel $NEWEST"; exit 1; }
+log "[driver] module present for kernel $NEWEST: $(dpkg-query -W -f '${Version}' "nvidia-utils-$BRANCH-server")"
+log "[driver] DRIVER INSTALLED (reboot next)"
+EOF
+}
+
+# After the reboot: the right kernel runs, the module loads, and (on a GPU) the driver sees the GPU.
+step_driver_check() {
+  cat <<'EOF'
+log "[driver] after reboot: kernel $(uname -r)"
+# The money guard: a reboot cancels a scheduled shutdown; the deadline unit must have re-armed it.
+test -f /run/systemd/shutdown/scheduled \
+  || { log "[driver] FAILED: the 4-hour shutdown was not re-armed after the reboot"; exit 1; }
+log "[driver] 4-hour shutdown re-armed: $(sed -n 's/^USEC=//p' /run/systemd/shutdown/scheduled | cut -c1-10 | xargs -I{} date -u -d @{} +%H:%M) UTC"
+modinfo -F version nvidia >/dev/null || { log "[driver] FAILED: no nvidia module for the running kernel"; exit 1; }
+if grep -qsx 0x10de /sys/bus/pci/devices/*/vendor; then   # 0x10de: NVIDIA's PCI vendor ID
+  nvidia-smi >/dev/null || { log "[driver] FAILED: nvidia-smi cannot talk to the GPU"; exit 1; }
+  log "[driver] GPU: $(nvidia-smi --query-gpu=name,driver_version,memory.total --format=csv,noheader), $(nvidia-smi | grep -o 'CUDA Version: [0-9.]*')"
+else
+  log "[driver] no NVIDIA GPU on this machine (CPU rehearsal): GPU check skipped"
+fi
+log "[driver] DRIVER OK"
+EOF
+}
+
+# §2 step 4: software. Same for the rehearsal and the real build.
 step_install() {
   cat <<'EOF'
 export DEBIAN_FRONTEND=noninteractive
 cloud-init status --wait >/dev/null || true
 APT="apt-get -q -y -o DPkg::Lock::Timeout=600"
+
+# Ubuntu's automatic package updates would start at every worker boot, through the small NAT
+# instance, holding the apt lock: off in the image.
+log "[install] automatic package updates off"
+systemctl disable --now apt-daily.timer apt-daily-upgrade.timer unattended-upgrades.service 2>/dev/null || true
+for unit in apt-daily.timer apt-daily-upgrade.timer unattended-upgrades.service; do
+  if systemctl is-enabled "$unit" 2>/dev/null | grep -qx enabled; then log "[install] FAILED: $unit still enabled"; exit 1; fi
+done
 
 log "[install] apt: ffmpeg, git, curl"
 $APT update
@@ -140,17 +199,19 @@ command -v ffmpeg ffprobe aws >/dev/null
 VERSIONS=$(cd /opt/neurolens/app && /opt/neurolens/venv/bin/python -c '
 import sys, torch, tribev2, nilearn, boto3, transformers, neurolens.worker, neurolens.inference
 print("python", sys.version.split()[0], "| torch", torch.__version__, "| torch CUDA", torch.version.cuda,
+      "| transformers", transformers.__version__,
       "| GPU visible", torch.cuda.is_available())' | tail -n 1)
 log "[install] $VERSIONS"
 if command -v nvidia-smi >/dev/null && nvidia-smi >/dev/null 2>&1; then
   log "[install] GPU: $(nvidia-smi --query-gpu=name,driver_version,memory.total --format=csv,noheader), $(nvidia-smi | grep -o 'CUDA Version: [0-9.]*')"
   /opt/neurolens/venv/bin/python -c "import torch; assert torch.cuda.is_available(), 'torch cannot see the GPU'"
 fi
+log "[install] root disk (becomes the image): $(df -h --output=used,size / | tail -n 1)"
 log "[install] INSTALL OK"
 EOF
 }
 
-# §2 steps 4-7: weights through the worker's own code, offline proof, peak RAM/VRAM, sync to S3.
+# §2 steps 5-8: weights through the worker's own code, offline proof, peak RAM/VRAM, sync to S3.
 step_weights() {
   cat <<'EOF'
 APP=/opt/neurolens/app; PY=/opt/neurolens/venv/bin/python; CACHE=/opt/neurolens/cache
@@ -158,19 +219,20 @@ echo "$CONFIG_B64" | base64 -d > "$APP/config.json"
 aws s3 cp "s3://$BUCKET/smoke/clip.mp4" /tmp/neurolens-clip.mp4 --only-show-errors
 
 cat > /tmp/neurolens-pipeline.py <<'PY'
-"""The worker's pipeline once on the smoke clip: both passes, so every encoder loads."""
+"""The worker's pipeline once on the smoke clip (its calls, §7a): both passes, so every encoder loads."""
 import json, logging, sys
 from pathlib import Path
 from neurolens import engagement, inference, settings
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
 cfg = settings.load_settings()
 inference.load_model(cfg)
-clip = Path(sys.argv[1]); silent_clip = clip.with_suffix(".noaudio.mp4")
+clip = Path(sys.argv[1])
+duration = inference.probe_duration(clip)
+events = inference.build_events(clip)
 print("MARK full-pass start", flush=True)
-full = inference.run_inference(clip)
+full = inference.predict(events, duration)
 print("MARK full-pass end", flush=True)
-inference.strip_audio(clip, silent_clip)
-silent = inference.run_inference(silent_clip)
+silent = inference.predict(inference.without_audio(events), duration)
 engagement.extract_engagement(full, silent, inference.roi_masks())
 print("PIPELINE OK", full.shape, silent.shape, "gpu:", json.dumps(inference.gpu_info()), flush=True)
 PY
@@ -246,12 +308,21 @@ log "[weights] WEIGHTS OK"
 EOF
 }
 
-# §2 step 8: software only in the image. Proves no file outside the cache still holds the token.
+# §2 step 9: software only in the image. Proves no file outside the cache still holds the token.
 # /root/.cache is kept: anything the libraries put there at run time (seen in the weights step's
 # last line) must also be there on the workers.
 step_scrub() {
   cat <<'EOF'
 rm -rf /opt/neurolens/app /opt/neurolens/output /tmp/neurolens-*
+# The build's 4-hour deadline must not reach the image: on a worker it would shut the machine down.
+systemctl disable neurolens-build-deadline.service 2>/dev/null || true
+rm -f /etc/systemd/system/neurolens-build-deadline.service /usr/local/sbin/neurolens-build-deadline \
+  /var/lib/neurolens-build-deadline
+systemctl daemon-reload
+if ls /etc/systemd/system/neurolens-build-deadline.service /etc/systemd/system/*/neurolens-build-deadline.service \
+     /usr/local/sbin/neurolens-build-deadline /var/lib/neurolens-build-deadline 2>/dev/null | grep -q .; then
+  log "[scrub] FAILED: the build deadline is still installed"; exit 1
+fi
 T=$(aws ssm get-parameter --name /neurolens/hf_token --with-decryption --query Parameter.Value --output text)
 FOUND=$(grep -rlsF --exclude-dir=cache -- "$T" /opt /root /home /etc /tmp /var/log /var/lib/amazon /var/lib/cloud || true)
 unset T
@@ -288,7 +359,7 @@ trap cleanup EXIT
 
 ssm_run() {  # $1 label, $2 deadline in seconds; stdin: the step script; env lines from $STEP_ENV
   local label=$1 timeout=$2 b64 params cmd status errors=0 deadline
-  b64=$( { printf '%s\n' "${STEP_ENV:-}"; step_preamble; cat; } | base64 | tr -d '\n')
+  b64=$( { printf 'export REGION=%s\n%s\n' "$AWS_REGION" "${STEP_ENV:-}"; step_preamble; cat; } | base64 | tr -d '\n')
   params=$(python3 -c 'import json,sys; print(json.dumps({
     "commands": ["echo " + sys.argv[1] + " | base64 -d > /tmp/neurolens-step.sh",
                  "bash /tmp/neurolens-step.sh; rc=$?; rm -f /tmp/neurolens-step.sh; exit $rc"],
@@ -314,6 +385,17 @@ ssm_run() {  # $1 label, $2 deadline in seconds; stdin: the step script; env lin
   [ "$status" = Success ] || { say "FAILED at step: $label ($status)"; exit 1; }
 }
 
+remote_boot_id() {  # prints the instance's current boot ID, or nothing if it cannot be reached now
+  local cmd
+  cmd=$(aws ssm send-command --instance-ids "$INSTANCE" --document-name AWS-RunShellScript \
+        --comment "neurolens build: boot id" --timeout-seconds 30 \
+        --parameters 'commands=["cat /proc/sys/kernel/random/boot_id"]' \
+        --query Command.CommandId --output text 2>/dev/null) || return 0
+  aws ssm wait command-executed --command-id "$cmd" --instance-id "$INSTANCE" 2>/dev/null || return 0
+  aws ssm get-command-invocation --command-id "$cmd" --instance-id "$INSTANCE" \
+    --query StandardOutputContent --output text 2>/dev/null | tr -d '[:space:]' || true
+}
+
 # A build machine that is still shutting down (e.g. a failed run moments ago) bills nothing but still
 # counts against the vCPU quota (VcpuLimitExceeded): wait for it first.
 OLD=$(aws ec2 describe-instances --filters Name=tag:Project,Values=neurolens Name=tag:Role,Values=build \
@@ -332,6 +414,29 @@ fi
 say "launching ($TYPES) from $(aws ec2 describe-images --image-ids "$BASE_AMI" --query 'Images[0].Name' --output text)"
 # Dead-man switch: the instance shuts itself down after 4 hours, and a shutdown from inside means
 # terminate. The script's own stop-instances call (before the image) is an API stop, not affected.
+# A reboot cancels a scheduled shutdown, so the deadline is also written to a file and a boot-time
+# unit re-arms it for the time left (the scrub step removes both before the image is made).
+read -r -d '' USER_DATA <<'UD' || true   # read -d '' ends at end of input with status 1
+#!/bin/bash
+echo $(( $(date +%s) + 240 * 60 )) > /var/lib/neurolens-build-deadline
+cat > /usr/local/sbin/neurolens-build-deadline <<'SH'
+#!/bin/bash
+left=$(( ( $(cat /var/lib/neurolens-build-deadline) - $(date +%s) ) / 60 ))
+shutdown -h "+$(( left > 0 ? left : 0 ))" "neurolens build: 4-hour limit"
+SH
+chmod 755 /usr/local/sbin/neurolens-build-deadline
+cat > /etc/systemd/system/neurolens-build-deadline.service <<'UNIT'
+[Unit]
+Description=NeuroLens build machine: shut down at the 4-hour deadline (re-armed after a reboot)
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/neurolens-build-deadline
+[Install]
+WantedBy=multi-user.target
+UNIT
+systemctl daemon-reload
+systemctl enable --now neurolens-build-deadline.service
+UD
 # A GPU type can be sold out in one zone: try the next zone's subnet on InsufficientInstanceCapacity
 # only; any other error stops here.
 for TYPE in $TYPES; do
@@ -339,7 +444,8 @@ for TYPE in $TYPES; do
   if OUT=$(aws ec2 run-instances --image-id "$BASE_AMI" --instance-type "$TYPE" \
       --subnet-id "$SUBNET" --security-group-ids "$SG" --iam-instance-profile "Name=$PROFILE" \
       --metadata-options HttpTokens=required --instance-initiated-shutdown-behavior terminate \
-      --user-data $'#!/bin/bash\nshutdown -h +240 "neurolens build: 4-hour limit"' \
+      --user-data "$USER_DATA" \
+      --block-device-mappings "DeviceName=$ROOT_DEV,Ebs={VolumeSize=$ROOT_GB,VolumeType=gp3,DeleteOnTermination=true}" \
       --tag-specifications \
         'ResourceType=instance,Tags=[{Key=Project,Value=neurolens},{Key=Name,Value=neurolens-build},{Key=Role,Value=build}]' \
         'ResourceType=volume,Tags=[{Key=Project,Value=neurolens},{Key=Name,Value=neurolens-build}]' \
@@ -363,11 +469,28 @@ for i in $(seq 1 60); do
   sleep 10
 done
 
+if [ "$DLAMI" = 0 ]; then
+  step_driver | ssm_run "NVIDIA driver" 1800
+  # The boot ID changes with every boot: a step that reports a new one ran after the reboot.
+  BOOT_BEFORE=$(remote_boot_id)
+  [ -n "$BOOT_BEFORE" ] || { say "FAILED: cannot read the instance's boot ID"; exit 1; }
+  say "rebooting to load the driver"
+  aws ec2 reboot-instances --instance-ids "$INSTANCE"
+  for i in $(seq 1 40); do
+    sleep 15
+    BOOT_NOW=$(remote_boot_id)
+    [ -n "$BOOT_NOW" ] && [ "$BOOT_NOW" != "$BOOT_BEFORE" ] && break
+    [ "$i" = 40 ] && { say "FAILED: the instance did not come back from its reboot within 10 minutes"; exit 1; }
+  done
+  say "back after the reboot"
+  step_driver_check | ssm_run "driver check" 600
+fi
+
 STEP_ENV="export BUCKET=$BUCKET"
 step_install | ssm_run "install software" 3600
 
 if [ "$REHEARSAL" = 1 ]; then
-  say "REHEARSAL OK: the software install works on $TYPE."
+  say "REHEARSAL OK: the driver and software install work on $TYPE."
   exit 0
 fi
 
