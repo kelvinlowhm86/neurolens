@@ -130,3 +130,7 @@ difference 0.0000 (53 rows, 585.8 s, peak GPU memory 11.16 GB), 119.01 s loop ma
 job 14 s. Session about $0.90.
 
 v1 (`ami-02401490feb3d139f`) deregistered and its snapshot deleted on 2026-10-03 after v2 passed; v2 is the only worker image.
+
+Stale features removed from S3 (2026-10-04): the three `models/models/neuralset.extractors.*` folders
+(22 objects, 72 MB) deleted after the build fix (`3a7d14a`); `models/` now holds weights only
+(`hub/`, `torch/`, `data/nilearn/`): 56 objects, 16.72 GB.
