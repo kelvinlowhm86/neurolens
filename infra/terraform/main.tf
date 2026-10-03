@@ -121,10 +121,10 @@ resource "aws_s3_bucket_cors_configuration" "main" {
 resource "aws_sqs_queue" "jobs" {
   name = var.queue_name
 
-  # M1's worker has no heartbeat, and two inference passes can take several minutes. With a
-  # shorter timeout a long job's message would reappear mid-processing. M2b adds the
-  # heartbeat and lowers this.
-  visibility_timeout_seconds = 900
+  # The worker has no heartbeat yet, so a job must finish before its message reappears. The
+  # first real jobs on g6e.xlarge took 1003 s and 1039 s (M2a build log), longer than M1's 900 s.
+  # M2b adds the heartbeat and lowers this to 120 s.
+  visibility_timeout_seconds = 1800
 
   sqs_managed_sse_enabled = true
 
