@@ -19,6 +19,7 @@ Also run `aws ec2 describe-instance-type-offerings --location-type availability-
 - Results written to S3 with a conditional write, instead of M1's local output folder
 - Start/stop scripts that keep idle cost near zero
 - A fake-mode wiring rehearsal on a cheap CPU instance, then the real-model check deferred from M1
+- Inference corrections found by that check (§7a): correct word timing for videos over 60 s and a single video encoding per job
 
 ### Out of scope
 - **M2b:** autoscaling, two workers, 120 s visibility timeout with heartbeat, fast failure release, graceful shutdown when a worker is stopped or scaled in, job-status objects and endpoints, the polling UI, and Experiments 1–2. Until M2b, a crash simply means the message reappears after M1's 900 s visibility timeout.
@@ -129,7 +130,7 @@ A CloudWatch alarm on the ASG's `GroupInServiceInstances` > 0 continuously for *
 `worker.idle_exit_minutes` (absent means never exit on idle; UserData sets 30 on AWS).
 
 ### 4h. Retry cap (dead-letter queue, Terraform on M1's queue)
-Real inference costs money, and M1's queue would redeliver a permanently failing job every 900 s for days. Add a **dead-letter queue** (a side queue that parks a message after repeated failures) named `<queue_name>-dlq`, SQS-managed encryption on, message retention 14 days, and a **redrive policy** on the job queue with `maxReceiveCount = 2`: a message received twice without being deleted moves to the dead-letter queue and is never retried again. Remove M1's `# TODO(M2b)` comment on the queue. With the 900 s visibility timeout a failing job is given up on after about 15 minutes (M2b shortens that with its heartbeat). SQS moves the message itself, so the worker's IAM needs no access to the dead-letter queue. To inspect a parked job: `aws sqs receive-message --queue-url <dlq url>`; to retry after a fix, use the console's "Start DLQ redrive". The name starts with `neurolens-`, so the deploy user's scoped policy already covers it.
+Real inference costs money, and M1's queue would redeliver a permanently failing job every 900 s for days. Add a **dead-letter queue** (a side queue that parks a message after repeated failures) named `<queue_name>-dlq`, SQS-managed encryption on, message retention 14 days, and a **redrive policy** on the job queue with `maxReceiveCount = 2`: a message received twice without being deleted moves to the dead-letter queue and is never retried again. Remove M1's `# TODO(M2b)` comment on the queue. Set the job queue's **visibility timeout to 1800 s** (was M1's 900 s): the first real jobs on `g6e.xlarge` took 1003 s and 1039 s (52 s and 119 s clips, before §7a), longer than 900 s, so with more than one worker a job would have been handed out twice. A failing job is therefore given up on after about an hour (M2b replaces this with its 120 s heartbeat). SQS moves the message itself, so the worker's IAM needs no access to the dead-letter queue. To inspect a parked job: `aws sqs receive-message --queue-url <dlq url>`; to retry after a fix, use the console's "Start DLQ redrive". The name starts with `neurolens-`, so the deploy user's scoped policy already covers it.
 
 ## 5. Code deployment (`infra/deploy_code.sh`)
 ```bash
@@ -157,11 +158,30 @@ From M2a on, the worker writes each result to `results/{job_id}.json` instead of
 ## 7. Real-model check (deferred from M1)
 On the first GPU boot, upload one video with speech that we have the rights to (the open-licensed Sintel trailer, about 52 s; record its title, URL and licence in `data/videos/SOURCES.md`) through the web app's presign flow and let the worker process it. There are no stored reference numbers to compare against, so the check is that the real pipeline ran and its output is sane and repeatable:
 - The job finishes: `results/{job_id}.json` exists, `fake_inference` is absent and `gpu` is present.
-- `duration_seconds` and the number of `timesteps` equal the clip's length rounded up; every value is between 0 and 1; `engagement_overall` and the five region columns are not constant (maximum above minimum).
+- `duration_seconds` and the number of `timesteps` give one row per second of the clip (a final partial second may add a row or not: the 52.2 s trailer gave 53 rows, the 119.01 s loop 119); every value is between 0 and 1; `engagement_overall` and the five region columns are not constant (maximum above minimum).
 - The same clip run a second time agrees with the first run to within 0.001 on every value. A larger gap is not automatically a bug but must be explained in the build log before M2b starts.
 - The worker log shows all three encoders loaded (video, audio, and text including the gated Llama 3.2 model), as in §2 step 4.
 - Record the job's wall-clock time and the peak GPU memory from the `gpu` field, for the cost figures in M2b and M4.
+- **After §7a:** the 119 s loop (`data/videos/_test_clips/`) gives exactly 119 timesteps with every transcribed word attached once, and each job encodes the video once. The 52 s trailer (no chunking, so the ghost-word fix does not touch it) agrees with the first real run's result within 0.001, which also checks that the no-audio pass on `without_audio` matches the old audio-free file.
 These are read by hand from the result files (a few lines of Python pasted into the build log is fine); no script is added to the repo.
+
+## 7a. Inference corrections (`neurolens/inference.py`, `neurolens/worker.py`)
+Two problems found on the first real GPU run, in tribev2 commit `af58661` with neuralset 0.0.2 (evidence: `docs/M2a_build_log.md`):
+- **Ghost words after 60 s.** tribev2's demo path splits audio longer than 60 s into chunks that share one audio file, transcribes the whole file once, then gives *every* chunk a copy of the *whole* transcript shifted by `start + offset` (120 s for the second chunk). Every word reappears 120 s too late, the timeline stretches to about twice the video, and a 119 s video returns 239 rows. Rows up to 99 s are right, rows 100–118 share a 100 s model window with the ghost words, and rows from 119 s on are garbage. Videos of 60 s or less are unaffected. (Upstream pull request #29 proposes `start - offset`, which still leaves every word duplicated; text features are summed, so that would double the text input.)
+- **The video is encoded twice.** The no-audio pass runs on a separate audio-free copy of the file, so tribev2's per-file feature cache misses and the identical video is encoded again: about half of each job.
+
+`run_inference` and `strip_audio` are replaced by three functions, so a job keeps three stages (with-audio pass, no-audio pass, ROI extraction):
+- `build_events(video_path) -> events`: builds the events the same way as tribev2's `demo_utils.get_audio_and_text_events` (the same preparation steps, parameters and order, copied into our code with a comment naming the pinned commit), except that the word step is our corrected `ExtractWordsFromAudio` subclass. The subclass reuses tribev2's transcription and its `.tsv` transcript cache unchanged and replaces only how words are attached to audio chunks, through `attach_chunk_words`. Correct for any video length; there is no length condition in the fix. tribev2 is pinned to `af58661` in `requirements/model.txt`, so the copied steps only change when we change the pin on purpose.
+- `without_audio(events) -> events`: keeps only the `Video` rows. It is the same video file, so the no-audio pass reuses the cached video features; the video model does not use the soundtrack.
+- `predict(events, duration) -> numpy array (n, 20484)`: tribev2's `predict`, then `order_by_time(preds, [segment start times], duration, tr)` with `tr` read from the model (1 s).
+
+Pure helpers, testable without tribev2:
+- `attach_chunk_words(transcript, chunks)`: `transcript` holds one audio file's words with times measured from the start of the file (as WhisperX writes them); `chunks` are that file's audio chunks (`start` on the video timeline, `offset` into the file, `duration`). Each word goes to exactly one chunk, the one with `offset <= word start < offset + duration`, and its time becomes `chunk start + (word start - offset)`. Words outside every chunk are dropped and counted in the log. Each output word carries the same chunk fields tribev2 copies (everything except `frequency`, `filepath`, `type`, `start`, `duration`, `offset`), plus `type = "Word"` and the language.
+- `order_by_time(preds, starts, duration, tr=1.0)`: returns the rows sorted by start time. Raises `TimelineError` (a `RuntimeError` subclass) unless the starts, rounded to 1 ms, are exactly `0, tr, 2·tr, ...` with no gap or repeat, the last start is below `duration` and reaches the end (at least `duration - 2·tr`, so a timeline cut short also fails), and there is one start per row (at least one row). A misaligned timeline must fail loudly, never reach a result. It is a safety net, not the fix.
+
+Fake mode (`FAKE_INFERENCE=1`): `build_events` and `without_audio` return a small stand-in recording the path and whether audio is kept; `predict` returns seeded random numbers of shape `(ceil(duration), 20484)`, seeded from the file's size (plus 1 for the no-audio pass), so both passes differ and repeat exactly.
+
+The worker calls `events = build_events(local)`, `preds_full = predict(events, duration)`, `preds_noaudio = predict(without_audio(events), duration)`, then `extract_engagement` (unchanged). No `.noaudio` file is written. A `TimelineError` is an ordinary failure (the message is retried, then dead-lettered).
 
 ## 8. Tests (`FAKE_INFERENCE=1 pytest`, moto)
 Add to M1's suite, written first:
@@ -169,6 +189,8 @@ Add to M1's suite, written first:
 - The worker publishes through `put_result`, never to the local output folder, returns `DUPLICATE` and deletes the message when `put_result` returns `False`. M1's "valid video" test is changed by the test-writing agent to read `results/` in moto instead of the local folder (a spec'd test change).
 - `run()` returns after `worker.idle_exit_minutes` with no messages (use a tiny value and a stubbed clock or short poll wait in the test), and never returns on idle when the setting is absent.
 - `resolve_paths` keeps absolute config paths (as UserData writes them) unchanged instead of joining them to the root.
+- §7a, on small `pandas` tables and arrays (no tribev2): `attach_chunk_words` with words at 1, 61 and 110 s of a 119 s file split into chunks (start 0, offset 0, 60 s) and (start 60, offset 60, 59 s) returns each word exactly once at 1, 61 and 110 s; a word exactly on a chunk boundary goes only to the later chunk; three chunks of a 150 s file put every word once at its true time; a chunk whose `start` differs from its `offset` maps times by `start + (word - offset)`; an empty transcript gives no words; a word past the last chunk is dropped. `order_by_time` sorts shuffled rows and raises `TimelineError` for a repeated start, a gap, a start at or after `duration`, a timeline ending more than `2·tr` before `duration`, a starts/rows count mismatch and no rows. Fake mode: `predict` shapes and repeatability, and the two passes differ.
+- The worker runs `build_events`, `predict`, `without_audio`, `predict`, `extract_engagement` in that order, writes no `.noaudio` file, and treats a `TimelineError` as a failure. These replace M1's tests of `run_inference`, `strip_audio` and the strip-then-rerun order (a spec'd test change, made by the test-writing agent).
 
 ## 9. File layout additions
 ```
@@ -184,7 +206,9 @@ infra/
   start_work.sh                     NEW: start NAT instance, ASG max 1, optional worker
   stop_work.sh                      NEW: ASG to 0, stop NAT instance, confirm nothing running
 neurolens/storage.py                MODIFIED: put_result
-neurolens/worker.py                 MODIFIED: results to S3, Outcome.DUPLICATE, idle exit
+neurolens/inference.py              MODIFIED: build_events, without_audio, predict, attach_chunk_words, order_by_time (§7a)
+requirements/model.txt              MODIFIED: tribev2 pinned to commit af58661
+neurolens/worker.py                 MODIFIED: results to S3, Outcome.DUPLICATE, idle exit, §7a call order
 tests/                              MODIFIED: §8 tests
 docs/M2a_build_log.md               NEW: measurements and choices (§2)
 ```
@@ -204,6 +228,7 @@ docs/M2a_build_log.md               NEW: measurements and choices (§2)
 12. `terraform apply` run twice reports no changes the second time.
 13. `FAKE_INFERENCE=1 pytest` passes locally and in CI, including the §8 tests, and the tests were committed before the implementation.
 14. A job forced to fail twice lands in the dead-letter queue and is not retried again. Force it by starting the rehearsal worker with a `paths.output` that cannot be created: every job then fails before any work, so the test costs nothing. Fix the path afterwards and confirm a new job completes.
+15. §7a: a 119 s clip returns 119 timesteps on the GPU, each job encodes the video once, and the job queue's visibility timeout is 1800 s.
 
 ## 11. Between sessions, idle cost and teardown
 - End every working session with `stop_work.sh`.

@@ -156,7 +156,7 @@ Order inside `handle_record` for each record (`job_id` from the key):
 4. From here, everything runs inside `Heartbeat(..., on_beat=lambda: billing.touch(db, job_id, attempt))`.
 5. Oversize (`head_object`): `issue_refund(..., "file_too_large", attempt=attempt)`, delete the object, return `REJECTED` (or `LOST_CLAIM` if the refund returned `False`).
 6. Download, `probe_duration`, then `verify(..., attempt, ...)`. `"lost_claim"` → `LOST_CLAIM`. A refund reason → delete the object and return `REJECTED` without running inference.
-7. Run the pipeline, calling `set_stage(db, job_id, attempt, ...)` at each transition (`downloading`, `inference_full`, `stripping_audio`, `inference_noaudio`, `extracting_roi`). A `False` → stop with `LOST_CLAIM`.
+7. Run the pipeline, calling `set_stage(db, job_id, attempt, ...)` at each transition (`downloading`, `inference_full`, `inference_noaudio`, `extracting_roi`). A `False` → stop with `LOST_CLAIM`.
 8. `put_result(...)`. Whether it returns `True` (`DONE`) or `False` (`DUPLICATE`), call `settle_success`. It is idempotent and makes sure a finished job is always charged.
 
 Also:

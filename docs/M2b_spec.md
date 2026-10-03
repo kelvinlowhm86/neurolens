@@ -57,7 +57,7 @@ Scale on the whole queue, including messages being worked on. Scaling only on *v
 Status objects at `status/{job_id}.json` in the same bucket:
 ```json
 { "job_id": "...", "status": "processing|done|failed",
-  "stage": "downloading|inference_full|stripping_audio|inference_noaudio|extracting_roi|null",
+  "stage": "downloading|inference_full|inference_noaudio|extracting_roi|null",
   "updated_at": "2026-10-14T03:22:10Z",
   "stages": [{"stage": "downloading", "at": "2026-10-14T03:22:10Z"}],
   "error": null }
@@ -91,7 +91,7 @@ Replace the `setInterval`-based fake progress text in `analyseVideo()` with:
 ## 8. Experiments instrumentation
 - **Shared artifact contract** (binding for Experiments 1–3 and M4's study export; M4's consolidation script and its tests are written against exactly this). Each run writes `experiments/<experiment>/<run_id>/` in the bucket (`experiment` is `experiment-1`, `experiment-2`, `experiment-3` or `study`). `experiments/*` never expires and is the sole input for M4's consolidation.
   - **`manifest.json`, every run:** `experiment`, `run_id`, `series` (a name grouping runs that belong together, e.g. `exp1-final`; consolidation combines all runs of one series), `started_utc`, `finished_utc`, `code_revision` (the git short hash of the code used: `/opt/neurolens/app/REVISION` on AWS, `git rev-parse --short HEAD` elsewhere), `environment` (`{"type": "aws", "instance_type", "ami_id"}` or `{"type": "onprem", "host", "gpu"}`), `files` (the file names below, each of which must exist).
-  - **`experiment-1`**: `runs.csv`, one row per job: `clip_seconds, job_label, upload_ms, queue_wait_ms, downloading_ms, inference_full_ms, stripping_audio_ms, inference_noaudio_ms, extracting_roi_ms, result_fetch_ms, render_ms, peak_vram_gb`. `render_ms` may be empty (filled by hand for 3 runs per clip length); `peak_vram_gb` comes from the result's `gpu` field. A stage's duration is the next stage's start minus its own; the last stage ends at the job's `done` time.
+  - **`experiment-1`**: `runs.csv`, one row per job: `clip_seconds, job_label, upload_ms, queue_wait_ms, downloading_ms, inference_full_ms, inference_noaudio_ms, extracting_roi_ms, result_fetch_ms, render_ms, peak_vram_gb`. `render_ms` may be empty (filled by hand for 3 runs per clip length); `peak_vram_gb` comes from the result's `gpu` field. A stage's duration is the next stage's start minus its own; the last stage ends at the job's `done` time.
   - **`experiment-2`**:
     - `jobs.csv`: `burst_size, job_label, submitted_utc, done_utc, status`.
     - `cloudwatch.csv`: `minute_utc, sqs_visible, sqs_in_flight, asg_in_service`.
