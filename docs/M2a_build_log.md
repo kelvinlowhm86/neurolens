@@ -103,3 +103,21 @@ Peak RAM was 14.8 GB. That leaves about 17 GB free on the `xlarge`'s 32 GB, well
   after boot, part of it fetched through the NAT instance). Later calls take 14 s. To look at before the
   demo; not changed here.
 - Session cost about $1.30 (`g6e.2xlarge` 13:14-13:46 UTC plus NAT).
+
+## Image `neurolens-worker-v2` (2026-10-03, plain Ubuntu)
+
+| | |
+|---|---|
+| AMI | `ami-05dbbbe71905d75e8` (`neurolens-worker-v2`), snapshot `snap-053d98217186573ee` |
+| Base | Canonical Ubuntu 22.04 (`ubuntu-jammy-22.04-amd64-server-20261001`), kernel 6.8.0-1066-aws |
+| Driver | packages `*-570-server` installed; Ubuntu now maps them to driver **580.178.04** (nvidia-smi: CUDA 13.0), which runs torch 2.6's CUDA 12.4 |
+| Size | 50 GB volume, **22.9 GB** stored (v1: 78.5 GB): about $1.15 a month instead of $3.90 |
+| Build | `g6e.xlarge` in us-east-1b (1a sold out), 36 min, about $1.10; reboot 37 s; 4-hour shutdown re-armed; CPU rehearsal on `t3.large` passed first (6 min) |
+| Software | python 3.12.15, torch 2.6.0+cu124, transformers 4.57.6; `/root/.cache/uv` 7.3 GB (WhisperX), pip cache 383 MB |
+
+**The build's pipeline check proved less than intended this time:** 80 s and 0.77 GB peak GPU memory
+(a worker run of the same clip: 12 min, 11 GB). The S3 `models/` folder also held the v1 build's
+per-video feature caches (audio, text and video extractors), and the build reuses the same clip file
+names, so the cached features stood in for the encoders. The v2 worker check (a fresh upload, new
+file name) is therefore the real proof that the encoders run on this image. Fix: feature caches out
+of `models/`, and a unique clip name per build.
