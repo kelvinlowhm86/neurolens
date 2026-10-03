@@ -216,7 +216,11 @@ step_weights() {
   cat <<'EOF'
 APP=/opt/neurolens/app; PY=/opt/neurolens/venv/bin/python; CACHE=/opt/neurolens/cache
 echo "$CONFIG_B64" | base64 -d > "$APP/config.json"
-aws s3 cp "s3://$BUCKET/smoke/clip.mp4" /tmp/neurolens-clip.mp4 --only-show-errors
+# File names unique to this build: tribev2 keeps per-video features ("neuralset.extractors.*" folders
+# in the cache), and a cached result for the same file would let a run skip the encoders.
+RUN_ID=$(date +%s)
+CLIP=/tmp/neurolens-clip-$RUN_ID.mp4; OFFLINE=/tmp/neurolens-offline-$RUN_ID.mp4
+aws s3 cp "s3://$BUCKET/smoke/clip.mp4" "$CLIP" --only-show-errors
 
 cat > /tmp/neurolens-pipeline.py <<'PY'
 """The worker's pipeline once on the smoke clip (its calls, §7a): both passes, so every encoder loads."""
@@ -237,7 +241,8 @@ engagement.extract_engagement(full, silent, inference.roi_masks())
 print("PIPELINE OK", full.shape, silent.shape, "gpu:", json.dumps(inference.gpu_info()), flush=True)
 PY
 
-run_pipeline() {  # $1 clip, $2 its own output file. Fails if speech was not transcribed.
+run_pipeline() {  # $1 clip, $2 its own output file. Fails if speech was not transcribed or an encoder did not run.
+  touch "$2.start"
   (cd "$APP" && NEUROLENS_ROOT="$APP" PYTHONPATH="$APP" PYTHONUNBUFFERED=1 "$PY" /tmp/neurolens-pipeline.py "$1") \
     2>&1 | tee "$2"
   # The clip has speech: "whisperx failed" in the with-audio pass means the text features (and the
@@ -246,12 +251,21 @@ run_pipeline() {  # $1 clip, $2 its own output file. Fails if speech was not tra
     log "[weights] FAILED: WhisperX transcribed no speech from a clip with speech (text features skipped)"
     return 1
   fi
-  log "[weights] $(grep 'PIPELINE OK' "$2" | tail -n 1)"
+  # Positive proof that the encoders ran in this run: each one wrote new features. (A run that reused
+  # cached features would pass every other check while proving nothing about the models.)
+  for enc in HuggingFaceVideo HuggingFaceText Wav2VecBert; do
+    if ! find "$CACHE/models" -path "*neuralset.extractors.*$enc*" -type f -newer "$2.start" 2>/dev/null | grep -q .; then
+      log "[weights] FAILED: the $enc encoder wrote no new features: it did not run on $1"
+      return 1
+    fi
+  done
+  log "[weights] $(grep 'PIPELINE OK' "$2" | tail -n 1) (video, text and audio encoders ran)"
 }
 
 if [ "$REFRESH" = 0 ] && [ -n "$(aws s3 ls "s3://$BUCKET/models/" | head -n 1)" ]; then
   log "[weights] models/ already in S3: syncing it down instead of downloading (--refresh-weights redoes it)"
-  aws s3 sync "s3://$BUCKET/models/" "$CACHE/" --only-show-errors --exclude "*/blobs/*"
+  aws s3 sync "s3://$BUCKET/models/" "$CACHE/" --only-show-errors --exclude "*/blobs/*" \
+    --exclude "models/neuralset.extractors.*"
   DOWNLOADED=0
 else
   log "[weights] full pipeline with the HuggingFace token (downloads ~20 GB)"
@@ -268,13 +282,12 @@ else
   ( HF_TOKEN=$(aws ssm get-parameter --name /neurolens/hf_token --with-decryption \
       --query Parameter.Value --output text)
     export HF_TOKEN
-    run_pipeline /tmp/neurolens-clip.mp4 /tmp/neurolens-run1.log )
+    run_pipeline "$CLIP" /tmp/neurolens-run1.log )
   kill "$SAMPLER"
   log "[weights] PEAK RAM: $(awk '{printf "%.1f GB", $1/1048576}' /tmp/neurolens-peak-ram-kb)"
   DOWNLOADED=1
 fi
 
-# A changed copy under a new name, so no per-video feature cache can stand in for the models.
 # Positive evidence that the text features ran: the Llama model's weights are in the cache (sturdier
 # than the absence of a log message, whose wording a tribev2 update could change).
 LLAMA=$("$PY" -c 'import json, sys; print(json.load(open(sys.argv[1]))["model"]["llama_repo_id"])' "$APP/config.json")
@@ -286,9 +299,10 @@ fi
 log "[weights] $LLAMA weights present: $(du -sh "$LLAMA_DIR" | cut -f1)"
 
 log "[weights] offline proof: fresh process, HF_HUB_OFFLINE=1, no token, a different file"
-ffmpeg -y -loglevel error -i /tmp/neurolens-clip.mp4 -c copy -metadata comment=offline-proof /tmp/neurolens-offline.mp4
+# A changed copy under a new name, so the second run cannot reuse the first run's features either.
+ffmpeg -y -loglevel error -i "$CLIP" -c copy -metadata comment="offline-proof $RUN_ID" "$OFFLINE"
 ( unset HF_TOKEN; export HF_HUB_OFFLINE=1
-  run_pipeline /tmp/neurolens-offline.mp4 /tmp/neurolens-run2.log )
+  run_pipeline "$OFFLINE" /tmp/neurolens-run2.log )
 
 if [ "$DOWNLOADED" = 1 ]; then
   T=$(aws ssm get-parameter --name /neurolens/hf_token --with-decryption --query Parameter.Value --output text)
@@ -297,10 +311,12 @@ if [ "$DOWNLOADED" = 1 ]; then
   if [ -n "$HIT" ]; then log "[weights] FAILED: the token is in the cache: $HIT"; exit 1; fi
   # The sync follows HuggingFace's snapshot symlinks, so snapshots/ holds full copies; blobs/ would
   # be the same bytes again.
-  log "[weights] weights to s3://$BUCKET/models/ (no xet download cache, no blobs, no token files)"
+  # Weights only: per-video features (neuralset.extractors.*) stay on this machine; in S3 they would
+  # reach every later build and let its pipeline check skip the encoders.
+  log "[weights] weights to s3://$BUCKET/models/ (no xet download cache, no blobs, no features, no token files)"
   aws s3 sync "$CACHE/" "s3://$BUCKET/models/" --only-show-errors \
     --exclude "models/xet/*" --exclude "uv/*" --exclude "lost+found/*" --exclude "*/blobs/*" \
-    --exclude "*/token" --exclude "*/stored_tokens"
+    --exclude "models/neuralset.extractors.*" --exclude "*/token" --exclude "*/stored_tokens"
 fi
 log "[weights] cache: $(du -sh "$CACHE/models" "$CACHE/data" 2>/dev/null | tr '\n\t' '  ')"
 log "[weights] outside the cache, kept in the image: $(du -sh /root/.cache/* 2>/dev/null | tr '\n\t' '  ')"
