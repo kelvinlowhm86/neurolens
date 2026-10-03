@@ -55,3 +55,28 @@ disk, faster network).
 
 Peak RAM was 14.8 GB. That leaves about 17 GB free on the `xlarge`'s 32 GB, well above the spec's
 ~4 GB rule (§4b). Peak VRAM was 18.6 GB of 46 GB.
+
+## First real GPU jobs (2026-10-03, on-demand `g6e.xlarge`, code `ab6ce4d`, before §7a)
+
+| | |
+|---|---|
+| Launch | `start_work.sh --worker` after a full stop (this covers the spec's "start after a full stop" check). Spot `g6e.xlarge` had been sold out in all four zones twice (`docs/evidence/`); after the switch to on-demand, three zones were sold out and the fourth (1c) launched within about 30 s. |
+| Boot | Weight sync 77 s (local NVMe disk; 538 s on the CPU rehearsal); worker service started 2.5 min after launch; model load 3 min 52 s; "Worker ready" 6.5 min after launch. |
+| tribev2 | Commit `af58661` (now pinned in `requirements/model.txt`), neuralset 0.0.2. |
+
+| | Job 1: Sintel trailer, 52.2 s | Job 2: trailer looped, 119.01 s |
+|---|---|---|
+| Job time | 1003.5 s | 1039.1 s |
+| First-job warm-up | about 8 min (WhisperX 6 min 16 s, then a 2 min gap); not repeated in job 2 | none (WhisperX 14 s) |
+| Video encoding | 104 steps at about 2.07 s, done twice (with and without audio) | 238 steps at about 2.07 s, done twice |
+| GPU busy while encoding | about 90% (limited by the GPU, not by video decoding) | similar |
+| Peak GPU memory, all processes (`nvidia-smi`) | 13.5 GB (video encoding) | 19.8 GB (text model) |
+| Peak system RAM | 5.5 GB | 13.7 GB |
+| Rows returned | 53 (correct) | 239 (wrong: should be 119) |
+
+- **Both jobs ran past the 900 s visibility timeout.** With one worker nothing was handed out twice (queue and dead-letter queue empty afterwards); with two it would have been. Timeout raised to 1800 s.
+- **239 rows for a 119 s video:** tribev2's word step gives every audio chunk (chunks start every 60 s) a copy of the whole transcript shifted by `start + offset`, so every word reappears 120 s too late and the timeline stretches to 239 s. Same bug as upstream pull request #29 (open, unmerged); its `start - offset` change would still leave every word duplicated, and text features are summed. The training config extracts words before chunking, so training was unaffected. Fixed in our code (spec §7a), with a loud timeline check.
+- **Video encoded twice:** the no-audio pass ran on a separate audio-free file, so tribev2's feature cache missed. Fixed in §7a: the no-audio pass reuses the same video events.
+- **How tribev2 reads video:** 64 frames per half-second step (from the previous 4 s), read a few at a time, so memory does not grow with resolution. The video model resizes frames to 292 px and analyses the centre 256 x 256.
+- Results kept in S3 for comparison after §7a: `results/154a2ebc-8db8-444d-b5ab-3d74cff22c4c.json` (job 1), `results/783d91f9-e262-445a-9e5e-d5b86275a800.json` (job 2).
+- Session cost about $1.50 (GPU 07:47-08:33 UTC plus NAT).
