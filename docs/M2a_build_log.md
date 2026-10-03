@@ -80,3 +80,26 @@ Peak RAM was 14.8 GB. That leaves about 17 GB free on the `xlarge`'s 32 GB, well
 - **How tribev2 reads video:** 64 frames per half-second step (from the previous 4 s), read a few at a time, so memory does not grow with resolution. The video model resizes frames to 292 px and analyses the centre 256 x 256.
 - Results kept in S3 for comparison after §7a: `results/154a2ebc-8db8-444d-b5ab-3d74cff22c4c.json` (job 1), `results/783d91f9-e262-445a-9e5e-d5b86275a800.json` (job 2).
 - Session cost about $1.50 (GPU 07:47-08:33 UTC plus NAT).
+
+## §7a verified on the GPU (2026-10-03, image `neurolens-worker-v1`, code `b1fb933`)
+
+`g6e.xlarge` was sold out; the group launched a `g6e.2xlarge` (same L40S GPU) in us-east-1d within
+10 s. Worker ready 6 min after launch (weight sync 55 s, model load 3 min 19 s).
+
+| | Job 1: Sintel trailer, 52.2 s | Job 2: trailer looped, 119.01 s |
+|---|---|---|
+| Job time (before §7a) | 736 s (1003 s) | 485 s (1039 s) |
+| WhisperX | 8 min 3 s (first job after boot) | 14 s |
+| Video encoding, with-audio pass | 3 min 31 s | 7 min 33 s (two 60 s / 59 s video chunks) |
+| No-audio pass | about 1 s: reuses the cached video features (encoded once) | about 1 s |
+| Rows | 53 | 120 (one per second started; the spec's earlier "119" was a wrong expectation) |
+| Peak GPU memory (`gpu` field) | 11.16 GB | 19.94 GB |
+| Check | every value within 0.0000 of the first real run (`results/154a2ebc...`) | timeline check passed: 0..119 with no gap or repeat (before §7a: 239 rows) |
+
+- The no-audio pass on `without_audio(events)` gives the same numbers as the old audio-free file, and
+  costs about 1 s instead of a second full encoding.
+- **First-job warm-up is the WhisperX step, not the GPU:** tribev2 runs WhisperX through `uvx`, which on
+  the first call after boot rebuilt its tool environment (6,904 files, 119 MB written to the uv cache
+  after boot, part of it fetched through the NAT instance). Later calls take 14 s. To look at before the
+  demo; not changed here.
+- Session cost about $1.30 (`g6e.2xlarge` 13:14-13:46 UTC plus NAT).

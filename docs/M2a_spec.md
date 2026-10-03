@@ -162,11 +162,11 @@ From M2a on, the worker writes each result to `results/{job_id}.json` instead of
 ## 7. Real-model check (deferred from M1)
 On the first GPU boot, upload one video with speech that we have the rights to (the open-licensed Sintel trailer, about 52 s; record its title, URL and licence in `data/videos/SOURCES.md`) through the web app's presign flow and let the worker process it. There are no stored reference numbers to compare against, so the check is that the real pipeline ran and its output is sane and repeatable:
 - The job finishes: `results/{job_id}.json` exists, `fake_inference` is absent and `gpu` is present.
-- `duration_seconds` and the number of `timesteps` give one row per second of the clip (a final partial second may add a row or not: the 52.2 s trailer gave 53 rows, the 119.01 s loop 119); every value is between 0 and 1; `engagement_overall` and the five region columns are not constant (maximum above minimum).
+- `duration_seconds` and the number of `timesteps` give one row per second started (the 52.2 s trailer gives 53 rows, the 119.01 s loop 120); every value is between 0 and 1; `engagement_overall` and the five region columns are not constant (maximum above minimum).
 - The same clip run a second time agrees with the first run to within 0.001 on every value. A larger gap is not automatically a bug but must be explained in the build log before M2b starts.
 - The worker log shows all three encoders loaded (video, audio, and text including the gated Llama 3.2 model), as in §2 step 5.
 - Record the job's wall-clock time and the peak GPU memory from the `gpu` field, for the cost figures in M2b and M4.
-- **After §7a:** the 119 s loop (`data/videos/_test_clips/`) gives exactly 119 timesteps with every transcribed word attached once, and each job encodes the video once. The 52 s trailer (no chunking, so the ghost-word fix does not touch it) agrees with the first real run's result within 0.001, which also checks that the no-audio pass on `without_audio` matches the old audio-free file.
+- **After §7a:** the 119 s loop (`data/videos/_test_clips/`) gives exactly 120 timesteps (one per second started) with every transcribed word attached once, and each job encodes the video once. The 52 s trailer (no chunking, so the ghost-word fix does not touch it) agrees with the first real run's result within 0.001, which also checks that the no-audio pass on `without_audio` matches the old audio-free file.
 - **On the plain-Ubuntu image** (§2), in the same session: the `transformers` version in the build log (model precision depends on it: see `docs/evidence/README.md`, "Model precision"; Meta's default is kept); the first job's warm-up time compared with v1's 8 minutes; one open-licensed 4K clip (peak RAM, job time); and the GPU benchmark of `g6e.xlarge`, `g6.2xlarge` and `g5.2xlarge`, run and decided by the rule in `docs/evidence/README.md` (section "Test"). The winner becomes the first entry of `worker_instance_types`. Only after the new image has passed the checks above: deregister `neurolens-worker-v1` and delete its snapshot.
 These are read by hand from the result files (a few lines of Python pasted into the build log is fine); no script is added to the repo.
 
@@ -234,7 +234,7 @@ docs/M2a_build_log.md               NEW: measurements and choices (§2)
 12. `terraform apply` run twice reports no changes the second time.
 13. `FAKE_INFERENCE=1 pytest` passes locally and in CI, including the §8 tests, and the tests were committed before the implementation.
 14. A job forced to fail twice lands in the dead-letter queue and is not retried again. Force it by starting the rehearsal worker with a `paths.output` that cannot be created: every job then fails before any work, so the test costs nothing. Fix the path afterwards and confirm a new job completes.
-15. §7a: a 119 s clip returns 119 timesteps on the GPU, each job encodes the video once, and the job queue's visibility timeout is 1800 s.
+15. §7a: the 119.01 s clip returns 120 timesteps on the GPU, each job encodes the video once, and the job queue's visibility timeout is 1800 s.
 16. The worker image is built from plain Ubuntu (§2), its snapshot size is in the build log next to v1's, and v1 is deregistered with its snapshot deleted.
 17. Region (§4i): `terraform plan` in `us-east-1` reports no changes after the refactor.
 18. The GPU benchmark (§7) is recorded in the build log and the chosen type is first in `worker_instance_types`.
