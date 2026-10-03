@@ -1,19 +1,18 @@
 # NeuroLens — M2a Implementation Spec
 **Milestone:** GPU image, private network and first real GPU run (first part of 9 – 19 Oct)
-**Builds on:** M1 (Terraform-managed S3 bucket and SQS queue in `us-east-1`, presigned-POST upload, `neurolens/worker.py` with the `FAKE_INFERENCE` switch running on a laptop, pytest + moto suite). M2a moves the worker onto a Spot GPU machine in a private network and proves the real model runs end to end. M2b then adds autoscaling, reliability and job status.
+**Builds on:** M1 (Terraform-managed S3 bucket and SQS queue in `us-east-1`, presigned-POST upload, `neurolens/worker.py` with the `FAKE_INFERENCE` switch running on a laptop, pytest + moto suite). M2a moves the worker onto an on-demand GPU machine in a private network and proves the real model runs end to end. M2b then adds autoscaling, reliability and job status.
 
 **Ground rules for all of M2a:** region `us-east-1` (the `g6e` GPU family is not offered in Singapore). Python 3.12, as in M0. All infrastructure is Terraform in `infra/terraform/`, tagged `Project=neurolens`, `Milestone=M2a`. Run AWS commands with the `neurolens` CLI profile only. **Tests first, as in M0 §5:** the §8 tests are written by a separate agent before the implementation and are not edited by the implementer.
 
 **Do first, on day one — GPU quotas.** New accounts often have 0 and increases can take days. In `us-east-1`, check and if needed request:
-- "Running On-Demand G and VT instances": at least **4 vCPUs** (the image build, §2, uses one on-demand `g6e.xlarge`).
-- "All G and VT Spot Instance Requests": at least **8 vCPUs** (one `g6e.xlarge` worker now, two in M2b).
+- "Running On-Demand G and VT instances": at least **8 vCPUs** (the image build and the workers are all on-demand: one `g6e.xlarge` worker now, two in M2b, or one `g6e.2xlarge` fallback).
 Also run `aws ec2 describe-instance-type-offerings --location-type availability-zone --filters Name=instance-type,Values=g6e.xlarge` and use two of the listed zones for the private subnets (§4a).
 
 ## 1. Scope
 ### In scope
 - GPU machine image (AMI) with software only; model weights stored once in S3 and copied to the machine's local NVMe disk at boot
 - VPC with private subnets for workers, a NAT instance for outbound traffic, and a free S3 gateway endpoint
-- Launch Template + Auto Scaling Group of Spot GPU workers, standing at zero, with **no scaling policy yet** (a worker is started by hand, §4d)
+- Launch Template + Auto Scaling Group of on-demand GPU workers, standing at zero, with **no scaling policy yet** (a worker is started by hand, §4d)
 - systemd unit that pulls the latest code on every start; UserData that pulls weights and writes config on first boot
 - Cost guards: a worker that shuts its instance down when idle or broken, an email alarm for a long-running GPU, and a retry cap (dead-letter queue, §4h) so a job that keeps failing stops after two attempts instead of repeating real GPU inference
 - `deploy_code.sh` for code updates without an image rebuild
@@ -22,7 +21,7 @@ Also run `aws ec2 describe-instance-type-offerings --location-type availability-
 - A fake-mode wiring rehearsal on a cheap CPU instance, then the real-model check deferred from M1
 
 ### Out of scope
-- **M2b:** autoscaling, two workers, 120 s visibility timeout with heartbeat, fast failure release, graceful shutdown on Spot interruption, job-status objects and endpoints, the polling UI, and Experiments 1–2. Until M2b, a Spot interruption or crash simply means the message reappears after M1's 900 s visibility timeout.
+- **M2b:** autoscaling, two workers, 120 s visibility timeout with heartbeat, fast failure release, graceful shutdown when a worker is stopped or scaled in, job-status objects and endpoints, the polling UI, and Experiments 1–2. Until M2b, a crash simply means the message reappears after M1's 900 s visibility timeout.
 - **M3:** Aurora, user accounts, credits/billing, Google sign-in, the web tier's load balancer.
 - EKS/Kubernetes, containers, image registries.
 
@@ -96,7 +95,7 @@ WantedBy=multi-user.target
 - **Worker security group:** no inbound rules; all outbound allowed. Workers have no public IP. Reason: servers with no public address can't be reached from the internet even if a firewall rule is later misconfigured.
 
 ### 4b. Launch Template and Auto Scaling Group
-- Launch Template: the software-only AMI from §2; `instance_type` is a Terraform variable, default **`g6e.xlarge`**. Switch to `g6e.2xlarge` only if §2's peak-RAM measurement leaves less than ~4 GB free on the 32 GB `xlarge`; record the measurement and the choice in the build log. Spot market options (max price = on-demand price). Root disk 100 GB gp3 (the image's software fills 66 of its 75 GB, and a CPU rehearsal has no instance store for the weights). No public IP; private subnets only. UserData is rendered with Terraform `templatefile`, which fills in the region, bucket name and queue URL (identifiers, not secrets).
+- Launch Template: the software-only AMI from §2; the group's instance types are a Terraform list, tried in order with a mixed instances policy (`prioritized`, 100% on-demand): default **`g6e.xlarge`, then `g6e.2xlarge`** when no `xlarge` is free in any zone. Put `g6e.2xlarge` first only if §2's peak-RAM measurement leaves less than ~4 GB free on the 32 GB `xlarge`; record the measurement and the choice in the build log. **On-demand, not Spot:** over the 90 days to 2026-10-03, Spot `g6e` averaged only 1–9% below on-demand and was sold out in all four zones on repeated attempts (data in `docs/evidence/`). If on-demand is sold out too, Spot is as well, so there is no Spot fallback; the group keeps retrying. Root disk 100 GB gp3 (the image's software fills 66 of its 75 GB, and a CPU rehearsal has no instance store for the weights). No public IP; private subnets only. UserData is rendered with Terraform `templatefile`, which fills in the region, bucket name and queue URL (identifiers, not secrets).
 - Worker IAM instance profile, scoped per prefix (M2b adds to it):
   - `s3:GetObject` on `uploads/*`, `code/*`, `models/*`, `results/*`
   - `s3:ListBucket` on the bucket, with no `s3:prefix` condition. Without it, S3 answers a request for a *missing* object with 403 instead of 404, which the worker would treat as a failure instead of `GONE`; a prefix condition would bring the 403 back, because a HEAD or GET request carries no prefix.
@@ -121,7 +120,7 @@ WantedBy=multi-user.target
 - Run `stop_work.sh` at the end of every working session. Workers cannot reach SQS while the NAT instance is stopped, which is why the ASG max is 0 then.
 
 ### 4e. Wiring rehearsal (before the first GPU boot)
-Set the Launch Template's `instance_type` to a small CPU type (e.g. `t3.large`, Spot is fine), with `FAKE_INFERENCE=1` in `env.conf`, and a software image without CUDA if the GPU AMI won't boot on it. Use this to debug networking, UserData, the S3 syncs, the systemd unit, code pulls, self-termination and the result write for cents instead of dollars. **Include one full `stop_work.sh` / `start_work.sh --worker` cycle**, to prove the NAT instance's routing survives a stop/start. Switch back to the GPU type for real runs.
+Set the worker instance types to a small CPU type (e.g. `["t3.large"]`), with `FAKE_INFERENCE=1` in `env.conf`, and a software image without CUDA if the GPU AMI won't boot on it. Use this to debug networking, UserData, the S3 syncs, the systemd unit, code pulls, self-termination and the result write for cents instead of dollars. **Include one full `stop_work.sh` / `start_work.sh --worker` cycle**, to prove the NAT instance's routing survives a stop/start. Switch back to the GPU type for real runs.
 
 ### 4f. Long-running GPU alarm (Terraform)
 A CloudWatch alarm on the ASG's `GroupInServiceInstances` > 0 continuously for **3 hours** sends an email through an SNS topic to Josh's address (a variable; confirm the subscription email once). It catches the cases self-termination cannot, such as a worker stuck mid-job or an unreachable NAT instance. Cost: about $0.10 a month.

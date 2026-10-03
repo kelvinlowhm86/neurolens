@@ -11,7 +11,7 @@ resource "aws_launch_template" "worker" {
 
   name          = "neurolens-worker"
   image_id      = var.worker_ami_id
-  instance_type = var.worker_instance_type
+  instance_type = var.worker_instance_types[0]
 
   iam_instance_profile {
     name = aws_iam_instance_profile.worker.name
@@ -31,10 +31,8 @@ resource "aws_launch_template" "worker" {
     }
   }
 
-  # Spot, capped at the on-demand price (no max_price given).
-  instance_market_options {
-    market_type = "spot"
-  }
+  # On-demand, not Spot: over the 90 days to 2026-10-03 Spot g6e averaged only 1-9% cheaper and was
+  # repeatedly sold out in all four zones (docs/evidence/). No instance_market_options = on-demand.
 
   metadata_options {
     http_tokens = "required"
@@ -67,9 +65,27 @@ resource "aws_autoscaling_group" "workers" {
   max_size            = 0
   desired_capacity    = 0
 
-  launch_template {
-    id      = aws_launch_template.worker[0].id
-    version = aws_launch_template.worker[0].latest_version
+  # Tries the types in order: g6e.xlarge, then g6e.2xlarge when no xlarge is free in any zone.
+  mixed_instances_policy {
+    instances_distribution {
+      on_demand_allocation_strategy            = "prioritized"
+      on_demand_base_capacity                  = 0
+      on_demand_percentage_above_base_capacity = 100
+    }
+
+    launch_template {
+      launch_template_specification {
+        launch_template_id = aws_launch_template.worker[0].id
+        version            = aws_launch_template.worker[0].latest_version
+      }
+
+      dynamic "override" {
+        for_each = var.worker_instance_types
+        content {
+          instance_type = override.value
+        }
+      }
+    }
   }
 
   # Free; the 3-hour alarm reads GroupInServiceInstances.

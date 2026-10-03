@@ -47,10 +47,10 @@ variable "worker_ami_id" {
   default     = ""
 }
 
-variable "worker_instance_type" {
-  description = "g6e.xlarge, or g6e.2xlarge if the build's peak-RAM rule says so; t3.large for the wiring rehearsal."
-  type        = string
-  default     = "g6e.xlarge"
+variable "worker_instance_types" {
+  description = "On-demand worker types in order of preference: the next is tried when the one before is sold out in every zone. [\"t3.large\"] for the wiring rehearsal."
+  type        = list(string)
+  default     = ["g6e.xlarge", "g6e.2xlarge"]
 }
 
 variable "worker_fake_inference" {

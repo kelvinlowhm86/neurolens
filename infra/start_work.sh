@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Starts a work session (M2a §4d): the NAT instance, then lets the worker group run one machine.
 #   infra/start_work.sh            NAT on, worker group max 1 (no worker yet)
-#   infra/start_work.sh --worker   also start one GPU worker (Spot, never above on-demand's $1.86 an hour)
+#   infra/start_work.sh --worker   also start one on-demand GPU worker ($1.86 an hour; $2.24 if only a 2xlarge is free)
 # End every session with infra/stop_work.sh.
 set -euo pipefail
 export AWS_PROFILE="${NEUROLENS_AWS_PROFILE:-neurolens}" AWS_REGION=us-east-1

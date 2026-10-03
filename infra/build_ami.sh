@@ -48,7 +48,7 @@ fi
 BASE_AMI=$(aws ssm get-parameter --name "$AMI_PARAM" --query Parameter.Value --output text)
 # Tried in order. g6e.2xlarge has the same GPU (more RAM and CPU, $2.24 an hour): only a fallback
 # when the smaller size is sold out everywhere. The image works on either; workers use the Terraform
-# worker_instance_type, whatever built the image.
+# worker_instance_types, whatever built the image.
 if [ "$REHEARSAL" = 1 ]; then TYPES=t3.large; else TYPES="g6e.xlarge g6e.2xlarge"; fi
 
 # ─── Remote steps (run on the instance as root through SSM Run Command) ────────────────────────

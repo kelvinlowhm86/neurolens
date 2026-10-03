@@ -11,5 +11,5 @@ alert_email = "you@example.com"
 
 # Set after infra/build_ami.sh prints the image ID (M2a):
 # worker_ami_id         = "ami-..."
-# worker_instance_type  = "g6e.xlarge"
+# worker_instance_types = ["g6e.xlarge", "g6e.2xlarge"]
 # worker_fake_inference = false      # true only for the CPU wiring rehearsal
