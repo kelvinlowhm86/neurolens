@@ -45,8 +45,8 @@ Every GPU instance type in us-east-1 (AWS price list and `aws ec2 describe-insta
 
 1. **GPU memory of at least about 22 GB usable.** The real pipeline peaked at 19.8 GB of GPU memory on a 119 s clip (first GPU run, 2026-10-03, `nvidia-smi` total including WhisperX).
 2. **Runs our software:** x86 processor and a GPU that PyTorch below 2.7 supports (tribev2 requires `torch<2.7`).
-3. **One GPU:** tribev2 runs on a single GPU, so more GPUs cost more without speeding a job up.
-4. **Smallest size with at least 32 GB RAM** (peak 13.7 GB). Larger sizes have the same GPU; the GPU was about 90% busy during video encoding, so extra CPU and RAM would not help.
+3. **One GPU:** tribev2 runs on a single GPU. A multi-GPU machine could run several jobs side by side, but per GPU it costs more than the single-GPU types (for example 4 x L4 in `g6.12xlarge` is about $1.15 per GPU-hour against $0.98 for `g6.2xlarge`; 4 x A10G about $1.42 against $1.21).
+4. **Smallest size with at least 32 GB RAM** (peak 13.7 GB). Larger sizes have the same GPU; the GPU was about 90% busy during video encoding, so extra CPU and RAM would not help. This is a judgment (keep about 4 GB free; running out of RAM kills the job), not a measurement: the 16 GB `xlarge` sizes would leave about 2 GB.
 
 | Type | GPU | GPU memory usable | RAM | On-demand $/h | Result |
 |---|---|---|---|---|---|
@@ -81,5 +81,22 @@ On each tested type, after the timeline and double-encoding fixes: the 52 s Sint
 ## Model precision
 All three feature models run at 32-bit precision, read from the pinned code rather than measured. TRIBE v2's `config.yaml` (HuggingFace `facebook/tribev2`) sets `device: cuda` for the text (`meta-llama/Llama-3.2-3B`), audio (`facebook/w2v-bert-2.0`) and video (`facebook/vjepa2-vitg-fpc64-256`) extractors. In neuralset 0.0.2, half precision (`torch_dtype=float16`) is used only when `device` is `accelerate` (text) or for LLaVA video models; the audio extractor asks for `float32` explicitly; the others load with `transformers`' default, which is 32-bit in the 4.x versions `requirements/model.txt` allows (`<5`). Consistent with the first real jobs: the peak of 19.8 GB of GPU memory came with the text model, whose ~3.2 billion parameters take about 13 GB at 32 bits (about 6.4 GB at 16). Reduced precision was not tried: the brain model was trained on features made this way.
 
-## Results
-(to be added after the run)
+## Results (2026-10-03, image `neurolens-worker-v2`, code `b1fb933`)
+One run per clip per type, in us-east-1. "Warm" leaves out the one-time WhisperX environment set-up of a worker's first job (5.7-6 min on every type; see `docs/M2a_build_log.md`), which was measured directly where the job ran first and subtracted otherwise.
+
+| | `g6e.xlarge` (L40S) | `g5.2xlarge` (A10G) | `g6.2xlarge` (L4) |
+|---|---|---|---|
+| On-demand $/h | 1.861 | 1.212 | 0.978 |
+| 52 s trailer, warm job | about 259 s, **$0.134** | 521 s, **$0.175** | 655 s, **$0.178** |
+| 119 s loop, warm job | 491 s, **$0.254** | about 1,184 s, **$0.399** | about 1,540 s, **$0.418** |
+| Video encoding, 52 s / 119 s | 211 s / 453 s | 492 s / 1,121 s (2.3x / 2.5x) | 636 s / 1,457 s (3.0x / 3.2x) |
+| Cost per second of video (119 s) | $0.0021 | $0.0034 | $0.0035 |
+| Peak GPU memory (`gpu` field) | 19.94 GB of 45.8 | 19.94 of 22.9 | 19.94 of 22.9 |
+| Results vs `g6e` | reference | within 0.0003 | within 0.0001 |
+| First job of a worker (119 s) | | 1,528 s | 1,880 s (over the 1,800 s queue timeout) |
+
+**Decision: `g6e.xlarge` stays** (then `g6e.2xlarge` when sold out). The two cheaper GPUs cost 1.3-1.6 times more per video and make people wait 2.3-3.2 times longer. The best cheaper type (A10G) is 31-57% dearer per video than `g6e`, outside the 20% re-run band, so no re-run was needed.
+
+**What limits the job:** video encoding on the A10G (same 32-bit compute as the L4, twice its memory bandwidth) was 2.4 times slower than on the L40S, close to the compute ratio (2.9) and far from the bandwidth ratio (1.4), so encoding is mainly limited by compute. The L4 alone could not show this: it trails the L40S by about 3 times on both.
+
+**As fallbacks when `g6e` is sold out:** both fit and give the same results. The A10G is the better one (faster, same cost per video). The L4's first 119 s job took longer than the queue's 1,800 s visibility timeout, so with more than one worker it would be handed out twice until M2b's heartbeat. Whether to add a fallback type is left to the demo capacity decision (M4 spec §1).
