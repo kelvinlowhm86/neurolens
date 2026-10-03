@@ -93,10 +93,11 @@ One run per clip per type, in us-east-1. "Warm" leaves out the one-time WhisperX
 | Cost per second of video (119 s) | $0.0021 | $0.0034 | $0.0035 |
 | Peak GPU memory (`gpu` field) | 19.94 GB of 45.8 | 19.94 of 22.9 | 19.94 of 22.9 |
 | Results vs `g6e` | reference | within 0.0003 | within 0.0001 |
+| `g6e.2xlarge` (fallback, same L40S, $2.24/h) | 119 s loop 485 s (code `b1fb933`, image v1): same speed, about $0.30 a job | | |
 | First job of a worker (119 s) | | 1,528 s | 1,880 s (over the 1,800 s queue timeout) |
 
 **Decision: `g6e.xlarge` stays** (then `g6e.2xlarge` when sold out). The two cheaper GPUs cost 1.3-1.6 times more per video and make people wait 2.3-3.2 times longer. The best cheaper type (A10G) is 31-57% dearer per video than `g6e`, outside the 20% re-run band, so no re-run was needed.
 
 **What limits the job:** video encoding on the A10G (same 32-bit compute as the L4, twice its memory bandwidth) was 2.4 times slower than on the L40S, close to the compute ratio (2.9) and far from the bandwidth ratio (1.4), so encoding is mainly limited by compute. The L4 alone could not show this: it trails the L40S by about 3 times on both.
 
-**As fallbacks when `g6e` is sold out:** both fit and give the same results. The A10G is the better one (faster, same cost per video). The L4's first 119 s job took longer than the queue's 1,800 s visibility timeout, so with more than one worker it would be handed out twice until M2b's heartbeat. Whether to add a fallback type is left to the demo capacity decision (M4 spec §1).
+**As fallbacks when `g6e` is sold out:** both fit and give the same results, but they are not used (Josh, 2026-10-04): slower and dearer per video; a region move is the fallback instead (M4 spec §1). The L4's first 119 s job also took longer than the queue's 1,800 s visibility timeout. The fallback stays `g6e.2xlarge`: the same GPU, the same speed, about 20% more per job.
