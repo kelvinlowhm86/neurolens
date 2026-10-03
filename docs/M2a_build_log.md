@@ -121,3 +121,10 @@ per-video feature caches (audio, text and video extractors), and the build reuse
 names, so the cached features stood in for the encoders. The v2 worker check (a fresh upload, new
 file name) is therefore the real proof that the encoders run on this image. Fix: feature caches out
 of `models/`, and a unique clip name per build.
+
+**v2 verified on a worker** (2026-10-03, `g6e.xlarge` in us-east-1b, fresh uploads, code `b1fb933`):
+ready 6.2 min after launch (weight sync 85 s). Both results match the v1 runs: 52 s trailer max
+difference 0.0000 (53 rows, 585.8 s, peak GPU memory 11.16 GB), 119.01 s loop max difference 0.0001
+(120 rows, 490.9 s, 19.94 GB). The video, audio and text encoders ran on the new image and driver
+(13.5 GB in use during video encoding). First-job WhisperX: 5 min 41 s (v1 image: 8 min 3 s); second
+job 14 s. Session about $0.90.
