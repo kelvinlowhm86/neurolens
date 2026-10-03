@@ -2,7 +2,7 @@
 **Milestone:** GPU image, private network and first real GPU run (first part of 9 – 19 Oct)
 **Builds on:** M1 (Terraform-managed S3 bucket and SQS queue in `us-east-1`, presigned-POST upload, `neurolens/worker.py` with the `FAKE_INFERENCE` switch running on a laptop, pytest + moto suite). M2a moves the worker onto an on-demand GPU machine in a private network and proves the real model runs end to end. M2b then adds autoscaling, reliability and job status.
 
-**Ground rules for all of M2a:** region `us-east-1` (the `g6e` GPU family is not offered in Singapore), held in one Terraform setting so the system can move (§4i). Python 3.12, as in M0. All infrastructure is Terraform in `infra/terraform/`, tagged `Project=neurolens`, `Milestone=M2a`. Run AWS commands with the `neurolens` CLI profile only. **Tests first, as in M0 §5:** the §8 tests are written by a separate agent before the implementation and are not edited by the implementer.
+**Ground rules for all of M2a:** region `us-east-1` (the `g6e` GPU family is not offered in Singapore), held in one Terraform setting (§4i). Python 3.12, as in M0. All infrastructure is Terraform in `infra/terraform/`, tagged `Project=neurolens`, `Milestone=M2a`. Run AWS commands with the `neurolens` CLI profile only. **Tests first, as in M0 §5:** the §8 tests are written by a separate agent before the implementation and are not edited by the implementer.
 
 **Do first, on day one — GPU quotas.** New accounts often have 0 and increases can take days. In `us-east-1`, check and if needed request:
 - "Running On-Demand G and VT instances": at least **8 vCPUs** (the image build and the workers are all on-demand: one `g6e.xlarge` worker now, two in M2b, or one `g6e.2xlarge` fallback).
@@ -133,20 +133,8 @@ A CloudWatch alarm on the ASG's `GroupInServiceInstances` > 0 continuously for *
 ### 4h. Retry cap (dead-letter queue, Terraform on M1's queue)
 Real inference costs money, and M1's queue would redeliver a permanently failing job every 900 s for days. Add a **dead-letter queue** (a side queue that parks a message after repeated failures) named `<queue_name>-dlq`, SQS-managed encryption on, message retention 14 days, and a **redrive policy** on the job queue with `maxReceiveCount = 2`: a message received twice without being deleted moves to the dead-letter queue and is never retried again. Remove M1's `# TODO(M2b)` comment on the queue. Set the job queue's **visibility timeout to 1800 s** (was M1's 900 s): the first real jobs on `g6e.xlarge` took 1003 s and 1039 s (52 s and 119 s clips, before §7a), longer than 900 s, so with more than one worker a job would have been handed out twice. A failing job is therefore given up on after about an hour (M2b replaces this with its 120 s heartbeat). SQS moves the message itself, so the worker's IAM needs no access to the dead-letter queue. To inspect a parked job: `aws sqs receive-message --queue-url <dlq url>`; to retry after a fix, use the console's "Start DLQ redrive". The name starts with `neurolens-`, so the deploy user's scoped policy already covers it.
 
-### 4i. Region (one setting) and moving to another region
-The region is one Terraform variable, `region` (default `us-east-1`). Everything region-specific derives from it: the provider, the S3 gateway endpoint's service name, the ARNs in the role policies, UserData's region value, and an output `region` that every script in `infra/` reads instead of hard-coding one. The zone lists (`zones`, `build_extra_zones`) are set per region in `terraform.tfvars`. Changing nothing but this refactor, `terraform plan` in `us-east-1` must report no changes.
-
-Per region: its own Terraform state (backend key `<region>/terraform.tfstate`; the existing `us-east-1` deployment keeps `m1/terraform.tfstate`, so nothing is orphaned; the state bucket itself stays in `us-east-1`), its own data bucket (the S3 gateway endpoint only reaches buckets in its own region, and bucket names are global, so the name carries the region), its own copy of the image, of `models/`, and of the `/neurolens/hf_token` parameter (Parameter Store is regional; only image builds read it). The GPU quota is per region too. The deploy user's IAM policies stay region-specific (tighter than allowing every region); a move prints the region-swapped policy text for Josh to paste.
-
-**When:** the plan B rule. If two separate sessions cannot get a `g6e.xlarge` or `g6e.2xlarge` in `us-east-1` within about 30 minutes, move to a region with granted quota (`us-west-2`, `us-east-2` or `ap-northeast-1`). Last call: the demo dry run a week before the demo.
-
-**`infra/move_region.sh <new-region> [--go]`.** Without `--go` it only checks and prints what it would do (free). With `--go`, in order, stopping at the first failure:
-1. Check the target: on-demand G quota of at least 8 vCPUs, and that `g6e.xlarge` is offered in the zones given for it.
-2. Print the region-swapped IAM policy text and wait until Josh confirms it is pasted.
-3. `terraform init -reconfigure` with the new state key, then `terraform apply` in the new region (Josh runs it).
-4. Copy the image (`aws ec2 copy-image`), `models/` (`aws s3 sync` between the buckets, ~18 GB, about $0.36 of transfer) and the token parameter, and run `deploy_code.sh`.
-5. Print the steps for one real job in the new region (`start_work.sh --worker` and an upload), which Josh runs.
-It **never deletes anything in the old region**. It ends by printing the teardown commands for the old region (`terraform destroy` with the old state, deregistering the image, deleting its snapshot), which Josh runs only after the new region has completed a real job. Tested free with `move_region.sh us-east-2` (no `--go`) and `terraform plan` against `us-east-2`.
+### 4i. Region (one setting)
+The region is one Terraform variable, `region` (default `us-east-1`). Everything region-specific derives from it: the provider, the S3 gateway endpoint's service name, the ARNs in the role policies, UserData's region value, and an output `region` that every script in `infra/` reads (through `infra/aws_env.sh`; `NEUROLENS_AWS_REGION` overrides it) instead of hard-coding one. The zone lists (`zones`, `build_extra_zones`) are set in `terraform.tfvars`. IAM names are global, so a deployment outside `us-east-1` adds its region to its role and instance-profile names; `us-east-1` keeps the original names. The Terraform state bucket stays in `us-east-1`. This makes a later move to another region a small change; whether a second region is needed for the demo is decided in M4 (M4 §1).
 
 ## 5. Code deployment (`infra/deploy_code.sh`)
 ```bash
@@ -220,7 +208,7 @@ infra/
   self_terminate.sh                 NEW
   deploy_code.sh                    NEW
   restart_workers.sh                NEW
-  move_region.sh                    NEW: copy the system to another region (§4i); never deletes the old one
+  aws_env.sh                        NEW: sourced by the scripts: profile, and the region from Terraform (§4i)
   start_work.sh                     NEW: start NAT instance, ASG max 1, optional worker
   stop_work.sh                      NEW: ASG to 0, stop NAT instance, confirm nothing running
 neurolens/storage.py                MODIFIED: put_result
@@ -248,7 +236,7 @@ docs/M2a_build_log.md               NEW: measurements and choices (§2)
 14. A job forced to fail twice lands in the dead-letter queue and is not retried again. Force it by starting the rehearsal worker with a `paths.output` that cannot be created: every job then fails before any work, so the test costs nothing. Fix the path afterwards and confirm a new job completes.
 15. §7a: a 119 s clip returns 119 timesteps on the GPU, each job encodes the video once, and the job queue's visibility timeout is 1800 s.
 16. The worker image is built from plain Ubuntu (§2), its snapshot size is in the build log next to v1's, and v1 is deregistered with its snapshot deleted.
-17. Region (§4i): `terraform plan` in `us-east-1` reports no changes after the refactor; `move_region.sh us-east-2` without `--go` and a `terraform plan` against `us-east-2` succeed without creating anything.
+17. Region (§4i): `terraform plan` in `us-east-1` reports no changes after the refactor.
 18. The GPU benchmark (§7) is recorded in the build log and the chosen type is first in `worker_instance_types`.
 
 ## 11. Between sessions, idle cost and teardown

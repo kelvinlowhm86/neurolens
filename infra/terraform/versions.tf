@@ -13,9 +13,8 @@ terraform {
   # one laptop. The bucket name is passed at init time so it is not committed:
   #   terraform init -backend-config=backend.hcl      (see README.md)
   backend "s3" {
-    # One state per region. us-east-1 keeps "m1/terraform.tfstate" (the name stays so nothing is
-    # orphaned); another region passes -backend-config=key=<region>/terraform.tfstate at init
-    # (infra/move_region.sh does).
+    # One state for the whole project; the name stays so nothing is orphaned. A deployment in
+    # another region would need its own key (-backend-config=key=<region>/terraform.tfstate).
     key          = "m1/terraform.tfstate"
     region       = "us-east-1"
     use_lockfile = true

@@ -20,7 +20,7 @@ variable "allowed_origins" {
 }
 
 variable "region" {
-  description = "AWS region for everything except the Terraform state bucket (M2a §4i). Changing it means a move: use infra/move_region.sh."
+  description = "AWS region for everything except the Terraform state bucket (M2a §4i)."
   type        = string
   default     = "us-east-1"
 }

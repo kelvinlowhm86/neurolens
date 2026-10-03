@@ -65,12 +65,6 @@
       "Condition": {"StringEquals": {"aws:RequestTag/Project": "neurolens"}}
     },
     {
-      "Sid": "Ec2CopyImageBetweenRegions",
-      "Effect": "Allow",
-      "Action": "ec2:CopyImage",
-      "Resource": ["arn:aws:ec2:us-east-1::image/*", "arn:aws:ec2:us-east-1:*:snapshot/*"]
-    },
-    {
       "Sid": "Ec2TagWhileCreating",
       "Effect": "Allow",
       "Action": "ec2:CreateTags",
