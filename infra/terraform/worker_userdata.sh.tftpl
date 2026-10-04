@@ -102,8 +102,10 @@ case $- in *i*)  # interactive shells only, so scripted output stays clean
 esac
 EOF
 # The image's unit still names neurolens-self-terminate.service in OnSuccess=/OnFailure= (a drop-in
-# cannot empty those lists): masking it means they start nothing (M2b §2b). Removed at the next
-# image rebuild (M2a §12).
+# cannot empty those lists): masking it means they start nothing (M2b §2b). The image installed that
+# unit file in /etc/systemd/system, exactly where `mask` puts its /dev/null link, so the file goes
+# first (mask refuses to overwrite it). Removed at the next image rebuild (M2a §12).
+rm -f /etc/systemd/system/neurolens-self-terminate.service
 systemctl mask neurolens-self-terminate.service
 systemctl daemon-reload
 
