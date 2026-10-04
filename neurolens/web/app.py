@@ -3,6 +3,7 @@
 import json
 import logging
 import math
+import uuid
 from pathlib import Path
 
 from flask import Flask, jsonify, request, send_from_directory
@@ -127,5 +128,50 @@ def create_app(data_dir=None, cfg=None):
 
         presigned["estimated_cost_usd"] = pricing.estimate_cost_usd(duration)
         return jsonify(presigned)
+
+    def job_data(job_id, read):
+        """Run `read(s3, bucket, job_id)` for a UUID job id.
+
+        Returns (value, None), or (None, an error response).
+
+        The status and result endpoints answer anyone who knows a job's (unguessable) UUID;
+        M3a adds ownership checks.
+        """
+        try:
+            uuid.UUID(job_id)
+        except ValueError:
+            return None, _error("bad_job_id", "The job id is not valid.")
+        try:
+            if s3 is None:
+                raise RuntimeError("no AWS settings (NEUROLENS_* in .env)")
+            return read(s3, cfg["aws"]["s3_bucket"], job_id), None
+        except Exception:
+            logger.exception(f"Could not read job {job_id}")
+            return None, _error("storage_error", "Could not read the job.", status=500)
+
+    def _not_found():
+        return _error("not_found", "No such job yet.", status=404)
+
+    @app.route("/api/jobs/<job_id>/status")
+    def job_status(job_id):
+        """A result's existence decides `done` (a crash can leave the status object behind);
+        otherwise the worker's status object. 404 means no worker has taken the job yet."""
+
+        def read(s3, bucket, job_id):
+            if storage.result_exists(s3, bucket, job_id):
+                return {"job_id": job_id, "status": "done"}
+            return storage.get_status(s3, bucket, job_id)
+
+        status, error = job_data(job_id, read)
+        if error:
+            return error
+        return jsonify(status) if status is not None else _not_found()
+
+    @app.route("/api/jobs/<job_id>/result")
+    def job_result(job_id):
+        result, error = job_data(job_id, storage.get_result)
+        if error:
+            return error
+        return jsonify(result) if result is not None else _not_found()
 
     return app

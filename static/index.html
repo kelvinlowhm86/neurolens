@@ -387,7 +387,7 @@ fileInput.addEventListener('change', ev => { if (ev.target.files.length) handleF
 
 $('btnNew').addEventListener('click', resetUI);
 $('upConfirm').addEventListener('click', startUpload);
-$('upCancel').addEventListener('click', resetUpload);
+$('upCancel').addEventListener('click', () => (trackedJob ? resetUI() : resetUpload()));
 
 function rejectFile(message) { $('uploadNote').textContent = message; fileInput.value = ''; }
 
@@ -471,10 +471,9 @@ async function startUpload() {
   xhr.onload = () => {
     if (xhr.status === 204) {  // S3 answers 204 with an empty body on success
       $('upBar').style.width = '100%';
-      $('upMsg').textContent = `Uploaded — processing (job ${presign.job_id})`;
       $('upConfirm').style.display = 'none';
-      $('upCancel').textContent = 'Upload another';
       $('headerMeta').textContent = `Uploaded: ${file.name}`;
+      trackJob(presign.job_id, file);
     } else { uploadFailed(`Upload failed (HTTP ${xhr.status}).`); }
   };
   xhr.onerror = () => uploadFailed('Upload failed: network error.');
@@ -484,6 +483,7 @@ async function startUpload() {
 }
 
 function resetUpload() {
+  stopTracking();
   pendingFile = null; pendingDuration = 0;
   $('uploadPanel').classList.remove('active');
   $('uploadNote').textContent = '';
@@ -492,6 +492,143 @@ function resetUpload() {
   $('samplesSection').style.display = '';
   $('headerMeta').textContent = hasPass ? 'Upload a video or select a sample' : 'Select a video to view analysis';
 }
+
+// ─── Job tracking (poll the status, show the result) ───────────────────────
+// The job id lives in the page address (?job=...), so the user can close the tab and come back
+// with the link: results are kept for 30 days.
+const POLL_MS = 5000;
+const SLOW_AFTER_MS = 30 * 60 * 1000;  // after this, add "taking longer than expected"
+const QUEUED_TEXT = 'Queued. If no GPU worker is running, starting one can take up to about 20 minutes. ' +
+  'You can close this page and come back with this link.';
+const STEP_TEXT = {
+  downloading: ['Downloading your video to the analysis machine...', 10],
+  transcribing: ['Transcribing the speech, so the model can read the words...', 30],
+  inference_full: ['Predicting brain activity from the picture and the sound...', 55],
+  inference_noaudio: ['Predicting it again without the sound, to measure what the audio adds...', 80],
+  extracting_roi: ['Working out the engagement for each brain region...', 95],
+};
+window.neurolensTimings = {};  // render_ms: result received -> charts drawn (Experiment 1)
+let trackedJob = null, pollTimer = null, trackStart = 0;
+
+function setJobInUrl(jobId) {
+  try {
+    const u = new URL(window.location.href);
+    if (jobId) u.searchParams.set('job', jobId); else u.searchParams.delete('job');
+    history.replaceState(null, '', u);
+  } catch (e) { /* the address is a convenience only */ }
+}
+
+function stopTracking() {
+  trackedJob = null;
+  clearTimeout(pollTimer);
+  setJobInUrl(null);
+}
+
+function trackJob(jobId, file) {
+  clearTimeout(pollTimer);
+  trackedJob = jobId; trackStart = Date.now();
+  setJobInUrl(jobId);
+  if (!file) {  // opened from a link: show the panel without an upload
+    uploadZone.classList.add('hidden');
+    $('samplesSection').style.display = 'none';
+    $('upFileName').textContent = `Job ${jobId.slice(0, 8)}`;
+    $('upDetail').textContent = ''; $('upCost').textContent = '';
+    $('upConfirm').style.display = 'none';
+    $('uploadPanel').classList.add('active');
+    $('headerMeta').textContent = `Job ${jobId.slice(0, 8)}`;
+  }
+  $('upCancel').textContent = 'Upload another';
+  $('upMsg').classList.remove('error');
+  pollJob(jobId, file);
+}
+
+function showJobMsg(text, isError) {
+  const slow = !isError && Date.now() - trackStart > SLOW_AFTER_MS;
+  $('upMsg').textContent = slow ? `${text} This is taking longer than expected.` : text;
+  $('upMsg').classList.toggle('error', !!isError);
+}
+
+async function pollJob(jobId, file) {
+  if (trackedJob !== jobId) return;  // the user left this job
+  let again = true;
+  try {
+    const res = await fetch(`/api/jobs/${jobId}/status`);
+    if (trackedJob !== jobId) return;
+    if (res.status === 404) {
+      $('upProgress').classList.remove('active');
+      showJobMsg(QUEUED_TEXT);
+    } else if (!res.ok) {
+      showJobMsg(`Could not check the job (HTTP ${res.status}). Trying again...`);
+    } else {
+      const st = await res.json();
+      if (trackedJob !== jobId) return;
+      if (st.status === 'done') {
+        again = !(await showResult(jobId, file));
+      } else if (st.status === 'failed') {
+        again = false;
+        $('upProgress').classList.remove('active');
+        showJobMsg(st.error || 'The analysis failed.', true);
+      } else if (st.stage === 'retrying') {
+        showJobMsg(`Retrying after an error: ${st.error || 'unknown error'}`);
+      } else {
+        const step = STEP_TEXT[st.stage];
+        $('upProgress').classList.add('active');
+        $('upBar').style.width = `${step ? step[1] : 5}%`;
+        showJobMsg(step ? step[0] : 'Processing...');
+      }
+    }
+  } catch (e) {
+    showJobMsg('Could not reach the server. Trying again...');
+  }
+  if (again && trackedJob === jobId) pollTimer = setTimeout(() => pollJob(jobId, file), POLL_MS);
+}
+
+// True when the result is on screen; false means "try again on the next poll".
+async function showResult(jobId, file) {
+  let result;
+  try {
+    const res = await fetch(`/api/jobs/${jobId}/result`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    result = await res.json();
+  } catch (e) {
+    showJobMsg('The analysis is done; loading the result...');
+    return false;
+  }
+  const t0 = performance.now();
+  analysisData = {
+    filename: file ? file.name : `Job ${jobId.slice(0, 8)}`,
+    duration_seconds: result.duration_seconds,
+    timesteps: result.timesteps,
+    processing_time_seconds: result.processing_time_seconds,
+  };
+  $('upProgress').classList.remove('active');
+  showJobMsg(`Done in ${Math.round(result.processing_time_seconds)}s of analysis time.`);
+  $('chartsEmpty').style.display = 'none';
+  $('chartsContainer').classList.add('active');
+  if (file) {  // the video is only on this computer: a resumed link shows the charts alone
+    video.src = URL.createObjectURL(file);
+    $('videoFilename').textContent = file.name;
+    $('videoDuration').textContent = `${result.duration_seconds}s`;
+    $('videoProcessTime').textContent = '';
+    $('videoContainer').classList.add('active');
+  }
+  try {
+    renderStats();
+    buildCharts();
+  } catch (e) {
+    console.error('Could not draw the result:', e);
+    showJobMsg('The analysis is done, but the result could not be drawn. Reload the page.', true);
+    return true;  // not a reason to ask the server again
+  }
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    window.neurolensTimings.render_ms = Math.round(performance.now() - t0);
+  }));
+  return true;
+}
+
+// A link with ?job=<id> resumes that job.
+const jobParam = params.get('job');
+if (jobParam && /^[0-9a-f-]{36}$/i.test(jobParam)) trackJob(jobParam, null);
 
 function renderStats() {
   const ts = analysisData.timesteps;
