@@ -29,6 +29,10 @@ group_sizes() {  # "min max desired", "None" if there is no group; fails if the 
   aws autoscaling describe-auto-scaling-groups --auto-scaling-group-names "$ASG" \
     --query 'AutoScalingGroups[0].[MinSize,MaxSize,DesiredCapacity]' --output text
 }
+group_machines() {  # how many machines the group still tracks (it knows a launch before EC2 lists it)
+  aws autoscaling describe-auto-scaling-groups --auto-scaling-group-names "$ASG" \
+    --query 'length(AutoScalingGroups[0].Instances)' --output text
+}
 
 # 1. A pause (infra/pause_idle_alarm.sh) lasts until the end of the session.
 aws cloudwatch enable-alarm-actions --alarm-names "$IDLE_ALARM" \
@@ -51,12 +55,14 @@ else
       DES=skip   # workers will not leave: do not wait for them
     fi
   fi
+  # Wait until the group tracks no machine and EC2 lists no live worker: a launch that was still
+  # starting when the group went to 0 shows up in the group's list first.
   [ "$DES" = skip ] || for _ in $(seq 1 60); do   # up to 10 minutes
-    if ! WORKERS=$(live Name=tag:Role,Values=worker); then
+    if ! TRACKED=$(group_machines) || ! WORKERS=$(live Name=tag:Role,Values=worker); then
       problem "could not list the workers"; break
     fi
-    [ -z "$WORKERS" ] && break
-    echo "Waiting for workers to end: $(echo "$WORKERS" | awk '{print $1, $4}' | tr '\n' ' ')"
+    [ "$TRACKED" = 0 ] && [ -z "$WORKERS" ] && break
+    echo "Waiting for workers to end ($TRACKED tracked by the group): $(echo "$WORKERS" | awk '{print $1, $4}' | tr '\n' ' ')"
     sleep 10
   done
 fi
