@@ -22,7 +22,6 @@ EXPERIMENT_FILES = {
         "cloudwatch.csv",
         "locust_stats.csv",
         "reliability.csv",
-        "instance_loss.csv",
         "cold_start.csv",
     ],
     "experiment-3": ["runs.csv"],
