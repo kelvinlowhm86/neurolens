@@ -1,19 +1,27 @@
 """M2a tests, written from docs/M2a_spec.md section 8 (and 4g, 6).
 
 Covers: put_result (S3 results, never overwritten), the worker publishing through it and the
-DUPLICATE outcome, the idle exit of run(), and resolve_paths keeping absolute paths.
+DUPLICATE outcome, and resolve_paths keeping absolute paths. M2b §1a removed the idle exit of
+run() and its tests (no-idle-exit is now tested in tests/test_m2b_shutdown.py), and changed a
+result that exists before any work from DUPLICATE to SKIPPED (§5). Calls use the §1a signatures.
 """
 
+import contextlib
 import json
-import time
 from pathlib import Path
 
 import pytest
 from botocore.exceptions import ClientError
-from neurolens import inference, settings, storage, worker
+from neurolens import settings, storage, worker
 from neurolens.worker import Outcome, handle_record, process_message
 
 MODULES = ("neurolens.inference", "neurolens.worker")
+MAX_RECEIVES = 2  # the job queue's maxReceiveCount (M2a §4h); every message here is receive 1
+
+
+def no_heartbeat():
+    """M2b §1a: handle_record's heartbeat factory. These tests do not exercise the heartbeat."""
+    return contextlib.nullcontext()
 
 
 @pytest.fixture(autouse=True)
@@ -124,7 +132,9 @@ def test_worker_result_lands_in_s3_and_nothing_in_the_local_output_folder(
     job_id, key = new_key()
     aws.s3.upload_file(str(clip_path), aws.bucket, key)
 
-    outcome = handle_record(aws.bucket, key, s3=aws.s3, cfg=cfg, roi_masks=roi_masks_small)
+    outcome = handle_record(
+        aws.bucket, key, s3=aws.s3, cfg=cfg, roi_masks=roi_masks_small, heartbeat=no_heartbeat
+    )
 
     assert outcome is Outcome.DONE
     assert stored(aws, job_id)["job_id"] == job_id
@@ -144,21 +154,37 @@ def test_worker_publishes_through_put_result(
     monkeypatch.setattr(storage, "put_result", spy)
     job_id, key = new_key()
     aws.s3.upload_file(str(clip_path), aws.bucket, key)
-    handle_record(aws.bucket, key, s3=aws.s3, cfg=make_cfg(), roi_masks=roi_masks_small)
+    handle_record(
+        aws.bucket,
+        key,
+        s3=aws.s3,
+        cfg=make_cfg(),
+        roi_masks=roi_masks_small,
+        heartbeat=no_heartbeat,
+    )
     assert seen == [(aws.bucket, job_id, job_id)]
 
 
-def test_existing_result_gives_duplicate_and_is_left_unchanged(
+def test_existing_result_gives_skipped_and_is_left_unchanged(
     aws, make_cfg, roi_masks_small, new_key, clip_path
 ):
+    """M2b §5 changed the outcome: a result that exists before any work is SKIPPED (was
+    DUPLICATE in M2a). The result is still left unchanged."""
     job_id, key = new_key()
     aws.s3.upload_file(str(clip_path), aws.bucket, key)
     earlier = {"job_id": job_id, "marker": "written by an earlier run"}
     assert storage.put_result(aws.s3, aws.bucket, job_id, earlier) is True
 
-    outcome = handle_record(aws.bucket, key, s3=aws.s3, cfg=make_cfg(), roi_masks=roi_masks_small)
+    outcome = handle_record(
+        aws.bucket,
+        key,
+        s3=aws.s3,
+        cfg=make_cfg(),
+        roi_masks=roi_masks_small,
+        heartbeat=no_heartbeat,
+    )
 
-    assert outcome is Outcome.DUPLICATE
+    assert outcome is Outcome.SKIPPED
     assert stored(aws, job_id) == earlier
 
 
@@ -168,7 +194,14 @@ def test_duplicate_when_put_result_returns_false(
     patch_everywhere("put_result", lambda *a, **kw: False, "neurolens.storage", "neurolens.worker")
     _, key = new_key()
     aws.s3.upload_file(str(clip_path), aws.bucket, key)
-    outcome = handle_record(aws.bucket, key, s3=aws.s3, cfg=make_cfg(), roi_masks=roi_masks_small)
+    outcome = handle_record(
+        aws.bucket,
+        key,
+        s3=aws.s3,
+        cfg=make_cfg(),
+        roi_masks=roi_masks_small,
+        heartbeat=no_heartbeat,
+    )
     assert outcome is Outcome.DUPLICATE
 
 
@@ -186,6 +219,8 @@ def test_duplicate_message_is_deleted(
         sqs=aws.sqs,
         cfg=make_cfg(),
         roi_masks=roi_masks_small,
+        shutdown=worker.ShutdownSignal(),
+        max_receives=MAX_RECEIVES,
     )
 
     assert remaining() == []
@@ -207,115 +242,10 @@ def test_a_put_result_error_leaves_the_message_for_retry(
         sqs=aws.sqs,
         cfg=make_cfg(),
         roi_masks=roi_masks_small,
+        shutdown=worker.ShutdownSignal(),
+        max_receives=MAX_RECEIVES,
     )
     assert len(remaining()) == 1
-
-
-# ---------------------------------------------------------------- run(): idle exit
-# The tests give run() fake boto3 clients, so they need no AWS and no model. A poll takes
-# POLL_SECONDS of real time, so the idle limit (a tiny fraction of a minute) is real too.
-
-POLL_SECONDS = 0.03
-IDLE_MINUTES = 0.004  # 0.24 s
-
-
-class Stop(BaseException):
-    """Ends a loop that would otherwise run forever (BaseException: nothing may swallow it)."""
-
-
-class FakeSqs:
-    """receive_message waits POLL_SECONDS. Messages are delivered on the listed poll numbers
-    (1-based); Stop is raised on poll `stop_after`."""
-
-    def __init__(self, bucket, deliver_on=(), stop_after=200):
-        self.bucket = bucket
-        self.deliver_on = set(deliver_on)
-        self.stop_after = stop_after
-        self.polls = 0
-        self.delivered_at = []
-        self.deleted = 0
-
-    def receive_message(self, **kwargs):
-        time.sleep(POLL_SECONDS)
-        self.polls += 1
-        if self.polls >= self.stop_after:
-            raise Stop
-        if self.polls in self.deliver_on:
-            self.delivered_at.append(time.monotonic())
-            key = "uploads/placeholder-user/x.mp4"
-            return {
-                "Messages": [
-                    {
-                        "MessageId": str(self.polls),
-                        "ReceiptHandle": "r",
-                        "Body": s3_event((self.bucket, key)),
-                    }
-                ]
-            }
-        return {}
-
-    def delete_message(self, **kwargs):
-        self.deleted += 1
-
-
-@pytest.fixture
-def run_env(aws, make_cfg, monkeypatch, roi_masks_small):
-    """Wire worker.run() to a config, a no-op model and fake clients. Returns a setup function."""
-    import boto3
-
-    def setup(sqs, **cfg_overrides):
-        cfg = make_cfg(**cfg_overrides)
-        monkeypatch.setattr(settings, "load_settings", lambda *a, **kw: cfg)
-        monkeypatch.setattr(inference, "load_model", lambda *a, **kw: None)
-        monkeypatch.setattr(inference, "roi_masks", lambda *a, **kw: roi_masks_small)
-        monkeypatch.setattr(worker, "handle_record", lambda *a, **kw: Outcome.DONE)
-
-        def fake_client(service, **kwargs):
-            return sqs if service == "sqs" else aws.s3
-
-        monkeypatch.setattr(boto3, "client", fake_client)
-        return cfg
-
-    return setup
-
-
-def test_run_returns_after_idle_exit_minutes_with_no_messages(run_env, aws):
-    sqs = FakeSqs(aws.bucket)
-    run_env(sqs, worker={"idle_exit_minutes": IDLE_MINUTES})
-    start = time.monotonic()
-    worker.run()  # returns instead of raising Stop or looping forever
-    elapsed = time.monotonic() - start
-    assert elapsed >= IDLE_MINUTES * 60 * 0.9  # it waited for the idle period, not less
-    assert sqs.polls < sqs.stop_after
-
-
-def test_run_never_returns_on_idle_when_the_setting_is_absent(run_env, aws):
-    # Far more idle polls than the limit used above (0.24 s) would allow: 20 x 0.03 s = 0.6 s.
-    sqs = FakeSqs(aws.bucket, stop_after=20)
-    run_env(sqs)  # no worker.idle_exit_minutes
-    with pytest.raises(Stop):
-        worker.run()
-    assert sqs.polls == 20
-
-
-def test_run_never_returns_on_idle_when_the_worker_section_has_no_idle_setting(run_env, aws):
-    sqs = FakeSqs(aws.bucket, stop_after=20)
-    run_env(sqs, worker={})
-    with pytest.raises(Stop):
-        worker.run()
-    assert sqs.polls == 20
-
-
-def test_receiving_a_message_resets_the_idle_timer(run_env, aws):
-    # A message arrives on poll 5 (about 0.15 s in), before the 0.24 s limit. Without a reset the
-    # worker would leave about 0.09 s after it; with one it stays a full idle period.
-    sqs = FakeSqs(aws.bucket, deliver_on=(5,))
-    run_env(sqs, worker={"idle_exit_minutes": IDLE_MINUTES})
-    worker.run()
-    left = time.monotonic()
-    assert sqs.delivered_at, "the message was never received"
-    assert sqs.deleted == 1  # it was handled, not skipped
-    assert left - sqs.delivered_at[-1] >= IDLE_MINUTES * 60 * 0.9
 
 
 # ---------------------------------------------------------------- resolve_paths

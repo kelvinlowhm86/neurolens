@@ -53,6 +53,17 @@ def isolate_env_settings(monkeypatch):
     monkeypatch.setattr(settings, "load_dotenv", lambda *a, **kw: None, raising=False)
 
 
+@pytest.fixture(autouse=True)
+def restore_sigterm_handler():
+    """M2b: worker.run() installs a SIGTERM handler. Whatever a test does, the next test starts
+    with the handler pytest had."""
+    import signal
+
+    previous = signal.getsignal(signal.SIGTERM)
+    yield
+    signal.signal(signal.SIGTERM, previous)
+
+
 @pytest.fixture
 def aws():
     """A moto S3 bucket and SQS queue, plus boto3 clients for them."""
@@ -93,6 +104,8 @@ def make_cfg(aws, tmp_path):
             "hf_download_timeout": 300,
             "max_video_duration_seconds": 120,
             "max_upload_bytes": 300000000,
+            # M2b §1a: the heartbeat settings config.json gains (same values).
+            "worker": {"heartbeat_seconds": 50, "max_job_minutes": 75},
         }
         if not with_aws:
             del cfg["aws"]
@@ -174,11 +187,17 @@ def patch_everywhere(monkeypatch):
 
 
 class SpyS3:
-    """Wraps a boto3 client: records every call and refuses the listed ones."""
+    """Wraps a boto3 client: records every call and refuses the listed ones.
 
-    def __init__(self, inner, forbid=()):
+    `forbid_on_uploads` refuses a call only when it targets an uploaded video (a key under
+    uploads/). M2b: the worker now reads status/ and results/ objects (put_status, result_exists),
+    so "never download the video" can no longer be checked by refusing get_object altogether.
+    """
+
+    def __init__(self, inner, forbid=(), forbid_on_uploads=()):
         self._inner = inner
         self._forbid = set(forbid)
+        self._forbid_on_uploads = set(forbid_on_uploads)
         self.calls = []
 
     def __getattr__(self, name):
@@ -190,6 +209,9 @@ class SpyS3:
             self.calls.append((name, args, kwargs))
             if name in self._forbid:
                 raise AssertionError(f"s3.{name} must not be called here")
+            key = kwargs.get("Key", args[1] if len(args) > 1 else None)
+            if name in self._forbid_on_uploads and str(key).startswith("uploads/"):
+                raise AssertionError(f"s3.{name} must not be called on {key} here")
             return attr(*args, **kwargs)
 
         return wrapper
@@ -200,8 +222,8 @@ class SpyS3:
 
 @pytest.fixture
 def spy_s3(aws):
-    def make(forbid=()):
-        return SpyS3(aws.s3, forbid=forbid)
+    def make(forbid=(), forbid_on_uploads=()):
+        return SpyS3(aws.s3, forbid=forbid, forbid_on_uploads=forbid_on_uploads)
 
     return make
 
@@ -211,13 +233,17 @@ def queue_message(aws):
     """Put a body on the queue and receive it, like the worker would.
 
     VisibilityTimeout=0 makes an undeleted message visible again at once, so
-    `remaining()` can tell whether process_message deleted it.
+    `remaining()` can tell whether process_message deleted it. The message carries its
+    ApproximateReceiveCount (M2b §1a: process_message reads it; this is its first receive, "1").
     """
 
     def put(body):
         aws.sqs.send_message(QueueUrl=aws.queue_url, MessageBody=body)
         resp = aws.sqs.receive_message(
-            QueueUrl=aws.queue_url, MaxNumberOfMessages=1, VisibilityTimeout=0
+            QueueUrl=aws.queue_url,
+            MaxNumberOfMessages=1,
+            VisibilityTimeout=0,
+            MessageSystemAttributeNames=["ApproximateReceiveCount"],
         )
         return resp["Messages"][0]
 

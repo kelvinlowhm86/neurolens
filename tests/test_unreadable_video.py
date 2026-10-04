@@ -2,19 +2,27 @@
 
 ffprobe cannot measure a file that is not a video, so probe_duration raises UnreadableVideo
 and the worker rejects the upload (deletes it and its message) instead of retrying forever.
+Calls use the M2b §1a signatures; the behaviour checked is unchanged.
 """
 
+import contextlib
 import json
 import os
 from pathlib import Path
 
 import pytest
 from botocore.exceptions import ClientError
-from neurolens import inference
+from neurolens import inference, worker
 from neurolens.worker import Outcome, handle_record, process_message
 
 MODULES = ("neurolens.inference", "neurolens.worker")
 NOT_A_VIDEO = b"this is not a video"
+MAX_RECEIVES = 2  # the job queue's maxReceiveCount (M2a §4h); every message here is receive 1
+
+
+def no_heartbeat():
+    """M2b §1a: handle_record's heartbeat factory. These tests do not exercise the heartbeat."""
+    return contextlib.nullcontext()
 
 
 @pytest.fixture(autouse=True)
@@ -98,7 +106,9 @@ def test_unreadable_upload_is_rejected_deleted_and_not_inferred(
     job_id, key = new_key()
     aws.s3.put_object(Bucket=aws.bucket, Key=key, Body=NOT_A_VIDEO)
 
-    outcome = handle_record(aws.bucket, key, s3=aws.s3, cfg=cfg, roi_masks=roi_masks_small)
+    outcome = handle_record(
+        aws.bucket, key, s3=aws.s3, cfg=cfg, roi_masks=roi_masks_small, heartbeat=no_heartbeat
+    )
 
     assert outcome is Outcome.REJECTED
     assert not object_exists(aws, key)
@@ -111,7 +121,14 @@ def test_empty_object_passing_size_check_is_also_rejected(
 ):
     _, key = new_key()
     aws.s3.put_object(Bucket=aws.bucket, Key=key, Body=b"")
-    outcome = handle_record(aws.bucket, key, s3=aws.s3, cfg=make_cfg(), roi_masks=roi_masks_small)
+    outcome = handle_record(
+        aws.bucket,
+        key,
+        s3=aws.s3,
+        cfg=make_cfg(),
+        roi_masks=roi_masks_small,
+        heartbeat=no_heartbeat,
+    )
     assert outcome is Outcome.REJECTED
     assert not object_exists(aws, key)
     assert inference_calls == {"build_events": [], "without_audio": [], "predict": []}
@@ -133,6 +150,8 @@ def test_unreadable_upload_end_to_end_deletes_object_and_message(
         sqs=aws.sqs,
         cfg=cfg,
         roi_masks=roi_masks_small,
+        shutdown=worker.ShutdownSignal(),
+        max_receives=MAX_RECEIVES,
     )
 
     assert remaining() == []
@@ -154,7 +173,14 @@ def test_a_genuine_inference_failure_is_still_not_a_rejection(
     aws.s3.upload_file(str(clip_path), aws.bucket, key)
 
     with pytest.raises(RuntimeError, match="model crashed"):
-        handle_record(aws.bucket, key, s3=aws.s3, cfg=make_cfg(), roi_masks=roi_masks_small)
+        handle_record(
+            aws.bucket,
+            key,
+            s3=aws.s3,
+            cfg=make_cfg(),
+            roi_masks=roi_masks_small,
+            heartbeat=no_heartbeat,
+        )
     assert object_exists(aws, key)
 
     process_message(
@@ -163,6 +189,8 @@ def test_a_genuine_inference_failure_is_still_not_a_rejection(
         sqs=aws.sqs,
         cfg=make_cfg(),
         roi_masks=roi_masks_small,
+        shutdown=worker.ShutdownSignal(),
+        max_receives=MAX_RECEIVES,
     )
     assert len(remaining()) == 1
     assert object_exists(aws, key)

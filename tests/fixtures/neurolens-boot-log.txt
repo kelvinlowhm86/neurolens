@@ -1,0 +1,7 @@
+2026-10-14T03:00:41Z boot start
+2026-10-14T03:00:42Z /dev/nvme1n1 already mounted at /opt/dlami/nvme by the base image: bound to /opt/neurolens/cache
+2026-10-14T03:00:42Z weight sync start
+2026-10-14T03:01:59Z weight sync done in 77 s
+2026-10-14T03:01:59Z settings written
+2026-10-14T03:02:08Z code 83e0bf9 pulled and settings verified
+2026-10-14T03:02:09Z worker started

@@ -1,6 +1,7 @@
 # Laptop and CI: tests and lint. No torch, no tribev2.
 -r web.txt
 -r worker.txt
+-r experiments.txt
 pytest>=8.0
 ruff>=0.6
-moto[s3,sqs]>=5.0
+moto[s3,sqs,autoscaling]>=5.0

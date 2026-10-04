@@ -1,6 +1,8 @@
 """Tests for neurolens.worker (moto, fake inference). Written from docs/M1_spec.md 1, 4a, 5, 6a
-and docs/M2a_spec.md 7a, 8."""
+and docs/M2a_spec.md 7a, 8. Calls use the M2b §1a signatures (heartbeat, shutdown,
+max_receives); the behaviour checked is unchanged."""
 
+import contextlib
 import inspect
 import json
 import math
@@ -20,6 +22,12 @@ SECTION_1_KEYS = {
     "fake_inference",
 }
 MODULES = ("neurolens.inference", "neurolens.worker")
+MAX_RECEIVES = 2  # the job queue's maxReceiveCount (M2a §4h); every message here is receive 1
+
+
+def no_heartbeat():
+    """M2b §1a: handle_record's heartbeat factory. These tests do not exercise the heartbeat."""
+    return contextlib.nullcontext()
 
 
 @pytest.fixture(autouse=True)
@@ -186,7 +194,9 @@ def test_valid_video_is_done_and_writes_result_json(
     job_id, key = new_key()
     upload_clip(aws, key, clip_path)
 
-    outcome = handle_record(aws.bucket, key, s3=aws.s3, cfg=cfg, roi_masks=roi_masks_small)
+    outcome = handle_record(
+        aws.bucket, key, s3=aws.s3, cfg=cfg, roi_masks=roi_masks_small, heartbeat=no_heartbeat
+    )
 
     assert outcome is Outcome.DONE
     result = read_result(aws, job_id)
@@ -221,7 +231,9 @@ def test_duration_and_timesteps_are_exactly_what_extract_engagement_returned(
     cfg = make_cfg()
     job_id, key = new_key()
     upload_clip(aws, key, clip_path)
-    handle_record(aws.bucket, key, s3=aws.s3, cfg=cfg, roi_masks=roi_masks_small)
+    handle_record(
+        aws.bucket, key, s3=aws.s3, cfg=cfg, roi_masks=roi_masks_small, heartbeat=no_heartbeat
+    )
     result = read_result(aws, job_id)
     assert len(calls["extract"]) == 1
     expected = json.loads(json.dumps(calls["extract"][0]))
@@ -237,7 +249,9 @@ def test_result_goes_to_s3_as_results_job_id_json_and_not_to_the_local_output_fo
     cfg = make_cfg(paths={**make_cfg()["paths"], "output": str(out_dir)})
     job_id, key = new_key(".mov")
     upload_clip(aws, key, clip_path)
-    handle_record(aws.bucket, key, s3=aws.s3, cfg=cfg, roi_masks=roi_masks_small)
+    handle_record(
+        aws.bucket, key, s3=aws.s3, cfg=cfg, roi_masks=roi_masks_small, heartbeat=no_heartbeat
+    )
     assert list(out_dir.iterdir()) == []  # M2a: nothing is written locally
     assert object_exists(aws, f"results/{job_id}.json")
 
@@ -248,7 +262,9 @@ def test_pipeline_runs_build_events_predict_without_audio_predict_extract_in_ord
     cfg = make_cfg()
     _, key = new_key()
     upload_clip(aws, key, clip_path)
-    handle_record(aws.bucket, key, s3=aws.s3, cfg=cfg, roi_masks=roi_masks_small)
+    handle_record(
+        aws.bucket, key, s3=aws.s3, cfg=cfg, roi_masks=roi_masks_small, heartbeat=no_heartbeat
+    )
     assert calls["order"] == [
         "build_events",
         "predict",
@@ -267,7 +283,9 @@ def test_pipeline_passes_events_and_predictions_along(
     cfg = make_cfg()
     _, key = new_key()
     upload_clip(aws, key, clip_path)
-    handle_record(aws.bucket, key, s3=aws.s3, cfg=cfg, roi_masks=roi_masks_small)
+    handle_record(
+        aws.bucket, key, s3=aws.s3, cfg=cfg, roi_masks=roi_masks_small, heartbeat=no_heartbeat
+    )
 
     [(_, audio, content, events)] = calls["build_events"]
     assert audio is True  # the downloaded video itself, with its soundtrack
@@ -295,7 +313,9 @@ def test_pipeline_writes_no_noaudio_file_and_runs_no_ffmpeg(
     cfg = make_cfg()
     _, key = new_key()
     upload_clip(aws, key, clip_path)
-    outcome = handle_record(aws.bucket, key, s3=aws.s3, cfg=cfg, roi_masks=roi_masks_small)
+    outcome = handle_record(
+        aws.bucket, key, s3=aws.s3, cfg=cfg, roi_masks=roi_masks_small, heartbeat=no_heartbeat
+    )
 
     assert outcome is Outcome.DONE
     seen_files = calls["files_at_extract"]
@@ -315,7 +335,9 @@ def test_a_timeline_error_from_predict_is_a_failure_not_an_outcome(
     job_id, key = new_key()
     upload_clip(aws, key, clip_path)
     with pytest.raises(inference.TimelineError):
-        handle_record(aws.bucket, key, s3=aws.s3, cfg=cfg, roi_masks=roi_masks_small)
+        handle_record(
+            aws.bucket, key, s3=aws.s3, cfg=cfg, roi_masks=roi_masks_small, heartbeat=no_heartbeat
+        )
     assert object_exists(aws, key)  # a failure is not a rejection: nothing is deleted
     assert not object_exists(aws, f"results/{job_id}.json")
 
@@ -337,6 +359,8 @@ def test_a_timeline_error_end_to_end_leaves_the_message_for_retry(
         sqs=aws.sqs,
         cfg=make_cfg(),
         roi_masks=roi_masks_small,
+        shutdown=worker.ShutdownSignal(),
+        max_receives=MAX_RECEIVES,
     )
     assert len(remaining()) == 1
     assert object_exists(aws, key)
@@ -350,12 +374,17 @@ def test_size_check_uses_head_object_before_download_file(
     _, key = new_key()
     upload_clip(aws, key, clip_path)
     s3 = spy_s3()
-    handle_record(aws.bucket, key, s3=s3, cfg=cfg, roi_masks=roi_masks_small)
+    handle_record(
+        aws.bucket, key, s3=s3, cfg=cfg, roi_masks=roi_masks_small, heartbeat=no_heartbeat
+    )
     names = s3.names()
     assert "head_object" in names and "download_file" in names
     assert names.index("head_object") < names.index("download_file")
-    head = next(c for c in s3.calls if c[0] == "head_object")
-    assert head[2] == {"Bucket": aws.bucket, "Key": key}
+    # M2b: result_exists may also call head_object (on results/), so look for the upload's own.
+    heads = [i for i, c in enumerate(s3.calls) if c[0] == "head_object" and c[2].get("Key") == key]
+    assert heads, "no head_object on the uploaded object"
+    assert s3.calls[heads[0]][2] == {"Bucket": aws.bucket, "Key": key}
+    assert heads[0] < names.index("download_file")
     download = next(c for c in s3.calls if c[0] == "download_file")
     assert download[1][:2] == (aws.bucket, key)
 
@@ -364,7 +393,9 @@ def test_object_exactly_at_the_cap_is_accepted(aws, make_cfg, roi_masks_small, n
     cfg = make_cfg(max_upload_bytes=clip_path.stat().st_size)
     _, key = new_key()
     upload_clip(aws, key, clip_path)
-    outcome = handle_record(aws.bucket, key, s3=aws.s3, cfg=cfg, roi_masks=roi_masks_small)
+    outcome = handle_record(
+        aws.bucket, key, s3=aws.s3, cfg=cfg, roi_masks=roi_masks_small, heartbeat=no_heartbeat
+    )
     assert outcome is Outcome.DONE
 
 
@@ -376,7 +407,9 @@ def test_result_has_gpu_only_when_gpu_info_returns_a_value(
     cfg = make_cfg()
     job_id, key = new_key()
     upload_clip(aws, key, clip_path)
-    handle_record(aws.bucket, key, s3=aws.s3, cfg=cfg, roi_masks=roi_masks_small)
+    handle_record(
+        aws.bucket, key, s3=aws.s3, cfg=cfg, roi_masks=roi_masks_small, heartbeat=no_heartbeat
+    )
     result = read_result(aws, job_id)
     assert set(result) == SECTION_1_KEYS | {"gpu"}
     assert result["gpu"] == gpu
@@ -406,7 +439,9 @@ def test_fake_inference_key_is_absent_when_fake_mode_is_off(
     cfg = make_cfg()
     job_id, key = new_key()
     upload_clip(aws, key, clip_path)
-    outcome = handle_record(aws.bucket, key, s3=aws.s3, cfg=cfg, roi_masks=roi_masks_small)
+    outcome = handle_record(
+        aws.bucket, key, s3=aws.s3, cfg=cfg, roi_masks=roi_masks_small, heartbeat=no_heartbeat
+    )
     assert outcome is Outcome.DONE
     result = read_result(aws, job_id)
     assert "fake_inference" not in result
@@ -423,9 +458,11 @@ def test_oversize_object_is_rejected_deleted_and_never_downloaded(
     job_id, key = new_key()
     upload(aws, key, b"x" * 1001)
     never_inference(patch_everywhere)
-    s3 = spy_s3(forbid=("download_file", "download_fileobj", "get_object"))
+    s3 = spy_s3(forbid=("download_file", "download_fileobj"), forbid_on_uploads=("get_object",))
 
-    outcome = handle_record(aws.bucket, key, s3=s3, cfg=cfg, roi_masks=roi_masks_small)
+    outcome = handle_record(
+        aws.bucket, key, s3=s3, cfg=cfg, roi_masks=roi_masks_small, heartbeat=no_heartbeat
+    )
 
     assert outcome is Outcome.REJECTED
     assert "head_object" in s3.names()
@@ -440,7 +477,9 @@ def test_oversize_rejection_never_runs_ffprobe_or_inference(
     cfg = make_cfg(max_upload_bytes=1000)
     _, key = new_key()
     upload(aws, key, b"x" * 5000)
-    outcome = handle_record(aws.bucket, key, s3=aws.s3, cfg=cfg, roi_masks=roi_masks_small)
+    outcome = handle_record(
+        aws.bucket, key, s3=aws.s3, cfg=cfg, roi_masks=roi_masks_small, heartbeat=no_heartbeat
+    )
     assert outcome is Outcome.REJECTED
     assert calls["probe_duration"] == []
     assert calls["build_events"] == []
@@ -455,7 +494,9 @@ def test_over_long_video_is_rejected_without_inference(
     job_id, key = new_key()
     upload_clip(aws, key, clip_path)
 
-    outcome = handle_record(aws.bucket, key, s3=aws.s3, cfg=cfg, roi_masks=roi_masks_small)
+    outcome = handle_record(
+        aws.bucket, key, s3=aws.s3, cfg=cfg, roi_masks=roi_masks_small, heartbeat=no_heartbeat
+    )
 
     assert outcome is Outcome.REJECTED
     assert calls["build_events"] == []
@@ -480,7 +521,9 @@ def test_duration_check_uses_probe_duration_of_the_downloaded_file(
     cfg = make_cfg()  # max 120 s
     _, key = new_key()
     upload(aws, key, b"these bytes are the object")
-    outcome = handle_record(aws.bucket, key, s3=aws.s3, cfg=cfg, roi_masks=roi_masks_small)
+    outcome = handle_record(
+        aws.bucket, key, s3=aws.s3, cfg=cfg, roi_masks=roi_masks_small, heartbeat=no_heartbeat
+    )
     assert outcome is Outcome.REJECTED
     assert seen == [b"these bytes are the object"]
     assert not object_exists(aws, key)
@@ -500,7 +543,9 @@ def test_a_failing_inference_raises_instead_of_returning_an_outcome(
     job_id, key = new_key()
     upload_clip(aws, key, clip_path)
     with pytest.raises(RuntimeError, match="GPU exploded"):
-        handle_record(aws.bucket, key, s3=aws.s3, cfg=cfg, roi_masks=roi_masks_small)
+        handle_record(
+            aws.bucket, key, s3=aws.s3, cfg=cfg, roi_masks=roi_masks_small, heartbeat=no_heartbeat
+        )
     assert object_exists(aws, key)  # a failure is not a rejection: nothing is deleted
     assert not (Path(cfg["paths"]["output"]) / f"{job_id}.json").exists()
 
@@ -508,7 +553,14 @@ def test_a_failing_inference_raises_instead_of_returning_an_outcome(
 def test_a_missing_object_is_gone_not_an_error(aws, make_cfg, roi_masks_small, new_key):
     """Spec 1 and 6a: an object that no longer exists (duplicate or expired) is Outcome.GONE."""
     _, key = new_key()
-    outcome = handle_record(aws.bucket, key, s3=aws.s3, cfg=make_cfg(), roi_masks=roi_masks_small)
+    outcome = handle_record(
+        aws.bucket,
+        key,
+        s3=aws.s3,
+        cfg=make_cfg(),
+        roi_masks=roi_masks_small,
+        heartbeat=no_heartbeat,
+    )
     assert outcome is Outcome.GONE
 
 
@@ -517,11 +569,12 @@ def test_a_missing_object_is_gone_not_an_error(aws, make_cfg, roi_masks_small, n
 
 @pytest.fixture
 def fake_handle_record(monkeypatch):
-    """Replace handle_record with a scripted one. The signature is the spec's, keyword-only."""
+    """Replace handle_record with a scripted one. The signature is the spec's, keyword-only
+    (M2b §1a adds `heartbeat`)."""
     seen = []
 
     def install(script):
-        def fake(bucket, key, *, s3, cfg, roi_masks):
+        def fake(bucket, key, *, s3, cfg, roi_masks, heartbeat):
             seen.append((bucket, key, s3, cfg, roi_masks))
             result = script[key]
             if isinstance(result, Exception):
@@ -540,7 +593,15 @@ def test_zero_record_message_is_deleted_without_calling_handle_record(
     seen = fake_handle_record({})
     body = json.dumps({"Service": "Amazon S3", "Event": "s3:TestEvent", "Bucket": aws.bucket})
     message = queue_message(body)
-    process_message(message, s3=aws.s3, sqs=aws.sqs, cfg=make_cfg(), roi_masks=roi_masks_small)
+    process_message(
+        message,
+        s3=aws.s3,
+        sqs=aws.sqs,
+        cfg=make_cfg(),
+        roi_masks=roi_masks_small,
+        shutdown=worker.ShutdownSignal(),
+        max_receives=MAX_RECEIVES,
+    )
     assert seen == []
     assert remaining() == []
 
@@ -550,7 +611,15 @@ def test_message_with_only_non_upload_keys_is_deleted(
 ):
     seen = fake_handle_record({})
     message = queue_message(s3_event((aws.bucket, "results/x.json"), (aws.bucket, "status/y")))
-    process_message(message, s3=aws.s3, sqs=aws.sqs, cfg=make_cfg(), roi_masks=roi_masks_small)
+    process_message(
+        message,
+        s3=aws.s3,
+        sqs=aws.sqs,
+        cfg=make_cfg(),
+        roi_masks=roi_masks_small,
+        shutdown=worker.ShutdownSignal(),
+        max_receives=MAX_RECEIVES,
+    )
     assert seen == []
     assert remaining() == []
 
@@ -564,7 +633,15 @@ def test_every_record_is_handled_and_message_deleted(
     body = s3_event(
         (aws.bucket, k1), (aws.bucket, k2), (aws.bucket, "results/z.json"), (aws.bucket, k3)
     )
-    process_message(queue_message(body), s3=aws.s3, sqs=aws.sqs, cfg=cfg, roi_masks=roi_masks_small)
+    process_message(
+        queue_message(body),
+        s3=aws.s3,
+        sqs=aws.sqs,
+        cfg=cfg,
+        roi_masks=roi_masks_small,
+        shutdown=worker.ShutdownSignal(),
+        max_receives=MAX_RECEIVES,
+    )
     assert [(b, k) for b, k, *_ in seen] == [(aws.bucket, k1), (aws.bucket, k2), (aws.bucket, k3)]
     for _, _, s3, got_cfg, masks in seen:
         assert s3 is aws.s3 and got_cfg is cfg and masks is roi_masks_small
@@ -582,7 +659,13 @@ def test_message_is_left_when_any_record_raises(
     body = s3_event(*[(aws.bucket, k) for k in keys])
     # process_message logs the traceback; it does not let the exception escape
     process_message(
-        queue_message(body), s3=aws.s3, sqs=aws.sqs, cfg=make_cfg(), roi_masks=roi_masks_small
+        queue_message(body),
+        s3=aws.s3,
+        sqs=aws.sqs,
+        cfg=make_cfg(),
+        roi_masks=roi_masks_small,
+        shutdown=worker.ShutdownSignal(),
+        max_receives=MAX_RECEIVES,
     )
     assert len(remaining()) == 1
 
@@ -599,6 +682,8 @@ def test_raising_record_is_logged_with_traceback(
             sqs=aws.sqs,
             cfg=make_cfg(),
             roi_masks=roi_masks_small,
+            shutdown=worker.ShutdownSignal(),
+            max_receives=MAX_RECEIVES,
         )
     errors = [r for r in caplog.records if r.exc_info]
     assert errors, "the traceback was not logged"
@@ -620,6 +705,8 @@ def test_valid_upload_end_to_end_deletes_message_and_writes_result(
         sqs=aws.sqs,
         cfg=cfg,
         roi_masks=roi_masks_small,
+        shutdown=worker.ShutdownSignal(),
+        max_receives=MAX_RECEIVES,
     )
     assert remaining() == []
     assert read_result(aws, job_id)["job_id"] == job_id
@@ -632,13 +719,15 @@ def test_oversize_upload_end_to_end_deletes_object_and_message(
     _, key = new_key()
     upload(aws, key, b"y" * 4000)
     never_inference(patch_everywhere)
-    s3 = spy_s3(forbid=("download_file", "download_fileobj", "get_object"))
+    s3 = spy_s3(forbid=("download_file", "download_fileobj"), forbid_on_uploads=("get_object",))
     process_message(
         queue_message(s3_event((aws.bucket, key))),
         s3=s3,
         sqs=aws.sqs,
         cfg=cfg,
         roi_masks=roi_masks_small,
+        shutdown=worker.ShutdownSignal(),
+        max_receives=MAX_RECEIVES,
     )
     assert not object_exists(aws, key)
     assert remaining() == []
@@ -660,6 +749,8 @@ def test_failing_upload_end_to_end_leaves_the_message(
         sqs=aws.sqs,
         cfg=make_cfg(),
         roi_masks=roi_masks_small,
+        shutdown=worker.ShutdownSignal(),
+        max_receives=MAX_RECEIVES,
     )
     assert len(remaining()) == 1
     assert object_exists(aws, key)
