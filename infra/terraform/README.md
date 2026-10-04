@@ -81,7 +81,7 @@ terraform apply                                 # again: should report "No chang
 ```
 
 In `terraform.tfvars`, `zones` must be zones of `region` that offer `g6e.xlarge` (the example file
-shows the command that lists them), and `alert_email` is where the 3-hour alarm writes. AWS then
+shows the command that lists them), and `alert_email` is where both alarms write. AWS then
 sends a confirmation email: click its link or the alarm cannot reach you.
 
 `terraform output` prints `region`, `bucket_name` and `queue_url`. Put them in the gitignored `.env`
@@ -106,7 +106,7 @@ The worker group needs the software image, which is built after the first apply:
 
 To change the region: edit `region`, `zones` and `build_extra_zones` together, make sure GPU quota
 exists in the new region, then rebuild the image there. Every script in `infra/` reads the region
-from `aws_env.sh`, which asks Terraform; set `NEUROLENS_AWS_REGION` to override it.
+from `aws_env.sh`, which asks Terraform only (never a copy such as `.env`). Region-move checklist: M4 §1.
 
 ## 2c. Applying a saved plan (when you want to review exactly what will change)
 

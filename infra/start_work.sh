@@ -15,8 +15,19 @@ case "${1:-}" in
   *) echo "usage: $0 [--worker]" >&2; exit 2 ;;
 esac
 
-# A pause (infra/pause_idle_alarm.sh) lasts at most until the next session starts (M2a §4f).
-aws cloudwatch enable-alarm-actions --alarm-names neurolens-worker-idle
+# A pause (infra/pause_idle_alarm.sh) lasts at most until the next session starts (M2a §4f). No session
+# starts unless the idle alarm exists with its actions on: it is the money guard for workers.
+IDLE_ALARM=neurolens-worker-idle
+if ! aws cloudwatch enable-alarm-actions --alarm-names "$IDLE_ALARM"; then
+  echo "Could not switch on the idle alarm's action (above). If it says AccessDenied, paste the current" >&2
+  echo "infra/iam/neurolens-deploy-services.json into the console policy. Nothing was started." >&2
+  exit 1
+fi
+if [ "$(aws cloudwatch describe-alarms --alarm-names "$IDLE_ALARM" \
+      --query 'MetricAlarms[0].ActionsEnabled' --output text)" != "True" ]; then
+  echo "The idle alarm $IDLE_ALARM is missing or its actions are off: run terraform apply. Nothing was started." >&2
+  exit 1
+fi
 
 NAT=$(aws ec2 describe-instances \
   --filters Name=tag:Project,Values=neurolens Name=tag:Role,Values=nat \

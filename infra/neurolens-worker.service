@@ -4,6 +4,8 @@
 Description=NeuroLens GPU worker
 After=network-online.target
 Wants=network-online.target
+# Overridden by /etc/systemd/system/neurolens-worker.service.d/limits.conf (UserData, M2a §3):
+# 3 starts within 3600 s. These two lines go at the next image rebuild.
 StartLimitIntervalSec=600
 StartLimitBurst=3
 OnFailure=neurolens-self-terminate.service

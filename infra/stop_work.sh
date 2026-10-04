@@ -38,7 +38,8 @@ aws cloudwatch enable-alarm-actions --alarm-names "$IDLE_ALARM" \
 if ! SIZES=$(group_sizes); then
   problem "could not read the worker group $ASG"
 elif [ "$SIZES" = "None" ]; then
-  echo "No worker group (it exists once worker_ami_id is set)."
+  # The group exists since worker_ami_id was set, so its absence means a wrong region or a broken setup.
+  problem "no worker group $ASG in $AWS_REGION: is this the right region?"
 else
   read -r MIN MAX DES <<<"$SIZES"
   if [ "$MIN $MAX $DES" != "0 0 0" ]; then
@@ -47,9 +48,10 @@ else
       echo "Worker group set to 0 (was min $MIN, max $MAX, desired $DES)."
     else
       problem "could not set the worker group $ASG to 0"
+      DES=skip   # workers will not leave: do not wait for them
     fi
   fi
-  for _ in $(seq 1 60); do   # up to 10 minutes
+  [ "$DES" = skip ] || for _ in $(seq 1 60); do   # up to 10 minutes
     if ! WORKERS=$(live Name=tag:Role,Values=worker); then
       problem "could not list the workers"; break
     fi
@@ -59,7 +61,15 @@ else
   done
 fi
 
-# 3. NAT instance.
+# 3. NAT instance. It exists in every state but terminated; none at all means a wrong region.
+if ! ANY_NAT=$(aws ec2 describe-instances \
+    --filters Name=tag:Project,Values=neurolens Name=tag:Role,Values=nat \
+              Name=instance-state-name,Values=pending,running,stopping,stopped \
+    --query 'Reservations[].Instances[].InstanceId' --output text); then
+  problem "could not look for the NAT instance"
+elif [ -z "$ANY_NAT" ]; then
+  problem "no NAT instance in $AWS_REGION: is this the right region?"
+fi
 if ! NAT=$(aws ec2 describe-instances \
     --filters Name=tag:Project,Values=neurolens Name=tag:Role,Values=nat Name=instance-state-name,Values=pending,running \
     --query 'Reservations[].Instances[].InstanceId' --output text); then
