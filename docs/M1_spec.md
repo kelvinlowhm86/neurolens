@@ -71,13 +71,12 @@ One rule: **behaviour settings are shared; anything specific to a person or a de
   {
     "paths": { "...": "..." },
     "model": { "...": "..." },
-    "aws": { "region": "us-east-1" },
     "hf_download_timeout": 300,
     "max_video_duration_seconds": 120,
     "max_upload_bytes": 300000000
   }
   ```
-- **`.env`** is gitignored and per person (`.env.example` is committed, with placeholders). `KEY=VALUE` lines; blank lines and `#` comments ignored; one pair of surrounding quotes around a value is removed. It holds `HF_TOKEN`, `NEUROLENS_S3_BUCKET`, `NEUROLENS_SQS_QUEUE_URL` and optionally `NEUROLENS_AWS_REGION`. Josh copies the bucket and queue from `terraform output`. Later milestones' deployment-specific identifiers follow the same rule (environment variables: `.env` on a laptop, `env.conf` on AWS).
+- **`.env`** is gitignored and per person (`.env.example` is committed, with placeholders). `KEY=VALUE` lines; blank lines and `#` comments ignored; one pair of surrounding quotes around a value is removed. It holds `HF_TOKEN`, `NEUROLENS_S3_BUCKET`, `NEUROLENS_SQS_QUEUE_URL` and `NEUROLENS_AWS_REGION`. Josh copies the bucket, queue and region from `terraform output`. Later milestones' deployment-specific identifiers follow the same rule (environment variables: `.env` on a laptop, `env.conf` on AWS).
 
 **Loading (`neurolens.settings`).** Entry points (the launcher `app.py`, the worker's `run()`, and `inference.load_model(cfg=None)`) call `load_settings`; `load_config` stays file-only.
 - `load_dotenv(root=None) -> None`: reads `<root>/.env` if it exists (no file is not an error) and sets each variable in `os.environ` **only if it is not already set**, so a real environment variable always wins over the file.
@@ -231,8 +230,8 @@ neurolens/
 worker.py           NEW launcher
 infra/terraform/    NEW: bucket, queue, notification, lifecycle, CORS; README with state bootstrap + teardown
 tests/              MODIFIED: §6a tests
-config.json         COMMITTED, shared settings only (no secrets): "aws.region", max_upload_bytes
-.env.example        NEW: placeholders for HF_TOKEN, NEUROLENS_S3_BUCKET, NEUROLENS_SQS_QUEUE_URL (config.sample.json is removed)
+config.json         COMMITTED, shared settings only (no secrets or deployment values): max_upload_bytes
+.env.example        NEW: placeholders for HF_TOKEN, NEUROLENS_S3_BUCKET, NEUROLENS_SQS_QUEUE_URL, NEUROLENS_AWS_REGION (config.sample.json is removed)
 static/             MODIFIED: presign + direct-upload flow
 requirements/       MODIFIED: boto3 (web, worker), moto (dev)
 ```
