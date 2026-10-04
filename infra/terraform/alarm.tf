@@ -25,8 +25,14 @@ resource "aws_cloudwatch_metric_alarm" "worker_running_long" {
   dimensions  = { AutoScalingGroupName = local.worker_asg }
   statistic   = "Maximum"
 
+  # A worker in service in at least 34 of the last 36 five-minute slices: about 3 hours of GPU time
+  # (170 of 180 minutes). A short gap does not make those hours cheaper, so it must not reset the
+  # warning; with 36 of 36, a gap near 5 minutes made the alarm flip every 5 minutes (the alarm
+  # re-checks every minute and the slices are cut at a different minute each time), one email per
+  # flip (M2b CPU rehearsal, build log).
   period              = 300
-  evaluation_periods  = 36 # 36 x 5 min = 3 hours
+  evaluation_periods  = 36
+  datapoints_to_alarm = 34
   comparison_operator = "GreaterThanThreshold"
   threshold           = 0
   treat_missing_data  = "notBreaching" # no group yet, or metrics off: no alarm
