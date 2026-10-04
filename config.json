@@ -11,5 +11,9 @@
   },
   "hf_download_timeout": 300,
   "max_video_duration_seconds": 120,
-  "max_upload_bytes": 300000000
+  "max_upload_bytes": 300000000,
+  "worker": {
+    "heartbeat_seconds": 50,
+    "max_job_minutes": 75
+  }
 }

@@ -2,6 +2,7 @@
 
 import json
 import uuid
+from datetime import UTC, datetime
 from pathlib import PurePosixPath
 from urllib.parse import unquote_plus
 
@@ -16,6 +17,8 @@ CONTENT_TYPE_EXTENSIONS = {
 }
 
 UPLOAD_PREFIX = "uploads/"
+NOT_FOUND_CODES = ("404", "NoSuchKey", "NotFound")
+TIME_FORMAT = "%Y-%m-%dT%H:%M:%SZ"  # every timestamp in status objects and boot records
 
 
 def presign_upload(s3, bucket, content_type, max_bytes, expires_in=300):
@@ -88,3 +91,67 @@ def put_result(s3, bucket, job_id, result):
             return False
         raise
     return True
+
+
+def is_not_found(err):
+    """True for S3's "no such object" error (head_object says 404, get_object NoSuchKey)."""
+    return isinstance(err, ClientError) and err.response.get("Error", {}).get("Code") in (
+        NOT_FOUND_CODES
+    )
+
+
+def utc_text(moment):
+    """A timezone-aware datetime as UTC text, e.g. 2026-10-14T03:22:10Z."""
+    return moment.astimezone(UTC).strftime(TIME_FORMAT)
+
+
+def _get_json(s3, bucket, key):
+    """The JSON object stored at key, or None if there is none. Other errors are raised."""
+    try:
+        body = s3.get_object(Bucket=bucket, Key=key)["Body"]
+    except ClientError as err:
+        if is_not_found(err):
+            return None
+        raise
+    return json.loads(body.read())
+
+
+def result_exists(s3, bucket, job_id):
+    try:
+        s3.head_object(Bucket=bucket, Key=f"results/{job_id}.json")
+    except ClientError as err:
+        if is_not_found(err):
+            return False
+        raise
+    return True
+
+
+def get_result(s3, bucket, job_id):
+    return _get_json(s3, bucket, f"results/{job_id}.json")
+
+
+def get_status(s3, bucket, job_id):
+    return _get_json(s3, bucket, f"status/{job_id}.json")
+
+
+def put_status(s3, bucket, job_id, status, *, stage=None, error=None, now=None):
+    """Update status/<job_id>.json: set status, stage, error and updated_at; append the stage.
+
+    Never changes an object whose status is already "done": a late failure or a slower
+    duplicate worker must not undo a finished job. Read-modify-write, not atomic: two workers on
+    one job can still interleave (rare, accepted; M3 adds a database lock).
+    """
+    key = f"status/{job_id}.json"
+    obj = _get_json(s3, bucket, key) or {"job_id": job_id, "stages": []}
+    if obj.get("status") == "done":
+        return
+    at = utc_text(now or datetime.now(UTC))
+    obj["status"] = status
+    obj["stage"] = stage
+    obj["error"] = error
+    obj["updated_at"] = at
+    if stage is not None:
+        obj.setdefault("stages", []).append({"stage": stage, "at": at})
+    s3.put_object(
+        Bucket=bucket, Key=key, Body=json.dumps(obj).encode(), ContentType="application/json"
+    )

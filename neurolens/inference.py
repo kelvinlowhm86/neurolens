@@ -5,6 +5,7 @@ import logging
 import math
 import os
 import subprocess
+import time
 
 import numpy as np
 
@@ -299,9 +300,13 @@ def predict(events, duration):
     """TRIBE v2 predictions, one row per second of video in time order: array (n, 20484).
 
     In fake mode: seeded random numbers of shape (ceil(duration), 20484), seeded from the file's
-    size (plus 1 for the no-audio pass), so the same video gives the same output.
+    size (plus 1 for the no-audio pass), so the same video gives the same output. Each fake call
+    sleeps FAKE_INFERENCE_SECONDS (default 0; only with FAKE_INFERENCE on), so a CPU rehearsal
+    has a job long enough to interrupt.
     """
     if isinstance(events, _FakeEvents):
+        if fake_mode():
+            time.sleep(float(os.environ.get("FAKE_INFERENCE_SECONDS") or 0))
         rng = np.random.default_rng(events.size + (0 if events.audio else 1))
         return rng.standard_normal((math.ceil(duration), N_VERTICES))
 
