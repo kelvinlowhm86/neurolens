@@ -70,3 +70,13 @@ the `transcribing` stage, for a 0.3 MB file. Most likely the first `import torch
 read). It is counted in the `downloading` stage. Experiment 1 runs on a worker that has done a
 warm-up job, so its numbers are not affected; the stage attribution is noted for review B, and the
 cold-disk cost goes into the §8 diagnosis.
+
+**3-hour alarm email storm (fixed):** the alert topic sent 12 emails between 19:49 and 20:14 UTC, all
+from `neurolens-worker-running-3h` flipping ALARM/OK every 5 minutes. Cause, from the alarm's own
+state reasons: a 5-minute gap with no worker in service (17:34:35-17:40, between R1's worker ending
+and R1b's starting). The alarm re-checks every minute with 5-minute slices cut at that minute; the
+checks at :x0/:x5 had a slice wholly inside the gap (0.0 at 17:35, so 35 of 36: OK), the checks a
+minute later did not (36 of 36: ALARM). Late or missing data played no part (no point was missing),
+so `treat_missing_data` would not have helped. Fix `alarm.tf`: 34 of 36 slices (about 170 of 180
+minutes of GPU time), so a short gap no longer resets the warning; applied 2026-10-05. Not exercised
+yet (needs a session over 3 hours).
