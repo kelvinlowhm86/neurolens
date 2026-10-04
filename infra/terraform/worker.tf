@@ -1,6 +1,7 @@
 # ─── GPU worker Launch Template and Auto Scaling group (M2a §4b) ───────────
 # Created only once worker_ami_id is set (after infra/build_ami.sh has made the image). The group
-# stands at zero with no scaling policy: infra/start_work.sh --worker starts one worker by hand.
+# stands at zero; its only scaling policy is the idle alarm's "set to 0" (alarm.tf). infra/start_work.sh
+# --worker starts one worker by hand.
 
 locals {
   workers_enabled = var.worker_ami_id != ""
@@ -88,7 +89,7 @@ resource "aws_autoscaling_group" "workers" {
     }
   }
 
-  # Free; the 3-hour alarm reads GroupInServiceInstances.
+  # Free; both alarms (alarm.tf) read GroupInServiceInstances.
   metrics_granularity = "1Minute"
   enabled_metrics     = ["GroupInServiceInstances", "GroupDesiredCapacity", "GroupPendingInstances"]
 

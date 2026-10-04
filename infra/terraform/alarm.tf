@@ -1,7 +1,9 @@
-# ─── Long-running GPU alarm (M2a §4f) ──────────────────────────────────────
-# Emails if a worker has been running for 3 hours straight: the backstop for what self-termination
-# cannot catch (a worker stuck mid-job, an unreachable NAT instance). Confirm the subscription email
-# once after the first apply. About $0.10 a month.
+# ─── GPU alarms (M2a §4f) ───────────────────────────────────────────────────
+# Two alarms on one email topic (confirm the subscription email once after the first apply):
+# - idle worker: ACTS. A worker in service while the job queue sees no message received and none
+#   deleted for 90 minutes is ended by AWS itself (group desired capacity to 0).
+# - long-running: email only, after 3 hours with a worker in service.
+# About $0.40 a month for both (four alarm metrics).
 
 resource "aws_sns_topic" "alerts" {
   name = "neurolens-alerts"
@@ -15,7 +17,7 @@ resource "aws_sns_topic_subscription" "alerts_email" {
 
 resource "aws_cloudwatch_metric_alarm" "worker_running_long" {
   alarm_name        = "neurolens-worker-running-3h"
-  alarm_description = "A NeuroLens GPU worker has been running for 3 hours. Check it, or run infra/stop_work.sh."
+  alarm_description = "A NeuroLens GPU worker has been running for 3 hours (warning only; the idle alarm ends idle workers). Check it, or run infra/stop_work.sh."
 
   namespace   = "AWS/AutoScaling"
   metric_name = "GroupInServiceInstances"
@@ -29,5 +31,78 @@ resource "aws_cloudwatch_metric_alarm" "worker_running_long" {
   treat_missing_data  = "notBreaching" # no group yet, or metrics off: no alarm
 
   alarm_actions = [aws_sns_topic.alerts.arn]
+  ok_actions    = [aws_sns_topic.alerts.arn]
+}
+
+# A worker always picks up or finishes a job within 90 minutes when healthy (longest job about
+# 55 minutes; an idle worker ends itself after 30). So no queue activity for 90 minutes with a worker
+# in service means self-termination failed, a crash loop, a frozen job or a dead NAT instance.
+# Missing SQS data (queues stop publishing after ~6 idle hours) counts as no activity; missing
+# group data never fires it. Paused by infra/pause_idle_alarm.sh until start_work/stop_work.
+resource "aws_autoscaling_policy" "workers_to_zero" {
+  count = local.workers_enabled ? 1 : 0
+
+  name                   = "neurolens-workers-to-zero"
+  autoscaling_group_name = aws_autoscaling_group.workers[0].name
+  policy_type            = "SimpleScaling"
+  adjustment_type        = "ExactCapacity"
+  scaling_adjustment     = 0
+}
+
+resource "aws_cloudwatch_metric_alarm" "worker_idle" {
+  count = local.workers_enabled ? 1 : 0
+
+  alarm_name        = "neurolens-worker-idle"
+  alarm_description = <<-EOT
+    A NeuroLens worker ran 90 minutes with no job picked up or finished, so AWS has set the worker
+    group to 0 and the worker is ending. Usual causes: its self-termination failed, a crash loop, a
+    frozen job, or the NAT instance is down. Manual work on a worker (Session Manager) is invisible
+    to this alarm: run infra/pause_idle_alarm.sh first. start_work.sh and stop_work.sh re-enable it.
+  EOT
+
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  threshold           = 1
+  evaluation_periods  = 18 # 18 x 5 min = 90 minutes
+  datapoints_to_alarm = 18
+  treat_missing_data  = "notBreaching"
+
+  metric_query {
+    id          = "idle"
+    expression  = "IF(insvc > 0 AND FILL(recv, 0) + FILL(del, 0) == 0, 1, 0)"
+    label       = "Worker in service with no queue activity"
+    return_data = true
+  }
+  metric_query {
+    id = "insvc"
+    metric {
+      namespace   = "AWS/AutoScaling"
+      metric_name = "GroupInServiceInstances"
+      dimensions  = { AutoScalingGroupName = local.worker_asg }
+      period      = 300
+      stat        = "Maximum"
+    }
+  }
+  metric_query {
+    id = "recv"
+    metric {
+      namespace   = "AWS/SQS"
+      metric_name = "NumberOfMessagesReceived"
+      dimensions  = { QueueName = aws_sqs_queue.jobs.name }
+      period      = 300
+      stat        = "Sum"
+    }
+  }
+  metric_query {
+    id = "del"
+    metric {
+      namespace   = "AWS/SQS"
+      metric_name = "NumberOfMessagesDeleted"
+      dimensions  = { QueueName = aws_sqs_queue.jobs.name }
+      period      = 300
+      stat        = "Sum"
+    }
+  }
+
+  alarm_actions = [aws_autoscaling_policy.workers_to_zero[0].arn, aws_sns_topic.alerts.arn]
   ok_actions    = [aws_sns_topic.alerts.arn]
 }
