@@ -13,6 +13,16 @@ locals {
   # its region to them. us-east-1 keeps the original names, so its live roles are not replaced.
   iam_suffix     = var.region == "us-east-1" ? "" : "-${var.region}"
   worker_asg_arn = "arn:aws:autoscaling:${var.region}:${local.account_id}:autoScalingGroup:*:autoScalingGroupName/${local.worker_asg}"
+
+  # Only the image build needs the HuggingFace token. The AWS-managed SSM core policy allows reading
+  # every parameter and the boundary allows /neurolens/*, so the worker and NAT roles deny it
+  # explicitly (a Deny always wins over an Allow). M2a §4b.
+  deny_neurolens_parameters = {
+    Sid      = "NoNeurolensParameters"
+    Effect   = "Deny"
+    Action   = ["ssm:GetParameter", "ssm:GetParameters", "ssm:GetParametersByPath", "ssm:GetParameterHistory"]
+    Resource = "arn:aws:ssm:${var.region}:${local.account_id}:parameter/neurolens/*"
+  }
 }
 
 data "aws_iam_policy_document" "ec2_assume" {
@@ -146,6 +156,7 @@ resource "aws_iam_role_policy" "worker" {
         Action   = "autoscaling:TerminateInstanceInAutoScalingGroup"
         Resource = local.worker_asg_arn
       },
+      local.deny_neurolens_parameters,
     ]
   })
 }
@@ -166,6 +177,15 @@ resource "aws_iam_role" "nat" {
   name                 = "neurolens-nat${local.iam_suffix}"
   assume_role_policy   = data.aws_iam_policy_document.ec2_assume.json
   permissions_boundary = local.boundary_arn
+}
+
+resource "aws_iam_role_policy" "nat" {
+  name = "neurolens-nat"
+  role = aws_iam_role.nat.id
+  policy = jsonencode({
+    Version   = "2012-10-17"
+    Statement = [local.deny_neurolens_parameters]
+  })
 }
 
 resource "aws_iam_role_policy_attachment" "nat_ssm" {

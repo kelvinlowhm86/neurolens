@@ -36,6 +36,7 @@
       "Effect": "Allow",
       "Action": [
         "cloudwatch:PutMetricAlarm", "cloudwatch:DeleteAlarms",
+        "cloudwatch:EnableAlarmActions", "cloudwatch:DisableAlarmActions",
         "cloudwatch:TagResource", "cloudwatch:UntagResource", "cloudwatch:ListTagsForResource"
       ],
       "Resource": "arn:aws:cloudwatch:us-east-1:*:alarm:neurolens-*"

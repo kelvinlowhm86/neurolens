@@ -21,7 +21,9 @@ it created. The region is one setting (`region` in `terraform.tfvars`, default `
   boundary.
 - A launch template and Auto Scaling group `neurolens-workers` (0 machines until you start a
   session), created only once `worker_ami_id` is set.
-- An SNS topic and an alarm that emails `alert_email` when a GPU worker has been running 3 hours.
+- Two alarms on one SNS email topic: the **idle alarm** ends a worker itself (AWS sets the group to 0)
+  when a worker has been in service for 90 minutes with no job picked up or finished; a second alarm
+  only emails `alert_email` when a worker has been running for 3 hours.
 
 **Cost:** with everything stopped, the running cost is the stored image and disks and the S3 files,
 roughly $3 a month. Machines bill only while a session is open: the NAT about 0.84 cents an hour, a
@@ -82,8 +84,9 @@ In `terraform.tfvars`, `zones` must be zones of `region` that offer `g6e.xlarge`
 shows the command that lists them), and `alert_email` is where the 3-hour alarm writes. AWS then
 sends a confirmation email: click its link or the alarm cannot reach you.
 
-`terraform output` prints `bucket_name` and `queue_url`. Put them in the gitignored `.env` at the
-repo root as `NEUROLENS_S3_BUCKET` and `NEUROLENS_SQS_QUEUE_URL` (see `.env.example`). The committed
+`terraform output` prints `region`, `bucket_name` and `queue_url`. Put them in the gitignored `.env`
+at the repo root as `NEUROLENS_AWS_REGION`, `NEUROLENS_S3_BUCKET` and `NEUROLENS_SQS_QUEUE_URL`
+(see `.env.example`). The committed
 `config.json` holds no account-specific values, and access keys never go in the project at all.
 
 ## 2b. The GPU worker group (M2a)
@@ -141,17 +144,25 @@ infra/start_work.sh              # NAT instance on; the worker group may run one
 infra/start_work.sh --worker     # also starts one GPU worker (billed from now)
 infra/deploy_code.sh             # after a commit: ship new code (workers pick it up on restart)
 infra/restart_workers.sh         # restart the worker service on running workers, show the revision
+infra/connect_worker.sh          # open a shell on the worker (Session Manager), after a warning
+infra/pause_idle_alarm.sh        # before long manual work on a worker: pause the idle alarm's action
 infra/stop_work.sh               # END EVERY SESSION WITH THIS
 ```
 
 A new worker takes about 6 minutes to be ready (software sync, then the model loads). The first job
-on a fresh worker adds about 6 minutes of one-time warm-up. `stop_work.sh` sets the group to zero,
-waits for the workers to go, stops the NAT instance and then lists any neurolens machine still
-running: read that last line, it should say there is none.
+on a fresh worker adds about 6 minutes of one-time warm-up.
 
-`stop_work.sh` needs the region, which it reads from Terraform's output. If Terraform cannot be
-reached it stops with instructions rather than guessing; run it as
-`NEUROLENS_AWS_REGION=us-east-1 infra/stop_work.sh` in that case.
+`stop_work.sh` sets the worker group to zero (even while it is still waiting for a GPU and has no
+machine yet), waits for the workers to go, stops the NAT instance and then checks. It prints
+**ALL STOPPED** only when every check succeeded. Anything it could not prove prints
+**NOT CONFIRMED** with the reason: read it and act on it. It needs the region from Terraform; if
+Terraform cannot answer, it stops nothing and prints the `terraform init` command to fix it. An
+image-build machine is listed, not stopped, with the command to end it if no build is running.
+
+**The idle alarm and manual work.** The idle alarm ends a worker that has gone 90 minutes with no
+job picked up or finished. It cannot see manual work on a worker (Session Manager), so before more
+than an hour of that, run `infra/pause_idle_alarm.sh`. The pause lasts until the next
+`start_work.sh` or `stop_work.sh`; while paused, only the 3-hour email covers a forgotten worker.
 
 ## 6. Tear down
 

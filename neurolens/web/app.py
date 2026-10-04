@@ -40,7 +40,13 @@ def create_app(data_dir=None, cfg=None):
     if cfg is not None and "aws" in cfg:
         import boto3
 
-        s3 = boto3.client("s3", region_name=cfg["aws"]["region"])
+        region = cfg["aws"].get("region")
+        if not region:
+            raise ValueError(
+                "Missing required setting: aws.region (NEUROLENS_AWS_REGION). Set it in .env, "
+                "copied from `terraform output region`."
+            )
+        s3 = boto3.client("s3", region_name=region)
     max_bytes = cfg.get("max_upload_bytes") if cfg else None
     max_seconds = settings.max_duration(cfg)
     samples_json = data_dir / "samples.json"

@@ -3,8 +3,8 @@
 # group's desired count: a plain shutdown would make the group launch a replacement, which would
 # fail the same way, in a billing loop.
 # Called by neurolens-self-terminate.service (with --after-worker-stop) and by UserData's ERR trap.
-# If the call fails (for example the NAT instance is down), it logs and stops: the 3-hour alarm is
-# the backstop.
+# If the call fails (for example the NAT instance is down), it logs and stops: the idle alarm
+# (M2a §4f) is the backstop and has AWS end the machine.
 set -uo pipefail
 
 LOG=/var/log/neurolens-boot.log
@@ -32,6 +32,6 @@ if aws autoscaling terminate-instance-in-auto-scaling-group --region "$REGION" \
     --instance-id "$ID" --should-decrement-desired-capacity >>"$LOG" 2>&1; then
   log "termination requested"
 else
-  log "termination call FAILED; the 3-hour alarm is the backstop"
+  log "termination call FAILED; the idle alarm is the backstop"
   exit 1
 fi

@@ -1,41 +1,104 @@
 #!/usr/bin/env bash
-# Ends a work session (M2a §4d): worker group to zero, waits for workers to go, stops the NAT
-# instance, then checks that no neurolens machine is left running. Run at the end of every session.
-set -euo pipefail
-source "$(dirname "$0")/aws_env.sh"   # AWS_PROFILE, AWS_REGION (M2a §4i)
+# Ends a work session (M2a §4d). Run at the end of every session.
+# Re-enables the idle alarm's action, sets the worker group to 0/0/0 (even while it is still waiting
+# for GPU capacity and has no machine yet), waits for workers to go, stops the NAT instance, then
+# checks. It prints ALL STOPPED only when every check succeeded; anything unproven prints
+# NOT CONFIRMED and exits 1. An image-build machine is listed, not stopped (it may be running on
+# purpose; it has its own guards).
+set -uo pipefail   # no -e on purpose: a failed call is recorded and the script goes on stopping the rest
 ASG=neurolens-workers
+IDLE_ALARM=neurolens-worker-idle
+PROBLEMS=""
+problem() { PROBLEMS="$PROBLEMS  - $*"$'\n'; echo "PROBLEM: $*" >&2; }
 
-live_instances() {  # $1: extra filters, e.g. Name=tag:Role,Values=worker
+# The region comes from Terraform (M2a §4i). Without it nothing can be checked: say so, never guess.
+if ! AWS_REGION=$(bash -c 'source "$1" >/dev/null && printf %s "$AWS_REGION"' _ "$(dirname "$0")/aws_env.sh"); then
+  echo "NOT CONFIRMED: nothing was checked or stopped, because the region is unknown (see above)." >&2
+  echo "Fix that and run this script again. Meanwhile the idle alarm ends an idle worker within about 90 minutes." >&2
+  exit 1
+fi
+export AWS_PROFILE="${NEUROLENS_AWS_PROFILE:-neurolens}" AWS_REGION
+
+live() {  # $1: an extra filter or "". Neurolens machines that may be billing; fails if the call fails.
   # shellcheck disable=SC2086
   aws ec2 describe-instances \
     --filters Name=tag:Project,Values=neurolens Name=instance-state-name,Values=pending,running,stopping,shutting-down $1 \
-    --query 'Reservations[].Instances[].[InstanceId,InstanceType,Tags[?Key==`Name`]|[0].Value,State.Name]' --output text
+    --query 'Reservations[].Instances[].[InstanceId,InstanceType,Tags[?Key==`Role`]|[0].Value,State.Name]' --output text
+}
+group_sizes() {  # "min max desired", "None" if there is no group; fails if the call fails
+  aws autoscaling describe-auto-scaling-groups --auto-scaling-group-names "$ASG" \
+    --query 'AutoScalingGroups[0].[MinSize,MaxSize,DesiredCapacity]' --output text
 }
 
-if [ -n "$(aws autoscaling describe-auto-scaling-groups --auto-scaling-group-names "$ASG" \
-      --query 'AutoScalingGroups[].AutoScalingGroupName' --output text)" ]; then
-  aws autoscaling update-auto-scaling-group --auto-scaling-group-name "$ASG" \
-    --min-size 0 --max-size 0 --desired-capacity 0
-  echo "Worker group set to 0. Waiting for workers to terminate..."
-  for _ in $(seq 1 60); do
-    [ -z "$(live_instances Name=tag:Role,Values=worker)" ] && break
+# 1. A pause (infra/pause_idle_alarm.sh) lasts until the end of the session.
+aws cloudwatch enable-alarm-actions --alarm-names "$IDLE_ALARM" \
+  || problem "could not re-enable the idle alarm's action ($IDLE_ALARM)"
+
+# 2. Worker group to 0/0/0 whenever any number is above 0, machines or not.
+if ! SIZES=$(group_sizes); then
+  problem "could not read the worker group $ASG"
+elif [ "$SIZES" = "None" ]; then
+  echo "No worker group (it exists once worker_ami_id is set)."
+else
+  read -r MIN MAX DES <<<"$SIZES"
+  if [ "$MIN $MAX $DES" != "0 0 0" ]; then
+    if aws autoscaling update-auto-scaling-group --auto-scaling-group-name "$ASG" \
+        --min-size 0 --max-size 0 --desired-capacity 0; then
+      echo "Worker group set to 0 (was min $MIN, max $MAX, desired $DES)."
+    else
+      problem "could not set the worker group $ASG to 0"
+    fi
+  fi
+  for _ in $(seq 1 60); do   # up to 10 minutes
+    if ! WORKERS=$(live Name=tag:Role,Values=worker); then
+      problem "could not list the workers"; break
+    fi
+    [ -z "$WORKERS" ] && break
+    echo "Waiting for workers to end: $(echo "$WORKERS" | awk '{print $1, $4}' | tr '\n' ' ')"
     sleep 10
   done
 fi
 
-NAT=$(aws ec2 describe-instances \
-  --filters Name=tag:Project,Values=neurolens Name=tag:Role,Values=nat Name=instance-state-name,Values=pending,running \
-  --query 'Reservations[].Instances[].InstanceId' --output text)
-if [ -n "$NAT" ]; then
-  aws ec2 stop-instances --instance-ids "$NAT" --output text >/dev/null
-  aws ec2 wait instance-stopped --instance-ids "$NAT"
-  echo "NAT instance $NAT stopped."
+# 3. NAT instance.
+if ! NAT=$(aws ec2 describe-instances \
+    --filters Name=tag:Project,Values=neurolens Name=tag:Role,Values=nat Name=instance-state-name,Values=pending,running \
+    --query 'Reservations[].Instances[].InstanceId' --output text); then
+  problem "could not look for the NAT instance"
+elif [ -n "$NAT" ]; then
+  # shellcheck disable=SC2086  # NAT is a space-separated list on purpose
+  if aws ec2 stop-instances --instance-ids $NAT --output text >/dev/null \
+      && aws ec2 wait instance-stopped --instance-ids $NAT; then
+    echo "NAT instance $NAT stopped."
+  else
+    problem "could not stop the NAT instance $NAT"
+  fi
 fi
 
-LEFT=$(live_instances "")
-if [ -n "$LEFT" ]; then
-  echo "WARNING: these neurolens machines are still running or stopping (and may be billing):" >&2
-  echo "$LEFT" >&2
+# 4. Check: the group reads 0/0/0 and no neurolens machine may be billing.
+if ! SIZES=$(group_sizes); then
+  problem "could not re-read the worker group $ASG"
+elif [ "$SIZES" != "None" ] && [ "$(echo "$SIZES" | tr -s ' \t' ' ')" != "0 0 0" ]; then
+  problem "worker group $ASG is not at 0 (min max desired: $SIZES)"
+fi
+if ! LEFT=$(live ""); then
+  problem "could not list the neurolens machines"
+elif [ -n "$LEFT" ]; then
+  while read -r ID TYPE ROLE STATE; do
+    if [ "$ROLE" = "build" ]; then
+      problem "image-build machine $ID ($TYPE) is $STATE. If no build is running, end it with:
+      AWS_PROFILE=$AWS_PROFILE aws ec2 terminate-instances --instance-ids $ID --region $AWS_REGION"
+    else
+      problem "$ID ($TYPE, role $ROLE) is $STATE"
+    fi
+  done <<<"$LEFT"
+fi
+STOPPED=$(aws ec2 describe-instances \
+  --filters Name=tag:Project,Values=neurolens Name=instance-state-name,Values=stopped \
+  --query 'Reservations[].Instances[].[InstanceId,InstanceType,Tags[?Key==`Role`]|[0].Value]' --output text 2>/dev/null) \
+  && [ -n "$STOPPED" ] && echo "Stopped (disk only, a few cents a month): $(echo "$STOPPED" | tr '\t\n' '  ')"
+
+if [ -n "$PROBLEMS" ]; then
+  printf 'NOT CONFIRMED in %s:\n%s' "$AWS_REGION" "$PROBLEMS" >&2
   exit 1
 fi
-echo "ALL STOPPED: no neurolens machine is running."
+echo "ALL STOPPED in $AWS_REGION: worker group at 0, no neurolens machine running."

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Starts a work session (M2a §4d): the NAT instance, then lets the worker group run one machine.
+# Starts a work session (M2a §4d): re-enables the idle alarm's action, starts the NAT instance, then
+# lets the worker group run one machine.
 #   infra/start_work.sh            NAT on, worker group max 1 (no worker yet)
 #   infra/start_work.sh --worker   also start one on-demand GPU worker ($1.86 an hour; $2.24 if only a 2xlarge is free)
 # End every session with infra/stop_work.sh.
@@ -13,6 +14,9 @@ case "${1:-}" in
   "") ;;
   *) echo "usage: $0 [--worker]" >&2; exit 2 ;;
 esac
+
+# A pause (infra/pause_idle_alarm.sh) lasts at most until the next session starts (M2a §4f).
+aws cloudwatch enable-alarm-actions --alarm-names neurolens-worker-idle
 
 NAT=$(aws ec2 describe-instances \
   --filters Name=tag:Project,Values=neurolens Name=tag:Role,Values=nat \

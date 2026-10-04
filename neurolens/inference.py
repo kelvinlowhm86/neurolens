@@ -310,8 +310,18 @@ def predict(events, duration):
     return order_by_time(preds, [s.start for s in segments], duration, tr=model.data.TR)
 
 
+def reset_gpu_peak():
+    """Start a new peak-memory count, so gpu_info() reports one job's peak. No-op without a GPU."""
+    try:
+        import torch
+    except ImportError:  # laptop / fake mode: torch is not installed
+        return
+    if torch.cuda.is_available():
+        torch.cuda.reset_peak_memory_stats(0)
+
+
 def gpu_info():
-    """GPU name and peak memory use, or None when there is no CUDA GPU."""
+    """GPU name and peak memory use since reset_gpu_peak(), or None when there is no CUDA GPU."""
     try:
         import torch
     except ImportError:  # laptop / fake mode: torch is not installed

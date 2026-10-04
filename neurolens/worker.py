@@ -18,11 +18,12 @@ logger = logging.getLogger("neurolens")
 
 NOT_FOUND_CODES = ("404", "NoSuchKey", "NotFound")
 
-# Keys the worker needs in config.json, as (path through the dict, name shown in errors).
+# Settings the worker needs, as (path through the dict, name shown in errors). The aws values are
+# deployment values from the environment (.env on a laptop, env.conf on AWS), never config.json.
 REQUIRED_CONFIG = [
-    (("aws", "region"), "aws.region"),
-    (("aws", "s3_bucket"), "aws.s3_bucket"),
-    (("aws", "sqs_queue_url"), "aws.sqs_queue_url"),
+    (("aws", "region"), "aws.region (NEUROLENS_AWS_REGION)"),
+    (("aws", "s3_bucket"), "aws.s3_bucket (NEUROLENS_S3_BUCKET)"),
+    (("aws", "sqs_queue_url"), "aws.sqs_queue_url (NEUROLENS_SQS_QUEUE_URL)"),
     (("paths", "output"), "paths.output"),
     (("max_upload_bytes",), "max_upload_bytes"),
 ]
@@ -55,7 +56,10 @@ def validate_config(cfg):
         node = cfg
         for part in path:
             if not isinstance(node, dict) or part not in node:
-                raise ValueError(f"config.json is missing required setting: {name}")
+                raise ValueError(
+                    f"Missing required setting: {name}. Deployment values come from .env "
+                    "(env.conf on AWS), behaviour settings from config.json."
+                )
             node = node[part]
 
 
@@ -102,6 +106,7 @@ def handle_record(bucket, key, *, s3, cfg, roi_masks):
 
         logger.info(f"Analysing {key} ({duration:.1f}s)")
         t0 = time.time()
+        inference.reset_gpu_peak()  # so the result's peak VRAM is this job's alone
         events = inference.build_events(local)
         preds_full = inference.predict(events, duration)
         preds_noaudio = inference.predict(inference.without_audio(events), duration)

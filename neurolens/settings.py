@@ -139,8 +139,10 @@ def configure_env(cfg, paths):
 
 # The max duration reflects the target use case (short-form pre-roll / social ad
 # creative). The GPU was chosen for it: memory and job time grow with video length
-# and were measured only up to 120 s, and a job must finish within the SQS
-# visibility timeout (1800 s until M2b's heartbeat). This is a hard
+# and were measured only up to 120 s. A 120 s 4K video takes about 40-47 minutes,
+# longer than the SQS visibility timeout (1800 s), so until M2b's heartbeat the
+# worker group stays at max 1 (M2a §4h); the idle alarm (90 min, M2a §4f) must stay
+# longer than the slowest job. This is a hard
 # product constraint, independent of billing — it must be enforced
 # regardless of credit balance (see M3a §4a `verify`, which must check this
 # BEFORE any credit-adjustment logic, not instead of it).
