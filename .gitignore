@@ -66,8 +66,9 @@ Thumbs.db
 .vscode/
 .idea/
 
-# ─── Personal files (Claude Code instructions, AI-use log) ─────────────────
+# ─── Personal files (Claude Code instructions, AI-use log, study pages) ────
 *.local.md
+*.local.html
 
 # ─── Tooling caches & build output ─────────────────────────────────────────
 .ruff_cache/
