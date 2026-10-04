@@ -37,7 +37,8 @@
       "Action": [
         "cloudwatch:PutMetricAlarm", "cloudwatch:DeleteAlarms",
         "cloudwatch:EnableAlarmActions", "cloudwatch:DisableAlarmActions",
-        "cloudwatch:TagResource", "cloudwatch:UntagResource", "cloudwatch:ListTagsForResource"
+        "cloudwatch:TagResource", "cloudwatch:UntagResource", "cloudwatch:ListTagsForResource",
+        "cloudwatch:DescribeAlarmHistory"
       ],
       "Resource": "arn:aws:cloudwatch:us-east-1:*:alarm:neurolens-*"
     },
@@ -91,6 +92,33 @@
         "ssm:GetCommandInvocation", "ssm:ListCommands", "ssm:ListCommandInvocations",
         "ssm:DescribeInstanceInformation", "ssm:DescribeParameters"
       ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "FunctionsOnlyNeurolens",
+      "Effect": "Allow",
+      "Action": "lambda:*",
+      "Resource": "arn:aws:lambda:us-east-1:*:function:neurolens-*"
+    },
+    {
+      "Sid": "EventRulesOnlyNeurolens",
+      "Effect": "Allow",
+      "Action": "events:*",
+      "Resource": "arn:aws:events:us-east-1:*:rule/neurolens-*"
+    },
+    {
+      "Sid": "FunctionLogsOnlyNeurolens",
+      "Effect": "Allow",
+      "Action": "logs:*",
+      "Resource": [
+        "arn:aws:logs:us-east-1:*:log-group:/aws/lambda/neurolens-*",
+        "arn:aws:logs:us-east-1:*:log-group:/aws/lambda/neurolens-*:*"
+      ]
+    },
+    {
+      "Sid": "ListLogGroups",
+      "Effect": "Allow",
+      "Action": "logs:DescribeLogGroups",
       "Resource": "*"
     }
   ]

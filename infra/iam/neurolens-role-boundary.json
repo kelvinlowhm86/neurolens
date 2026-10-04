@@ -27,10 +27,22 @@
       "Condition": {"StringEquals": {"kms:ViaService": "ssm.us-east-1.amazonaws.com"}}
     },
     {
-      "Sid": "SelfTerminateOnlyNeurolensGroups",
+      "Sid": "ReadGroups",
       "Effect": "Allow",
-      "Action": "autoscaling:TerminateInstanceInAutoScalingGroup",
+      "Action": "autoscaling:DescribeAutoScalingGroups",
+      "Resource": "*"
+    },
+    {
+      "Sid": "ResizeOnlyNeurolensGroups",
+      "Effect": "Allow",
+      "Action": "autoscaling:UpdateAutoScalingGroup",
       "Resource": "arn:aws:autoscaling:us-east-1:*:autoScalingGroup:*:autoScalingGroupName/neurolens-*"
+    },
+    {
+      "Sid": "LogsOnlyNeurolensFunctions",
+      "Effect": "Allow",
+      "Action": ["logs:CreateLogStream", "logs:PutLogEvents"],
+      "Resource": "arn:aws:logs:us-east-1:*:log-group:/aws/lambda/neurolens-*:*"
     },
     {
       "Sid": "SessionManagerAgent",

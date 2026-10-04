@@ -1,10 +1,21 @@
 # ─── GPU worker Launch Template and Auto Scaling group (M2a §4b) ───────────
 # Created only once worker_ami_id is set (after infra/build_ami.sh has made the image). The group
-# stands at zero; its only scaling policy is the idle alarm's "set to 0" (alarm.tf). infra/start_work.sh
-# --worker starts one worker by hand.
+# stands at zero; the queue scales it (scaling.tf, M2b) and infra/start_work.sh --worker starts a
+# warm hold by hand.
 
 locals {
   workers_enabled = var.worker_ami_id != ""
+
+  # The worker's config.json: the committed file with the machine's absolute paths, so the two can
+  # never drift apart (a hand-kept copy here once missed new settings). Changing config.json
+  # changes the launch template: it reaches new workers, not running ones.
+  worker_config = jsonencode(merge(jsondecode(file("${path.module}/../../config.json")), {
+    paths = {
+      models = "/opt/neurolens/cache/models"
+      data   = "/opt/neurolens/cache/data"
+      output = "/opt/neurolens/output"
+    }
+  }))
 }
 
 resource "aws_launch_template" "worker" {
@@ -40,10 +51,12 @@ resource "aws_launch_template" "worker" {
   }
 
   user_data = base64encode(templatefile("${path.module}/worker_userdata.sh.tftpl", {
-    region         = var.region
-    bucket         = aws_s3_bucket.main.bucket
-    queue_url      = aws_sqs_queue.jobs.url
-    fake_inference = var.worker_fake_inference
+    region           = var.region
+    bucket           = aws_s3_bucket.main.bucket
+    queue_url        = aws_sqs_queue.jobs.url
+    fake_inference   = var.worker_fake_inference
+    fake_job_seconds = var.worker_fake_job_seconds
+    config_json      = local.worker_config
   }))
 
   tag_specifications {
@@ -89,7 +102,7 @@ resource "aws_autoscaling_group" "workers" {
     }
   }
 
-  # Free; both alarms (alarm.tf) read GroupInServiceInstances.
+  # Free; the alarms read GroupInServiceInstances and Experiment 2 exports it.
   metrics_granularity = "1Minute"
   enabled_metrics     = ["GroupInServiceInstances", "GroupDesiredCapacity", "GroupPendingInstances"]
 

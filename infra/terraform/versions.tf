@@ -7,6 +7,11 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 5.0"
     }
+    # Zips the circuit breaker's code for Lambda (M2b §2c).
+    archive = {
+      source  = "hashicorp/archive"
+      version = "~> 2.0"
+    }
   }
 
   # Terraform's record of what exists (its "state") lives in a small separate S3 bucket, not on

@@ -1,7 +1,8 @@
 # ─── GPU alarms (M2a §4f) ───────────────────────────────────────────────────
 # Two alarms on one email topic (confirm the subscription email once after the first apply):
 # - idle worker: ACTS. A worker in service while the job queue sees no message received and none
-#   deleted for 90 minutes is ended by AWS itself (group desired capacity to 0).
+#   deleted for 90 minutes is ended by AWS itself (group desired capacity to 0), and the circuit
+#   breaker (scaling.tf) sets the group's max to 0 so it is not replaced.
 # - long-running: email only, after 3 hours with a worker in service.
 # About $0.40 a month for both (four alarm metrics).
 
@@ -35,10 +36,12 @@ resource "aws_cloudwatch_metric_alarm" "worker_running_long" {
 }
 
 # A worker always picks up or finishes a job within 90 minutes when healthy (longest job about
-# 55 minutes; an idle worker ends itself after 30). So no queue activity for 90 minutes with a worker
-# in service means self-termination failed, a crash loop, a frozen job or a dead NAT instance.
+# 55 minutes; scale-in ends an idle worker after 15). So no queue activity for 90 minutes with a
+# worker in service means a crash loop, broken code, a frozen job, a dead NAT instance or a warm
+# hold (M2b §2d; the hold keeps its worker and the breaker skips it).
 # Missing SQS data (queues stop publishing after ~6 idle hours) counts as no activity; missing
-# group data never fires it. Paused by infra/pause_idle_alarm.sh until start_work/stop_work.
+# group data never fires it. Manual work needs a warm hold (start_work.sh --worker), not a pause:
+# scale-in would end the worker 15 minutes after the queue empties anyway.
 resource "aws_autoscaling_policy" "workers_to_zero" {
   count = local.workers_enabled ? 1 : 0
 
@@ -52,13 +55,10 @@ resource "aws_autoscaling_policy" "workers_to_zero" {
 resource "aws_cloudwatch_metric_alarm" "worker_idle" {
   count = local.workers_enabled ? 1 : 0
 
-  alarm_name        = "neurolens-worker-idle"
-  alarm_description = <<-EOT
-    A NeuroLens worker ran 90 minutes with no job picked up or finished, so AWS has set the worker
-    group to 0 and the worker is ending. Usual causes: its self-termination failed, a crash loop, a
-    frozen job, or the NAT instance is down. Manual work on a worker (Session Manager) is invisible
-    to this alarm: run infra/pause_idle_alarm.sh first. start_work.sh and stop_work.sh re-enable it.
-  EOT
+  alarm_name = "neurolens-worker-idle"
+  # The email text (M2b §2c). Causes: a crash loop, broken code, a frozen job or a down NAT
+  # instance, or a warm hold with no jobs (then it only emails).
+  alarm_description = "AWS has stopped all NeuroLens workers (max 0) after 90 minutes without queue activity, unless a warm hold is active. Run infra/start_work.sh to start again."
 
   comparison_operator = "GreaterThanOrEqualToThreshold"
   threshold           = 1

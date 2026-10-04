@@ -1,15 +1,14 @@
 #!/bin/bash
-# NeuroLens worker first boot (M2a §4c). Rendered by Terraform: region, bucket, queue URL and the
-# fake-inference switch are filled in. Runs once per instance; pull_code.sh runs on every start.
+# NeuroLens worker first boot (M2a §4c, M2b §2b). Rendered by Terraform: region, bucket, queue URL,
+# config.json and the rehearsal switches are filled in. Runs once per instance; pull_code.sh runs on
+# every start. The worker's boot record (M2b §10) reads the step lines of this log: keep their text.
 set -euo pipefail
 
 LOG=/var/log/neurolens-boot.log
 log() { echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) $*" | tee -a "$LOG"; }
-on_error() {
-  log "FAILED at line $1; ending this machine"
-  /opt/neurolens/bin/self_terminate.sh || true
-}
-trap 'on_error $LINENO' ERR
+# A failed boot only logs: the machine never ends itself (M2b §2). With no worker running, the idle
+# alarm and the circuit breaker end it and stop replacements within about 90 minutes.
+trap 'log "FAILED at line $LINENO; waiting for the idle alarm and circuit breaker"' ERR
 
 log "boot start"
 
@@ -30,17 +29,20 @@ else
   log "could not use $DISK: using a folder on the root disk (slower)"
 fi
 
-# 3. Weights from S3 (through the free gateway endpoint).
+# 3. Weights from S3 (through the free gateway endpoint). A fake-inference rehearsal needs none.
+%{ if fake_inference ~}
+log "fake inference: no weight sync"
+%{ else ~}
 log "weight sync start"
 SECONDS=0
 # Skip HuggingFace's blobs/: the snapshots/ files are full copies where offline loading looks, so
 # blobs/ (also uploaded, as the S3 sync followed the snapshot symlinks) would double the download.
 aws s3 sync "s3://${bucket}/models/" "$CACHE/" --region "${region}" --only-show-errors --exclude "*/blobs/*"
 log "weight sync done in $SECONDS s"
+%{ endif ~}
 
 # 4. Settings. env.conf: deployment identifiers only (region, bucket, queue), no secrets.
-# config.json: the shared file's behaviour settings with absolute paths; keep in step with the
-# committed config.json.
+# config.json: the committed file with this machine's absolute paths (Terraform fills it in).
 mkdir -p /opt/neurolens/app /opt/neurolens/output
 umask 077
 cat > /opt/neurolens/env.conf <<EOF
@@ -52,27 +54,11 @@ NEUROLENS_DEPLOYED=1
 HF_HUB_OFFLINE=1
 %{ if fake_inference ~}
 FAKE_INFERENCE=1
+FAKE_INFERENCE_SECONDS=${fake_job_seconds}
 %{ endif ~}
 EOF
 cat > /opt/neurolens/app/config.json <<'EOF'
-{
-  "paths": {
-    "models": "/opt/neurolens/cache/models",
-    "data": "/opt/neurolens/cache/data",
-    "output": "/opt/neurolens/output"
-  },
-  "model": {
-    "repo_id": "facebook/tribev2",
-    "llama_repo_id": "meta-llama/Llama-3.2-3B",
-    "pre_download_llama": false
-  },
-  "hf_download_timeout": 300,
-  "max_video_duration_seconds": 120,
-  "max_upload_bytes": 300000000,
-  "worker": {
-    "idle_exit_minutes": 30
-  }
-}
+${config_json}
 EOF
 chmod 600 /opt/neurolens/env.conf /opt/neurolens/app/config.json
 umask 022
@@ -84,26 +70,36 @@ set -a
 set +a
 /opt/neurolens/bin/pull_code.sh
 test -s /opt/neurolens/env.conf
+# The worker's own settings check, so a missing setting fails here, logged, not in a crash loop.
 (cd /opt/neurolens/app && /opt/neurolens/venv/bin/python -c \
-  "from neurolens.settings import load_config; load_config()")
+  "from neurolens.settings import load_settings; from neurolens.worker import validate_config; validate_config(load_settings())")
 log "code $(cat /opt/neurolens/app/REVISION) pulled and settings verified"
 
-# 6. Crash limit (M2a §3): 3 starts within an hour, then OnFailure ends the machine. The window must
-# outlast a crash cycle (each restart reloads the model, ~3.5 min); systemd counts in fixed windows.
-# A drop-in, so it reaches new workers without an image rebuild.
+# 6. Service changes as a drop-in, so they reach new workers without an image rebuild:
+# - crash limit (M2a §3): 3 starts within an hour, then the service stays failed and the machine
+#   waits for the idle alarm and circuit breaker. The window must outlast a crash cycle (each restart
+#   reloads the model, ~3.5 min); systemd counts in fixed windows.
+# - empty OnSuccess=/OnFailure= clear the image's self-termination hooks (M2b §2b).
+# - TimeoutStopSec: on SIGTERM the worker hands its job back within seconds; after 110 s systemd
+#   kills it, and the heartbeat's end makes the job visible again within about 120 s.
 mkdir -p /etc/systemd/system/neurolens-worker.service.d
 cat > /etc/systemd/system/neurolens-worker.service.d/limits.conf <<'EOF'
 [Unit]
 StartLimitIntervalSec=3600
 StartLimitBurst=3
+OnSuccess=
+OnFailure=
+
+[Service]
+TimeoutStopSec=110
 EOF
-# Manual work is invisible to the idle alarm (M2a §4f). infra/connect_worker.sh prints this before
-# every session; login shells on the machine (bash -l, sudo -i) show it too.
+# Manual work is invisible to the queue-based rules (M2b §2). infra/connect_worker.sh prints this
+# before every session; login shells on the machine (bash -l, sudo -i) show it too.
 cat > /etc/profile.d/neurolens-idle-alarm.sh <<'EOF'
 case $- in *i*)  # interactive shells only, so scripted output stays clean
   echo
-  echo "  NeuroLens worker: this machine is ended automatically after 90 minutes without queue jobs"
-  echo "  (the idle alarm). For longer manual work, run infra/pause_idle_alarm.sh on your Mac first."
+  echo "  NeuroLens worker: AWS ends this machine 15 minutes after the job queue empties, unless a warm"
+  echo "  hold is on. For manual work, run infra/start_work.sh --worker --hours N on your Mac first."
   echo ;;
 esac
 EOF

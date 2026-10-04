@@ -102,7 +102,28 @@ The worker group needs the software image, which is built after the first apply:
 
 `worker_instance_types` lists the GPU types in order of preference (default `g6e.xlarge`, then
 `g6e.2xlarge` when the first is sold out in every zone). `worker_fake_inference = true` with
-`["t3.large"]` is the cheap CPU rehearsal that tests the wiring without a GPU.
+`["t3.large"]` is the cheap CPU rehearsal that tests the wiring without a GPU (no weight sync);
+`worker_fake_job_seconds` then makes each fake job take that long, so it can be interrupted.
+
+The worker's `config.json` is the committed one with the machine's paths filled in: change the root
+`config.json` and apply, and new workers get it (running ones keep theirs).
+
+## 2d. How many workers run (M2b)
+
+Only AWS decides; the worker never ends its own machine.
+
+- **Scale out:** a job waiting in the queue for a minute adds a worker, up to the group's max. A new
+  worker counts as "starting" for 15 minutes (`scale_out_warmup_seconds`), so one waiting job never
+  launches a second worker while the first boots.
+- **Scale in:** when the queue has had no waiting or running job for 15 minutes, the group goes to 0.
+- **Circuit breaker:** if a worker is in service but nothing has moved in the queue for 90 minutes
+  (the idle alarm), AWS ends it and a small Lambda (`infra/lambda/breaker.py`) sets the group's max
+  to 0, so a broken worker is not replaced over and over. You get an email. Nothing launches again
+  until the next `start_work.sh`. This caps a failure at about 1.5-2 hours of GPU (about $3-4).
+- **Warm hold:** `start_work.sh --worker --hours N` keeps one worker for N hours (1 to 4) even with no
+  jobs: the group's minimum is 1, which scale-in, the idle alarm and the breaker all respect. An
+  AWS-side timer (`neurolens-warm-hold-end`) sets the minimum back to 0 at the end, even if your
+  laptop is off; then the worker goes once the queue has been empty for 15 minutes.
 
 To change the region: edit `region`, `zones` and `build_extra_zones` together, make sure GPU quota
 exists in the new region, then rebuild the image there. Every script in `infra/` reads the region
@@ -140,29 +161,48 @@ CORS document, so the list is the single place.
 Nothing runs between sessions. From the repo root:
 
 ```bash
-infra/start_work.sh              # NAT instance on; the worker group may run one machine, none yet
-infra/start_work.sh --worker     # also starts one GPU worker (billed from now)
-infra/deploy_code.sh             # after a commit: ship new code (workers pick it up on restart)
-infra/restart_workers.sh         # restart the worker service on running workers, show the revision
-infra/connect_worker.sh          # open a shell on the worker (Session Manager), after a warning
-infra/pause_idle_alarm.sh        # before long manual work on a worker: pause the idle alarm's action
-infra/stop_work.sh               # END EVERY SESSION WITH THIS
+infra/start_work.sh                     # NAT instance on; an upload now starts a worker by itself
+infra/start_work.sh --max 2             # the same with up to two workers (Experiment 2 only)
+infra/start_work.sh --worker --hours 3  # warm hold: one GPU worker now, kept 3 hours (billed from now)
+infra/deploy_code.sh                    # after a commit: ship new code (workers pick it up on restart)
+infra/restart_workers.sh                # restart the worker service on running workers, show the revision
+infra/connect_worker.sh                 # open a shell on the worker (Session Manager), after a warning
+infra/stop_work.sh                      # END EVERY SESSION WITH THIS
 ```
 
-A new worker takes about 6 minutes to be ready (software sync, then the model loads). The first job
-on a fresh worker adds about 6 minutes of one-time warm-up.
+A new worker takes about 6.5 minutes to be ready (software sync, then the model loads), plus 1-3
+minutes for the queue's metric to start it after an upload. Restarting the worker service hands a
+running job back to the queue at once; another attempt finishes it.
 
-`stop_work.sh` sets the worker group to zero (even while it is still waiting for a GPU and has no
-machine yet), waits for the workers to go, stops the NAT instance and then checks. It prints
+`stop_work.sh` ends a warm hold, sets the worker group to zero (even while it is still waiting for a
+GPU and has no machine yet), waits for the workers to go, stops the NAT instance and then checks. It prints
 **ALL STOPPED** only when every check succeeded. Anything it could not prove prints
 **NOT CONFIRMED** with the reason: read it and act on it. It needs the region from Terraform; if
 Terraform cannot answer, it stops nothing and prints the `terraform init` command to fix it. An
 image-build machine is listed, not stopped, with the command to end it if no build is running.
 
-**The idle alarm and manual work.** The idle alarm ends a worker that has gone 90 minutes with no
-job picked up or finished. It cannot see manual work on a worker (Session Manager), so before more
-than an hour of that, run `infra/pause_idle_alarm.sh`. The pause lasts until the next
-`start_work.sh` or `stop_work.sh`; while paused, only the 3-hour email covers a forgotten worker.
+**Manual work on a worker.** Scale-in ends a worker 15 minutes after the queue empties, and none of
+the rules can see work done by hand (Session Manager). Start a warm hold first
+(`start_work.sh --worker --hours N`); run it again to extend. During a hold of more than 90 minutes
+without jobs, the idle alarm still emails, but changes nothing.
+
+**After a breaker email.** The group is at max 0. Look at the worker's log first (the email names no
+cause: a crash loop, broken code, a frozen job or a stopped NAT instance), fix it, then
+`start_work.sh` again. `start_work.sh` and `stop_work.sh` print a note when they find the group at
+max 0 with the NAT instance still running.
+
+## 5b. Demo routine (M2b)
+
+1. The day before (the week before for the TA demo): one full dry run of steps 2-5.
+2. 45-60 minutes before: `infra/start_work.sh --worker --hours 3` (demo length, early start and a
+   margin). Starting early leaves time to fall back to the no-AWS backup (M4) if no GPU is free.
+3. Wait for "Worker ready" (`infra/connect_worker.sh`, or the result of step 4).
+4. One warm-up job: upload a short sample clip, so the first-job costs are paid before the audience
+   arrives and the whole chain is proven that day.
+5. Demo. If it overruns the hold, run step 2 again (it moves the end).
+6. Straight after: `infra/stop_work.sh`, and wait for **ALL STOPPED**.
+
+Cost: about 1.5-2 hours of GPU, roughly $3-4.
 
 ## 6. Tear down
 

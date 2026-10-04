@@ -139,23 +139,37 @@ resource "aws_iam_role_policy" "worker" {
         Resource = "${aws_s3_bucket.main.arn}/results/*"
       },
       {
+        # Job status objects (M2b §4): read, then written back with the new stage.
+        Sid      = "ReadWriteJobStatus"
+        Effect   = "Allow"
+        Action   = ["s3:GetObject", "s3:PutObject"]
+        Resource = "${aws_s3_bucket.main.arn}/status/*"
+      },
+      {
+        # Boot records for the cold-start table (M2b §10). Write only.
+        Sid      = "WriteBootRecords"
+        Effect   = "Allow"
+        Action   = "s3:PutObject"
+        Resource = "${aws_s3_bucket.main.arn}/experiments/*"
+      },
+      {
         Sid      = "DeleteRejectedUploads"
         Effect   = "Allow"
         Action   = "s3:DeleteObject"
         Resource = "${aws_s3_bucket.main.arn}/uploads/*"
       },
       {
-        Sid      = "ReadJobQueue"
-        Effect   = "Allow"
-        Action   = ["sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:GetQueueAttributes"]
+        Sid    = "ReadJobQueue"
+        Effect = "Allow"
+        # ChangeMessageVisibility: the heartbeat and the fast release (M2b §6). GetQueueAttributes:
+        # the worker reads maxReceiveCount from the queue's redrive policy at start.
+        Action = [
+          "sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:GetQueueAttributes",
+          "sqs:ChangeMessageVisibility",
+        ]
         Resource = aws_sqs_queue.jobs.arn
       },
-      {
-        Sid      = "EndOwnMachine"
-        Effect   = "Allow"
-        Action   = "autoscaling:TerminateInstanceInAutoScalingGroup"
-        Resource = local.worker_asg_arn
-      },
+      # No Auto Scaling permission at all: from M2b only AWS decides how many workers run (§2).
       local.deny_neurolens_parameters,
     ]
   })
@@ -169,6 +183,52 @@ resource "aws_iam_role_policy_attachment" "worker_ssm" {
 resource "aws_iam_instance_profile" "worker" {
   name = "neurolens-worker${local.iam_suffix}"
   role = aws_iam_role.worker.name
+}
+
+# ─── Circuit breaker Lambda (M2b §2c) ──────────────────────────────────────
+
+resource "aws_iam_role" "breaker" {
+  name                 = "neurolens-breaker${local.iam_suffix}"
+  permissions_boundary = local.boundary_arn
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Action    = "sts:AssumeRole"
+      Principal = { Service = "lambda.amazonaws.com" }
+    }]
+  })
+  tags = { Milestone = "M2b" }
+}
+
+resource "aws_iam_role_policy" "breaker" {
+  name = "neurolens-breaker"
+  role = aws_iam_role.breaker.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        # Describe calls cannot be limited to one group (AWS needs "*"). Read only.
+        Sid      = "ReadGroups"
+        Effect   = "Allow"
+        Action   = "autoscaling:DescribeAutoScalingGroups"
+        Resource = "*"
+      },
+      {
+        Sid      = "SetWorkerGroupToZero"
+        Effect   = "Allow"
+        Action   = "autoscaling:UpdateAutoScalingGroup"
+        Resource = local.worker_asg_arn
+      },
+      {
+        Sid      = "OwnLogs"
+        Effect   = "Allow"
+        Action   = ["logs:CreateLogStream", "logs:PutLogEvents"]
+        Resource = "${aws_cloudwatch_log_group.breaker.arn}:*"
+      },
+    ]
+  })
 }
 
 # ─── NAT instance (Session Manager only, for debugging it without SSH) ─────

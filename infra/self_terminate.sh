@@ -1,37 +1,8 @@
 #!/bin/bash
-# Ends this worker machine (M2a §3, cost guard). Asks Auto Scaling to terminate it AND lower the
-# group's desired count: a plain shutdown would make the group launch a replacement, which would
-# fail the same way, in a billing loop.
-# Called by neurolens-self-terminate.service (with --after-worker-stop) and by UserData's ERR trap.
-# If the call fails (for example the NAT instance is down), it logs and stops: the idle alarm
-# (M2a §4f) is the backstop and has AWS end the machine.
-set -uo pipefail
-
-LOG=/var/log/neurolens-boot.log
-log() { echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) self_terminate: $*" | tee -a "$LOG" >&2; }
-
-if [ "${1:-}" = "--after-worker-stop" ]; then
-  # `systemctl restart neurolens-worker` (restart_workers.sh) also stops the worker briefly. Give a
-  # restart time to bring it back, and stand down if it did.
-  sleep 15
-  state=$(systemctl is-active neurolens-worker || true)
-  if [ "$state" = "active" ] || [ "$state" = "activating" ]; then
-    log "worker is $state again (a restart); not terminating"
-    exit 0
-  fi
-fi
-
-IMDS=http://169.254.169.254/latest
-TOKEN=$(curl -sf -m 5 -X PUT "$IMDS/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 60") \
-  || { log "no instance metadata token; cannot terminate"; exit 1; }
-ID=$(curl -sf -m 5 -H "X-aws-ec2-metadata-token: $TOKEN" "$IMDS/meta-data/instance-id")
-REGION=$(curl -sf -m 5 -H "X-aws-ec2-metadata-token: $TOKEN" "$IMDS/meta-data/placement/region")
-
-log "terminating $ID"
-if aws autoscaling terminate-instance-in-auto-scaling-group --region "$REGION" \
-    --instance-id "$ID" --should-decrement-desired-capacity >>"$LOG" 2>&1; then
-  log "termination requested"
-else
-  log "termination call FAILED; the idle alarm is the backstop"
-  exit 1
-fi
+# Self-termination was removed in M2b (§2b): only AWS decides how many workers run. This stub stays
+# until the next image rebuild, because the pull_code.sh baked into neurolens-worker-v2 installs it on
+# every start and fails if it is missing. Nothing calls it any more (UserData's drop-in clears the
+# service's OnSuccess=/OnFailure=, and UserData's error trap only logs).
+echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) self_terminate: self-termination removed (M2b); not ending this machine" \
+  | tee -a /var/log/neurolens-boot.log >&2
+exit 0

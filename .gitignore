@@ -83,3 +83,5 @@ build/
 terraform.tfvars
 *.tfplan
 backend.hcl
+# Lambda zips Terraform builds from infra/lambda/ (M2b breaker)
+infra/terraform/.build/

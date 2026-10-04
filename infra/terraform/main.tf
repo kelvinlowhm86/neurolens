@@ -121,15 +121,15 @@ resource "aws_s3_bucket_cors_configuration" "main" {
 resource "aws_sqs_queue" "jobs" {
   name = var.queue_name
 
-  # The worker has no heartbeat yet, so a job must finish before its message reappears. The
-  # first real jobs on g6e.xlarge took 1003 s and 1039 s (M2a build log), longer than M1's 900 s.
-  # M2b adds the heartbeat and lowers this to 120 s.
-  visibility_timeout_seconds = 1800
+  # The worker's heartbeat (M2b §6) extends a running job's message every 50 s, so this only
+  # decides how soon a dead worker's job is retried: about two minutes.
+  visibility_timeout_seconds = 120
 
   sqs_managed_sse_enabled = true
 
   # Retry cap (M2a §4h): a message received twice without being deleted is parked in the
-  # dead-letter queue instead of rerunning paid GPU inference every 900 s.
+  # dead-letter queue instead of rerunning paid GPU inference forever. The worker reads
+  # maxReceiveCount from here at start (M2b §1a), so this is the one place to change it.
   redrive_policy = jsonencode({
     deadLetterTargetArn = aws_sqs_queue.jobs_dlq.arn
     maxReceiveCount     = 2

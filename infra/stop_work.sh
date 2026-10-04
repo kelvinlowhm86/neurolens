@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
-# Ends a work session (M2a §4d). Run at the end of every session.
-# Re-enables the idle alarm's action, sets the worker group to 0/0/0 (even while it is still waiting
-# for GPU capacity and has no machine yet), waits for workers to go, stops the NAT instance, then
-# checks. It prints ALL STOPPED only when every check succeeded; anything unproven prints
+# Ends a work session (M2a §4d, M2b §2d). Run at the end of every session.
+# Re-enables the idle alarm's action, removes a warm hold's end timer, sets the worker group to 0/0/0
+# (even while it is still waiting for GPU capacity and has no machine yet), waits for workers to go,
+# stops the NAT instance, then checks. It prints ALL STOPPED only when every check succeeded; anything unproven prints
 # NOT CONFIRMED and exits 1. An image-build machine is listed, not stopped (it may be running on
 # purpose; it has its own guards).
 set -uo pipefail   # no -e on purpose: a failed call is recorded and the script goes on stopping the rest
 ASG=neurolens-workers
 IDLE_ALARM=neurolens-worker-idle
+HOLD_END=neurolens-warm-hold-end
 PROBLEMS=""
 problem() { PROBLEMS="$PROBLEMS  - $*"$'\n'; echo "PROBLEM: $*" >&2; }
 
@@ -29,14 +30,26 @@ group_sizes() {  # "min max desired", "None" if there is no group; fails if the 
   aws autoscaling describe-auto-scaling-groups --auto-scaling-group-names "$ASG" \
     --query 'AutoScalingGroups[0].[MinSize,MaxSize,DesiredCapacity]' --output text
 }
+hold_end() {  # the warm hold's end timer: its name, or "" if there is none; fails if the call fails
+  aws autoscaling describe-scheduled-actions --auto-scaling-group-name "$ASG" \
+    --scheduled-action-names "$HOLD_END" --query 'ScheduledUpdateGroupActions[].ScheduledActionName' --output text
+}
 group_machines() {  # how many machines the group still tracks (it knows a launch before EC2 lists it)
   aws autoscaling describe-auto-scaling-groups --auto-scaling-group-names "$ASG" \
     --query 'length(AutoScalingGroups[0].Instances)' --output text
 }
 
-# 1. A pause (infra/pause_idle_alarm.sh) lasts until the end of the session.
+# 1. The idle alarm acts in every session, even if someone switched it off by hand.
 aws cloudwatch enable-alarm-actions --alarm-names "$IDLE_ALARM" \
   || problem "could not re-enable the idle alarm's action ($IDLE_ALARM)"
+
+# 1b. A warm hold's end timer would otherwise fire in a later session (M2b §2d).
+if ! HOLD=$(hold_end); then
+  problem "could not look for the warm hold's end timer ($HOLD_END)"
+elif [ -n "$HOLD" ] && [ "$HOLD" != "None" ]; then
+  aws autoscaling delete-scheduled-action --auto-scaling-group-name "$ASG" --scheduled-action-name "$HOLD_END" \
+    && echo "Warm hold ended." || problem "could not delete the warm hold's end timer ($HOLD_END)"
+fi
 
 # 2. Worker group to 0/0/0 whenever any number is above 0, machines or not.
 if ! SIZES=$(group_sizes); then
@@ -46,6 +59,14 @@ elif [ "$SIZES" = "None" ]; then
   problem "no worker group $ASG in $AWS_REGION: is this the right region?"
 else
   read -r MIN MAX DES <<<"$SIZES"
+  # Max 0 while the NAT instance runs: the session was not ended by this script, usually because the
+  # circuit breaker stopped the workers (M2b §2c; its email says why). A note, not a problem.
+  if [ "$MAX" = 0 ] && [ -n "$(aws ec2 describe-instances --filters Name=tag:Project,Values=neurolens \
+      Name=tag:Role,Values=nat Name=instance-state-name,Values=running \
+      --query 'Reservations[].Instances[].InstanceId' --output text 2>/dev/null)" ]; then
+    echo "Note: the worker group was already at max 0 with the NAT instance running. The circuit"
+    echo "breaker probably stopped the workers during this session (see the alarm email)."
+  fi
   if [ "$MIN $MAX $DES" != "0 0 0" ]; then
     if aws autoscaling update-auto-scaling-group --auto-scaling-group-name "$ASG" \
         --min-size 0 --max-size 0 --desired-capacity 0; then
@@ -90,7 +111,12 @@ elif [ -n "$NAT" ]; then
   fi
 fi
 
-# 4. Check: the group reads 0/0/0 and no neurolens machine may be billing.
+# 4. Check: no hold timer, the group reads 0/0/0 and no neurolens machine may be billing.
+if ! HOLD=$(hold_end); then
+  problem "could not re-check the warm hold's end timer"
+elif [ -n "$HOLD" ] && [ "$HOLD" != "None" ]; then
+  problem "the warm hold's end timer $HOLD_END still exists"
+fi
 if ! SIZES=$(group_sizes); then
   problem "could not re-read the worker group $ASG"
 elif [ "$SIZES" != "None" ] && [ "$(echo "$SIZES" | tr -s ' \t' ' ')" != "0 0 0" ]; then
@@ -117,4 +143,4 @@ if [ -n "$PROBLEMS" ]; then
   printf 'NOT CONFIRMED in %s:\n%s' "$AWS_REGION" "$PROBLEMS" >&2
   exit 1
 fi
-echo "ALL STOPPED in $AWS_REGION: worker group at 0, no neurolens machine running."
+echo "ALL STOPPED in $AWS_REGION: worker group at 0, no warm hold, no neurolens machine running."

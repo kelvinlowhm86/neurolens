@@ -67,6 +67,22 @@ variable "worker_instance_types" {
   default     = ["g6e.xlarge", "g6e.2xlarge"]
 }
 
+variable "scale_out_warmup_seconds" {
+  description = <<-EOT
+    How long a newly launched worker counts as "still starting" for the scale-out policy (M2b §2a).
+    A GPU boot takes about 6.5 minutes and the SQS metric lags 1-3 minutes, so 900 s keeps one
+    waiting job from launching a second worker while the first boots.
+  EOT
+  type        = number
+  default     = 900
+}
+
+variable "worker_fake_job_seconds" {
+  description = "CPU rehearsal only (with worker_fake_inference): each fake predict call sleeps this long, so a job is long enough to interrupt (FAKE_INFERENCE_SECONDS, M2b §1a). 0 = off."
+  type        = number
+  default     = 0
+}
+
 variable "worker_fake_inference" {
   description = "True only for the wiring rehearsal on a CPU instance: FAKE_INFERENCE=1 in env.conf."
   type        = bool
