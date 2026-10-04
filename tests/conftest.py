@@ -35,6 +35,8 @@ ENV_SETTING_VARS = [
     "NEUROLENS_AWS_REGION",
     "NEUROLENS_S3_BUCKET",
     "NEUROLENS_SQS_QUEUE_URL",
+    "NEUROLENS_WORKER_GROUP",  # M2b: aws.worker_group
+    "NEUROLENS_DEPLOYED",  # M2b: makes validate_config require aws.worker_group
 ]
 
 
