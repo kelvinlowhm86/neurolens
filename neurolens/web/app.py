@@ -48,7 +48,14 @@ def create_app(data_dir=None, cfg=None):
                 "Missing required setting: aws.region (NEUROLENS_AWS_REGION). Set it in .env, "
                 "copied from `terraform output region`."
             )
-        s3 = boto3.client("s3", region_name=region)
+        session = boto3.Session(region_name=region)
+        # Fail at start, not at the first upload: signing the upload form needs credentials.
+        if session.get_credentials() is None:
+            raise ValueError(
+                "No AWS credentials found. Set AWS_PROFILE=neurolens in .env (see .env.example) "
+                "or in the shell that starts the web app."
+            )
+        s3 = session.client("s3")
     max_bytes = cfg.get("max_upload_bytes") if cfg else None
     max_seconds = settings.max_duration(cfg)
     samples_json = data_dir / "samples.json"
