@@ -112,14 +112,18 @@ The worker's `config.json` is the committed one with the machine's paths filled 
 
 Only AWS decides; the worker never ends its own machine.
 
-- **Scale out:** a job waiting in the queue for a minute adds a worker, up to the group's max. A new
-  worker counts as "starting" for 15 minutes (`scale_out_warmup_seconds`), so one waiting job never
-  launches a second worker while the first boots.
+- **Scale out:** a job waiting in the queue for a minute adds a worker (two when two or more wait),
+  up to the group's max. A new worker counts as "starting" for 15 minutes
+  (`scale_out_warmup_seconds`), so one waiting job never launches a second worker while the first boots.
 - **Scale in:** when the queue has had no waiting or running job for 15 minutes, the group goes to 0.
+  A worker holding a job protects its own machine from scale-in until the job ends, because the
+  queue's numbers reach CloudWatch a few minutes late.
 - **Circuit breaker:** if a worker is in service but nothing has moved in the queue for 90 minutes
-  (the idle alarm), AWS ends it and a small Lambda (`infra/lambda/breaker.py`) sets the group's max
-  to 0, so a broken worker is not replaced over and over. You get an email. Nothing launches again
-  until the next `start_work.sh`. This caps a failure at about 1.5-2 hours of GPU (about $3-4).
+  (the idle alarm), AWS ends it and you get an email. A small Lambda (`infra/lambda/breaker.py`)
+  checks every 5 minutes: while that alarm is on and no warm hold is running, it removes the
+  workers' protection and sets the group's max to 0, so a broken worker is not replaced over and
+  over. Nothing launches again until the next `start_work.sh`. This caps a failure at about
+  1.5-2 hours of GPU (about $3-4). If the Lambda itself fails, a second alarm emails you.
 - **Warm hold:** `start_work.sh --worker --hours N` keeps one worker for N hours (1 to 4) even with no
   jobs: the group's minimum is 1, which scale-in, the idle alarm and the breaker all respect. An
   AWS-side timer (`neurolens-warm-hold-end`) sets the minimum back to 0 at the end, even if your
@@ -162,6 +166,7 @@ Nothing runs between sessions. From the repo root:
 
 ```bash
 infra/start_work.sh                     # NAT instance on; an upload now starts a worker by itself
+                                        # (refuses unless every alarm and the breaker are on)
 infra/start_work.sh --max 2             # the same with up to two workers (Experiment 2 only)
 infra/start_work.sh --worker --hours 3  # warm hold: one GPU worker now, kept 3 hours (billed from now)
 infra/deploy_code.sh                    # after a commit: ship new code (workers pick it up on restart)
@@ -174,7 +179,8 @@ A new worker takes about 6.5 minutes to be ready (software sync, then the model 
 minutes for the queue's metric to start it after an upload. Restarting the worker service hands a
 running job back to the queue at once; another attempt finishes it.
 
-`stop_work.sh` ends a warm hold, sets the worker group to zero (even while it is still waiting for a
+`stop_work.sh` ends a warm hold, removes the workers' scale-in protection (a running job is handed
+back and runs next session), sets the worker group to zero (even while it is still waiting for a
 GPU and has no machine yet), waits for the workers to go, stops the NAT instance and then checks. It prints
 **ALL STOPPED** only when every check succeeded. Anything it could not prove prints
 **NOT CONFIRMED** with the reason: read it and act on it. It needs the region from Terraform; if

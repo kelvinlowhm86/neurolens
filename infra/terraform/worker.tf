@@ -57,6 +57,7 @@ resource "aws_launch_template" "worker" {
     fake_inference   = var.worker_fake_inference
     fake_job_seconds = var.worker_fake_job_seconds
     config_json      = local.worker_config
+    worker_group     = local.worker_asg
   }))
 
   tag_specifications {

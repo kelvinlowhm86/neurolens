@@ -61,9 +61,10 @@ def load_dotenv(root=None):
 def apply_env(cfg):
     """A copy of cfg with person- and deployment-specific values taken from the environment.
 
-    HF_TOKEN -> hf_token; NEUROLENS_AWS_REGION / NEUROLENS_S3_BUCKET / NEUROLENS_SQS_QUEUE_URL
-    -> aws.region / aws.s3_bucket / aws.sqs_queue_url. Only variables that are set and
-    non-empty change anything. The input is never modified.
+    HF_TOKEN -> hf_token; NEUROLENS_AWS_REGION / NEUROLENS_S3_BUCKET / NEUROLENS_SQS_QUEUE_URL /
+    NEUROLENS_WORKER_GROUP -> aws.region / aws.s3_bucket / aws.sqs_queue_url / aws.worker_group
+    (the last only on AWS workers). Only variables that are set and non-empty change anything.
+    The input is never modified.
     """
     out = copy.deepcopy(cfg)
     token = os.environ.get("HF_TOKEN")
@@ -73,6 +74,7 @@ def apply_env(cfg):
         ("NEUROLENS_AWS_REGION", "region"),
         ("NEUROLENS_S3_BUCKET", "s3_bucket"),
         ("NEUROLENS_SQS_QUEUE_URL", "sqs_queue_url"),
+        ("NEUROLENS_WORKER_GROUP", "worker_group"),
     ):
         value = os.environ.get(var)
         if value:

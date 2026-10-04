@@ -12,7 +12,8 @@ set -euo pipefail
 source "$(dirname "$0")/aws_env.sh"   # AWS_PROFILE, AWS_REGION (M2a §4i)
 ASG=neurolens-workers
 HOLD_END=neurolens-warm-hold-end
-IDLE_ALARM=neurolens-worker-idle
+ALARMS="neurolens-worker-idle neurolens-worker-scale-out neurolens-worker-scale-in"
+BREAKER_RULE=neurolens-breaker-every-5-min
 
 usage() { echo "usage: $0 [--max 1|2] [--worker [--hours 1-4]]" >&2; exit 2; }
 WORKER=0 HOURS=3 MAX=1
@@ -29,16 +30,23 @@ done
 case "$HOURS" in 1|2|3|4) ;; *) echo "--hours must be 1, 2, 3 or 4 (got $HOURS)." >&2; exit 2 ;; esac
 case "$MAX" in 1|2) ;; *) echo "--max must be 1 or 2 (got $MAX)." >&2; exit 2 ;; esac
 
-# No session starts unless the idle alarm exists with its actions on: it is the money guard for
-# workers (and through it, the circuit breaker).
-if ! aws cloudwatch enable-alarm-actions --alarm-names "$IDLE_ALARM"; then
-  echo "Could not switch on the idle alarm's action (above). If it says AccessDenied, paste the current" >&2
+# No session starts unless every money guard is in place: the three alarms with their actions on
+# (idle, scale-out, scale-in) and the circuit breaker's 5-minute schedule enabled (M2b §2).
+# shellcheck disable=SC2086  # ALARMS is a space-separated list on purpose
+if ! aws cloudwatch enable-alarm-actions --alarm-names $ALARMS; then
+  echo "Could not switch on the alarms' actions (above). If it says AccessDenied, paste the current" >&2
   echo "infra/iam/neurolens-deploy-services.json into the console policy. Nothing was started." >&2
   exit 1
 fi
-if [ "$(aws cloudwatch describe-alarms --alarm-names "$IDLE_ALARM" \
-      --query 'MetricAlarms[0].ActionsEnabled' --output text)" != "True" ]; then
-  echo "The idle alarm $IDLE_ALARM is missing or its actions are off: run terraform apply. Nothing was started." >&2
+# shellcheck disable=SC2086
+ON=$(aws cloudwatch describe-alarms --alarm-names $ALARMS \
+  --query 'length(MetricAlarms[?ActionsEnabled])' --output text)
+if [ "$ON" != 3 ]; then
+  echo "Only $ON of the 3 alarms ($ALARMS) exist with their actions on: run terraform apply. Nothing was started." >&2
+  exit 1
+fi
+if [ "$(aws events describe-rule --name "$BREAKER_RULE" --query State --output text 2>/dev/null)" != ENABLED ]; then
+  echo "The circuit breaker's schedule $BREAKER_RULE is missing or disabled: run terraform apply. Nothing was started." >&2
   exit 1
 fi
 
@@ -47,6 +55,15 @@ SIZES=$(aws autoscaling describe-auto-scaling-groups --auto-scaling-group-names 
 if [ "$SIZES" = "None" ]; then
   echo "No worker group yet (it is created once worker_ami_id is set)." >&2
   [ "$WORKER" = 0 ] && [ "$MAX" = 1 ] || { echo "Cannot start workers without the group. Nothing was started." >&2; exit 1; }
+  DES=0
+else
+  read -r _ _ DES <<<"$SIZES"
+fi
+# Never below the workers the group already has: a lower max makes AWS end one, even mid-job.
+if [ "$MAX" -lt "$DES" ]; then
+  echo "The worker group has $DES workers; max $MAX would end one, possibly mid-job. Wait until the" >&2
+  echo "queue is empty (scale-in ends them), or end the session with infra/stop_work.sh. Nothing was started." >&2
+  exit 1
 fi
 
 NAT=$(aws ec2 describe-instances \
@@ -85,8 +102,8 @@ echo "NAT instance $NAT_ID running (about 0.84 cents an hour)."
 
 if [ "$WORKER" = 1 ]; then
   aws autoscaling update-auto-scaling-group --auto-scaling-group-name "$ASG" \
-    --min-size 1 --max-size "$MAX" --desired-capacity 1
-  echo "Warm hold until $END UTC: one worker is starting (billed from now) and stays even with no jobs."
+    --min-size 1 --max-size "$MAX" --desired-capacity $((DES > 1 ? DES : 1))
+  echo "Warm hold until $END UTC: one worker is starting or running (billed from now) and stays even with no jobs."
   echo "After that, AWS ends it once the queue has been empty for 15 minutes. Run again to extend."
 else
   # Never touches the minimum or the hold's end, so it cannot end a running hold.

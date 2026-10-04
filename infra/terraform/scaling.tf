@@ -3,9 +3,12 @@
 # - scale out: a job waiting in the queue adds a worker, up to the group's max (1, or 2 for
 #   Experiment 2). Outside a session the max is 0, so an upload waits for the next session.
 # - scale in: queue empty (waiting and in-progress jobs) for 15 minutes sets the group to 0.
-# - circuit breaker: when the idle alarm (alarm.tf) fires, a Lambda sets the group to max 0, so a
-#   broken worker is not replaced in a loop. Nothing launches again until start_work.sh.
-# Alarms about $0.40 a month; the Lambda runs a few times a month at most ($0).
+# - circuit breaker: every 5 minutes a Lambda checks the idle alarm (alarm.tf); while it is in
+#   ALARM and no warm hold is on, it sets the group to max 0, so a broken worker is not replaced in
+#   a loop. Nothing launches again until start_work.sh.
+# A busy worker holds scale-in protection (neurolens/worker.py), so scale-in never ends it mid-job;
+# the breaker and stop_work.sh remove that protection when they stop the group.
+# Alarms about $0.50 a month; the Lambda's ~9,000 runs a month are inside the free tier ($0).
 
 # ─── Scale out ─────────────────────────────────────────────────────────────
 
@@ -19,14 +22,20 @@ resource "aws_autoscaling_policy" "scale_out" {
   metric_aggregation_type   = "Maximum"
   estimated_instance_warmup = var.scale_out_warmup_seconds
 
+  # Bounds are relative to the alarm's threshold (1 waiting job). During a warm-up, repeated
+  # breaches in the same step add nothing more, so a backlog gets its second worker from the
+  # second step at once (capped by the group's max), not by repetition.
   step_adjustment {
     metric_interval_lower_bound = 0
+    metric_interval_upper_bound = 1
     scaling_adjustment          = 1
+  }
+  step_adjustment {
+    metric_interval_lower_bound = 1
+    scaling_adjustment          = 2
   }
 }
 
-# While this stays in ALARM, AWS repeats the policy every minute, so a backlog keeps adding
-# workers up to the max; a worker still in its warm-up counts as already added.
 resource "aws_cloudwatch_metric_alarm" "scale_out" {
   count = local.workers_enabled ? 1 : 0
 
@@ -50,7 +59,8 @@ resource "aws_cloudwatch_metric_alarm" "scale_out" {
 
 # ─── Scale in ──────────────────────────────────────────────────────────────
 # Waiting AND in-progress messages: a running job's message is invisible, so scaling on waiting
-# messages alone would see an empty queue mid-job and end the worker doing it.
+# messages alone would see an empty queue mid-job. The metrics arrive 1-3 minutes late, so a job
+# taken in the last minutes can still look "empty": the worker's scale-in protection covers that.
 
 resource "aws_cloudwatch_metric_alarm" "scale_in" {
   count = local.workers_enabled ? 1 : 0
@@ -105,6 +115,8 @@ data "archive_file" "breaker" {
 }
 
 resource "aws_cloudwatch_log_group" "breaker" {
+  count = local.workers_enabled ? 1 : 0
+
   name              = "/aws/lambda/neurolens-breaker"
   retention_in_days = 30
   tags              = { Milestone = "M2b" }
@@ -124,6 +136,7 @@ resource "aws_lambda_function" "breaker" {
   environment {
     variables = {
       WORKER_GROUP = aws_autoscaling_group.workers[0].name
+      IDLE_ALARM   = aws_cloudwatch_metric_alarm.worker_idle[0].alarm_name
     }
   }
 
@@ -131,35 +144,52 @@ resource "aws_lambda_function" "breaker" {
   tags       = { Milestone = "M2b" }
 }
 
-# Fires on the idle alarm's change to ALARM. Manual work on a worker needs a warm hold
-# (start_work.sh --worker): the breaker leaves a group with minimum 1 alone.
-resource "aws_cloudwatch_event_rule" "idle_alarm" {
+# Every 5 minutes, not on the idle alarm's change of state: a change happens once, so a loop of
+# replacements that keeps the alarm in ALARM, or one failed run, would never be looked at again.
+resource "aws_cloudwatch_event_rule" "breaker_schedule" {
   count = local.workers_enabled ? 1 : 0
 
-  name        = "neurolens-idle-alarm-breaker"
-  description = "The NeuroLens idle alarm went to ALARM: run the circuit breaker."
-  event_pattern = jsonencode({
-    source        = ["aws.cloudwatch"]
-    "detail-type" = ["CloudWatch Alarm State Change"]
-    resources     = [aws_cloudwatch_metric_alarm.worker_idle[0].arn]
-    detail        = { state = { value = ["ALARM"] } }
-  })
-  tags = { Milestone = "M2b" }
+  name                = "neurolens-breaker-every-5-min" # start_work.sh checks it is ENABLED
+  description         = "Run the NeuroLens circuit breaker (it acts only while the idle alarm is in ALARM)."
+  schedule_expression = "rate(5 minutes)"
+  tags                = { Milestone = "M2b" }
 }
 
 resource "aws_cloudwatch_event_target" "breaker" {
   count = local.workers_enabled ? 1 : 0
 
-  rule = aws_cloudwatch_event_rule.idle_alarm[0].name
+  rule = aws_cloudwatch_event_rule.breaker_schedule[0].name
   arn  = aws_lambda_function.breaker[0].arn
 }
 
 resource "aws_lambda_permission" "events_invoke_breaker" {
   count = local.workers_enabled ? 1 : 0
 
-  statement_id  = "AllowIdleAlarmRule"
+  statement_id  = "AllowBreakerSchedule"
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.breaker[0].function_name
   principal     = "events.amazonaws.com"
-  source_arn    = aws_cloudwatch_event_rule.idle_alarm[0].arn
+  source_arn    = aws_cloudwatch_event_rule.breaker_schedule[0].arn
+}
+
+# The safety net's own safety net: a failing breaker emails at once.
+resource "aws_cloudwatch_metric_alarm" "breaker_errors" {
+  count = local.workers_enabled ? 1 : 0
+
+  alarm_name        = "neurolens-breaker-errors"
+  alarm_description = "The NeuroLens circuit breaker Lambda failed. Until it works, only the 3-hour email covers a broken worker: check its log (/aws/lambda/neurolens-breaker) and run infra/stop_work.sh if in doubt."
+
+  namespace   = "AWS/Lambda"
+  metric_name = "Errors"
+  dimensions  = { FunctionName = aws_lambda_function.breaker[0].function_name }
+  statistic   = "Sum"
+
+  period              = 300
+  evaluation_periods  = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  threshold           = 1
+  treat_missing_data  = "notBreaching"
+
+  alarm_actions = [aws_sns_topic.alerts.arn]
+  tags          = { Milestone = "M2b" }
 }

@@ -14,7 +14,8 @@ the deploy user's keys could create a `neurolens-` role with full account access
 and so escape every other restriction here. A permissions boundary is a ceiling AWS checks on top of a role's
 own policy: the compute policy only lets the deploy user create or edit roles that carry this boundary, and
 the deploy user cannot edit the boundary itself. So a role can never do more than read and write NeuroLens
-storage and queues, read `/neurolens/` parameters, resize `neurolens-*` worker groups (the circuit breaker),
+storage and queues, read `/neurolens/` parameters, resize `neurolens-*` worker groups and set their machines' scale-in protection (the circuit
+breaker; a worker only for its own machine while busy),
 write its own Lambda logs, and talk to Session Manager. Since M2b no role may end a machine: only AWS decides
 how many workers run.
 Terraform must set `permissions_boundary` on every role it creates, or AWS refuses the call.

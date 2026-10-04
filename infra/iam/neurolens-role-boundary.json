@@ -27,15 +27,15 @@
       "Condition": {"StringEquals": {"kms:ViaService": "ssm.us-east-1.amazonaws.com"}}
     },
     {
-      "Sid": "ReadGroups",
+      "Sid": "ReadGroupsAndAlarms",
       "Effect": "Allow",
-      "Action": "autoscaling:DescribeAutoScalingGroups",
+      "Action": ["autoscaling:DescribeAutoScalingGroups", "cloudwatch:DescribeAlarms"],
       "Resource": "*"
     },
     {
-      "Sid": "ResizeOnlyNeurolensGroups",
+      "Sid": "ResizeAndProtectOnlyNeurolensGroups",
       "Effect": "Allow",
-      "Action": "autoscaling:UpdateAutoScalingGroup",
+      "Action": ["autoscaling:UpdateAutoScalingGroup", "autoscaling:SetInstanceProtection"],
       "Resource": "arn:aws:autoscaling:us-east-1:*:autoScalingGroup:*:autoScalingGroupName/neurolens-*"
     },
     {

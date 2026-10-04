@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 # Ends a work session (M2a §4d, M2b §2d). Run at the end of every session.
-# Re-enables the idle alarm's action, removes a warm hold's end timer, sets the worker group to 0/0/0
-# (even while it is still waiting for GPU capacity and has no machine yet), waits for workers to go,
-# stops the NAT instance, then checks. It prints ALL STOPPED only when every check succeeded; anything unproven prints
-# NOT CONFIRMED and exits 1. An image-build machine is listed, not stopped (it may be running on
+# Re-enables the alarms' actions, removes a warm hold's end timer and the workers' scale-in protection
+# (a stop means stop: a running job is handed back for the next session), sets the worker group to
+# 0/0/0 (even while it is still waiting for GPU capacity and has no machine yet), waits for workers
+# to go, stops the NAT instance, then checks. It prints ALL STOPPED only when every check succeeded;
+# anything unproven prints NOT CONFIRMED and exits 1. An image-build machine is listed, not stopped (it may be running on
 # purpose; it has its own guards).
 set -uo pipefail   # no -e on purpose: a failed call is recorded and the script goes on stopping the rest
 ASG=neurolens-workers
-IDLE_ALARM=neurolens-worker-idle
+ALARMS="neurolens-worker-idle neurolens-worker-scale-out neurolens-worker-scale-in"
 HOLD_END=neurolens-warm-hold-end
 PROBLEMS=""
 problem() { PROBLEMS="$PROBLEMS  - $*"$'\n'; echo "PROBLEM: $*" >&2; }
@@ -39,9 +40,10 @@ group_machines() {  # how many machines the group still tracks (it knows a launc
     --query 'length(AutoScalingGroups[0].Instances)' --output text
 }
 
-# 1. The idle alarm acts in every session, even if someone switched it off by hand.
-aws cloudwatch enable-alarm-actions --alarm-names "$IDLE_ALARM" \
-  || problem "could not re-enable the idle alarm's action ($IDLE_ALARM)"
+# 1. The alarms act in every session, even if someone switched them off by hand.
+# shellcheck disable=SC2086  # ALARMS is a space-separated list on purpose
+aws cloudwatch enable-alarm-actions --alarm-names $ALARMS \
+  || problem "could not re-enable the alarms' actions ($ALARMS)"
 
 # 1b. A warm hold's end timer would otherwise fire in a later session (M2b §2d).
 if ! HOLD=$(hold_end); then
@@ -66,6 +68,16 @@ else
       --query 'Reservations[].Instances[].InstanceId' --output text 2>/dev/null)" ]; then
     echo "Note: the worker group was already at max 0 with the NAT instance running. The circuit"
     echo "breaker probably stopped the workers during this session (see the alarm email)."
+  fi
+  # A busy worker protects itself from scale-in (M2b §1a); without this it would outlive the stop.
+  if ! IDS=$(aws autoscaling describe-auto-scaling-groups --auto-scaling-group-names "$ASG" \
+      --query 'AutoScalingGroups[0].Instances[].InstanceId' --output text); then
+    problem "could not list the workers' scale-in protection"
+  elif [ -n "$IDS" ] && [ "$IDS" != "None" ]; then
+    # shellcheck disable=SC2086  # IDS is a space-separated list on purpose
+    aws autoscaling set-instance-protection --auto-scaling-group-name "$ASG" --instance-ids $IDS \
+      --no-protected-from-scale-in \
+      || problem "could not remove the workers' scale-in protection ($IDS): they may not end"
   fi
   if [ "$MIN $MAX $DES" != "0 0 0" ]; then
     if aws autoscaling update-auto-scaling-group --auto-scaling-group-name "$ASG" \

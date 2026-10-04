@@ -197,6 +197,40 @@ def release(sqs, queue_url, receipt_handle):
         )
 
 
+class ScaleInProtection:
+    """Marks this machine protected from scale-in while it holds a job (M2b §1a).
+
+    Scale-in decides "the queue is empty" from metrics a few minutes old, so without this a worker
+    that has just taken a job could be removed. AWS's documented pattern for long-running queue
+    workers. It never changes how many machines run. A failed call is logged, never raised: the job
+    then runs unprotected, as safe as without this (a scale-in hands it back to the queue).
+    """
+
+    def __init__(self, autoscaling, group_name, instance_id):
+        self._autoscaling = autoscaling
+        self._group_name = group_name
+        self._instance_id = instance_id
+
+    @contextlib.contextmanager
+    def hold(self):
+        self._set(True)
+        try:
+            yield
+        finally:
+            self._set(False)
+
+    def _set(self, protected):
+        try:
+            self._autoscaling.set_instance_protection(
+                InstanceIds=[self._instance_id],
+                AutoScalingGroupName=self._group_name,
+                ProtectedFromScaleIn=protected,
+            )
+        except Exception:
+            state = "protect" if protected else "unprotect"
+            logger.warning(f"Could not {state} this machine against scale-in", exc_info=True)
+
+
 def _reject(s3, bucket, key, job_id, reason, user_error):
     """A video that can never succeed: final status first, then delete the upload (if the
     delete is lost, a redelivery rejects it again and rewrites the same status)."""
@@ -217,6 +251,12 @@ def validate_config(cfg):
                     "(env.conf on AWS), behaviour settings from config.json."
                 )
             node = node[part]
+    # On AWS the worker protects its machine from scale-in while busy, which needs its group's name.
+    if os.environ.get("NEUROLENS_DEPLOYED") and not cfg.get("aws", {}).get("worker_group"):
+        raise ValueError(
+            "Missing required setting: aws.worker_group (NEUROLENS_WORKER_GROUP), written into "
+            "env.conf by the worker's UserData."
+        )
 
 
 def handle_record(bucket, key, *, s3, cfg, roi_masks, heartbeat):
@@ -420,7 +460,7 @@ def _hand_back(s3, sqs, queue_url, receipt, bucket, job_id, *, final):
         _write_failure_status(s3, bucket, job_id, final=True, error=INTERRUPTED)
 
 
-def _poll(*, s3, sqs, cfg, roi_masks, shutdown, max_receives):
+def _poll(*, s3, sqs, cfg, roi_masks, shutdown, max_receives, protection=None):
     """Long-poll for at most one message and handle it.
 
     The number of messages received (0 for an empty queue), or None if the receive call failed.
@@ -438,22 +478,30 @@ def _poll(*, s3, sqs, cfg, roi_masks, shutdown, max_receives):
         return None
     messages = resp.get("Messages", [])
     for message in messages:
-        process_message(
-            message,
-            s3=s3,
-            sqs=sqs,
-            cfg=cfg,
-            roi_masks=roi_masks,
-            shutdown=shutdown,
-            max_receives=max_receives,
-        )
+        with protection.hold() if protection else contextlib.nullcontext():
+            process_message(
+                message,
+                s3=s3,
+                sqs=sqs,
+                cfg=cfg,
+                roi_masks=roi_masks,
+                shutdown=shutdown,
+                max_receives=max_receives,
+            )
     return len(messages)
 
 
-def poll_once(*, s3, sqs, cfg, roi_masks, shutdown, max_receives):
-    """True if the receive call worked (even with no message); False if it failed."""
+def poll_once(*, s3, sqs, cfg, roi_masks, shutdown, max_receives, protection=None):
+    """True if the receive call worked (even with no message); False if it failed. With a
+    ScaleInProtection, each message is handled while this machine is protected from scale-in."""
     received = _poll(
-        s3=s3, sqs=sqs, cfg=cfg, roi_masks=roi_masks, shutdown=shutdown, max_receives=max_receives
+        s3=s3,
+        sqs=sqs,
+        cfg=cfg,
+        roi_masks=roi_masks,
+        shutdown=shutdown,
+        max_receives=max_receives,
+        protection=protection,
     )
     return received is not None
 
@@ -527,12 +575,12 @@ def _put_boot_json(s3, bucket, name, obj):
         logger.exception(f"Could not write boot record {name}")
 
 
-def _record_boot(s3, bucket):
+def _record_boot(s3, bucket, identity):
     """Write this GPU boot's record; return the instance id (None when not recorded)."""
-    if not os.environ.get("NEUROLENS_DEPLOYED") or inference.fake_mode():
+    if identity is None or inference.fake_mode():
         return None
+    instance_id, instance_type = identity
     try:
-        instance_id, instance_type = _instance_identity()
         record = boot_record(BOOT_LOG.read_text(), datetime.now(UTC), instance_id, instance_type)
     except Exception:
         logger.exception("Could not build the boot record")
@@ -558,7 +606,18 @@ def run():
         inference.load_model(cfg)  # in real mode this takes minutes on first run
         roi_masks = inference.roi_masks()
 
-        instance_id = _record_boot(s3, aws["s3_bucket"])
+        identity = protection = None
+        if os.environ.get("NEUROLENS_DEPLOYED"):
+            try:
+                identity = _instance_identity()
+            except Exception:
+                logger.exception(
+                    "Could not read instance metadata: running without scale-in protection"
+                )
+        if identity is not None:
+            autoscaling = boto3.client("autoscaling", region_name=aws["region"])
+            protection = ScaleInProtection(autoscaling, aws["worker_group"], identity[0])
+        instance_id = _record_boot(s3, aws["s3_bucket"], identity)
         last_transcribing_seconds = None
 
         logger.info(f"Worker ready. Polling {aws['sqs_queue_url']} (max receives {max_receives})")
@@ -572,6 +631,7 @@ def run():
                     roi_masks=roi_masks,
                     shutdown=shutdown,
                     max_receives=max_receives,
+                    protection=protection,
                 )
             except ShutdownRequested:
                 break

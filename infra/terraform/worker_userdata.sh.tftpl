@@ -50,6 +50,7 @@ NEUROLENS_ROOT=/opt/neurolens/app
 NEUROLENS_S3_BUCKET=${bucket}
 NEUROLENS_SQS_QUEUE_URL=${queue_url}
 NEUROLENS_AWS_REGION=${region}
+NEUROLENS_WORKER_GROUP=${worker_group}
 NEUROLENS_DEPLOYED=1
 HF_HUB_OFFLINE=1
 %{ if fake_inference ~}
@@ -79,7 +80,6 @@ log "code $(cat /opt/neurolens/app/REVISION) pulled and settings verified"
 # - crash limit (M2a §3): 3 starts within an hour, then the service stays failed and the machine
 #   waits for the idle alarm and circuit breaker. The window must outlast a crash cycle (each restart
 #   reloads the model, ~3.5 min); systemd counts in fixed windows.
-# - empty OnSuccess=/OnFailure= clear the image's self-termination hooks (M2b §2b).
 # - TimeoutStopSec: on SIGTERM the worker hands its job back within seconds; after 110 s systemd
 #   kills it, and the heartbeat's end makes the job visible again within about 120 s.
 mkdir -p /etc/systemd/system/neurolens-worker.service.d
@@ -87,8 +87,6 @@ cat > /etc/systemd/system/neurolens-worker.service.d/limits.conf <<'EOF'
 [Unit]
 StartLimitIntervalSec=3600
 StartLimitBurst=3
-OnSuccess=
-OnFailure=
 
 [Service]
 TimeoutStopSec=110
@@ -103,6 +101,10 @@ case $- in *i*)  # interactive shells only, so scripted output stays clean
   echo ;;
 esac
 EOF
+# The image's unit still names neurolens-self-terminate.service in OnSuccess=/OnFailure= (a drop-in
+# cannot empty those lists): masking it means they start nothing (M2b §2b). Removed at the next
+# image rebuild (M2a §12).
+systemctl mask neurolens-self-terminate.service
 systemctl daemon-reload
 
 # 7. Start the worker (disabled in the image until now).

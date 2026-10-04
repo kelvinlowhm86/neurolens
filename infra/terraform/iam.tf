@@ -169,7 +169,14 @@ resource "aws_iam_role_policy" "worker" {
         ]
         Resource = aws_sqs_queue.jobs.arn
       },
-      # No Auto Scaling permission at all: from M2b only AWS decides how many workers run (§2).
+      {
+        # Only "not me, not now" while it holds a job (M2b §1a): it can never change how many
+        # workers run. AWS's documented pattern for long-running queue workers.
+        Sid      = "ProtectOwnMachineWhileBusy"
+        Effect   = "Allow"
+        Action   = "autoscaling:SetInstanceProtection"
+        Resource = local.worker_asg_arn
+      },
       local.deny_neurolens_parameters,
     ]
   })
@@ -209,23 +216,24 @@ resource "aws_iam_role_policy" "breaker" {
     Version = "2012-10-17"
     Statement = [
       {
-        # Describe calls cannot be limited to one group (AWS needs "*"). Read only.
-        Sid      = "ReadGroups"
+        # Describe calls cannot be limited to one group or alarm (AWS needs "*"). Read only.
+        Sid      = "ReadGroupsAndIdleAlarm"
         Effect   = "Allow"
-        Action   = "autoscaling:DescribeAutoScalingGroups"
+        Action   = ["autoscaling:DescribeAutoScalingGroups", "cloudwatch:DescribeAlarms"]
         Resource = "*"
       },
       {
-        Sid      = "SetWorkerGroupToZero"
+        # Remove the workers' scale-in protection, then set the group to zero.
+        Sid      = "StopWorkerGroup"
         Effect   = "Allow"
-        Action   = "autoscaling:UpdateAutoScalingGroup"
+        Action   = ["autoscaling:SetInstanceProtection", "autoscaling:UpdateAutoScalingGroup"]
         Resource = local.worker_asg_arn
       },
       {
         Sid      = "OwnLogs"
         Effect   = "Allow"
         Action   = ["logs:CreateLogStream", "logs:PutLogEvents"]
-        Resource = "${aws_cloudwatch_log_group.breaker.arn}:*"
+        Resource = "arn:aws:logs:${var.region}:${local.account_id}:log-group:/aws/lambda/neurolens-breaker:*"
       },
     ]
   })
