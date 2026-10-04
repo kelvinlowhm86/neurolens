@@ -156,3 +156,69 @@ The worker group had found no `g6e` in any zone for about 40 minutes first (17:3
   this cost; whether it changes the results measurably has to be checked first. Decision deferred
   (M2b, with the warm-up fix): a 1-minute 4K ad currently costs about $0.55 and takes about 20 minutes warm.
 - Session cost about $1.10.
+
+## Milestone review fixes (2026-10-04)
+
+An independent review of M2a found that a slowly crashing worker was never shut down (systemd's
+3-in-10-minutes limit resets before a ~4-minute crash cycle fills it), that self-termination tried
+once with only an email behind it, and that `stop_work.sh` could stop nothing (no Terraform) or skip
+a group still waiting for a GPU. Fixes in spec §3, §4b-§4g, §12; code `ad25cb3`, `c55e9d1`, `48e0425`,
+`395387d`. A second review of the spec and a third of the code each found and fixed further gaps.
+
+**Idle alarm, measured before relying on it** (read-only `get-metric-data`):
+- In 5-minute periods where the queue published **no data points at all** (it stops after about
+  6 quiet hours), `FILL(recv, 0)` still returned a full series and the alarm expression evaluated
+  to 1 in all 24 periods of a 2-hour window: the alarm fires in that state.
+- Empty long polls are not counted as messages received: in the 2026-10-03 session, half-hour periods
+  with a worker running show `NumberOfMessagesReceived` 0 alongside `NumberOfEmptyReceives` 5. A worker
+  that polls an empty queue reads as idle.
+- After the apply the alarm moved to OK with all values 0 (no worker), and the email arrived.
+
+**`stop_work.sh`, live:**
+- Before the deploy policy had `cloudwatch:EnableAlarmActions`: NOT CONFIRMED with the AccessDenied
+  reason (twice), exit 1. After the policy paste: ALL STOPPED.
+- From a fresh `git worktree` (no Terraform setup): the `terraform init` command and "NOT CONFIRMED:
+  nothing was checked or stopped", exit 1.
+- `start_work.sh --worker && stop_work.sh` (group at desired 1, machine still launching): the first
+  version zeroed the group but its wait saw no machine yet, so the late-appearing worker gave NOT
+  CONFIRMED. Fix `395387d`: also wait until the group tracks no machine. Re-run: waited through
+  "pending" and "shutting-down", then ALL STOPPED (criterion 21).
+
+## Acceptance criteria (spec §10)
+
+| # | Status | Evidence |
+|---|---|---|
+| 1 | Pass | 8 vCPU on-demand G quota in us-east-1; zones a-d offer `g6e.xlarge` (`zones` in `terraform.tfvars`) |
+| 2 | Pass | v1 and v2 image sections above (AMI, snapshot size, peak RAM 14.8 GB / VRAM 18.6 GB, offline re-run); `g6e.xlarge` justified by RAM |
+| 3 | Pass | wiring rehearsal above (job end to end on a CPU worker); NAT stop/start then a new job: every later session starts that way |
+| 4 | Pass | §7a verified on the GPU (52 s trailer within 0.0000 of the first run) |
+| 5 | Pass | boot log timestamps; weight sync 538 s (CPU), 55-85 s (GPU) |
+| 6 | Pass | `deploy_code.sh` refused an uncommitted change (2026-10-04); after a deploy, `restart_workers.sh` showed `ab6ce4d` and REVISION matched (rehearsal) |
+| 7 | Pass | every worker boot writes both files and starts the service with no manual step; both mode 600 (CPU test 2026-10-04) |
+| 8 | Pass | UserData failure (disk-full rehearsal) and clean stop (rehearsal) self-terminated with the group to 0; three crashes: criterion 19. Idle exit: unit test that `run()` returns, which takes the same clean-stop path as the rehearsal's clean stop |
+| 9 | Pass | private-subnet workers reached SQS via the NAT and S3 via the endpoint in every session |
+| 10 | Pass | sessions above: `stop_work.sh` ALL STOPPED; `start_work.sh --worker` then a completed job |
+| 11 | Pass | alarm emails received (subscription confirmed) |
+| 12 | Pass | `terraform plan`: "No changes" (2026-10-04) |
+| 13 | Pass | 345 tests pass locally and in CI; tests committed before the code (`c1f6bca` before `2d8a47a`, `382a001` before `6954972`) |
+| 14 | Pass | redrive on the real queue (2026-10-04): a test message received twice (counts 1, 2) was not returned on the third receive and was in the dead-letter queue, then deleted; the worker never deletes a failed message (unit tests) |
+| 15 | Pass | 120 timesteps for 119.01 s, one encoding per job, visibility 1800 s |
+| 16 | Pass | v2 from plain Ubuntu, 22.9 GB vs 78.5 GB; v1 deregistered, snapshot deleted |
+| 17 | Pass | region refactor: plan with no changes in us-east-1 |
+| 18 | Pass | benchmark in `docs/evidence/README.md`; `g6e.xlarge` first |
+| 19-23 | Pass | CPU test session below |
+
+## CPU test session (2026-10-04, `t3.large`, fake model, code `48e0425`)
+
+| Check | Result |
+|---|---|
+| 20, idle alarm | Worker started, NAT instance stopped at once, after more than 6 quiet hours on the queue (no SQS metrics). The worker could reach neither SQS nor Auto Scaling, so its own idle exit and self-termination could not work. At +88 min the alarm went to ALARM; Auto Scaling's log: "a monitor alarm neurolens-worker-idle in state ALARM triggered policy neurolens-workers-to-zero changing the desired capacity from 1 to 0"; worker gone 2 min later; ALARM email received. Cost of the stuck worker about $0.12. |
+| 21, `stop_work.sh` | See "Milestone review fixes" above |
+| 7 | `env.conf` and `config.json` mode 600; the worker's `config.json` has no `aws` block |
+| 22 | On the worker, `aws ssm get-parameter --name /neurolens/hf_token`: AccessDeniedException, explicit deny |
+| 23 | Local web app code with the region only in `.env`: presign, upload of the 27 s clip (HTTP 204), result with 28 rows. With `NEUROLENS_AWS_REGION` empty, the web app and the worker stop with an error naming it |
+| 19, restarts | Three `restart_workers.sh` in a row (four starts within the hour with the boot start): worker still running; `reset-failed` clears the start counter on a running service |
+| 19, crash loop | Start command replaced by `sleep 240; exit 1`: crashes at about 4, 8 and 12 min, the next start refused (`failed`), self-termination at 12.5 min, group 1 to 0 |
+
+Also confirmed on the worker: start limit `1h` / burst 3 from the UserData drop-in, the
+`/etc/profile.d` warning file, code `48e0425`. Session cost about $0.30.

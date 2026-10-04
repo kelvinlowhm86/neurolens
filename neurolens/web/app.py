@@ -35,7 +35,8 @@ def create_app(data_dir=None, cfg=None):
             data_dir = root / "data"
 
     data_dir = Path(data_dir)
-    # The S3 client exists only when the config has an aws block (M0-style tests have none).
+    # The S3 client exists only when the settings have an aws block, which .env fills in (M0-style
+    # tests have none).
     s3 = None
     if cfg is not None and "aws" in cfg:
         import boto3
@@ -115,7 +116,7 @@ def create_app(data_dir=None, cfg=None):
 
         try:
             if s3 is None:
-                raise RuntimeError("config.json has no aws block")
+                raise RuntimeError("no AWS settings (NEUROLENS_* in .env)")
             if max_bytes is None:
                 # a missing limit must never mean "unlimited"
                 raise RuntimeError("config.json has no max_upload_bytes")
