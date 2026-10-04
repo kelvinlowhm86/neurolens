@@ -83,7 +83,7 @@ Switched on shortly before the study, by changing one Terraform variable:
 | Command | Starts |
 |---|---|
 | `start_work.sh` | NAT instance; web server; reaper rule on (M3a). Waits until `https://<distribution>.cloudfront.net/healthz` returns 200, then prints "ready". |
-| `start_work.sh --worker` | The above, plus one GPU worker held warm (M2b §2). |
+| `start_work.sh --worker` | The above, plus one GPU worker held warm (M2b §2d). |
 | `start_work.sh --study` | `--worker`, plus Aurora minimum capacity 0.5 ACU so nobody waits for the database to wake. Use it for demos and study sessions. |
 | `stop_work.sh` | Reverses all of it: GPU workers to zero and the warm hold released; Aurora minimum back to 0; reaper run once, then off; web server stopped; NAT stopped. It then checks that no GPU, web or NAT instance is running and prints the Aurora minimum capacity. |
 
@@ -141,7 +141,7 @@ An independent track: it can run any time after M2b.
 - `experiments/tco_benchmark.py` times the full two-pass pipeline for 15 s, 30 s and 60 s clips, 10 runs each, and writes a CSV of wall-clock times.
 - **On-premise leg:** on the school's GPU cluster via Slurm (`experiments/slurm/tco_benchmark.sbatch`, a GPU with 40 GB or more), falling back to a teammate's 2× RTX 4090 machine. Power cost is estimated from published GPU TDP figures, not measured. The cluster has no AWS credentials: copy the output to a laptop and upload it with the manifest.
 - **Cloud leg:** reuse Experiment 1's per-stage timings where it has 10 runs per clip length; run only the missing ones on a Spot worker (about 1–2 hours of GPU at most; flag the estimate before running).
-- Output under `experiments/experiment-3/<run_id>/` with a `manifest.json`, following M2b §8's contract. Cost comparisons are scenario estimates built from measured runtimes and stated assumptions (including the report's $0.10-per-video model and the ~1,475 videos/month breakeven), never presented as observed fully-loaded costs.
+- Output under `experiments/experiment-3/<run_id>/` with a `manifest.json`, following M2b §10's contract. Cost comparisons are scenario estimates built from measured runtimes and stated assumptions (including the report's $0.10-per-video model and the ~1,475 videos/month breakeven), never presented as observed fully-loaded costs.
 
 ## 7. Stretch: Stripe test-mode credit demo
 Attempt only after every other acceptance criterion in §10 passes. It demonstrates a payment flow **without real money** and must never be switched to live mode.
