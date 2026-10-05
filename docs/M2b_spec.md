@@ -157,11 +157,15 @@ After the presigned S3 POST succeeds (204), the page currently shows "Uploaded �
 - Record the time from receiving the result to the chart being drawn in `window.neurolensTimings.render_ms` (Experiment 1).
 
 ## 8. First-job warm-up (WhisperX)
-A fresh worker's first job spends about 6 minutes in WhisperX (5 min 41 s on `neurolens-worker-v2`); later jobs take about 14 s. tribev2 runs WhisperX through `uvx`, which on its first call after boot rebuilt its tool environment (6,904 files, 119 MB, partly fetched through the NAT instance).
-1. **Diagnose on the CPU rehearsal worker** (the environment rebuild is not GPU work): on a fresh worker from the current image, run the exact `uvx` command tribev2 runs (read it from the pinned tribev2 source) twice on a few seconds of audio, timing each and noting network use. Record the cause in the build log.
-2. **Fix, in this order of preference:** (a) an environment setting in `env.conf` that lets `uvx` reuse the environment baked into the image (if the rebuild comes from a refresh check); (b) otherwise a boot-time warm-up: UserData writes and starts a one-shot unit that runs the same command on one second of silence while the model loads (about 3.5 minutes), so it is done before the first job; (c) an image change, only if (a) and (b) fail.
-3. If the fix needs an image rebuild, the same rebuild carries out M2a §12's deferred items and §2b's removals.
-4. Pass: on a fresh GPU worker, the first job's `transcribing` stage takes within 1 minute of a later job's.
+A fresh worker's first job spends about 6 minutes in WhisperX (5 min 41 s on `neurolens-worker-v2`); later jobs take about 14 s. tribev2 runs WhisperX as `uvx whisperx ...` (pinned tribev2, `eventstransforms.py`). The image holds uv's cache and WhisperX environment in `/root/.cache/uv`.
+
+**Cause (diagnosed on the CPU rehearsal worker, build log §8):** two parts. (1) uv's saved package lists are older than its 10-minute freshness window, so `uvx` asks PyPI again; when any of WhisperX's 124 dependencies has a newer release than the image's, the resolution changes and uv builds a new environment (about 14 s on CPU) — and the worker runs dependency versions the image was never tested with. (2) Most of the time: the worker's disk is created from the image snapshot and fetches each block from S3 on its first read, so loading torch and WhisperX's libraries (and, on GPU, the CUDA libraries) is slow once (about 2 min 40 s of a 2 min 54 s cold `uvx whisperx --help` on CPU, against 16.5 s warm). The same effect is the 86–107 s first `import torch` in the worker.
+
+**Fix:**
+1. `UV_OFFLINE=1` in `env.conf` (UserData): `uvx` resolves only from the image's cache, so it reuses the image's WhisperX environment, makes no PyPI requests and runs the tested versions. If the image ever lacked a package, the job fails loudly ("whisperx failed") instead of fetching it.
+2. The launch template's root volume sets `volume_initialization_rate = 300` (MiB/s, EBS Provisioned Rate for Volume Initialization): AWS copies the whole snapshot (about 23 GB of data) to the disk in about 75 s, well inside the model load, for about $0.08 per worker boot (charged on the snapshot's data size). If EBS cannot provide the rate, the launch fails and the group retries; if that is ever seen, removing the line falls back to the default behaviour. Fast snapshot restore ($0.75 an hour per zone while enabled) was ruled out on cost; a boot-time read of chosen files was the free alternative, covering only those files.
+
+**Pass:** on the CPU rehearsal worker, a fresh worker's first `uvx -v whisperx --help` installs nothing, makes no PyPI requests and takes within a few seconds of a warm run; on a fresh GPU worker, the first job's `transcribing` stage takes within 1 minute of a later job's (criterion 10).
 
 ## 9. 4K downscale test
 A 55 s 4K clip took 4.4 times longer than a 480p clip of similar length (video encoding 18.2 s per second of video, GPU busy 15%, CPU 54% of 4 cores): decoding 4K frames on the CPU limits the job, while the model only looks at a 256 x 256 centre square of each frame (its processor resizes the short side to 292). Shrinking the video first would likely remove most of this, but only if it does not change the results. The pass mark is fixed here, before any run.
@@ -284,7 +288,7 @@ CPU = rehearsal worker in fake mode with a slow fake job; GPU = real worker.
 
 ## 14. Between sessions, cost and teardown
 - End every working session with `stop_work.sh`; restore `worker_instance_types` after Experiment 2.
-- **M2b GPU spend estimate:** Experiment 1 session with §9 Step A and the stop check about $3–3.60; Experiment 2 about $5–6; warm-up fix check and §9 Step B about $1 each; CPU rehearsals (including the 2-hour breaker test) about $1. About $11–13 in total. Flag each session's estimate before starting it.
+- **M2b GPU spend estimate:** Experiment 1 session with §9 Step A and the stop check about $3–3.60; Experiment 2 about $5–6; warm-up fix check and §9 Step B about $1 each; CPU rehearsals (including the 2-hour breaker test) about $1. About $11–13 in total. Disk initialization (§8) adds about $0.08 per worker boot. Flag each session's estimate before starting it.
 - Keep the software-only image, `models/`, `code/latest.zip` and `experiments/`; M3 and M4 reuse them. Keep the 4K baseline result until §9 is decided.
 - Final teardown (`terraform destroy`, deregistering images, deleting snapshots) happens only after M4's consolidation.
 

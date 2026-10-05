@@ -40,6 +40,10 @@ resource "aws_launch_template" "worker" {
       volume_size           = 100
       volume_type           = "gp3"
       delete_on_termination = true
+      # Copy the whole image snapshot to the disk at 300 MiB/s (about 75 s, about $0.08 a boot), instead
+      # of each block on its first read: a cold disk made the first job's WhisperX and torch loading
+      # minutes slower (M2b §8). If EBS cannot give the rate, the launch fails and the group retries.
+      volume_initialization_rate = 300
     }
   }
 

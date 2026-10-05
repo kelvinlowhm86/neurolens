@@ -74,6 +74,29 @@ read). It is counted in the `downloading` stage. Experiment 1 runs on a worker t
 warm-up job, so its numbers are not affected; the stage attribution is noted for review B, and the
 cold-disk cost goes into the §8 diagnosis.
 
+
+## §8 first-job warm-up: diagnosis (2026-10-05, CPU worker, fresh from `neurolens-worker-v2`)
+
+Run as root (the service's user, `HOME=/root`) on a fresh `t3.large` worker, nothing else run first.
+uv's cache from the image build is in `/root/.cache/uv` (`environments-v2`, `simple-v25`, `archive-v0`, ...).
+
+| Run | Real time | CPU (user + sys) | Network received | What uv did |
+|---|---|---|---|---|
+| Cold: `uvx -v whisperx --help` | 2 min 54 s | 13 s | about 1 MB | 126 PyPI revalidation requests (saved lists older than 10 minutes); "Resolved 124 packages in 2.21s", "Prepared 2 packages", "Installed 124 packages in 11.37s": a new environment, because 2 dependencies had newer releases than the image's |
+| Warm, same command | 16.5 s | 5 s | — | no revalidation, "Resolved 124 packages in 185ms", nothing installed |
+
+Cause: the environment rebuild is real but small (about 14 s); most of the cold run is waiting on the
+disk (13 s of CPU in 174 s), reading torch and WhisperX's libraries from a volume restored lazily from
+the image snapshot. The worker's first `import torch` (86-107 s) is the same effect. On GPU the CUDA
+libraries add more cold reads, which fits the 5-6 minutes seen there (to be confirmed: criterion 10).
+The rebuild also means each fresh worker ran whatever dependency versions PyPI had that day.
+uvx used the system Python 3.10 at runtime, as in the image build (neither sets uv's Python directory).
+
+Fix (spec §8): `UV_OFFLINE=1` in `env.conf`, and the root volume's `volume_initialization_rate = 300`
+(about 23 GB of snapshot data, about 75 s, about $0.08 a boot; Fast Snapshot Restore at $0.75 an hour
+per zone ruled out). Applied 2026-10-05 (launch template only). The boot-time warm-up of chosen files
+was the free alternative.
+
 **3-hour alarm email storm (fixed):** the alert topic sent 12 emails between 19:49 and 20:14 UTC, all
 from `neurolens-worker-running-3h` flipping ALARM/OK every 5 minutes. Cause, from the alarm's own
 state reasons: a 5-minute gap with no worker in service (17:34:35-17:40, between R1's worker ending
