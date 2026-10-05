@@ -61,7 +61,7 @@ resource "aws_autoscaling_policy" "workers_to_zero" {
 resource "aws_cloudwatch_metric_alarm" "worker_idle" {
   count = local.workers_enabled ? 1 : 0
 
-  alarm_name = "neurolens-worker-idle"
+  alarm_name = local.idle_alarm
   # The email text (M2b §2c). Causes: a crash loop, broken code, a frozen job or a down NAT
   # instance, or a warm hold with no jobs (then it only emails).
   alarm_description = "AWS has stopped all NeuroLens workers (max 0) after 90 minutes without queue activity, unless a warm hold is active. Run infra/start_work.sh to start again."
@@ -109,6 +109,13 @@ resource "aws_cloudwatch_metric_alarm" "worker_idle" {
     }
   }
 
-  alarm_actions = [aws_autoscaling_policy.workers_to_zero[0].arn, aws_sns_topic.alerts.arn]
-  ok_actions    = [aws_sns_topic.alerts.arn]
+  # The breaker runs at once as well (M2b §2c): the "set to 0" policy ends the worker, and with a job
+  # waiting, scale-out would launch a replacement about a minute later, before a scheduled run set
+  # max 0 (seen in the CPU rehearsal, R8).
+  alarm_actions = [
+    aws_autoscaling_policy.workers_to_zero[0].arn,
+    aws_sns_topic.alerts.arn,
+    aws_lambda_function.breaker[0].arn,
+  ]
+  ok_actions = [aws_sns_topic.alerts.arn]
 }

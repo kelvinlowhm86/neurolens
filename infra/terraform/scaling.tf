@@ -136,7 +136,7 @@ resource "aws_lambda_function" "breaker" {
   environment {
     variables = {
       WORKER_GROUP = aws_autoscaling_group.workers[0].name
-      IDLE_ALARM   = aws_cloudwatch_metric_alarm.worker_idle[0].alarm_name
+      IDLE_ALARM   = local.idle_alarm
     }
   }
 
@@ -144,7 +144,7 @@ resource "aws_lambda_function" "breaker" {
   tags       = { Milestone = "M2b" }
 }
 
-# Every 5 minutes, not on the idle alarm's change of state: a change happens once, so a loop of
+# Every 5 minutes as well as when the idle alarm fires: a change of state happens once, so a loop of
 # replacements that keeps the alarm in ALARM, or one failed run, would never be looked at again.
 resource "aws_cloudwatch_event_rule" "breaker_schedule" {
   count = local.workers_enabled ? 1 : 0
@@ -170,6 +170,18 @@ resource "aws_lambda_permission" "events_invoke_breaker" {
   function_name = aws_lambda_function.breaker[0].function_name
   principal     = "events.amazonaws.com"
   source_arn    = aws_cloudwatch_event_rule.breaker_schedule[0].arn
+}
+
+# Only the idle alarm may run the breaker directly (its run at the moment the alarm fires).
+resource "aws_lambda_permission" "idle_alarm_invoke_breaker" {
+  count = local.workers_enabled ? 1 : 0
+
+  statement_id   = "AllowIdleAlarm"
+  action         = "lambda:InvokeFunction"
+  function_name  = aws_lambda_function.breaker[0].function_name
+  principal      = "lambda.alarms.cloudwatch.amazonaws.com"
+  source_arn     = aws_cloudwatch_metric_alarm.worker_idle[0].arn
+  source_account = local.account_id
 }
 
 # The safety net's own safety net: a failing breaker emails at once.

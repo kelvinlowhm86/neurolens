@@ -120,7 +120,7 @@ Only AWS decides; the worker never ends its own machine.
   queue's numbers reach CloudWatch a few minutes late.
 - **Circuit breaker:** if a worker is in service but nothing has moved in the queue for 90 minutes
   (the idle alarm), AWS ends it and you get an email. A small Lambda (`infra/lambda/breaker.py`)
-  checks every 5 minutes: while that alarm is on and no warm hold is running, it removes the
+  runs when that alarm fires and again every 5 minutes: while that alarm is on and no warm hold is running, it removes the
   workers' protection and sets the group's max to 0, so a broken worker is not replaced over and
   over. Nothing launches again until the next `start_work.sh`. This caps a failure at about
   1.5-2 hours of GPU (about $3-4). If the Lambda itself fails, a second alarm emails you.

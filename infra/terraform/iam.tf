@@ -9,6 +9,8 @@ locals {
   boundary_arn = "arn:aws:iam::${local.account_id}:policy/neurolens-role-boundary"
   ssm_core_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
   worker_asg   = "neurolens-workers"
+  # Named here, not read from the alarm: the alarm runs the breaker, which needs the name (a cycle).
+  idle_alarm = "neurolens-worker-idle"
   # IAM names are global (shared by every region): a deployment in another region (M2a §4i) adds
   # its region to them. us-east-1 keeps the original names, so its live roles are not replaced.
   iam_suffix     = var.region == "us-east-1" ? "" : "-${var.region}"

@@ -1,12 +1,14 @@
 """Circuit breaker (docs/M2b_spec.md §2c): stop all automatic worker launches.
 
-Runs every 5 minutes (an EventBridge schedule). While the idle alarm is in ALARM (a worker in
-service and no queue activity for 90 minutes) and no warm hold is on, it removes every worker's
-scale-in protection and sets the worker group to min 0 / max 0 / desired 0, so a broken worker is
-not replaced in a loop. Nothing launches again until infra/start_work.sh sets max 1.
+Runs when the idle alarm fires (one of its actions) and every 5 minutes (an EventBridge schedule).
+While the idle alarm is in ALARM (a worker in service and no queue activity for 90 minutes) and no
+warm hold is on, it removes every worker's scale-in protection and sets the worker group to
+min 0 / max 0 / desired 0, so a broken worker is not replaced in a loop. Nothing launches again
+until infra/start_work.sh sets max 1.
 
-It re-checks on every run instead of reacting once to the alarm's change, so a loop that keeps the
-alarm in ALARM, or one failed run, cannot slip past it. It changes nothing when:
+The run at the moment the alarm fires sets max 0 before scale-out can replace the worker that the
+alarm's "set to 0" policy ends. The schedule re-checks instead of relying on that one run, so a
+loop that keeps the alarm in ALARM, or one failed run, cannot slip past it. It changes nothing when:
 - the idle alarm exists and is not in ALARM (OK or INSUFFICIENT_DATA). A missing alarm counts as
   ALARM, so the breaker fails safe;
 - the group's minimum is 1 or more: a warm hold, a deliberately idle worker.
