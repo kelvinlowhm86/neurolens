@@ -88,3 +88,8 @@ output "stripe_webhook_url" {
   description = "Paste into the Stripe test-mode webhook endpoint (event: checkout.session.completed)."
   value       = aws_lambda_function_url.webhook.function_url
 }
+
+output "cloudfront_distribution_id" {
+  description = "Read by infra/deploy_web.sh to clear the cache after a deploy."
+  value       = aws_cloudfront_distribution.site.id
+}
