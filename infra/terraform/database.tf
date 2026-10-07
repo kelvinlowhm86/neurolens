@@ -1,6 +1,6 @@
 # ─── Aurora PostgreSQL through the Data API (M3a §3a) ──────────────────────
 #
-# Users, credit balances and job state. Serverless v2 from 0 ACU: it pauses after 10 idle minutes
+# Users, credit balances and job state. Serverless v2 from 0 ACU: it pauses after 5 idle minutes
 # and wakes in about 15 s on the next call, so it costs only while a session or a job uses it.
 # Reached only through the RDS Data API (HTTPS, IAM-checked): no workload opens a connection to
 # port 5432, so its security group has no rules at all and nothing needs to sit in the VPC.
@@ -96,25 +96,26 @@ locals {
   ]
 }
 
-# Forgotten-database alarm (M3b §6): awake for a large share of each of 6 hours in a row means something
-# keeps it awake (a forgotten stop_work.sh or --keep-worker-and-db, an open tab, a retrying Lambda):
-# about $1.40 a day at 0.5 ACU. The hourly AVERAGE above 0.15 ACU is awake for more than about 30% of
-# the hour at the 0.5 minimum. The hourly reaper's wake (about 6 minutes, 10%) stays below it; a caller
-# every 12 minutes (about 45%) and a held minimum (100%) are above it.
+# Forgotten-database alarm (M3b §6): awake in more than 30% of the minutes of each of 6 hours in a
+# row means something keeps it awake (a forgotten stop_work.sh or --keep-worker-and-db, an open tab, a
+# retrying Lambda): about $1.40 a day at 0.5 ACU. The metric reads 0 while paused, so the hourly 70th
+# percentile of its per-minute values is above 0 exactly when it was awake for over 30% of the hour,
+# whatever capacity it ran at. The hourly reaper's wake (about 6 minutes, 10%) stays below that; a
+# caller every 12 minutes (about 45%) and a held minimum (100%) are above it.
 resource "aws_cloudwatch_metric_alarm" "db_awake_long" {
   alarm_name        = "neurolens-db-awake-6h"
   alarm_description = "NeuroLens Aurora has been awake for a large share (over 30%) of each of the last 6 hours (about $1.40 a day while awake). Run infra/stop_work.sh; if it stays awake, look for whatever keeps calling it (an open page, a Lambda retrying: see /aws/lambda/neurolens-*)."
 
-  namespace   = "AWS/RDS"
-  metric_name = "ServerlessDatabaseCapacity"
-  dimensions  = { DBClusterIdentifier = aws_rds_cluster.db.cluster_identifier }
-  statistic   = "Average"
+  namespace          = "AWS/RDS"
+  metric_name        = "ServerlessDatabaseCapacity"
+  dimensions         = { DBClusterIdentifier = aws_rds_cluster.db.cluster_identifier }
+  extended_statistic = "p70"
 
   period              = 3600
   evaluation_periods  = 6
   datapoints_to_alarm = 6
   comparison_operator = "GreaterThanThreshold"
-  threshold           = 0.15
+  threshold           = 0
   treat_missing_data  = "notBreaching"
 
   alarm_actions = [aws_sns_topic.alerts.arn]

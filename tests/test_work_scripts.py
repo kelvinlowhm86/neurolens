@@ -95,6 +95,8 @@ if key == "ec2 describe-nat-gateways":
     states = next(a for a in args if a.startswith("Name=state,Values=")).split("=")[2].split(",")
     ids = [n["id"] for n in w["nats"] if n["state"] in states]
     out((ids[0] if ids else "None") if "[0]" in query else "\t".join(ids))
+if key == "ec2 describe-route-tables":
+    out(w.get("private_route_table", "rtb-1"))
 if key == "ec2 describe-addresses":
     out("\n".join(f"{e}\tNone" for e in w["eips"]))
 if key == "ec2 describe-instances":
@@ -219,6 +221,21 @@ def test_start_without_nat_gateway_changes_nothing(sandbox):
     assert r.changes() == []
 
 
+def test_start_refuses_when_the_private_route_does_not_use_the_nat_gateway(sandbox):
+    r = sandbox("start_work.sh", started_world(private_route_table="None"))
+    assert r.code != 0
+    assert "route" in r.err
+    assert r.changes() == []
+
+
+def test_start_failure_after_aurora_was_raised_says_to_run_stop_work(sandbox):
+    world = started_world(fail=["autoscaling update-auto-scaling-group"])
+    r = sandbox("start_work.sh", world, "--keep-worker-and-db")
+    assert r.code != 0
+    assert r.find("rds", "modify-db-cluster")  # Aurora was raised first
+    assert "infra/stop_work.sh" in r.err
+
+
 def test_start_plain_only_sets_max_size(sandbox):
     r = sandbox("start_work.sh", started_world())
     assert r.code == 0
@@ -332,6 +349,7 @@ def test_stop_resets_aurora_minimum_then_all_stopped(sandbox):
     r = sandbox("stop_work.sh", healthy_world(db_min="0.5"))
     modify = r.find("rds", "modify-db-cluster")
     assert len(modify) == 1 and "MinCapacity=0," in " ".join(r.calls[modify[0]])
+    assert "SecondsUntilAutoPause=300" in " ".join(r.calls[modify[0]])
     assert r.code == 0 and "ALL STOPPED" in r.out
 
 

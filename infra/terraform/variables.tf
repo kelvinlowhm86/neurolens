@@ -107,7 +107,7 @@ variable "nat_gateway" {
   description = <<-EOT
     The workers' way out to the internet (SQS, the Data API, HuggingFace), M3b §5. true on days with
     GPU work and for the deployed window (about $1.20 a day while it exists), false otherwise. The
-    website never needs it. Terraform refuses false while the worker group's max is above 0: run
+    website never needs it. Terraform refuses false while the worker group may start workers or one is running: run
     infra/stop_work.sh first.
   EOT
   type        = bool

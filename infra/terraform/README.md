@@ -18,7 +18,7 @@ it created. The region is one setting (`region` in `terraform.tfvars`, default `
 - A **NAT Gateway** (`nat_gateway` in `terraform.tfvars`, default `false`): the workers' only way out to
   the internet (HuggingFace, SQS, the database). It exists only while the variable is `true`, which
   costs about $1.20 a day: set it for days with GPU work and the deployed window, then back. Terraform
-  refuses to switch it off while the worker group's max is above 0 (run `infra/stop_work.sh` first).
+  refuses to switch it off while the worker group may start workers or one is running (run `infra/stop_work.sh` first).
   The website never needs it.
 - Roles (image build, worker, circuit breaker, web, Stripe webhook, dead-letter handler, reaper), each
   limited to what it needs and capped by a permission boundary.

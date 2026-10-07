@@ -104,10 +104,23 @@ resource "aws_route_table" "private" {
     # Workers running without a way out cannot fetch jobs or reach the database, and would only
     # bill until the idle alarm. The group's max is read at plan time.
     precondition {
-      condition     = var.nat_gateway || alltrue([for g in data.aws_autoscaling_group.workers : g.max_size == 0])
-      error_message = "nat_gateway = false while the worker group's max is above 0: run infra/stop_work.sh first, then apply again."
+      condition     = var.nat_gateway || (alltrue([for g in data.aws_autoscaling_group.workers : g.max_size == 0]) && length(data.aws_instances.workers.ids) == 0)
+      error_message = "nat_gateway = false while the worker group may start workers or a worker is still running: run infra/stop_work.sh first, check that no worker is listed, then apply again."
     }
   }
+}
+
+# Workers that exist right now, whatever the group says (one may be finishing a job).
+data "aws_instances" "workers" {
+  filter {
+    name   = "tag:Role"
+    values = ["worker"]
+  }
+  filter {
+    name   = "tag:Project"
+    values = ["neurolens"]
+  }
+  instance_state_names = ["pending", "running"]
 }
 
 # The worker group, when it exists (it does only once an image is set).

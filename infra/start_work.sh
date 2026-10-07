@@ -92,7 +92,19 @@ if [ -z "$NAT" ] || [ "$NAT" = None ]; then
   echo "until you set it back). Nothing was started." >&2
   exit 1
 fi
-echo "NAT Gateway $NAT available."
+# ...and the private subnets must actually route through it (a half-finished apply can create the
+# gateway but not the route).
+ROUTED=$(aws ec2 describe-route-tables --filters Name=tag:Name,Values=neurolens-private \
+  Name=route.nat-gateway-id,Values="$NAT" --query 'RouteTables[0].RouteTableId' --output text)
+if [ -z "$ROUTED" ] || [ "$ROUTED" = None ]; then
+  echo "NAT Gateway $NAT exists but the private route table does not send traffic through it:" >&2
+  echo "run terraform apply again. Nothing was started." >&2
+  exit 1
+fi
+echo "NAT Gateway $NAT available and routed."
+
+# From the first change on, a failed step leaves things part-started: say what to run.
+trap 'echo "A step failed after the session was part-started (above): run infra/stop_work.sh to put everything back." >&2' ERR
 
 # The warm hold's end goes in first: if AWS cannot record it, nothing starts (a hold with no end
 # would keep a GPU running until stop_work.sh).
