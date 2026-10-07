@@ -1,14 +1,15 @@
-"""Database smoke test (M3a §3d, §8 step 2): one throwaway job through billing on a real database.
+"""Database smoke test (M3a §3d, §8 step 2): throwaway jobs through billing on a real database.
 
     python infra/db_smoke.py --backend data_api   # Aurora (NEUROLENS_DB_* in .env)
     python infra/db_smoke.py --backend postgres   # local PostgreSQL (NEUROLENS_DB_DSN in .env)
 
 Runs ensure_user, reserve, claim, set_stage, verify and settle_success for a throwaway user,
-checks the ledger invariant, reads the whole `jobs` row back and checks the Python type of every
-column against what the PostgreSQL backend returns (§3d), so a wrong guess about the Data API's
-formats is caught here, not in production. Prints how long the first call took (it includes
-waking Aurora from pause). The throwaway user's rows are deleted at the end, pass or fail.
-Exit code 0 only if every check passed.
+then a second job through touch, release_for_retry (no message) and issue_refund (whose re-check
+reads boolean columns), checks the ledger invariant, reads the whole `jobs` row back and checks
+the Python type of every column against what the PostgreSQL backend returns (§3d), so a wrong
+guess about the Data API's formats is caught here, not in production. Prints how long the first
+call took (it includes waking Aurora from pause). The throwaway user's rows are deleted at the
+end, pass or fail. Exit code 0 only if every check passed.
 """
 
 import argparse
@@ -106,9 +107,18 @@ def smoke(db):
             problems.append(f"verify returned {verdict!r}")
         if not billing.settle_success(db, job_id):
             problems.append("settle_success returned False")
+        refunded = str(uuid.uuid4())
+        billing.reserve(db, user_id, refunded, f"uploads/{user_id}/{refunded}.mp4", None, 27400)
+        attempt = billing.claim(db, refunded)
+        steps = {
+            "touch": billing.touch(db, refunded, attempt),
+            "release_for_retry": billing.release_for_retry(db, refunded, attempt, None),
+            "issue_refund": billing.issue_refund(db, refunded, "presign_failed", queued_before_s=0),
+        }
+        problems += [f"{name} returned False" for name, ok in steps.items() if not ok]
         balance = billing.get_balance(db, user_id)
         if balance != {"available_cents": 230, "reserved_cents": 0}:
-            problems.append(f"balance {balance} after reserving {price} and capturing 270")
+            problems.append(f"balance {balance} after reserving {price}, capturing 270, refunding")
         problems += check_invariant(db, user_id)
         with db.transaction() as tx:
             [row] = tx.execute(

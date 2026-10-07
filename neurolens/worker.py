@@ -302,7 +302,7 @@ def handle_record(bucket, key, *, s3, db, cfg, roi_masks, heartbeat):
     with release_for_retry and the exception re-raised; money stays reserved.
     """
     job_id = storage.job_id_from_key(key)
-    if billing.job_state(db, job_id) is None:
+    if job_id is None or billing.job_state(db, job_id) is None:
         logger.warning(f"Skipped {key}: no job in the database (a manual or pre-M3 upload)")
         return Outcome.SKIPPED
     if storage.result_exists(s3, bucket, job_id):
@@ -311,18 +311,19 @@ def handle_record(bucket, key, *, s3, db, cfg, roi_masks, heartbeat):
         logger.info(f"Skipped {job_id}: a result already exists")
         return Outcome.SKIPPED
 
-    attempt = billing.claim(db, job_id)
-    if attempt is None:
-        state = billing.job_state(db, job_id)
-        if state is None or state["status"] in billing.TERMINAL:
-            logger.info(f"Skipped {job_id}: already finished")
-            return Outcome.SKIPPED
-        # Never SKIPPED for a job in progress: deleting the message could lose the job if the
-        # claim holder's release failed. Left alone, the claim goes stale and is re-claimed.
-        logger.info(f"Busy {job_id}: another worker holds it; leaving the message")
-        return Outcome.BUSY
-
+    attempt = None
     try:
+        # Claimed inside the try, so a shutdown right after the claim still hands the job back.
+        attempt = billing.claim(db, job_id)
+        if attempt is None:
+            state = billing.job_state(db, job_id)
+            if state is None or state["status"] in billing.TERMINAL:
+                logger.info(f"Skipped {job_id}: already finished")
+                return Outcome.SKIPPED
+            # Never SKIPPED for a job in progress: deleting the message could lose the job if the
+            # claim holder's release failed. Left alone, the claim goes stale and is re-claimed.
+            logger.info(f"Busy {job_id}: another worker holds it; leaving the message")
+            return Outcome.BUSY
         with heartbeat(lambda: billing.touch(db, job_id, attempt)):
             return _analyse(
                 bucket, key, job_id, attempt, s3=s3, db=db, cfg=cfg, roi_masks=roi_masks
@@ -331,12 +332,25 @@ def handle_record(bucket, key, *, s3, db, cfg, roi_masks, heartbeat):
         logger.warning(f"Lost the claim on {job_id} (attempt {attempt}): stopping, money untouched")
         return Outcome.LOST_CLAIM
     except BaseException as err:
-        message = INTERRUPTED if isinstance(err, ShutdownRequested) else _error_text(err)
+        if attempt is not None:
+            _hand_back(db, job_id, attempt, err)
+        raise
+
+
+def _hand_back(db, job_id, attempt, err):
+    """Release the claim so the next worker can take the job at once. A shutdown signal can
+    interrupt this once (the handler raises only once), so a second try completes. A failure is
+    logged and never replaces the original exception: the claim then goes stale instead."""
+    message = INTERRUPTED if isinstance(err, ShutdownRequested) else _error_text(err)
+    for _ in range(2):
         try:
             billing.release_for_retry(db, job_id, attempt, message)
+            return
+        except ShutdownRequested:
+            message = INTERRUPTED
         except Exception:
             logger.exception(f"Could not hand {job_id} back; its claim goes stale instead")
-        raise
+            return
 
 
 def _analyse(bucket, key, job_id, attempt, *, s3, db, cfg, roi_masks):

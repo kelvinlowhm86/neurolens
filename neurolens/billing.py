@@ -230,16 +230,17 @@ def verify(db, job_id, attempt, verified_duration_ms, max_duration_s):
         job = _lock_job(tx, job_id)
         if not _holds_claim(job, attempt):
             return LOST_CLAIM
-        tx.execute(
-            "UPDATE jobs SET verified_duration_ms = :ms WHERE job_id = CAST(:job_id AS uuid)",
-            {"ms": verified_duration_ms, "job_id": job_id},
-        )
         # The length limit is a product rule, checked before any credit logic, whatever the
-        # balance (settings.max_duration).
+        # balance (settings.max_duration). Also before recording the duration: a crafted file
+        # can claim more hours than the INTEGER column holds.
         if verified_duration_ms > max_duration_s * 1000:
             reason = "duration_exceeds_max_verified"
             _refund(tx, job_id, job, reason, None)
             return reason
+        tx.execute(
+            "UPDATE jobs SET verified_duration_ms = :ms WHERE job_id = CAST(:job_id AS uuid)",
+            {"ms": verified_duration_ms, "job_id": job_id},
+        )
         price = estimate_cost_cents(verified_duration_ms / 1000)
         difference = price - job["reserved_cents"]
         if difference == 0:

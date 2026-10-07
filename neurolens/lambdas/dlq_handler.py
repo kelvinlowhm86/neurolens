@@ -33,7 +33,7 @@ def _last_error(db, job_id):
 def settle_or_refund(db, s3, bucket, job_id):
     """True when the job is finished (charged, refunded or already terminal); False while a
     live worker holds it."""
-    state = billing.job_state(db, job_id)
+    state = None if job_id is None else billing.job_state(db, job_id)
     if state is None or state["status"] in billing.TERMINAL:
         logger.info(f"{job_id}: unknown or already finished, nothing to do")
         return True

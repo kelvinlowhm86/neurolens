@@ -1,6 +1,7 @@
 """S3 helpers shared by the web app and the worker. No torch, no neurolens.inference."""
 
 import json
+import uuid
 from datetime import UTC
 from pathlib import PurePosixPath
 from urllib.parse import unquote_plus
@@ -65,7 +66,13 @@ def parse_s3_event(body):
 
 
 def job_id_from_key(key):
-    return PurePosixPath(key).stem
+    """The job id in an upload key, or None when the file name is not one (a manual upload such
+    as uploads/ad.mp4: no job can have that id)."""
+    stem = PurePosixPath(key).stem
+    try:
+        return stem if str(uuid.UUID(stem)) == stem else None
+    except ValueError:
+        return None
 
 
 def put_result(s3, bucket, job_id, result):

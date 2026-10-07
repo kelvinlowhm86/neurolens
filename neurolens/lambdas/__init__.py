@@ -17,10 +17,8 @@ def setup_logging():
 
 def database():
     """Aurora through the Data API, waking it if paused (the default 60 s budget)."""
-    import boto3
-
     return dbmod.DataApiDatabase(
-        boto3.client("rds-data"),
+        dbmod.data_api_client(),
         os.environ["NEUROLENS_DB_CLUSTER_ARN"],
         os.environ["NEUROLENS_DB_SECRET_ARN"],
         os.environ["NEUROLENS_DB_NAME"],

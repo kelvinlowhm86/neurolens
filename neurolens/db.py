@@ -96,12 +96,30 @@ def _pg_value(value):
 # ---------------------------------------------------------------- RDS Data API
 
 
+def data_api_client(region=None):
+    """An rds-data client that never re-sends a request. botocore's default retries would
+    re-send a statement whose response was lost, running it twice inside the same transaction
+    (a relative balance update applied twice, with one ledger row)."""
+    import boto3
+    from botocore.config import Config
+
+    return boto3.client(
+        "rds-data", region_name=region, config=Config(retries={"total_max_attempts": 1})
+    )
+
+
 class DataApiDatabase:
     """Aurora through the RDS Data API. Only waking from auto-pause is retried (§3d): a failed
     commit, whose outcome is unknown, is raised to the caller, and the billing guards make the
-    caller's retry safe."""
+    caller's retry safe. The client must not retry on its own (see data_api_client)."""
 
     def __init__(self, rds_data_client, cluster_arn, secret_arn, database, resume_wait_s=60):
+        retries = rds_data_client.meta.config.retries or {}
+        if retries.get("total_max_attempts") != 1:
+            raise ValueError(
+                "The rds-data client re-sends failed requests, which can run a statement twice "
+                "in one transaction: build it with neurolens.db.data_api_client()."
+            )
         self._client = rds_data_client
         self._arns = {"resourceArn": cluster_arn, "secretArn": secret_arn}
         self._database = database
@@ -234,8 +252,10 @@ def from_config(cfg):
         missing = [label for key, label in names.items() if not aws.get(key)]
         if missing:
             raise ValueError(f"Missing required settings for the Data API: {', '.join(missing)}")
-        import boto3
-
-        client = boto3.client("rds-data", region_name=aws["region"])
-        return DataApiDatabase(client, aws["db_cluster_arn"], aws["db_secret_arn"], aws["db_name"])
+        return DataApiDatabase(
+            data_api_client(aws["region"]),
+            aws["db_cluster_arn"],
+            aws["db_secret_arn"],
+            aws["db_name"],
+        )
     raise ValueError(f"db.backend must be 'data_api' or 'postgres', not {backend!r}")
