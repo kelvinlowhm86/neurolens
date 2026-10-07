@@ -6,6 +6,10 @@ so tests can hand in moto (fake S3/SQS) clients.
 From M2b the worker never ends its own machine: AWS alone decides how many workers run
 (docs/M2b_spec.md §2). On SIGTERM (scale-in, a lost machine, `systemctl stop`) it hands its job
 back to the queue at once and returns.
+
+From M3a the database owns job state and money (docs/M3a_spec.md §5): the worker claims a job
+before any work, verifies its price after measuring it, and charges or refunds it through
+neurolens.billing. The claim's attempt number never leaves handle_record.
 """
 
 import contextlib
@@ -22,7 +26,8 @@ from pathlib import Path
 
 from botocore.exceptions import ClientError
 
-from neurolens import engagement, inference, settings, storage
+from neurolens import billing, engagement, inference, settings, storage
+from neurolens import db as dbmod
 
 logger = logging.getLogger("neurolens")
 
@@ -39,7 +44,10 @@ REQUIRED_CONFIG = [
 ]
 
 INTERRUPTED = "The job was interrupted. Please upload it again."
-MAX_ERROR_CHARS = 200  # the status object's `error` is shown to the user as is
+MAX_ERROR_CHARS = 200  # the job's error_message is shown to the user as is
+# A redelivery comes no sooner than 120 s after the last beat and a claim is stale after 90 s
+# (billing.claim), so each beat must refresh the claim within 50 s.
+MAX_HEARTBEAT_SECONDS = 50
 BOOT_LOG = Path("/var/log/neurolens-boot.log")  # written by the worker's UserData
 
 # Seconds the latest job spent in `transcribing` (build_events, where WhisperX runs), for the
@@ -48,13 +56,19 @@ last_transcribing_seconds = None
 
 
 class Outcome(enum.Enum):
-    """Final outcome of one S3 record. Any failure is an exception, not an outcome."""
+    """Outcome of one S3 record. Any failure is an exception, not an outcome. Every outcome is
+    final (the message may be deleted) except BUSY."""
 
-    DONE = "done"
-    REJECTED = "rejected"  # oversize, too long or unreadable; the object is deleted
-    GONE = "gone"  # the object no longer exists (duplicate notice or expired): nothing to do
-    DUPLICATE = "duplicate"  # another worker wrote the result while this one ran; left unchanged
-    SKIPPED = "skipped"  # a result already existed before any work
+    DONE = "done"  # this worker published the result and it was charged
+    DUPLICATE = "duplicate"  # another worker published first; charged once all the same
+    REJECTED = "rejected"  # refunded before inference (oversize, unreadable, too long, ...)
+    SKIPPED = "skipped"  # unknown job, result already existed, or the job is already finished
+    BUSY = "busy"  # another worker holds a fresh claim: leave the message to reappear
+    LOST_CLAIM = "lost_claim"  # this worker lost its claim part-way: whoever holds it finishes
+
+
+class _ClaimLost(Exception):
+    """A billing call reported that this worker no longer holds the job."""
 
 
 class ShutdownRequested(BaseException):
@@ -107,11 +121,16 @@ class ShutdownSignal:
 
 
 class Heartbeat:
-    """Keeps a message hidden while its job runs, by extending its visibility every interval.
+    """Keeps a message hidden while its job runs, by extending its visibility every interval,
+    then calls `on_beat` (the claim's database touch). The first beat comes after one interval.
 
     A worker that dies silently stops beating, and the message reappears within
     visibility_seconds. After max_seconds the beats stop (logged as an error), so a hung job is
     retried too.
+
+    Exit waits only for a visibility call already in progress, never for a running on_beat: a
+    database call can wait up to 60 s for Aurora to wake, and systemd allows 110 s to stop. A late
+    on_beat is harmless (a touch after release or settlement changes nothing, billing.touch).
     """
 
     def __init__(
@@ -123,6 +142,7 @@ class Heartbeat:
         interval_seconds,
         visibility_seconds=120,
         max_seconds=None,
+        on_beat=None,
     ):
         self._sqs = sqs
         self._queue_url = queue_url
@@ -130,6 +150,7 @@ class Heartbeat:
         self._interval = interval_seconds
         self._visibility = visibility_seconds
         self._max_seconds = max_seconds
+        self._on_beat = on_beat
         # Re-entrant: if a shutdown signal interrupts __exit__ right after it took the lock, the
         # second attempt in __exit__ can take it again instead of deadlocking.
         self._lock = threading.RLock()
@@ -155,10 +176,11 @@ class Heartbeat:
         return False
 
     def _stop(self):
-        with self._lock:  # a beat holds the lock while it runs: none can start after this
+        # A visibility call holds the lock while it runs: none can start after this. The thread
+        # (a daemon) is not joined, so a slow on_beat never delays the exit.
+        with self._lock:
             self._stopped = True
         self._wake.set()
-        self._thread.join()
 
     def _beat(self):
         while not self._wake.wait(self._interval):
@@ -182,6 +204,12 @@ class Heartbeat:
                     )
                 except Exception:
                     logger.warning("Heartbeat failed; trying again next interval", exc_info=True)
+            if self._on_beat is None or self._stopped:
+                continue
+            try:
+                self._on_beat()
+            except Exception:
+                logger.warning("Heartbeat callback failed; trying again next beat", exc_info=True)
 
 
 def release(sqs, queue_url, receipt_handle):
@@ -231,12 +259,14 @@ class ScaleInProtection:
             logger.warning(f"Could not {state} this machine against scale-in", exc_info=True)
 
 
-def _reject(s3, bucket, key, job_id, reason, user_error):
-    """A video that can never succeed: final status first, then delete the upload (if the
-    delete is lost, a redelivery rejects it again and rewrites the same status)."""
-    logger.warning(f"Rejected s3://{bucket}/{key}: {reason}")
-    storage.put_status(s3, bucket, job_id, "failed", error=user_error)
-    s3.delete_object(Bucket=bucket, Key=key)
+def _reject(s3, db, bucket, key, job_id, attempt, reason, message, *, delete=True):
+    """A job that can never succeed: refund it first, then delete the upload (a lost delete is
+    harmless: a redelivery fails its claim on the refunded job, and uploads expire)."""
+    if not billing.issue_refund(db, job_id, reason, message, attempt=attempt):
+        raise _ClaimLost
+    logger.warning(f"Rejected and refunded s3://{bucket}/{key}: {reason}")
+    if delete:
+        s3.delete_object(Bucket=bucket, Key=key)
     return Outcome.REJECTED
 
 
@@ -251,6 +281,11 @@ def validate_config(cfg):
                     "(env.conf on AWS), behaviour settings from config.json."
                 )
             node = node[part]
+    if cfg["worker"]["heartbeat_seconds"] > MAX_HEARTBEAT_SECONDS:
+        raise ValueError(
+            f"worker.heartbeat_seconds must be at most {MAX_HEARTBEAT_SECONDS} (a claim goes "
+            "stale after 90 s without a beat)."
+        )
     # On AWS the worker protects its machine from scale-in while busy, which needs its group's name.
     if os.environ.get("NEUROLENS_DEPLOYED") and not cfg.get("aws", {}).get("worker_group"):
         raise ValueError(
@@ -259,42 +294,72 @@ def validate_config(cfg):
         )
 
 
-def handle_record(bucket, key, *, s3, cfg, roi_masks, heartbeat):
-    """Analyse one uploaded video. Never touches SQS itself: `heartbeat()` gives the Heartbeat
-    that keeps this message hidden while the work runs."""
+def handle_record(bucket, key, *, s3, db, cfg, roi_masks, heartbeat):
+    """Analyse one uploaded video. Never touches SQS itself: `heartbeat(on_beat)` gives the
+    Heartbeat that keeps this message hidden while the work runs.
+
+    If anything raises after the claim (including ShutdownRequested), the job is handed back
+    with release_for_retry and the exception re-raised; money stays reserved.
+    """
     job_id = storage.job_id_from_key(key)
+    if billing.job_state(db, job_id) is None:
+        logger.warning(f"Skipped {key}: no job in the database (a manual or pre-M3 upload)")
+        return Outcome.SKIPPED
     if storage.result_exists(s3, bucket, job_id):
+        # A no-op unless an earlier worker crashed between writing the result and settling.
+        billing.settle_success(db, job_id)
         logger.info(f"Skipped {job_id}: a result already exists")
         return Outcome.SKIPPED
-    with heartbeat():
-        return _analyse(bucket, key, job_id, s3=s3, cfg=cfg, roi_masks=roi_masks)
+
+    attempt = billing.claim(db, job_id)
+    if attempt is None:
+        state = billing.job_state(db, job_id)
+        if state is None or state["status"] in billing.TERMINAL:
+            logger.info(f"Skipped {job_id}: already finished")
+            return Outcome.SKIPPED
+        # Never SKIPPED for a job in progress: deleting the message could lose the job if the
+        # claim holder's release failed. Left alone, the claim goes stale and is re-claimed.
+        logger.info(f"Busy {job_id}: another worker holds it; leaving the message")
+        return Outcome.BUSY
+
+    try:
+        with heartbeat(lambda: billing.touch(db, job_id, attempt)):
+            return _analyse(
+                bucket, key, job_id, attempt, s3=s3, db=db, cfg=cfg, roi_masks=roi_masks
+            )
+    except _ClaimLost:
+        logger.warning(f"Lost the claim on {job_id} (attempt {attempt}): stopping, money untouched")
+        return Outcome.LOST_CLAIM
+    except BaseException as err:
+        message = INTERRUPTED if isinstance(err, ShutdownRequested) else _error_text(err)
+        try:
+            billing.release_for_retry(db, job_id, attempt, message)
+        except Exception:
+            logger.exception(f"Could not hand {job_id} back; its claim goes stale instead")
+        raise
 
 
-def _analyse(bucket, key, job_id, *, s3, cfg, roi_masks):
+def _analyse(bucket, key, job_id, attempt, *, s3, db, cfg, roi_masks):
     global last_transcribing_seconds
 
     def stage(name):
-        storage.put_status(s3, bucket, job_id, "processing", stage=name)
+        if not billing.set_stage(db, job_id, attempt, name):
+            raise _ClaimLost
+
+    def reject(reason, message=None, *, delete=True):
+        return _reject(s3, db, bucket, key, job_id, attempt, reason, message, delete=delete)
 
     # Size backstop first: S3's own size cap should already have stopped a big file, but
-    # never download, probe or run inference on one that got through.
+    # never download, probe or run inference on one that got through. A queued job can outlive
+    # its upload (uploads expire after 2 days, queue messages after 4).
     try:
         size = s3.head_object(Bucket=bucket, Key=key)["ContentLength"]
     except ClientError as err:
         if storage.is_not_found(err):
-            # No status write: this may be a duplicate notice for a video already rejected.
-            logger.warning(f"Gone s3://{bucket}/{key}: object does not exist")
-            return Outcome.GONE
+            return reject("upload_missing", "The uploaded file no longer exists.", delete=False)
         raise
     if size > cfg["max_upload_bytes"]:
-        return _reject(
-            s3,
-            bucket,
-            key,
-            job_id,
-            f"{size} bytes exceeds max_upload_bytes",
-            "The file is larger than the upload limit.",
-        )
+        return reject("file_too_large", "The file is larger than the upload limit.")
 
     # Resolve the output folder before any expensive work, so a bad path fails early.
     out_dir = settings.resolve_paths(cfg, settings.get_root())["output"]
@@ -308,29 +373,25 @@ def _analyse(bucket, key, job_id, *, s3, cfg, roi_masks):
             s3.download_file(bucket, key, str(local))
         except ClientError as err:
             if storage.is_not_found(err):
-                logger.warning(f"Gone s3://{bucket}/{key}: object vanished before download")
-                return Outcome.GONE
+                return reject("upload_missing", "The uploaded file no longer exists.", delete=False)
             raise
 
-        # The authoritative duration check (the browser's estimate can be wrong or spoofed).
+        # The authoritative duration (the browser's estimate can be wrong or spoofed).
         try:
             duration = inference.probe_duration(local)
         except inference.UnreadableVideo:
             # Not a video, corrupt, audio-only or no duration: it can never succeed, so do not
             # retry it.
-            return _reject(
-                s3, bucket, key, job_id, "not a readable video", "The file is not a readable video."
-            )
-        limit = settings.max_duration(cfg)
-        if duration > limit:
-            return _reject(
-                s3,
-                bucket,
-                key,
-                job_id,
-                f"{duration:.1f}s exceeds the maximum duration",
-                f"The video is longer than {limit:g} seconds.",
-            )
+            return reject("unreadable_video", "The file is not a readable video.")
+        verdict = billing.verify(
+            db, job_id, attempt, round(duration * 1000), settings.max_duration(cfg)
+        )
+        if verdict == billing.LOST_CLAIM:
+            raise _ClaimLost
+        if verdict != billing.OK:  # refunded by verify: too long, or not enough credit
+            logger.warning(f"Rejected and refunded s3://{bucket}/{key}: {verdict}")
+            s3.delete_object(Bucket=bucket, Key=key)
+            return Outcome.REJECTED
 
         logger.info(f"Analysing {key} ({duration:.1f}s)")
         t0 = time.time()
@@ -355,11 +416,13 @@ def _analyse(bucket, key, job_id, *, s3, cfg, roi_masks):
         result["gpu"] = gpu
 
     # Publish to S3 without ever replacing an earlier result (a redelivered notice must not
-    # overwrite the first answer). The done status only after the result is confirmed.
-    if not storage.put_result(s3, bucket, job_id, result):
+    # overwrite the first answer). Either way the finished job is charged, once.
+    published = storage.put_result(s3, bucket, job_id, result)
+    if not billing.settle_success(db, job_id):
+        logger.warning(f"{job_id} was already settled or refunded; the result is not charged")
+    if not published:
         logger.warning(f"Duplicate {job_id}: a result already exists, left unchanged")
         return Outcome.DUPLICATE
-    storage.put_status(s3, bucket, job_id, "done")
     logger.info(f"Done {job_id} in {result['processing_time_seconds']}s")
     return Outcome.DONE
 
@@ -375,27 +438,14 @@ def _error_text(err):
     return text
 
 
-def _write_failure_status(s3, bucket, job_id, *, final, error):
-    """The §4 failure status, only if no result exists. Logs instead of raising, so the release
-    that follows always happens."""
-    try:
-        if storage.result_exists(s3, bucket, job_id):
-            return
-        if final:
-            storage.put_status(s3, bucket, job_id, "failed", error=error)
-        else:
-            storage.put_status(s3, bucket, job_id, "processing", stage="retrying", error=error)
-    except Exception:
-        logger.exception(f"Could not write the failure status of {job_id}")
-
-
-def process_message(message, *, s3, sqs, cfg, roi_masks, shutdown, max_receives):
+def process_message(message, *, s3, sqs, db, cfg, roi_masks, shutdown, max_receives):
     """Handle every record in one SQS message.
 
-    The message is deleted only if every record returned an Outcome (a message with no
-    records, like S3's one-off test event, is deleted too), or if its body can never be parsed.
-    If a record raises, the failure status is written and the message is released at once for
-    another attempt (after max_receives receives SQS moves it to the dead-letter queue). On a
+    The message is deleted only if every record returned a final outcome (BUSY is not final:
+    the message is left to reappear after its visibility timeout). A message with no records,
+    like S3's one-off test event, is deleted too, as is one whose body can never be parsed.
+    If a record raises, the message is released at once for another attempt (after
+    max_receives receives SQS moves it to the dead-letter queue, whose Lambda refunds it). On a
     shutdown the message is released and ShutdownRequested is raised; nothing else escapes.
     """
     queue_url = cfg["aws"]["sqs_queue_url"]
@@ -406,7 +456,6 @@ def process_message(message, *, s3, sqs, cfg, roi_masks, shutdown, max_receives)
         raise ShutdownRequested()
 
     receive_count = int(message.get("Attributes", {}).get("ApproximateReceiveCount", "1"))
-    final = receive_count >= max_receives
 
     try:
         records = storage.parse_s3_event(message["Body"])
@@ -414,53 +463,52 @@ def process_message(message, *, s3, sqs, cfg, roi_masks, shutdown, max_receives)
         logger.exception("Unparseable message body; deleting it (it can never succeed)")
         records = []
 
-    def heartbeat():
+    def heartbeat(on_beat):
         return Heartbeat(
             sqs,
             queue_url,
             receipt,
             interval_seconds=cfg["worker"]["heartbeat_seconds"],
             max_seconds=60 * cfg["worker"]["max_job_minutes"],
+            on_beat=on_beat,
         )
 
-    bucket = job_id = None
+    job_id = None
+    busy = False
     try:
         for bucket, key in records:
             job_id = storage.job_id_from_key(key)
-            # Only the record work is inside job(): the status writes, release and delete
-            # below cannot be interrupted by the signal.
+            # Only the record work is inside job(): the release and delete below cannot be
+            # interrupted by the signal.
             with shutdown.job():
-                handle_record(bucket, key, s3=s3, cfg=cfg, roi_masks=roi_masks, heartbeat=heartbeat)
+                outcome = handle_record(
+                    bucket, key, s3=s3, db=db, cfg=cfg, roi_masks=roi_masks, heartbeat=heartbeat
+                )
+            busy = busy or outcome is Outcome.BUSY
     except ShutdownRequested:
-        _hand_back(s3, sqs, queue_url, receipt, bucket, job_id, final=final)
+        logger.warning(f"Shutdown requested during job {job_id}: releasing its message")
+        release(sqs, queue_url, receipt)
         raise
     except Exception as err:
+        release(sqs, queue_url, receipt)
         if shutdown.requested():
             # systemd stops the whole service, so a subprocess (WhisperX, ffmpeg) may fail
             # before the signal reaches us: a shutdown, not a failure of the job.
-            _hand_back(s3, sqs, queue_url, receipt, bucket, job_id, final=final)
+            logger.warning(f"Shutdown requested during job {job_id}: released its message")
             raise ShutdownRequested() from err
         attempt = f"attempt {receive_count} of {max_receives}"
-        logger.exception(f"Job {job_id} failed ({attempt}); releasing it")
-        _write_failure_status(s3, bucket, job_id, final=final, error=_error_text(err))
-        release(sqs, queue_url, receipt)
+        logger.exception(f"Job {job_id} failed ({attempt}); released it")
         return
 
+    if busy:
+        return
     try:
         sqs.delete_message(QueueUrl=queue_url, ReceiptHandle=receipt)
     except Exception:
         logger.exception("Could not delete a finished message; it will be redelivered")
 
 
-def _hand_back(s3, sqs, queue_url, receipt, bucket, job_id, *, final):
-    """Shutdown mid-job: release the message; on the final attempt, tell the user."""
-    logger.warning(f"Shutdown requested during job {job_id}: releasing its message")
-    release(sqs, queue_url, receipt)
-    if final:
-        _write_failure_status(s3, bucket, job_id, final=True, error=INTERRUPTED)
-
-
-def _poll(*, s3, sqs, cfg, roi_masks, shutdown, max_receives, protection=None):
+def _poll(*, s3, sqs, db, cfg, roi_masks, shutdown, max_receives, protection=None):
     """Long-poll for at most one message and handle it.
 
     The number of messages received (0 for an empty queue), or None if the receive call failed.
@@ -483,6 +531,7 @@ def _poll(*, s3, sqs, cfg, roi_masks, shutdown, max_receives, protection=None):
                 message,
                 s3=s3,
                 sqs=sqs,
+                db=db,
                 cfg=cfg,
                 roi_masks=roi_masks,
                 shutdown=shutdown,
@@ -491,12 +540,13 @@ def _poll(*, s3, sqs, cfg, roi_masks, shutdown, max_receives, protection=None):
     return len(messages)
 
 
-def poll_once(*, s3, sqs, cfg, roi_masks, shutdown, max_receives, protection=None):
+def poll_once(*, s3, sqs, db, cfg, roi_masks, shutdown, max_receives, protection=None):
     """True if the receive call worked (even with no message); False if it failed. With a
     ScaleInProtection, each message is handled while this machine is protected from scale-in."""
     received = _poll(
         s3=s3,
         sqs=sqs,
+        db=db,
         cfg=cfg,
         roi_masks=roi_masks,
         shutdown=shutdown,
@@ -603,6 +653,7 @@ def run():
         s3 = boto3.client("s3", region_name=aws["region"])
         sqs = boto3.client("sqs", region_name=aws["region"])
         max_receives = read_max_receives(sqs, aws["sqs_queue_url"])
+        db = dbmod.from_config(cfg)  # before the model load: a bad db setting fails fast
         inference.load_model(cfg)  # in real mode this takes minutes on first run
         roi_masks = inference.roi_masks()
 
@@ -627,6 +678,7 @@ def run():
                 received = _poll(
                     s3=s3,
                     sqs=sqs,
+                    db=db,
                     cfg=cfg,
                     roi_masks=roi_masks,
                     shutdown=shutdown,

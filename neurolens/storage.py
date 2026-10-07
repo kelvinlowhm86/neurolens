@@ -2,7 +2,7 @@
 
 import json
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC
 from pathlib import PurePosixPath
 from urllib.parse import unquote_plus
 
@@ -18,7 +18,7 @@ CONTENT_TYPE_EXTENSIONS = {
 
 UPLOAD_PREFIX = "uploads/"
 NOT_FOUND_CODES = ("404", "NoSuchKey", "NotFound")
-TIME_FORMAT = "%Y-%m-%dT%H:%M:%SZ"  # every timestamp in status objects and boot records
+TIME_FORMAT = "%Y-%m-%dT%H:%M:%SZ"  # every timestamp in job stages and boot records
 
 
 def presign_upload(s3, bucket, content_type, max_bytes, expires_in=300):
@@ -128,30 +128,3 @@ def result_exists(s3, bucket, job_id):
 
 def get_result(s3, bucket, job_id):
     return _get_json(s3, bucket, f"results/{job_id}.json")
-
-
-def get_status(s3, bucket, job_id):
-    return _get_json(s3, bucket, f"status/{job_id}.json")
-
-
-def put_status(s3, bucket, job_id, status, *, stage=None, error=None, now=None):
-    """Update status/<job_id>.json: set status, stage, error and updated_at; append the stage.
-
-    Never changes an object whose status is already "done": a late failure or a slower
-    duplicate worker must not undo a finished job. Read-modify-write, not atomic: two workers on
-    one job can still interleave (rare, accepted; M3 adds a database lock).
-    """
-    key = f"status/{job_id}.json"
-    obj = _get_json(s3, bucket, key) or {"job_id": job_id, "stages": []}
-    if obj.get("status") == "done":
-        return
-    at = utc_text(now or datetime.now(UTC))
-    obj["status"] = status
-    obj["stage"] = stage
-    obj["error"] = error
-    obj["updated_at"] = at
-    if stage is not None:
-        obj.setdefault("stages", []).append({"stage": stage, "at": at})
-    s3.put_object(
-        Bucket=bucket, Key=key, Body=json.dumps(obj).encode(), ContentType="application/json"
-    )
