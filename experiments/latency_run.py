@@ -18,22 +18,11 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 
-COLUMNS = [
-    "clip_seconds",
-    "job_label",
-    "upload_ms",
-    "queue_wait_ms",
-    "downloading_ms",
-    "transcribing_ms",
-    "inference_full_ms",
-    "inference_noaudio_ms",
-    "extracting_roi_ms",
-    "result_fetch_ms",
-    "render_ms",
-    "peak_vram_gb",
-]
+from neurolens import experiment_runs
+from neurolens.storage import EXTENSION_CONTENT_TYPES, utc_parse
+
+COLUMNS = experiment_runs.EXPERIMENT_1_COLUMNS
 STAGES = ["downloading", "transcribing", "inference_full", "inference_noaudio", "extracting_roi"]
-CONTENT_TYPES = {".mp4": "video/mp4", ".mov": "video/quicktime", ".webm": "video/webm"}
 POLL_SECONDS = 2
 GIVE_UP_SECONDS = 60 * 60
 
@@ -52,11 +41,8 @@ def stage_durations_ms(status, upload_end):
     """Stage times from a finished job's status (the status endpoint's response). A stage lasts
     until the next one starts; the last lasts until the done time (updated_at). queue_wait is the
     first stage's start minus the end of the upload."""
-    fmt = "%Y-%m-%dT%H:%M:%SZ"
-    starts = {
-        s["stage"]: datetime.strptime(s["at"], fmt).replace(tzinfo=UTC) for s in status["stages"]
-    }
-    done = datetime.strptime(status["updated_at"], fmt).replace(tzinfo=UTC)
+    starts = {s["stage"]: utc_parse(s["at"]) for s in status["stages"]}
+    done = utc_parse(status["updated_at"])
     ends = [starts[s] for s in STAGES[1:]] + [done]
     out = {
         "queue_wait_ms": max(0, round((starts["downloading"] - upload_end).total_seconds() * 1000))
@@ -77,7 +63,7 @@ def main():
     import boto3
     import requests
 
-    from neurolens import experiment_runs, settings
+    from neurolens import settings
 
     cfg = settings.load_settings()
     bucket = cfg["aws"]["s3_bucket"]
@@ -89,7 +75,7 @@ def main():
         f"{args.api}/api/uploads/presign",
         json={
             "filename": clip.name,
-            "content_type": CONTENT_TYPES[clip.suffix.lower()],
+            "content_type": EXTENSION_CONTENT_TYPES[clip.suffix.lower()],
             "client_duration_seconds": seconds,
             "client_declared_bytes": clip.stat().st_size,
         },

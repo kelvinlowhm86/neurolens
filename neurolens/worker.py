@@ -247,6 +247,9 @@ class ScaleInProtection:
         finally:
             self._set(False)
 
+    def clear(self):
+        self._set(False)
+
     def _set(self, protected):
         try:
             self._autoscaling.set_instance_protection(
@@ -506,8 +509,8 @@ def process_message(message, *, s3, sqs, db, cfg, roi_masks, shutdown, max_recei
     except Exception as err:
         release(sqs, queue_url, receipt)
         if shutdown.requested():
-            # systemd stops the whole service, so a subprocess (WhisperX, ffmpeg) may fail
-            # before the signal reaches us: a shutdown, not a failure of the job.
+            # A shutdown, not a failure of the job. A safety net: KillMode=mixed keeps systemd
+            # from signalling a subprocess (WhisperX, ffmpeg) before us.
             logger.warning(f"Shutdown requested during job {job_id}: released its message")
             raise ShutdownRequested() from err
         attempt = f"attempt {receive_count} of {max_receives}"
@@ -682,6 +685,9 @@ def run():
         if identity is not None:
             autoscaling = boto3.client("autoscaling", region_name=aws["region"])
             protection = ScaleInProtection(autoscaling, aws["worker_group"], identity[0])
+            # A previous process killed mid-job (SIGKILL, out of memory) never unprotected this
+            # machine, and an idle protected machine cannot be scaled in.
+            protection.clear()
         instance_id = _record_boot(s3, aws["s3_bucket"], identity)
         last_transcribing_seconds = None
 

@@ -193,7 +193,7 @@ infra/start_work.sh                     # NAT instance on; an upload now starts 
 infra/start_work.sh --max 2             # the same with up to two workers (Experiment 2 only)
 infra/start_work.sh --worker --hours 3  # warm hold: one GPU worker now, kept 3 hours (billed from now)
 infra/deploy_code.sh                    # after a commit: ship new code (workers pick it up on restart)
-infra/restart_workers.sh                # restart the worker service on running workers, show the revision
+infra/restart_workers.sh                # restart the worker service on running workers, show the revision (refuses while one has a job; --now forces)
 infra/connect_worker.sh                 # open a shell on the worker (Session Manager), after a warning
 infra/stop_work.sh                      # END EVERY SESSION WITH THIS
 ```

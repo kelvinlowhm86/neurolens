@@ -5,6 +5,7 @@
         --instance-type g6e.xlarge --ami-id ami-...
 
 Refuses if a file the experiment needs is missing, so a half-finished run never looks complete.
+Records the deployed code revision: run it before deploying anything newer.
 """
 
 import argparse
@@ -29,6 +30,8 @@ def main():
 
     cfg = settings.load_settings()
     s3 = boto3.client("s3", region_name=cfg["aws"]["region"])
+    # The workers ran the deployed bundle, not this laptop's checkout (which may have moved on).
+    deployed = s3.get_object(Bucket=cfg["aws"]["s3_bucket"], Key="code/latest.revision")
     manifest = experiment_runs.write_manifest(
         s3,
         cfg["aws"]["s3_bucket"],
@@ -38,6 +41,7 @@ def main():
         started_utc=args.started,
         finished_utc=args.finished,
         environment={"type": "aws", "instance_type": args.instance_type, "ami_id": args.ami_id},
+        revision=deployed["Body"].read().decode().strip(),
     )
     print(f"manifest written: {manifest['files']}")
 

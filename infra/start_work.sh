@@ -58,7 +58,16 @@ if [ "$SIZES" = "None" ]; then
   [ "$WORKER" = 0 ] && [ "$MAX" = 1 ] || { echo "Cannot start workers without the group. Nothing was started." >&2; exit 1; }
   DES=0
 else
-  read -r _ _ DES <<<"$SIZES"
+  read -r MIN _ DES <<<"$SIZES"
+  # The idle alarm stays in ALARM for 5-10 minutes after the breaker fires (until a 5-minute slice
+  # with no worker in service). Meanwhile the breaker's schedule would set max 0 again, silently
+  # undoing this start. A warm hold (minimum 1) is safe: the breaker leaves it alone.
+  if [ "$WORKER" = 0 ] && [ "$MIN" = 0 ] && [ "$(aws cloudwatch describe-alarms \
+      --alarm-names neurolens-worker-idle --query 'MetricAlarms[0].StateValue' --output text)" = ALARM ]; then
+    echo "The idle alarm is still in ALARM (the circuit breaker stopped the workers): the breaker would" >&2
+    echo "undo this start. Try again in about 10 minutes, or start a warm hold with --worker. Nothing was started." >&2
+    exit 1
+  fi
 fi
 # Never below the workers the group already has: a lower max makes AWS end one, even mid-job.
 if [ "$MAX" -lt "$DES" ]; then

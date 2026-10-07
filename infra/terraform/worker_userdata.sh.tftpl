@@ -89,6 +89,9 @@ log "code $(cat /opt/neurolens/app/REVISION) pulled and settings verified"
 #   reloads the model, ~3.5 min); systemd counts in fixed windows.
 # - TimeoutStopSec: on SIGTERM the worker hands its job back within seconds; after 110 s systemd
 #   kills it, and the heartbeat's end makes the job visible again within about 120 s.
+# - KillMode=mixed: SIGTERM goes to the worker alone, not also to its helper programs (ffprobe,
+#   WhisperX), so a helper killed first cannot make a stop look like a job failure. Python ends its
+#   own helpers; any left when it exits (or at the 110 s limit) get SIGKILL.
 mkdir -p /etc/systemd/system/neurolens-worker.service.d
 cat > /etc/systemd/system/neurolens-worker.service.d/limits.conf <<'EOF'
 [Unit]
@@ -97,6 +100,7 @@ StartLimitBurst=3
 
 [Service]
 TimeoutStopSec=110
+KillMode=mixed
 EOF
 # Manual work is invisible to the queue-based rules (M2b §2). infra/connect_worker.sh prints this
 # before every session; login shells on the machine (bash -l, sudo -i) show it too.

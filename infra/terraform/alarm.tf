@@ -6,6 +6,11 @@
 # - long-running: email only, after 3 hours with a worker in service.
 # About $0.40 a month for both (four alarm metrics).
 
+locals {
+  # Named here, not read from the alarm: the alarm runs the breaker, which needs the name (a cycle).
+  idle_alarm = "neurolens-worker-idle"
+}
+
 resource "aws_sns_topic" "alerts" {
   name = "neurolens-alerts"
 }

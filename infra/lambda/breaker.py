@@ -2,9 +2,9 @@
 
 Runs when the idle alarm fires (one of its actions) and every 5 minutes (an EventBridge schedule).
 While the idle alarm is in ALARM (a worker in service and no queue activity for 90 minutes) and no
-warm hold is on, it removes every worker's scale-in protection and sets the worker group to
-min 0 / max 0 / desired 0, so a broken worker is not replaced in a loop. Nothing launches again
-until infra/start_work.sh sets max 1.
+warm hold is on, it removes every in-service worker's scale-in protection and sets the worker group
+to min 0 / max 0 / desired 0 (even if removing protection failed), so a broken worker is not
+replaced in a loop. Nothing launches again until infra/start_work.sh sets max 1.
 
 The run at the moment the alarm fires sets max 0 before scale-out can replace the worker that the
 alarm's "set to 0" policy ends. The schedule re-checks instead of relying on that one run, so a
@@ -44,17 +44,23 @@ def handler(event, context):
         logger.info(f"{group_name} has minimum {group['MinSize']} (warm hold): changing nothing")
         return {"changed": False}
 
-    # A busy (or hung) worker protects itself from scale-in; it must go too.
-    ids = [i["InstanceId"] for i in group["Instances"]]
-    for start in range(0, len(ids), 50):  # the call takes at most 50 instances
-        autoscaling.set_instance_protection(
-            InstanceIds=ids[start : start + 50],
-            AutoScalingGroupName=group_name,
-            ProtectedFromScaleIn=False,
+    # A busy (or hung) worker protects itself from scale-in; it must go too. Only in-service
+    # workers carry protection: one already ending (the alarm's own "set to 0") would make the
+    # call fail. Removed first, so the "set to 0" below can end them.
+    ids = [i["InstanceId"] for i in group["Instances"] if i["LifecycleState"] == "InService"]
+    try:
+        for start in range(0, len(ids), 50):  # the call takes at most 50 instances
+            autoscaling.set_instance_protection(
+                InstanceIds=ids[start : start + 50],
+                AutoScalingGroupName=group_name,
+                ProtectedFromScaleIn=False,
+            )
+    finally:
+        # Max 0 even if that failed: stopping every launch matters most (the error still raises,
+        # so the Errors alarm emails).
+        autoscaling.update_auto_scaling_group(
+            AutoScalingGroupName=group_name, MinSize=0, MaxSize=0, DesiredCapacity=0
         )
-    autoscaling.update_auto_scaling_group(
-        AutoScalingGroupName=group_name, MinSize=0, MaxSize=0, DesiredCapacity=0
-    )
     logger.warning(
         f"{alarm_name} in ALARM: {group_name} was "
         f"{group['MinSize']}/{group['MaxSize']}/{group['DesiredCapacity']} (min/max/desired); "

@@ -2,7 +2,7 @@
 
 import json
 import uuid
-from datetime import UTC
+from datetime import UTC, datetime
 from pathlib import PurePosixPath
 from urllib.parse import unquote_plus
 
@@ -108,6 +108,11 @@ def is_not_found(err):
 def utc_text(moment):
     """A timezone-aware datetime as UTC text, e.g. 2026-10-14T03:22:10Z."""
     return moment.astimezone(UTC).strftime(TIME_FORMAT)
+
+
+def utc_parse(text):
+    """The inverse of utc_text."""
+    return datetime.strptime(text, TIME_FORMAT).replace(tzinfo=UTC)
 
 
 def _get_json(s3, bucket, key):

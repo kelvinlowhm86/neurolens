@@ -6,7 +6,8 @@ experiment-2/<run_id>/cloudwatch.csv.
 """
 
 import argparse
-from datetime import UTC, datetime
+
+from neurolens.storage import utc_parse, utc_text
 
 COLUMNS = ["minute_utc", "sqs_visible", "sqs_in_flight", "asg_in_service"]
 GROUP = "neurolens-workers"
@@ -34,9 +35,6 @@ def main():
     queue = aws["sqs_queue_url"].rsplit("/", 1)[-1]
     cloudwatch = boto3.client("cloudwatch", region_name=aws["region"])
     s3 = boto3.client("s3", region_name=aws["region"])
-
-    def parse(text):
-        return datetime.strptime(text, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=UTC)
 
     def query(id_, namespace, metric, dimension, value, stat):
         return {
@@ -81,13 +79,11 @@ def main():
     names = {"visible": "sqs_visible", "inflight": "sqs_in_flight", "insvc": "asg_in_service"}
     series = {col: {} for col in COLUMNS[1:]}
     for page in cloudwatch.get_paginator("get_metric_data").paginate(
-        MetricDataQueries=queries, StartTime=parse(args.start), EndTime=parse(args.end)
+        MetricDataQueries=queries, StartTime=utc_parse(args.start), EndTime=utc_parse(args.end)
     ):
         for result in page["MetricDataResults"]:
             for stamp, value in zip(result["Timestamps"], result["Values"], strict=True):
-                series[names[result["Id"]]][
-                    stamp.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
-                ] = value
+                series[names[result["Id"]]][utc_text(stamp)] = value
 
     rows = merge_series(series)
     experiment_runs.put_text(

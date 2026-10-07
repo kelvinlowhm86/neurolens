@@ -12,7 +12,8 @@ import json
 import re
 from datetime import UTC, datetime, timedelta
 
-TIME_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
+from neurolens.storage import utc_parse, utc_text
+
 COLUMNS = [
     "boot_utc",
     "trigger",
@@ -33,11 +34,11 @@ STAMP = re.compile(r"At (\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ)")
 
 
 def _parse(text):
-    return datetime.strptime(text, TIME_FORMAT).replace(tzinfo=UTC) if text else None
+    return utc_parse(text) if text else None
 
 
 def _text(moment):
-    return moment.astimezone(UTC).strftime(TIME_FORMAT) if moment else None
+    return utc_text(moment) if moment else None
 
 
 def _seconds(start, end):
@@ -69,19 +70,18 @@ def scale_out_alarm_time(activity, alarm_history):
     changed = desired_change_time(activity)
     if changed is None or "user request" in cause or "alarm" not in cause:
         return None
-    best = None
+    causes = [t for t in _alarm_times(alarm_history) if t <= changed <= t + ALARM_CAUSE_WINDOW]
+    return max(causes, default=None)
+
+
+def _alarm_times(alarm_history):
+    """Every time the alarm went to ALARM."""
+    times = []
     for item in alarm_history:
         data = json.loads(item.get("HistoryData") or "{}")
-        if data.get("newState", {}).get("stateValue") != "ALARM":
-            continue
-        when = item["Timestamp"].astimezone(UTC)
-        if (
-            when <= changed
-            and changed - when <= ALARM_CAUSE_WINDOW
-            and (best is None or when > best)
-        ):
-            best = when
-    return best
+        if data.get("newState", {}).get("stateValue") == "ALARM":
+            times.append(item["Timestamp"].astimezone(UTC))
+    return times
 
 
 def rows(boot_records, scaling_activities, alarm_history):
@@ -138,14 +138,17 @@ def _load_boots(s3, bucket, since):
 
 
 def _fill_metric_delay(result, boots, activities, alarm_history, jobs):
-    """Alarm boots: the alarm's change to ALARM minus the earliest upload submitted before it."""
+    """Alarm boots: the alarm's change to ALARM minus the earliest upload since its previous
+    change to ALARM (an earlier upload belongs to an earlier boot)."""
     submitted = sorted(_parse(j["submitted_utc"]) for j in jobs if j.get("submitted_utc"))
+    alarm_times = _alarm_times(alarm_history)
     for row, boot in zip(result, boots, strict=True):
         act = launch_activity(boot["instance_id"], activities)
         if row["trigger"] != "alarm" or not act:
             continue
         alarm_time = scale_out_alarm_time(act, alarm_history)
-        earlier = [t for t in submitted if t <= alarm_time]
+        previous = max((t for t in alarm_times if t < alarm_time), default=None)
+        earlier = [t for t in submitted if t <= alarm_time and (previous is None or t > previous)]
         if earlier:
             row["metric_delay_s"] = _seconds(min(earlier), alarm_time)
 

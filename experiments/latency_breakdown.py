@@ -7,17 +7,9 @@ clip length, from experiment-1 runs.csv files.
 import argparse
 import statistics
 
-MS_COLUMNS = [
-    "upload_ms",
-    "queue_wait_ms",
-    "downloading_ms",
-    "transcribing_ms",
-    "inference_full_ms",
-    "inference_noaudio_ms",
-    "extracting_roi_ms",
-    "result_fetch_ms",
-    "render_ms",
-]
+from neurolens.experiment_runs import EXPERIMENT_1_COLUMNS
+
+MS_COLUMNS = [c for c in EXPERIMENT_1_COLUMNS if c.endswith("_ms")]
 
 
 def summarise(rows):

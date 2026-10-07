@@ -48,6 +48,11 @@ group_machines() {  # how many machines the group still tracks (it knows a launc
 # shellcheck disable=SC2086  # ALARMS is a space-separated list on purpose
 aws cloudwatch enable-alarm-actions --alarm-names $ALARMS \
   || problem "could not re-enable the alarms' actions ($ALARMS)"
+# AWS accepts a missing alarm's name without error, so count the ones that exist with actions on.
+# shellcheck disable=SC2086
+ON=$(aws cloudwatch describe-alarms --alarm-names $ALARMS \
+  --query 'length(MetricAlarms[?ActionsEnabled])' --output text)
+[ "$ON" = 3 ] || problem "only ${ON:-0} of the 3 alarms ($ALARMS) exist with their actions on: run terraform apply"
 
 # 1b. A warm hold's end timer would otherwise fire in a later session (M2b §2d).
 if ! HOLD=$(hold_end); then

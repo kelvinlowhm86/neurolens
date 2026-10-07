@@ -26,6 +26,21 @@ EXPERIMENT_FILES = {
     ],
     "experiment-3": ["runs.csv"],
 }
+# Experiment 1's runs.csv (latency_run writes it, latency_breakdown summarises its *_ms columns).
+EXPERIMENT_1_COLUMNS = [
+    "clip_seconds",
+    "job_label",
+    "upload_ms",
+    "queue_wait_ms",
+    "downloading_ms",
+    "transcribing_ms",
+    "inference_full_ms",
+    "inference_noaudio_ms",
+    "extracting_roi_ms",
+    "result_fetch_ms",
+    "render_ms",
+    "peak_vram_gb",
+]
 
 
 def run_prefix(experiment, run_id):
@@ -85,11 +100,22 @@ def append_row(s3, bucket, experiment, run_id, name, columns, row):
 
 
 def write_manifest(
-    s3, bucket, experiment, run_id, *, series, started_utc, finished_utc, environment
+    s3,
+    bucket,
+    experiment,
+    run_id,
+    *,
+    series,
+    started_utc,
+    finished_utc,
+    environment,
+    revision=None,
 ):
-    """Write manifest.json. Refuses (ValueError) if any file the experiment needs is missing."""
+    """Write manifest.json. Refuses (ValueError) if any file the experiment needs is missing.
+    `revision` is the code the run used; by default the code this runs from (code_revision)."""
     files = EXPERIMENT_FILES[experiment]
-    missing = [name for name in files if get_text(s3, bucket, experiment, run_id, name) is None]
+    prefix = run_prefix(experiment, run_id)
+    missing = [name for name in files if not storage.object_exists(s3, bucket, prefix + name)]
     if missing:
         raise ValueError(f"{experiment}/{run_id} is missing {', '.join(missing)}")
     manifest = {
@@ -98,7 +124,7 @@ def write_manifest(
         "series": series,
         "started_utc": started_utc,
         "finished_utc": finished_utc,
-        "code_revision": code_revision(),
+        "code_revision": revision or code_revision(),
         "environment": environment,
         "files": files,
     }
