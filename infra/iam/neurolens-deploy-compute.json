@@ -32,7 +32,7 @@
       "Condition": {
         "StringEquals": {
           "aws:RequestTag/Project": "neurolens",
-          "ec2:InstanceType": ["g6e.xlarge", "g6e.2xlarge", "t3.large", "t4g.micro"]
+          "ec2:InstanceType": ["g6e.xlarge", "g6e.2xlarge", "t3.large"]
         }
       }
     },
@@ -86,6 +86,27 @@
         "ec2:DeregisterImage"
       ],
       "Resource": "*",
+      "Condition": {"StringEquals": {"ec2:ResourceTag/Project": "neurolens"}}
+    },
+    {
+      "Sid": "NatGatewayAndAddressCreateOnlyIfTaggedNeurolens",
+      "Effect": "Allow",
+      "Action": ["ec2:CreateNatGateway", "ec2:AllocateAddress"],
+      "Resource": ["arn:aws:ec2:us-east-1:*:natgateway/*", "arn:aws:ec2:us-east-1:*:elastic-ip/*"],
+      "Condition": {"StringEquals": {"aws:RequestTag/Project": "neurolens"}}
+    },
+    {
+      "Sid": "NatGatewayOnlyInNeurolensSubnetWithNeurolensAddress",
+      "Effect": "Allow",
+      "Action": "ec2:CreateNatGateway",
+      "Resource": ["arn:aws:ec2:us-east-1:*:subnet/*", "arn:aws:ec2:us-east-1:*:elastic-ip/*"],
+      "Condition": {"StringEquals": {"ec2:ResourceTag/Project": "neurolens"}}
+    },
+    {
+      "Sid": "ReleaseOnlyNeurolensAddresses",
+      "Effect": "Allow",
+      "Action": ["ec2:ReleaseAddress", "ec2:DisassociateAddress"],
+      "Resource": "arn:aws:ec2:us-east-1:*:elastic-ip/*",
       "Condition": {"StringEquals": {"ec2:ResourceTag/Project": "neurolens"}}
     },
     {

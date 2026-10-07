@@ -30,7 +30,7 @@ variable "zones" {
     Availability zones that offer g6e.xlarge (check with `aws ec2 describe-instance-type-offerings
     --location-type availability-zone --filters Name=instance-type,Values=g6e.xlarge`), one private
     worker subnet each: more zones give the worker group more places to find a GPU. The first also
-    holds the public subnet (NAT instance).
+    holds the public subnet (NAT Gateway).
   EOT
   type        = list(string)
 
@@ -101,4 +101,15 @@ variable "auth_domain_prefix" {
 variable "google_client_id" {
   description = "The Google OAuth client's ID (not secret). Set in terraform.tfvars."
   type        = string
+}
+
+variable "nat_gateway" {
+  description = <<-EOT
+    The workers' way out to the internet (SQS, the Data API, HuggingFace), M3b §5. true on days with
+    GPU work and for the deployed window (about $1.20 a day while it exists), false otherwise. The
+    website never needs it. Terraform refuses false while the worker group's max is above 0: run
+    infra/stop_work.sh first.
+  EOT
+  type        = bool
+  default     = false
 }

@@ -45,7 +45,7 @@ resource "aws_rds_cluster" "db" {
   serverlessv2_scaling_configuration {
     min_capacity             = 0
     max_capacity             = 2
-    seconds_until_auto_pause = 600
+    seconds_until_auto_pause = 300
   }
 
   # 1 day of automatic backups (free at this size). `terraform destroy` works without a manual step
@@ -90,27 +90,28 @@ locals {
   ]
 }
 
-# Forgotten-database alarm (M3a §7): awake at some point in each of 6 hours in a row means something
-# keeps waking it (a forgotten stop_work.sh, an open tab, a retrying Lambda): about $1.40 a day at
-# 0.5 ACU. "At some point", not "all hour": a caller every 12 minutes (the dead-letter handler's
-# retry) lets it pause for a minute or two each time, yet keeps it awake most of the hour.
+# Forgotten-database alarm (M3b §6): awake for a large share of each of 6 hours in a row means something
+# keeps it awake (a forgotten stop_work.sh or --keep-worker-and-db, an open tab, a retrying Lambda):
+# about $1.40 a day at 0.5 ACU. The hourly AVERAGE above 0.15 ACU is awake for more than about 30% of
+# the hour at the 0.5 minimum. The hourly reaper's wake (about 6 minutes, 10%) stays below it; a caller
+# every 12 minutes (about 45%) and a held minimum (100%) are above it.
 resource "aws_cloudwatch_metric_alarm" "db_awake_long" {
   alarm_name        = "neurolens-db-awake-6h"
-  alarm_description = "NeuroLens Aurora has been awake in each of the last 6 hours (about $1.40 a day while awake). Run infra/stop_work.sh; if it stays awake, look for whatever keeps calling it (an open page, a Lambda retrying: see /aws/lambda/neurolens-*)."
+  alarm_description = "NeuroLens Aurora has been awake for a large share (over 30%) of each of the last 6 hours (about $1.40 a day while awake). Run infra/stop_work.sh; if it stays awake, look for whatever keeps calling it (an open page, a Lambda retrying: see /aws/lambda/neurolens-*)."
 
   namespace   = "AWS/RDS"
   metric_name = "ServerlessDatabaseCapacity"
   dimensions  = { DBClusterIdentifier = aws_rds_cluster.db.cluster_identifier }
-  statistic   = "Maximum" # above 0 at some point in the hour: it was awake in it
+  statistic   = "Average"
 
   period              = 3600
   evaluation_periods  = 6
   datapoints_to_alarm = 6
   comparison_operator = "GreaterThanThreshold"
-  threshold           = 0
+  threshold           = 0.15
   treat_missing_data  = "notBreaching"
 
   alarm_actions = [aws_sns_topic.alerts.arn]
   ok_actions    = [aws_sns_topic.alerts.arn]
-  tags          = { Milestone = "M3a" }
+  tags          = { Milestone = "M3b" }
 }

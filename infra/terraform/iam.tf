@@ -231,30 +231,3 @@ resource "aws_iam_role_policy" "breaker" {
     ]
   })
 }
-
-# ─── NAT instance (Session Manager only, for debugging it without SSH) ─────
-
-resource "aws_iam_role" "nat" {
-  name                 = "neurolens-nat${local.iam_suffix}"
-  assume_role_policy   = data.aws_iam_policy_document.ec2_assume.json
-  permissions_boundary = local.boundary_arn
-}
-
-resource "aws_iam_role_policy" "nat" {
-  name = "neurolens-nat"
-  role = aws_iam_role.nat.id
-  policy = jsonencode({
-    Version   = "2012-10-17"
-    Statement = [local.deny_neurolens_parameters]
-  })
-}
-
-resource "aws_iam_role_policy_attachment" "nat_ssm" {
-  role       = aws_iam_role.nat.name
-  policy_arn = local.ssm_core_arn
-}
-
-resource "aws_iam_instance_profile" "nat" {
-  name = "neurolens-nat${local.iam_suffix}"
-  role = aws_iam_role.nat.name
-}

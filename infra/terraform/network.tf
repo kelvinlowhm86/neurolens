@@ -1,12 +1,14 @@
 # ─── Private network for the GPU workers (M2a §4a) ─────────────────────────
 #
-#   public subnets (zone A + build-only b, c, d): NAT instance, image builds; route to the internet gateway
-#   private subnets (zones A-D): workers, no public IP; route to the NAT instance
-#   S3 gateway endpoint on both route tables: S3 traffic never goes through the NAT instance
+#   public subnets (zone A + build-only b, c, d): NAT Gateway, image builds; route to the internet gateway
+#   private subnets (zones A-D): workers, no public IP; route to the NAT Gateway while it exists
+#   S3 gateway endpoint on both route tables: S3 traffic never goes through the NAT Gateway
 #
-# One NAT instance, not one per zone: a zone outage during short work sessions is unlikely, and a
-# second NAT doubles the moving parts. For zone resilience AWS recommends a managed NAT Gateway per
-# zone; a single NAT is the usual trade-off when rare downtime is acceptable.
+# The NAT Gateway is a switch (var.nat_gateway, M3b §5): on for days with GPU work and the deployed
+# window, off otherwise (about $1.20 a day while it exists). Without it the workers reach only S3, so
+# they must not run: start_work.sh refuses to start them, and Terraform refuses to remove the gateway
+# while the worker group may start any (below). One gateway, not one per zone: a zone outage during a
+# work session is unlikely, and AWS's per-zone advice is for zone resilience we do not need.
 
 resource "aws_vpc" "main" {
   cidr_block           = "10.20.0.0/16"
@@ -76,12 +78,46 @@ resource "aws_route_table_association" "public" {
 resource "aws_route_table" "private" {
   vpc_id = aws_vpc.main.id
 
-  route {
-    cidr_block           = "0.0.0.0/0"
-    network_interface_id = aws_instance.nat.primary_network_interface_id
-  }
+  # The way out while the NAT Gateway exists; none otherwise. An explicit list, even empty: leaving
+  # `route` out would tell Terraform to ignore routes, so an old one would stay behind. In this
+  # attribute form every route field must be named.
+  route = [for id in aws_nat_gateway.main[*].id : {
+    cidr_block                 = "0.0.0.0/0"
+    nat_gateway_id             = id
+    ipv6_cidr_block            = null
+    destination_prefix_list_id = null
+    carrier_gateway_id         = null
+    core_network_arn           = null
+    egress_only_gateway_id     = null
+    gateway_id                 = null
+    local_gateway_id           = null
+    network_interface_id       = null
+    odb_network_arn            = null
+    transit_gateway_id         = null
+    vpc_endpoint_id            = null
+    vpc_peering_connection_id  = null
+  }]
 
   tags = { Name = "neurolens-private" }
+
+  lifecycle {
+    # Workers running without a way out cannot fetch jobs or reach the database, and would only
+    # bill until the idle alarm. The group's max is read at plan time.
+    precondition {
+      condition     = var.nat_gateway || alltrue([for g in data.aws_autoscaling_group.workers : g.max_size == 0])
+      error_message = "nat_gateway = false while the worker group's max is above 0: run infra/stop_work.sh first, then apply again."
+    }
+  }
+}
+
+# The worker group, when it exists (it does only once an image is set).
+data "aws_autoscaling_groups" "workers" {
+  names = [local.worker_asg]
+}
+
+data "aws_autoscaling_group" "workers" {
+  for_each = toset(data.aws_autoscaling_groups.workers.names)
+  name     = each.value
 }
 
 resource "aws_route_table_association" "private" {
@@ -119,76 +155,19 @@ resource "aws_security_group" "no_inbound" {
   tags = { Name = "neurolens-no-inbound" }
 }
 
-# The NAT instance accepts traffic only from inside the VPC, to forward it out.
-resource "aws_security_group" "nat" {
-  name        = "neurolens-nat"
-  description = "NeuroLens NAT instance: inbound from the VPC only"
-  vpc_id      = aws_vpc.main.id
+# ─── NAT Gateway (on only while var.nat_gateway is true) ──────────────────
 
-  ingress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = [aws_vpc.main.cidr_block]
-  }
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  tags = { Name = "neurolens-nat" }
+resource "aws_eip" "nat" {
+  count  = var.nat_gateway ? 1 : 0
+  domain = "vpc"
+  tags   = { Name = "neurolens-nat", Milestone = "M3b" }
 }
 
-# ─── NAT instance ──────────────────────────────────────────────────────────
+resource "aws_nat_gateway" "main" {
+  count         = var.nat_gateway ? 1 : 0
+  allocation_id = aws_eip.nat[0].id
+  subnet_id     = aws_subnet.public.id
+  tags          = { Name = "neurolens-nat", Milestone = "M3b" }
 
-data "aws_ssm_parameter" "al2023_arm64" {
-  name = "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64"
-}
-
-resource "aws_instance" "nat" {
-  ami                    = data.aws_ssm_parameter.al2023_arm64.value
-  instance_type          = "t4g.micro"
-  subnet_id              = aws_subnet.public.id
-  vpc_security_group_ids = [aws_security_group.nat.id]
-  iam_instance_profile   = aws_iam_instance_profile.nat.name
-  source_dest_check      = false # it forwards other machines' traffic
-
-  # An auto-assigned public IP (from the subnet), not an Elastic IP: it is released while the
-  # instance is stopped, so nothing is billed for it then.
-  associate_public_ip_address = true
-
-  metadata_options {
-    http_tokens = "required"
-  }
-
-  root_block_device {
-    volume_size = 8
-    volume_type = "gp3"
-    encrypted   = true
-  }
-
-  # Runs on the first boot only, so everything it sets must survive a stop/start.
-  user_data = <<-EOF
-    #!/bin/bash
-    set -euo pipefail
-    dnf install -y iptables-services
-    echo "net.ipv4.ip_forward = 1" > /etc/sysctl.d/90-nat.conf
-    sysctl -p /etc/sysctl.d/90-nat.conf
-    IFACE=$(ip route show default | awk '{print $5}')
-    iptables -t nat -A POSTROUTING -o "$IFACE" -s ${aws_vpc.main.cidr_block} -j MASQUERADE
-    iptables-save > /etc/sysconfig/iptables
-    systemctl enable --now iptables
-  EOF
-
-  tags = { Name = "neurolens-nat", Role = "nat" }
-
-  lifecycle {
-    # A newer Amazon Linux release must not replace a working NAT instance. A stopped instance
-    # reports no public IP, which would otherwise force a replacement on every apply between
-    # sessions (the subnet assigns a new one on each start).
-    ignore_changes = [ami, associate_public_ip_address]
-  }
+  depends_on = [aws_internet_gateway.main]
 }

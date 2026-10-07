@@ -144,8 +144,8 @@ resource "aws_lambda_function" "breaker" {
   tags       = { Milestone = "M2b" }
 }
 
-# Every 5 minutes as well as when the idle alarm fires: a change of state happens once, so a loop of
-# replacements that keeps the alarm in ALARM, or one failed run, would never be looked at again.
+# Every 5 minutes, its only trigger (M3b §6b): it acts while the idle alarm is in ALARM, so a loop of
+# replacements that keeps the alarm in ALARM, or a warm hold ending during one, is still caught.
 resource "aws_cloudwatch_event_rule" "breaker_schedule" {
   count = local.workers_enabled ? 1 : 0
 
@@ -170,38 +170,4 @@ resource "aws_lambda_permission" "events_invoke_breaker" {
   function_name = aws_lambda_function.breaker[0].function_name
   principal     = "events.amazonaws.com"
   source_arn    = aws_cloudwatch_event_rule.breaker_schedule[0].arn
-}
-
-# Only the idle alarm may run the breaker directly (its run at the moment the alarm fires).
-resource "aws_lambda_permission" "idle_alarm_invoke_breaker" {
-  count = local.workers_enabled ? 1 : 0
-
-  statement_id   = "AllowIdleAlarm"
-  action         = "lambda:InvokeFunction"
-  function_name  = aws_lambda_function.breaker[0].function_name
-  principal      = "lambda.alarms.cloudwatch.amazonaws.com"
-  source_arn     = aws_cloudwatch_metric_alarm.worker_idle[0].arn
-  source_account = local.account_id
-}
-
-# The safety net's own safety net: a failing breaker emails at once.
-resource "aws_cloudwatch_metric_alarm" "breaker_errors" {
-  count = local.workers_enabled ? 1 : 0
-
-  alarm_name        = "neurolens-breaker-errors"
-  alarm_description = "The NeuroLens circuit breaker Lambda failed. Until it works, only the 3-hour email covers a broken worker: check its log (/aws/lambda/neurolens-breaker) and run infra/stop_work.sh if in doubt."
-
-  namespace   = "AWS/Lambda"
-  metric_name = "Errors"
-  dimensions  = { FunctionName = aws_lambda_function.breaker[0].function_name }
-  statistic   = "Sum"
-
-  period              = 300
-  evaluation_periods  = 1
-  comparison_operator = "GreaterThanOrEqualToThreshold"
-  threshold           = 1
-  treat_missing_data  = "notBreaching"
-
-  alarm_actions = [aws_sns_topic.alerts.arn]
-  tags          = { Milestone = "M2b" }
 }

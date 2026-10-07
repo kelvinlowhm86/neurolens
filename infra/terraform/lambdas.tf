@@ -1,7 +1,7 @@
 # ─── Dead-letter handler and reaper Lambdas (M3a §7) ───────────────────────
 #
 # Both settle or refund jobs: the dead-letter handler every job that failed twice, the reaper (every
-# 5 minutes, only while a work session runs) any job left stuck. Not in the VPC: they reach Aurora
+# hour, always on, M3b §6) any job left stuck. Not in the VPC: they reach Aurora
 # through the Data API and S3 through its public endpoint, both IAM-checked. One zip with only the
 # pure-Python modules they import (no numpy); it changes only when those files do.
 
@@ -21,7 +21,6 @@ locals {
     dlq    = { name = "neurolens-dlq-handler", handler = "neurolens.lambdas.dlq_handler.handler" }
     reaper = { name = "neurolens-reaper", handler = "neurolens.lambdas.reaper.handler" }
   }
-  reaper_rule = "neurolens-reaper-every-5-min" # start_work.sh enables it, stop_work.sh disables it
 }
 
 data "archive_file" "m3a_lambdas" {
@@ -134,18 +133,15 @@ resource "aws_lambda_event_source_mapping" "dlq" {
   batch_size       = 1
 }
 
-# Created disabled and left to the scripts: a schedule that queries Aurora every 5 minutes would
-# keep it from ever pausing (about $1.40 a day). Between sessions abandoned reservations wait.
+# Always on, owned by Terraform alone (M3b §6). Each run wakes Aurora for about 5 minutes (it pauses
+# after 300 s idle): about $4 a month. A stuck job waits at most about 70 minutes (its 10- or 60-minute
+# threshold plus the hour); the dead-letter handler still refunds the common failures in seconds.
 resource "aws_cloudwatch_event_rule" "reaper" {
-  name                = local.reaper_rule
-  description         = "Run the NeuroLens reaper (settles or refunds stuck jobs) during work sessions only."
-  schedule_expression = "rate(5 minutes)"
-  state               = "DISABLED"
-  tags                = { Milestone = "M3a" }
-
-  lifecycle {
-    ignore_changes = [state]
-  }
+  name                = "neurolens-reaper-hourly"
+  description         = "Run the NeuroLens reaper (settles or refunds stuck jobs) every hour."
+  schedule_expression = "rate(1 hour)"
+  state               = "ENABLED"
+  tags                = { Milestone = "M3b" }
 }
 
 resource "aws_cloudwatch_event_target" "reaper" {
@@ -159,27 +155,4 @@ resource "aws_lambda_permission" "events_invoke_reaper" {
   function_name = aws_lambda_function.m3a["reaper"].function_name
   principal     = "events.amazonaws.com"
   source_arn    = aws_cloudwatch_event_rule.reaper.arn
-}
-
-# A failing run emails at once. The dead-letter handler also errors, by design, when a worker still
-# holds a job (a rare duplicate message): one such email is expected; repeated ones are not.
-resource "aws_cloudwatch_metric_alarm" "m3a_lambda_errors" {
-  for_each = local.m3a_lambdas
-
-  alarm_name        = "${each.value.name}-errors"
-  alarm_description = "The NeuroLens ${each.value.name} Lambda failed: jobs may be left unsettled. Check its log (/aws/lambda/${each.value.name})."
-
-  namespace   = "AWS/Lambda"
-  metric_name = "Errors"
-  dimensions  = { FunctionName = aws_lambda_function.m3a[each.key].function_name }
-  statistic   = "Sum"
-
-  period              = 300
-  evaluation_periods  = 1
-  comparison_operator = "GreaterThanOrEqualToThreshold"
-  threshold           = 1
-  treat_missing_data  = "notBreaching"
-
-  alarm_actions = [aws_sns_topic.alerts.arn]
-  tags          = { Milestone = "M3a" }
 }

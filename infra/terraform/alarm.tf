@@ -1,13 +1,13 @@
 # ─── GPU alarms (M2a §4f) ───────────────────────────────────────────────────
-# Two alarms on one email topic (confirm the subscription email once after the first apply):
-# - idle worker: ACTS. A worker in service while the job queue sees no message received and none
-#   deleted for 90 minutes is ended by AWS itself (group desired capacity to 0), and the circuit
-#   breaker (scaling.tf) sets the group's max to 0 so it is not replaced.
+# Alarms on one email topic (confirm the subscription email once after the first apply):
+# - idle worker: detects and emails (M3b §6b). A worker in service while the job queue sees no
+#   message received and none deleted for 90 minutes; the circuit breaker (scaling.tf), on its
+#   5-minute schedule, then removes protection and sets the group to 0/0/0 unless a warm hold is on.
 # - long-running: email only, after 3 hours with a worker in service.
-# About $0.40 a month for both (four alarm metrics).
+# - one error alarm per Lambda: email on any failed run.
 
 locals {
-  # Named here, not read from the alarm: the alarm runs the breaker, which needs the name (a cycle).
+  # Named here: the breaker reads the alarm by this name.
   idle_alarm = "neurolens-worker-idle"
 }
 
@@ -48,11 +48,12 @@ resource "aws_cloudwatch_metric_alarm" "worker_running_long" {
 
 # A worker always picks up or finishes a job within 90 minutes when healthy (longest job about
 # 55 minutes; scale-in ends an idle worker after 15). So no queue activity for 90 minutes with a
-# worker in service means a crash loop, broken code, a frozen job, a dead NAT instance or a warm
-# hold (M2b §2d; the hold keeps its worker and the breaker skips it).
+# worker in service means a crash loop, broken code, a frozen job, no NAT Gateway or a warm hold
+# (M2b §2d; the hold keeps its worker and the breaker skips it).
 # Missing SQS data (queues stop publishing after ~6 idle hours) counts as no activity; missing
 # group data never fires it. Manual work needs a warm hold (start_work.sh --worker), not a pause:
 # scale-in would end the worker 15 minutes after the queue empties anyway.
+# workers_to_zero is scale-in's action (scaling.tf); the idle alarm no longer uses it.
 resource "aws_autoscaling_policy" "workers_to_zero" {
   count = local.workers_enabled ? 1 : 0
 
@@ -67,9 +68,9 @@ resource "aws_cloudwatch_metric_alarm" "worker_idle" {
   count = local.workers_enabled ? 1 : 0
 
   alarm_name = local.idle_alarm
-  # The email text (M2b §2c). Causes: a crash loop, broken code, a frozen job or a down NAT
-  # instance, or a warm hold with no jobs (then it only emails).
-  alarm_description = "AWS has stopped all NeuroLens workers (max 0) after 90 minutes without queue activity, unless a warm hold is active. Run infra/start_work.sh to start again."
+  # The email text. Causes: a crash loop, broken code, a frozen job, no NAT Gateway, or a warm hold
+  # with no jobs (then the breaker leaves it alone).
+  alarm_description = "A NeuroLens worker has been in service for 90 minutes without queue activity. Unless a warm hold is on, the circuit breaker stops all workers (max 0) within 5 minutes. Run infra/start_work.sh to start again."
 
   comparison_operator = "GreaterThanOrEqualToThreshold"
   threshold           = 1
@@ -114,13 +115,61 @@ resource "aws_cloudwatch_metric_alarm" "worker_idle" {
     }
   }
 
-  # The breaker runs at once as well (M2b §2c): the "set to 0" policy ends the worker, and with a job
-  # waiting, scale-out would launch a replacement about a minute later, before a scheduled run set
-  # max 0 (seen in the CPU rehearsal, R8).
-  alarm_actions = [
-    aws_autoscaling_policy.workers_to_zero[0].arn,
-    aws_sns_topic.alerts.arn,
-    aws_lambda_function.breaker[0].arn,
-  ]
-  ok_actions = [aws_sns_topic.alerts.arn]
+  alarm_actions = [aws_sns_topic.alerts.arn]
+  ok_actions    = [aws_sns_topic.alerts.arn]
+}
+
+# ─── One error alarm per Lambda (M3b §6b) ──────────────────────────────────
+# Catches a function that runs and fails, not one that never runs. The dead-letter handler also errors,
+# by design, when a worker still holds a job (a rare duplicate message): one such email is expected;
+# repeated ones are not.
+
+locals {
+  lambda_error_alarms = merge(
+    local.workers_enabled ? {
+      "neurolens-breaker" = "Until it works, only the 3-hour email covers a broken worker. Run infra/stop_work.sh if in doubt."
+    } : {},
+    { for k, v in local.m3a_lambdas : v.name => "Jobs may be left unsettled." },
+    {
+      (local.web_lambdas.web.name)     = "The website may be failing for users."
+      (local.web_lambdas.webhook.name) = "A paid Stripe test top-up may not have been credited (Stripe retries for 3 days)."
+    },
+  )
+}
+
+resource "aws_cloudwatch_metric_alarm" "lambda_errors" {
+  for_each = local.lambda_error_alarms
+
+  alarm_name        = "${each.key}-errors"
+  alarm_description = "The NeuroLens ${each.key} Lambda failed. ${each.value} Check its log (/aws/lambda/${each.key})."
+
+  namespace   = "AWS/Lambda"
+  metric_name = "Errors"
+  dimensions  = { FunctionName = each.key }
+  statistic   = "Sum"
+
+  period              = 300
+  evaluation_periods  = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  threshold           = 1
+  treat_missing_data  = "notBreaching"
+
+  alarm_actions = [aws_sns_topic.alerts.arn]
+  tags          = { Milestone = "M3b" }
+}
+
+# The breaker's and M3a's alarms keep their names and move into the block above.
+moved {
+  from = aws_cloudwatch_metric_alarm.breaker_errors[0]
+  to   = aws_cloudwatch_metric_alarm.lambda_errors["neurolens-breaker"]
+}
+
+moved {
+  from = aws_cloudwatch_metric_alarm.m3a_lambda_errors["dlq"]
+  to   = aws_cloudwatch_metric_alarm.lambda_errors["neurolens-dlq-handler"]
+}
+
+moved {
+  from = aws_cloudwatch_metric_alarm.m3a_lambda_errors["reaper"]
+  to   = aws_cloudwatch_metric_alarm.lambda_errors["neurolens-reaper"]
 }

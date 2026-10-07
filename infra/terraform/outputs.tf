@@ -35,8 +35,9 @@ output "build_instance_profile" {
   value = aws_iam_instance_profile.build.name
 }
 
-output "nat_instance_id" {
-  value = aws_instance.nat.id
+output "nat_gateway_id" {
+  description = "The NAT Gateway, or empty while nat_gateway is false (start_work.sh and stop_work.sh check it)."
+  value       = join("", aws_nat_gateway.main[*].id)
 }
 
 output "db_cluster_arn" {
