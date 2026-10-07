@@ -7,7 +7,8 @@
 #   infra/restart_workers.sh --now  restarts anyway
 set -euo pipefail
 source "$(dirname "$0")/aws_env.sh"   # AWS_PROFILE, AWS_REGION (M2a §4i)
-case "${1:-}" in ''|--now) ;; *) echo "usage: $0 [--now]" >&2; exit 2 ;; esac
+NOW=0
+case "${1:-}" in '') ;; --now) NOW=1 ;; *) echo "usage: $0 [--now]" >&2; exit 2 ;; esac
 
 IDS=$(aws ec2 describe-instances \
   --filters Name=tag:Project,Values=neurolens Name=tag:Role,Values=worker Name=instance-state-name,Values=running \
@@ -18,7 +19,7 @@ fi
 # A worker holds scale-in protection exactly while it has a job (M2b §2c).
 BUSY=$(aws autoscaling describe-auto-scaling-groups --auto-scaling-group-names neurolens-workers \
   --query 'AutoScalingGroups[0].Instances[?ProtectedFromScaleIn].InstanceId' --output text)
-if [ -n "$BUSY" ] && [ "$BUSY" != None ] && [ "${1:-}" != --now ]; then
+if [ -n "$BUSY" ] && [ "$BUSY" != None ] && [ "$NOW" = 0 ]; then
   echo "Busy with a job: $BUSY. Wait until it finishes, or run again with --now. Nothing was restarted." >&2
   exit 1
 fi
