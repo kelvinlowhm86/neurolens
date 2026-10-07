@@ -95,7 +95,7 @@ print(json.dumps([m for m in ("neurolens.inference", "torch") if m in sys.module
 """
 
 CFG_WITHOUT_AWS = {
-    "paths": {"models": "m", "data": "d", "output": "o"},
+    "paths": {"models": "m", "data": "d"},
     "max_video_duration_seconds": 120,
     "max_upload_bytes": 300000000,
     # M3a §9: config.json's development identity and local-only address

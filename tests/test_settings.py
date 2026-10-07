@@ -73,8 +73,7 @@ def test_missing_config_is_an_error_only_when_requested(tmp_path):
     code = (
         "import neurolens.settings as s; "
         "s.get_root(); "
-        "s.resolve_paths({'paths': {'models': './models', 'data': './data', "
-        "'output': './output'}}, s.get_root()); "
+        "s.resolve_paths({'paths': {'models': './models', 'data': './data'}}, s.get_root()); "
         "print('ok')"
     )
     env = {**os.environ, "NEUROLENS_ROOT": str(tmp_path)}
@@ -91,10 +90,9 @@ def test_missing_config_is_an_error_only_when_requested(tmp_path):
 
 def test_resolve_paths_with_sample_config(tmp_path, sample_cfg):
     paths = settings.resolve_paths(sample_cfg, tmp_path)
-    assert set(paths) == {"models", "data", "output"}
+    assert set(paths) == {"models", "data"}
     assert Path(paths["models"]).resolve() == (tmp_path / "models").resolve()
     assert Path(paths["data"]).resolve() == (tmp_path / "data").resolve()
-    assert Path(paths["output"]).resolve() == (tmp_path / "output").resolve()
 
 
 def test_resolve_paths_creates_nothing(tmp_path, sample_cfg):
@@ -102,10 +100,10 @@ def test_resolve_paths_creates_nothing(tmp_path, sample_cfg):
     assert list(tmp_path.iterdir()) == []
 
 
-def test_ensure_dirs_creates_the_three_folders(tmp_path, sample_cfg):
+def test_ensure_dirs_creates_the_folders(tmp_path, sample_cfg):
     paths = settings.resolve_paths(sample_cfg, tmp_path)
     settings.ensure_dirs(paths)
-    for name in ("models", "data", "output"):
+    for name in ("models", "data"):
         assert (tmp_path / name).is_dir()
 
 

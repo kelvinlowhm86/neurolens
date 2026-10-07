@@ -329,7 +329,7 @@ EOF
 # last line) must also be there on the workers.
 step_scrub() {
   cat <<'EOF'
-rm -rf /opt/neurolens/app /opt/neurolens/output /tmp/neurolens-*
+rm -rf /opt/neurolens/app /tmp/neurolens-*
 # The build's 4-hour deadline must not reach the image: on a worker it would shut the machine down.
 systemctl disable neurolens-build-deadline.service 2>/dev/null || true
 rm -f /etc/systemd/system/neurolens-build-deadline.service /usr/local/sbin/neurolens-build-deadline \
@@ -511,7 +511,7 @@ if [ "$REHEARSAL" = 1 ]; then
 fi
 
 CONFIG_B64=$(python3 -c 'import json; c = json.load(open("config.json")); c["paths"] = {
-  "models": "/opt/neurolens/cache/models", "data": "/opt/neurolens/cache/data", "output": "/opt/neurolens/output"}
+  "models": "/opt/neurolens/cache/models", "data": "/opt/neurolens/cache/data"}
 print(json.dumps(c, indent=2))' | base64 | tr -d '\n')
 STEP_ENV="export BUCKET=$BUCKET REFRESH=$REFRESH CONFIG_B64=$CONFIG_B64"
 step_weights | ssm_run "weights and pipeline" 7200

@@ -113,7 +113,7 @@ WantedBy=multi-user.target
 1. `set -euo pipefail`; an `ERR` trap that logs the failing line and calls `self_terminate.sh` (§3); log every step with a timestamp to `/var/log/neurolens-boot.log` (M2b's Experiment 2 reads these).
 2. Format and mount the instance-store NVMe disk at `/opt/neurolens/cache`. If no instance-store disk exists (the CPU rehearsal instance, §4e), use a folder on the root disk instead.
 3. `aws s3 sync s3://<bucket>/models/ /opt/neurolens/cache/`. Log its duration.
-4. Write `/opt/neurolens/env.conf` (§3), with `NEUROLENS_S3_BUCKET`, `NEUROLENS_SQS_QUEUE_URL` and `NEUROLENS_AWS_REGION` from the templated values, and `/opt/neurolens/app/config.json` (the shared file's schema) with absolute paths: `paths.models = /opt/neurolens/cache/models`, `paths.data = /opt/neurolens/cache/data`, `paths.output = /opt/neurolens/output`; `worker.idle_exit_minutes = 30`. `chmod 600` both. No `HF_TOKEN` is needed: weights come from S3 and `HF_HUB_OFFLINE=1` is set.
+4. Write `/opt/neurolens/env.conf` (§3), with `NEUROLENS_S3_BUCKET`, `NEUROLENS_SQS_QUEUE_URL` and `NEUROLENS_AWS_REGION` from the templated values, and `/opt/neurolens/app/config.json` (the shared file's schema) with absolute paths: `paths.models = /opt/neurolens/cache/models`, `paths.data = /opt/neurolens/cache/data`. `chmod 600` both. No `HF_TOKEN` is needed: weights come from S3 and `HF_HUB_OFFLINE=1` is set.
 5. Run `pull_code.sh` once, then verify: `test -s /opt/neurolens/env.conf` and `/opt/neurolens/venv/bin/python -c "from neurolens.settings import load_config; load_config()"` run from `/opt/neurolens/app` with `NEUROLENS_ROOT` set. A failure trips the `ERR` trap.
 6. Write the §3 start-limit drop-in, `systemctl daemon-reload`, then `systemctl enable --now neurolens-worker`.
 
@@ -165,7 +165,7 @@ echo "Deployed $(cat /tmp/code.revision). Running workers pick it up on their ne
 `git archive` keeps the `neurolens/` folder structure (a flattening `zip -j` would break every `from neurolens...` import) and ships exactly one commit, whose ID later goes into experiment manifests. `infra/restart_workers.sh` runs `systemctl restart neurolens-worker` on every running worker through SSM Run Command, so a deploy reaches them without new instances.
 
 ## 6. Results in S3
-From M2a on, the worker writes each result to `results/{job_id}.json` instead of M1's local output folder, on the laptop and on AWS alike.
+From M2a on, the worker writes each result to `results/{job_id}.json` instead of M1's local output folder, on the laptop and on AWS alike; the worker has no local output folder and config has no `paths.output`.
 - `neurolens.storage.put_result(s3, bucket, job_id, result) -> bool` writes with `put_object(..., IfNoneMatch="*")`: `True` if written, `False` if a result already existed (`PreconditionFailed`, HTTP 412). Any other error propagates, including the `ConditionalRequestConflict` (HTTP 409) S3 may return when two writes race; the record then fails and is retried.
 - A completed result is therefore never replaced. M2b builds its duplicate handling and status on this.
 - `neurolens.worker.Outcome` gains `DUPLICATE`: returned when `put_result` returns `False`. It is final, so the message is deleted.
@@ -250,7 +250,7 @@ config.json                         MODIFIED: no aws block (the region comes fro
 11. The §4f alarm exists and its email subscription is confirmed.
 12. `terraform apply` run twice reports no changes the second time.
 13. `FAKE_INFERENCE=1 pytest` passes locally and in CI, including the §8 tests, and the tests were committed before the implementation.
-14. A job forced to fail twice lands in the dead-letter queue and is not retried again. Force it by starting the rehearsal worker with a `paths.output` that cannot be created: every job then fails before any work, so the test costs nothing. Fix the path afterwards and confirm a new job completes.
+14. A job forced to fail twice lands in the dead-letter queue and is not retried again. Force it by restarting the worker twice while a fake job runs (`restart_workers.sh --now`, twice): each restart hands the job back, and the second receive is the last. Then confirm a new job completes.
 15. §7a: the 119.01 s clip returns 120 timesteps on the GPU, each job encodes the video once, and the job queue's visibility timeout is 1800 s.
 16. The worker image is built from plain Ubuntu (§2), its snapshot size is in the build log next to v1's, and v1 is deregistered with its snapshot deleted.
 17. Region (§4i): `terraform plan` in `us-east-1` reports no changes after the refactor.

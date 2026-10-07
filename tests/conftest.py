@@ -108,7 +108,6 @@ def aws():
 @pytest.fixture
 def make_cfg(aws, tmp_path):
     """Build a config dict like config.json plus the .env values, pointing at the moto resources."""
-    (tmp_path / "output").mkdir(exist_ok=True)
 
     def make(with_aws=True, **overrides):
         cfg = {
@@ -116,7 +115,6 @@ def make_cfg(aws, tmp_path):
             "paths": {
                 "models": str(tmp_path / "models"),
                 "data": str(tmp_path / "data"),
-                "output": str(tmp_path / "output"),
             },
             "model": {
                 "repo_id": "facebook/tribev2",

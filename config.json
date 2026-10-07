@@ -1,8 +1,7 @@
 {
   "paths": {
     "models": "./models",
-    "data": "./data",
-    "output": "./output"
+    "data": "./data"
   },
   "model": {
     "repo_id": "facebook/tribev2",

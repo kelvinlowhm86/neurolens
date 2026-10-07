@@ -126,9 +126,7 @@ def test_outcome_has_duplicate():
     assert Outcome.DUPLICATE not in (Outcome.DONE, Outcome.REJECTED, Outcome.SKIPPED)
 
 
-def test_worker_result_lands_in_s3_and_nothing_in_the_local_output_folder(
-    aws, make_cfg, roi_masks_small, db, new_job, clip_path
-):
+def test_worker_result_lands_in_s3(aws, make_cfg, roi_masks_small, db, new_job, clip_path):
     cfg = make_cfg()
     job_id, key = new_job()
     aws.s3.upload_file(str(clip_path), aws.bucket, key)
@@ -145,7 +143,6 @@ def test_worker_result_lands_in_s3_and_nothing_in_the_local_output_folder(
 
     assert outcome is Outcome.DONE
     assert stored(aws, job_id)["job_id"] == job_id
-    assert list(Path(cfg["paths"]["output"]).iterdir()) == []
 
 
 def test_worker_publishes_through_put_result(
@@ -277,25 +274,22 @@ def test_resolve_paths_keeps_absolute_paths_unchanged(tmp_path):
         "paths": {
             "models": "/opt/neurolens/cache/models",
             "data": "/opt/neurolens/cache/data",
-            "output": "/opt/neurolens/output",
         }
     }
     paths = settings.resolve_paths(cfg, tmp_path)
     assert paths["models"] == Path("/opt/neurolens/cache/models")
     assert paths["data"] == Path("/opt/neurolens/cache/data")
-    assert paths["output"] == Path("/opt/neurolens/output")
 
 
 def test_resolve_paths_still_resolves_relative_paths_under_the_root(tmp_path):
-    cfg = {"paths": {"models": "./models", "data": "data", "output": "out/results"}}
+    cfg = {"paths": {"models": "./models", "data": "data"}}
     paths = settings.resolve_paths(cfg, tmp_path)
     assert paths["models"] == (tmp_path / "models").resolve()
     assert paths["data"] == (tmp_path / "data").resolve()
-    assert paths["output"] == (tmp_path / "out" / "results").resolve()
 
 
 def test_resolve_paths_handles_a_mix_of_absolute_and_relative(tmp_path):
-    cfg = {"paths": {"models": "/opt/neurolens/cache/models", "data": "data", "output": "out"}}
+    cfg = {"paths": {"models": "/opt/neurolens/cache/models", "data": "data"}}
     paths = settings.resolve_paths(cfg, tmp_path)
     assert paths["models"] == Path("/opt/neurolens/cache/models")
     assert paths["data"] == (tmp_path / "data").resolve()

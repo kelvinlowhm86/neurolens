@@ -35,7 +35,6 @@ hub/
 !/data/videos/SOURCES.md
 
 # ─── Generated output ──────────────────────────────────────────────────────
-/output/
 /data/output/**/*.json
 /data/output/**/*.npy
 /data/output/**/*.png

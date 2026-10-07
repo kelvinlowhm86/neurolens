@@ -37,7 +37,6 @@ REQUIRED_CONFIG = [
     (("aws", "region"), "aws.region (NEUROLENS_AWS_REGION)"),
     (("aws", "s3_bucket"), "aws.s3_bucket (NEUROLENS_S3_BUCKET)"),
     (("aws", "sqs_queue_url"), "aws.sqs_queue_url (NEUROLENS_SQS_QUEUE_URL)"),
-    (("paths", "output"), "paths.output"),
     (("max_upload_bytes",), "max_upload_bytes"),
     (("worker", "heartbeat_seconds"), "worker.heartbeat_seconds"),
     (("worker", "max_job_minutes"), "worker.max_job_minutes"),
@@ -377,10 +376,6 @@ def _analyse(bucket, key, job_id, attempt, *, s3, db, cfg, roi_masks):
         raise
     if size > cfg["max_upload_bytes"]:
         return reject("file_too_large", "The file is larger than the upload limit.")
-
-    # Resolve the output folder before any expensive work, so a bad path fails early.
-    out_dir = settings.resolve_paths(cfg, settings.get_root())["output"]
-    out_dir.mkdir(parents=True, exist_ok=True)
 
     suffix = Path(key).suffix
     with tempfile.TemporaryDirectory() as tmp:

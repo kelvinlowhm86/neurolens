@@ -9,7 +9,6 @@ PostgreSQL first; the behaviour checked is unchanged (M3a also refunds it: `unre
 import contextlib
 import json
 import os
-from pathlib import Path
 
 import pytest
 from botocore.exceptions import ClientError
@@ -119,7 +118,6 @@ def test_unreadable_upload_is_rejected_deleted_and_not_inferred(
 
     assert outcome is Outcome.REJECTED
     assert not object_exists(aws, key)
-    assert not (Path(cfg["paths"]["output"]) / f"{job_id}.json").exists()
     assert inference_calls == {"build_events": [], "without_audio": [], "predict": []}
 
 
@@ -165,7 +163,6 @@ def test_unreadable_upload_end_to_end_deletes_object_and_message(
 
     assert remaining() == []
     assert not object_exists(aws, key)
-    assert not (Path(cfg["paths"]["output"]) / f"{job_id}.json").exists()
     assert inference_calls == {"build_events": [], "without_audio": [], "predict": []}
 
 

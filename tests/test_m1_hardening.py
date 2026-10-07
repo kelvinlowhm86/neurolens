@@ -12,7 +12,6 @@ import contextlib
 import json
 import re
 import subprocess
-from pathlib import Path
 
 import pytest
 from botocore.exceptions import ClientError
@@ -153,7 +152,6 @@ MISSING_KEYS = [
     ("aws", "region"),
     ("aws", "s3_bucket"),
     ("aws", "sqs_queue_url"),
-    ("paths", "output"),
     (None, "max_upload_bytes"),
 ]
 
@@ -190,35 +188,6 @@ def test_run_rejects_a_config_with_a_missing_key_before_loading_the_model(
     assert loaded == []
 
 
-# ---------------------------------------------------------------- 4b. output folder before download
-
-
-def test_unusable_output_folder_fails_before_the_download(
-    aws, db, make_cfg, roi_masks_small, new_job, clip_path, tmp_path, spy_s3, patch_everywhere
-):
-    blocker = tmp_path / "a_regular_file"
-    blocker.write_text("not a folder")
-    cfg = make_cfg(paths={**make_cfg()["paths"], "output": str(blocker / "results")})
-    _, key = new_job()
-    aws.s3.upload_file(str(clip_path), aws.bucket, key)
-    never_inference(patch_everywhere)
-    s3 = spy_s3(forbid=("download_file", "download_fileobj"), forbid_on_uploads=("get_object",))
-
-    with pytest.raises(Exception):  # noqa: B017 - the exact type is not specified
-        handle_record(
-            aws.bucket,
-            key,
-            s3=s3,
-            db=db,
-            cfg=cfg,
-            roi_masks=roi_masks_small,
-            heartbeat=no_heartbeat,
-        )
-
-    assert "download_file" not in s3.names()
-    assert object_exists(aws, key)  # a failure is not a rejection
-
-
 # ---------------------------------------------------------------- A. audio-only video
 
 
@@ -251,7 +220,6 @@ def test_audio_only_upload_is_rejected_and_deleted_without_inference(
 
     assert outcome is Outcome.REJECTED
     assert not object_exists(aws, key)
-    assert not (Path(cfg["paths"]["output"]) / f"{job_id}.json").exists()
     assert pg.job(job_id)["error_code"] == "unreadable_video"
 
 
@@ -293,7 +261,6 @@ def test_missing_upload_is_refunded_and_nothing_else_happens(
     assert outcome is Outcome.REJECTED
     assert pg.job(job_id)["error_code"] == "upload_missing"
     assert pg.balance() == (500, 0)
-    assert not (Path(cfg["paths"]["output"]) / f"{job_id}.json").exists()
 
 
 def test_duplicate_event_for_an_oversize_object_is_rejected_then_skipped(

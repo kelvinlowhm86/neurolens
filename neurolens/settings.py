@@ -102,9 +102,9 @@ def load_settings(root=None):
 
 
 def resolve_paths(cfg, root):
-    """Absolute models/data/output folders from the config. Creates nothing."""
+    """Absolute models/data folders from the config. Creates nothing."""
     root = Path(root)
-    return {name: (root / cfg["paths"][name]).resolve() for name in ("models", "data", "output")}
+    return {name: (root / cfg["paths"][name]).resolve() for name in ("models", "data")}
 
 
 def ensure_dirs(paths):

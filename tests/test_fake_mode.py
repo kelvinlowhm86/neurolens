@@ -183,7 +183,6 @@ def test_load_model_in_fake_mode_skips_torch_but_loads_atlas(tmp_path):
         "paths": {
             "models": str(tmp_path / "models"),
             "data": str(tmp_path / "data"),
-            "output": str(tmp_path / "output"),
         },
         "model": {"repo_id": "facebook/tribev2"},
         "hf_download_timeout": 300,

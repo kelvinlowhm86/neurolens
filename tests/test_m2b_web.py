@@ -178,7 +178,7 @@ with mock_aws():
     boto3.client("s3", region_name="us-east-1").create_bucket(Bucket="neurolens-hygiene")
     from neurolens.web.app import create_app
     cfg = {
-        "paths": {"models": "m", "data": "d", "output": "o"},
+        "paths": {"models": "m", "data": "d"},
         "aws": {"region": "us-east-1", "s3_bucket": "neurolens-hygiene",
                 "sqs_queue_url": "https://sqs.us-east-1.amazonaws.com/123456789012/q"},
         "max_video_duration_seconds": 120,

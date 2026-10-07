@@ -150,19 +150,19 @@ def test_apply_env_maps_each_variable(monkeypatch, name, path):
 
 def test_apply_env_creates_the_aws_dict_when_absent(monkeypatch):
     monkeypatch.setenv("NEUROLENS_S3_BUCKET", "b")
-    out = settings.apply_env({"paths": {"output": "o"}})
+    out = settings.apply_env({"paths": {"data": "d"}})
     assert out["aws"] == {"s3_bucket": "b"}
 
 
 def test_apply_env_leaves_other_keys_untouched(monkeypatch):
     monkeypatch.setenv("NEUROLENS_S3_BUCKET", "b")
     cfg = {
-        "paths": {"output": "o"},
+        "paths": {"data": "d"},
         "max_upload_bytes": 5,
         "aws": {"region": "eu-west-1", "extra": "keep"},
     }
     out = settings.apply_env(cfg)
-    assert out["paths"] == {"output": "o"}
+    assert out["paths"] == {"data": "d"}
     assert out["max_upload_bytes"] == 5
     assert out["aws"] == {"region": "eu-west-1", "extra": "keep", "s3_bucket": "b"}
 
@@ -174,7 +174,7 @@ def test_apply_env_ignores_unset_or_empty_variables(monkeypatch, value):
             monkeypatch.delenv(name, raising=False)
         else:
             monkeypatch.setenv(name, value)
-    cfg = {"paths": {"output": "o"}}
+    cfg = {"paths": {"data": "d"}}
     out = settings.apply_env(cfg)
     assert out == cfg
     assert "hf_token" not in out
@@ -190,7 +190,7 @@ def test_apply_env_empty_variable_does_not_blank_a_file_value(monkeypatch):
 def test_apply_env_never_mutates_its_input(monkeypatch):
     for name in ENV_TO_KEY:
         monkeypatch.setenv(name, "x")
-    cfg = {"aws": {"region": "us-east-1"}, "paths": {"output": "o"}}
+    cfg = {"aws": {"region": "us-east-1"}, "paths": {"data": "d"}}
     snapshot = copy.deepcopy(cfg)
     out = settings.apply_env(cfg)
     assert cfg == snapshot
@@ -218,7 +218,7 @@ def test_apply_env_value_overrides_the_file_value(monkeypatch):
 # ------------------------------------------------------------------ load_settings
 
 FILE_CFG = {
-    "paths": {"models": "./models", "data": "./data", "output": "./output"},
+    "paths": {"models": "./models", "data": "./data"},
     "model": {"repo_id": "facebook/tribev2"},
     "aws": {"region": "us-east-1"},
     "hf_download_timeout": 300,
@@ -406,7 +406,7 @@ def test_committed_config_has_no_secret_looking_values(committed_cfg):
 
 
 def test_committed_config_keeps_the_shared_shape(committed_cfg):
-    assert set(committed_cfg["paths"]) >= {"models", "data", "output"}
+    assert set(committed_cfg["paths"]) >= {"models", "data"}
     assert "max_upload_bytes" in committed_cfg
     assert "max_video_duration_seconds" in committed_cfg
 

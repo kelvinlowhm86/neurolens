@@ -13,7 +13,6 @@ locals {
     paths = {
       models = "/opt/neurolens/cache/models"
       data   = "/opt/neurolens/cache/data"
-      output = "/opt/neurolens/output"
     }
   }))
 }

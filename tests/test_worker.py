@@ -258,12 +258,10 @@ def test_duration_and_timesteps_are_exactly_what_extract_engagement_returned(
     assert result["timesteps"] == expected["timesteps"]
 
 
-def test_result_goes_to_s3_as_results_job_id_json_and_not_to_the_local_output_folder(
-    aws, make_cfg, roi_masks_small, db, new_job, clip_path, tmp_path
+def test_result_goes_to_s3_as_results_job_id_json(
+    aws, make_cfg, roi_masks_small, db, new_job, clip_path
 ):
-    out_dir = tmp_path / "elsewhere" / "results_here"
-    out_dir.mkdir(parents=True)
-    cfg = make_cfg(paths={**make_cfg()["paths"], "output": str(out_dir)})
+    cfg = make_cfg()
     job_id, key = new_job(".mov")
     upload_clip(aws, key, clip_path)
     handle_record(
@@ -275,7 +273,6 @@ def test_result_goes_to_s3_as_results_job_id_json_and_not_to_the_local_output_fo
         roi_masks=roi_masks_small,
         heartbeat=no_heartbeat,
     )
-    assert list(out_dir.iterdir()) == []  # M2a: nothing is written locally
     assert object_exists(aws, f"results/{job_id}.json")
 
 
@@ -544,7 +541,6 @@ def test_oversize_object_is_rejected_deleted_and_never_downloaded(
     assert "head_object" in s3.names()
     assert "download_file" not in s3.names()
     assert not object_exists(aws, key)
-    assert not (Path(cfg["paths"]["output"]) / f"{job_id}.json").exists()
 
 
 def test_oversize_rejection_never_runs_ffprobe_or_inference(
@@ -591,7 +587,6 @@ def test_over_long_video_is_rejected_without_inference(
     assert calls["without_audio"] == []
     assert calls["predict"] == []
     assert not object_exists(aws, key)
-    assert not (Path(cfg["paths"]["output"]) / f"{job_id}.json").exists()
 
 
 def test_duration_check_uses_probe_duration_of_the_downloaded_file(
@@ -647,7 +642,6 @@ def test_a_failing_inference_raises_instead_of_returning_an_outcome(
             heartbeat=no_heartbeat,
         )
     assert object_exists(aws, key)  # a failure is not a rejection: nothing is deleted
-    assert not (Path(cfg["paths"]["output"]) / f"{job_id}.json").exists()
 
 
 def test_a_missing_object_is_refunded_not_an_error(aws, make_cfg, roi_masks_small, db, new_job, pg):
