@@ -18,6 +18,8 @@
 | Extra work | none: Flask as on the laptop | an adapter (Lambda Web Adapter), a function URL as CloudFront's origin (with origin access control), logs in CloudWatch |
 | Drawbacks | | 1–2 s on the first request after a quiet spell; 6 MB request/response limit (uploads go straight to S3, so unaffected) |
 
+If the server stays, also decide whether §3b's load balancer is needed at all. CloudFront's VPC origin can point straight at the one EC2 instance. Stop/start keeps its instance ID and private address, systemd restarts a crashed gunicorn, and EC2's automatic recovery brings back the same instance after a hardware fault, so the origin stays valid in all three cases. Only a replaced instance needs the origin updated (AWS has no automatic update for that). The load balancer's health checks pay off with two or more servers; with one, the default should be no load balancer. (The 30 Sep decisions page also gave a course reason, "shows self-healing for grading", which is not a design reason.)
+
 Check before deciding: the Google sign-in flow (Authlib, signed session cookie) works unchanged behind a function URL; CloudFront origin access control for a Lambda function URL; the cold-start time with our imports. If Lambda is chosen, update §3, §8, §10, §12, Terraform and the architecture page together.
 
 **Before building — decide how users sign in (Josh decides; then §2 is rewritten for the choice).** §2 assumes Google sign-in directly, which is fine for the course's known users but assumes every user has a Google account; a real product can't (many marketing teams use Microsoft 365).
