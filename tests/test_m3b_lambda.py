@@ -120,17 +120,23 @@ def test_a_request_with_two_cookies_reaches_flask_with_both(lambda_env, monkeypa
     assert json.loads(body_of(resp)) == {"a": "1", "b": "2"}
 
 
-def test_the_public_address_comes_from_parameter_store_when_the_environment_has_none(
+def test_values_that_depend_on_cloudfront_come_from_parameter_store_when_the_environment_has_none(
     lambda_env, ssm, idp, auth_seam, count_create_app, monkeypatch
 ):
-    """CloudFront's address cannot be an environment variable of the function it fronts."""
+    """CloudFront's address, and the Cognito client whose callback contains it, cannot be
+    environment variables of the function CloudFront fronts."""
     monkeypatch.delenv("NEUROLENS_PUBLIC_BASE_URL")
-    ssm.put_parameter(
-        Name="/neurolens/web/public_base_url", Value="https://abc.cloudfront.net", Type="String"
-    )
+    monkeypatch.delenv("NEUROLENS_COGNITO_CLIENT_ID")
+    for name, value in (
+        ("/neurolens/web/public_base_url", "https://abc.cloudfront.net"),
+        ("/neurolens/web/cognito_client_id", "client-from-parameter-store"),
+    ):
+        ssm.put_parameter(Name=name, Value=value, Type="String")
     module = fresh_import("neurolens.web.lambda_handler")
     module.handler(function_url_event("GET", "/healthz"), LambdaContext())
-    assert count_create_app[0]["cfg"]["public_base_url"] == "https://abc.cloudfront.net"
+    cfg = count_create_app[0]["cfg"]
+    assert cfg["public_base_url"] == "https://abc.cloudfront.net"
+    assert cfg["auth"]["cognito_client_id"] == "client-from-parameter-store"
 
 
 # ---------------------------------------------------------------- import hygiene

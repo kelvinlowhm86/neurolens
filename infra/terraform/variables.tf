@@ -12,8 +12,8 @@ variable "queue_name" {
 variable "allowed_origins" {
   description = <<-EOT
     Web addresses allowed to upload straight to the bucket from a browser (CORS). An origin
-    must match exactly, so localhost and 127.0.0.1 are listed separately. To add M3's HTTPS
-    address later, add it here and apply.
+    must match exactly, so localhost and 127.0.0.1 are listed separately. The CloudFront address
+    is always added by Terraform; list only other origins here.
   EOT
   type        = list(string)
   default     = ["http://localhost:5003", "http://127.0.0.1:5003"]

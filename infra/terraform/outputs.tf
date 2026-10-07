@@ -63,7 +63,7 @@ output "public_base_url" {
 }
 
 output "cognito_issuer" {
-  value = "https://cognito-idp.${var.region}.amazonaws.com/${aws_cognito_user_pool.users.id}"
+  value = local.cognito_issuer
 }
 
 output "cognito_client_id" {
@@ -82,4 +82,9 @@ output "google_redirect_uri" {
 output "sign_in_test_url" {
   description = "Day-one check (M3b): Cognito's sign-in page; a successful sign-in lands on <public_base_url>/auth/callback?code=..."
   value       = "https://${local.cognito_domain}/oauth2/authorize?client_id=${aws_cognito_user_pool_client.web.id}&response_type=code&scope=openid+email&redirect_uri=${local.public_base_url}/auth/callback"
+}
+
+output "stripe_webhook_url" {
+  description = "Paste into the Stripe test-mode webhook endpoint (event: checkout.session.completed)."
+  value       = aws_lambda_function_url.webhook.function_url
 }

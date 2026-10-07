@@ -107,13 +107,13 @@ resource "aws_s3_bucket_lifecycle_configuration" "main" {
 
 # Lets the browser POST a file straight to the bucket from these origins. S3 applies CORS per
 # bucket, not per prefix; the uploads/ restriction is the key condition in the signed POST
-# policy. Terraform owns the whole document: to add an origin, add it to allowed_origins.
+# policy. Terraform owns the whole document: to add an origin, add it to allowed_origins (the CloudFront address is always included).
 resource "aws_s3_bucket_cors_configuration" "main" {
   bucket = aws_s3_bucket.main.id
 
   cors_rule {
     allowed_methods = ["POST"]
-    allowed_origins = var.allowed_origins
+    allowed_origins = concat(var.allowed_origins, [local.public_base_url])
     allowed_headers = ["*"]
     max_age_seconds = 3000
   }
