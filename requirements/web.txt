@@ -1,5 +1,4 @@
-# Web server: no torch, no model.
--r base.txt
+# Web server (the Lambda functions): no torch, no model, no numpy (the web code never imports it).
 flask>=3.0.0
 boto3>=1.34
 # M3b: Cognito sign-in (Authlib's Flask client over requests), the Lambda launcher, Stripe test top-ups

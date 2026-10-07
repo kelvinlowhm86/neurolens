@@ -11,10 +11,13 @@ TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 mkdir -p build
 
+# Code and dependency list both from the last commit, never the working folder.
+mkdir -p "$TMP/src"
+git archive HEAD neurolens config.json requirements | tar -x -C "$TMP/src"
 python3 -m pip install --quiet --disable-pip-version-check \
   --platform manylinux2014_aarch64 --implementation cp --python-version 3.12 --only-binary=:all: \
-  --target "$TMP/pkg" -r requirements/web.txt
-git archive HEAD neurolens config.json | tar -x -C "$TMP/pkg"
+  --target "$TMP/pkg" -r "$TMP/src/requirements/web.txt"
+cp -R "$TMP/src/neurolens" "$TMP/src/config.json" "$TMP/pkg/"
 
 rm -f "$OUT"
 (cd "$TMP/pkg" && zip -qr "$OLDPWD/$OUT" . -x '*/__pycache__/*' '*.dist-info/RECORD')

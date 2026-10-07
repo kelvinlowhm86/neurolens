@@ -1,4 +1,4 @@
-# Shared by every machine (web server, GPU worker, CI).
+# Shared by the worker machines and CI (not the web server, which needs no numpy).
 # numpy is pinned to the exact version tribev2 forces, so everything runs the same maths.
 # (The old README pin numpy<2.1 guarded an ImportError "_center" seen with an earlier
 # tribev2. The M2a GPU image build ran the full real pipeline with 2.2.6 without it.)
