@@ -89,15 +89,29 @@ resource "aws_cognito_user_pool" "users" {
   tags = { Milestone = "M3b" }
 }
 
+# The Google OAuth client's secret, stored once by hand as a SecureString (M3b §2a), so no apply
+# needs it in the shell. It also ends up in the encrypted Terraform state, as for any provider.
+data "aws_ssm_parameter" "google_client_secret" {
+  name = "/neurolens/terraform/google_client_secret"
+}
+
 resource "aws_cognito_identity_provider" "google" {
   user_pool_id  = aws_cognito_user_pool.users.id
   provider_name = "Google"
   provider_type = "Google"
 
+  # Cognito fills in Google's fixed endpoints itself; listing them keeps every plan from showing
+  # a change that removes them.
   provider_details = {
-    client_id        = var.google_client_id
-    client_secret    = var.google_client_secret
-    authorize_scopes = "openid email"
+    client_id                     = var.google_client_id
+    client_secret                 = data.aws_ssm_parameter.google_client_secret.value
+    authorize_scopes              = "openid email"
+    attributes_url                = "https://people.googleapis.com/v1/people/me?personFields="
+    attributes_url_add_attributes = "true"
+    authorize_url                 = "https://accounts.google.com/o/oauth2/v2/auth"
+    oidc_issuer                   = "https://accounts.google.com"
+    token_request_method          = "POST"
+    token_url                     = "https://www.googleapis.com/oauth2/v4/token"
   }
 
   # Mapped email addresses arrive unverified unless email_verified is mapped too.

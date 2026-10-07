@@ -102,9 +102,3 @@ variable "google_client_id" {
   description = "The Google OAuth client's ID (not secret). Set in terraform.tfvars."
   type        = string
 }
-
-variable "google_client_secret" {
-  description = "The Google OAuth client's secret. Only from the environment (TF_VAR_google_client_secret), never committed; it ends up in the encrypted Terraform state, as for any identity provider."
-  type        = string
-  sensitive   = true
-}
