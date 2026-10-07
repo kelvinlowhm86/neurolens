@@ -34,6 +34,12 @@ Check before deciding: the Google sign-in flow (Authlib, signed session cookie) 
 
 Check before deciding: Cognito's hosted sign-in works with the `*.cloudfront.net` callback; the dev-mode guard and session cookie are unchanged; how much the hosted pages can match the site. If Cognito is chosen, update §2, §5, §9, §10, Terraform and the architecture page together.
 
+**Before building — decide the deployed operating model (principle set by Josh, 7 Oct).** Two modes, kept apart:
+- **Development and budget mode (course work, rehearsals):** run by hand with `start_work.sh` / `stop_work.sh`. Safeguards are alarms that email, not more automation, except where a failure is both costly and silent (the GPU: idle alarm and circuit breaker). Every safety net is more code, permissions and failure modes, so none is added for cheap, reported failures (for example a forgotten `stop_work.sh` keeping Aurora awake: the forgotten-database alarm emails).
+- **Deployed mode (the product):** no human in the loop. Everything a user needs runs by itself as the normal path, not as a safety net: the website is always up (the web-hosting decision above), workers can always reach SQS, S3 and the Data API (NAT instance always on, about $9–10 a month with its public address, or a setup that needs none), and the reaper runs always without keeping Aurora awake (for example it skips a run while Aurora is paused: with no activity nothing new can be stuck). The scripts become maintenance tools.
+
+Decide which mode the study and demo run in, and the cost of deployed mode until 13 Nov, against the $50 cap. If deployed mode is chosen, update the operating model line above, §3c, §8, §10 and the architecture page together.
+
 **Day one — check the address works with Google.** Create the CloudFront distribution (§3; the origin can be added later), then add `https://<distribution>.cloudfront.net/auth/callback` as an authorized redirect URI in the Google Cloud console. Google requires HTTPS and a host under a public suffix; `cloudfront.net` should qualify, but confirm it before building anything else. If Google rejects it, stop and ask Josh: the fallbacks are a free dynamic-DNS name with Caddy, or a cheap bought domain.
 
 ## 1. Scope
