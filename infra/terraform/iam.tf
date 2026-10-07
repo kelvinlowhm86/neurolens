@@ -117,7 +117,7 @@ resource "aws_iam_role_policy" "worker" {
 
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [
+    Statement = concat(local.db_access_statements, [
       {
         Sid    = "ReadInputsCodeWeightsResults"
         Effect = "Allow"
@@ -127,7 +127,7 @@ resource "aws_iam_role_policy" "worker" {
       },
       {
         # Without ListBucket, S3 answers a request for a missing object with 403 instead of 404,
-        # which the worker would treat as a failure, not GONE. No s3:prefix condition: a HEAD or GET
+        # which the worker would treat as a failure, not a missing upload. No s3:prefix condition: a HEAD or GET
         # carries no prefix, so the condition would fail and bring the 403 back.
         Sid      = "ListBucketSoMissingObjectsGive404"
         Effect   = "Allow"
@@ -139,13 +139,6 @@ resource "aws_iam_role_policy" "worker" {
         Effect   = "Allow"
         Action   = "s3:PutObject"
         Resource = "${aws_s3_bucket.main.arn}/results/*"
-      },
-      {
-        # Job status objects (M2b §4): read, then written back with the new stage.
-        Sid      = "ReadWriteJobStatus"
-        Effect   = "Allow"
-        Action   = ["s3:GetObject", "s3:PutObject"]
-        Resource = "${aws_s3_bucket.main.arn}/status/*"
       },
       {
         # Boot records for the cold-start table (M2b §10). Write only.
@@ -180,7 +173,7 @@ resource "aws_iam_role_policy" "worker" {
         Resource = local.worker_asg_arn
       },
       local.deny_neurolens_parameters,
-    ]
+    ])
   })
 }
 

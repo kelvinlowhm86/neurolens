@@ -5,7 +5,7 @@ account (other projects' buckets or machines, for example). Three policy files:
 
 | File | Attached to | What it allows |
 |---|---|---|
-| `neurolens-deploy-services.json` | the deploy user | S3 buckets and SQS queues named `neurolens-*`; Auto Scaling groups, alarms (and their history) and email topics named `neurolens-*`; Lambda functions, EventBridge rules and Lambda log groups named `neurolens-*` (M2b circuit breaker; M3a's functions reuse them); Parameter Store under `/neurolens/`; remote commands and sessions only on machines tagged `Project=neurolens` |
+| `neurolens-deploy-services.json` | the deploy user | S3 buckets and SQS queues named `neurolens-*`; Auto Scaling groups, alarms (and their history) and email topics named `neurolens-*`; Lambda functions, EventBridge rules and Lambda log groups named `neurolens-*` (M2b circuit breaker; M3a's functions reuse them) and the queue trigger of a `neurolens-*` function; the `neurolens-*` Aurora database, its RDS-created password secret and the Data API on it (M3a); Parameter Store under `/neurolens/`; remote commands and sessions only on machines tagged `Project=neurolens` |
 | `neurolens-deploy-compute.json` | the deploy user | EC2 and networking: anything may be *read*; new things may be created only if tagged `Project=neurolens`; only things already tagged `Project=neurolens` may be changed, stopped or deleted. Machines only of the types the project uses (`g6e.xlarge`, `g6e.2xlarge`; `g6.2xlarge` and `g5.2xlarge` for the GPU benchmark; `t3.large`, `t4g.micro`). Roles and instance profiles named `neurolens-*`, handed only to EC2 and Lambda |
 | `neurolens-role-boundary.json` | nobody directly (a *permissions boundary*) | The most any `neurolens-*` role may ever do, whatever is written into it |
 
@@ -14,7 +14,7 @@ the deploy user's keys could create a `neurolens-` role with full account access
 and so escape every other restriction here. A permissions boundary is a ceiling AWS checks on top of a role's
 own policy: the compute policy only lets the deploy user create or edit roles that carry this boundary, and
 the deploy user cannot edit the boundary itself. So a role can never do more than read and write NeuroLens
-storage and queues, read `/neurolens/` parameters, resize `neurolens-*` worker groups and set their machines' scale-in protection (the circuit
+storage and queues, use the NeuroLens database through the Data API (M3a), read `/neurolens/` parameters, resize `neurolens-*` worker groups and set their machines' scale-in protection (the circuit
 breaker; a worker only for its own machine while busy),
 write its own Lambda logs, and talk to Session Manager. Since M2b no role may end a machine: only AWS decides
 how many workers run.

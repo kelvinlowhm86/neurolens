@@ -133,6 +133,28 @@ To change the region: edit `region`, `zones` and `build_extra_zones` together, m
 exists in the new region, then rebuild the image there. Every script in `infra/` reads the region
 from `aws_env.sh`, which asks Terraform only (never a copy such as `.env`). Region-move checklist: M4 §1.
 
+## 2e. The database and the settlement Lambdas (M3a)
+
+`database.tf` creates Aurora PostgreSQL (Serverless v2, 0-2 ACU): users, credit and job state. It
+pauses after 10 idle minutes (0 ACU, storage only) and wakes in about 15 s on the next call. Nothing
+connects to it over the network: the app, the worker and the Lambdas use the RDS Data API (HTTPS,
+checked by IAM), and the password lives only in Secrets Manager, created and rotated by RDS.
+`lambdas.tf` adds two Lambdas: the **dead-letter handler** settles or refunds every job that failed
+twice, and the **reaper** settles or refunds stuck jobs every 5 minutes, but only during a session:
+`start_work.sh` switches its schedule on and `stop_work.sh` runs it once and switches it off, so
+Aurora can pause between sessions. Alarms email you if Aurora stays awake for 6 hours or a Lambda fails.
+
+After the first apply (from the repo root):
+
+```bash
+terraform -chdir=infra/terraform output db_cluster_arn db_secret_arn db_name
+# copy the three into .env as NEUROLENS_DB_CLUSTER_ARN, NEUROLENS_DB_SECRET_ARN, NEUROLENS_DB_NAME
+python infra/apply_schema.py --backend data_api    # creates the tables; a second run changes nothing
+python infra/db_smoke.py --backend data_api        # one throwaway job through billing: PASS expected
+```
+
+Cost: about 6 cents an hour while awake (0.5 ACU), $0.40 a month for the secret, storage cents.
+
 ## 2c. Applying a saved plan (when you want to review exactly what will change)
 
 Some tools refuse to let an assistant run `terraform apply`. The safe pattern is: write the plan to
@@ -151,8 +173,9 @@ rm tfplan                         # delete the plan file afterwards
 ```bash
 aws s3api get-bucket-lifecycle-configuration --bucket <bucket_name>   # 2 days, 2 days, 30 days
 aws s3api get-bucket-cors --bucket <bucket_name>
-aws s3 cp some.mp4 s3://<bucket_name>/uploads/placeholder-user/test.mp4
+aws s3 cp some.mp4 s3://<bucket_name>/uploads/test.mp4
 aws sqs receive-message --queue-url <queue_url>                       # one message within seconds
+# From M3a a worker skips such a hand upload (no job in the database): real jobs come from the page.
 ```
 
 ## 4. Add a browser address later (M3)
@@ -212,7 +235,8 @@ Cost: about 1.5-2 hours of GPU, roughly $3-4.
 
 ## 6. Tear down
 
-Stop the session first (section 5). The worker image and its disk snapshot are not Terraform's: deregister the
+Stop the session first (section 5). `terraform destroy` also deletes the database, its backups and
+its secret, with no final snapshot: export anything you need first. The worker image and its disk snapshot are not Terraform's: deregister the
 image and delete its snapshot by hand. S3 refuses to delete a non-empty bucket, so empty it first, once results and experiment files are no
 longer needed:
 

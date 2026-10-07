@@ -14,6 +14,7 @@ ASG=neurolens-workers
 HOLD_END=neurolens-warm-hold-end
 ALARMS="neurolens-worker-idle neurolens-worker-scale-out neurolens-worker-scale-in"
 BREAKER_RULE=neurolens-breaker-every-5-min
+REAPER_RULE=neurolens-reaper-every-5-min
 
 usage() { echo "usage: $0 [--max 1|2] [--worker [--hours 1-4]]" >&2; exit 2; }
 WORKER=0 HOURS=3 MAX=1
@@ -98,6 +99,15 @@ if [ "$NAT_STATE" != running ]; then
   aws ec2 wait instance-running --instance-ids "$NAT_ID"
 fi
 echo "NAT instance $NAT_ID running (about 0.84 cents an hour)."
+
+# The reaper (M3a §7) settles or refunds stuck jobs, during sessions only: between them its
+# 5-minute schedule would keep Aurora from pausing. stop_work.sh switches it off again.
+if ! aws events enable-rule --name "$REAPER_RULE"; then
+  echo "Could not enable the reaper's schedule $REAPER_RULE (above): run terraform apply, then this" >&2
+  echo "script again. The NAT instance is running: end with infra/stop_work.sh if you stop here." >&2
+  exit 1
+fi
+echo "Reaper on (every 5 minutes; keeps the database awake, about 6 cents an hour, until stop_work.sh)."
 [ "$SIZES" != "None" ] || exit 0
 
 if [ "$WORKER" = 1 ]; then

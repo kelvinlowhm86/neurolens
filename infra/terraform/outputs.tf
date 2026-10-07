@@ -1,5 +1,6 @@
 # Put these in the git-ignored .env at the repo root (bucket_name -> NEUROLENS_S3_BUCKET,
-# queue_url -> NEUROLENS_SQS_QUEUE_URL).
+# queue_url -> NEUROLENS_SQS_QUEUE_URL, db_cluster_arn / db_secret_arn / db_name ->
+# NEUROLENS_DB_CLUSTER_ARN / NEUROLENS_DB_SECRET_ARN / NEUROLENS_DB_NAME).
 
 output "bucket_name" {
   value = aws_s3_bucket.main.bucket
@@ -36,6 +37,19 @@ output "build_instance_profile" {
 
 output "nat_instance_id" {
   value = aws_instance.nat.id
+}
+
+output "db_cluster_arn" {
+  value = aws_rds_cluster.db.arn
+}
+
+output "db_secret_arn" {
+  description = "The ARN of the database's password secret (not the password itself)."
+  value       = local.db_secret_arn
+}
+
+output "db_name" {
+  value = local.db_name
 }
 
 output "region" {

@@ -54,6 +54,22 @@
         "ssmmessages:*", "ec2messages:*"
       ],
       "Resource": "*"
+    },
+    {
+      "Sid": "DataApiOnlyNeurolensDatabase",
+      "Effect": "Allow",
+      "Action": [
+        "rds-data:ExecuteStatement", "rds-data:BeginTransaction",
+        "rds-data:CommitTransaction", "rds-data:RollbackTransaction"
+      ],
+      "Resource": "arn:aws:rds:us-east-1:*:cluster:neurolens-*"
+    },
+    {
+      "Sid": "ReadOnlyTheNeurolensDatabaseSecret",
+      "Effect": "Allow",
+      "Action": "secretsmanager:GetSecretValue",
+      "Resource": "arn:aws:secretsmanager:us-east-1:*:secret:rds!*",
+      "Condition": {"StringLike": {"secretsmanager:ResourceTag/aws:rds:primaryDBClusterArn": "arn:aws:rds:us-east-1:*:cluster:neurolens-*"}}
     }
   ]
 }

@@ -62,6 +62,9 @@ resource "aws_launch_template" "worker" {
     fake_job_seconds = var.worker_fake_job_seconds
     config_json      = local.worker_config
     worker_group     = local.worker_asg
+    db_cluster_arn   = aws_rds_cluster.db.arn
+    db_secret_arn    = local.db_secret_arn
+    db_name          = local.db_name
   }))
 
   tag_specifications {

@@ -136,12 +136,16 @@ resource "aws_sqs_queue" "jobs" {
   })
 }
 
-# Parked jobs wait here for 14 days. Inspect with `aws sqs receive-message`; retry after a fix with
-# the console's "Start DLQ redrive". SQS moves messages itself, so the worker needs no access.
+# Jobs that failed twice. From M3a the dead-letter handler Lambda (lambdas.tf) settles or refunds
+# each one; SQS moves messages here itself, so the worker needs no access. A message the handler
+# cannot finish yet (a worker still holds the job) is tried again after the visibility timeout,
+# which must be at least the Lambda's 120 s timeout (AWS recommends 6 times it); messages are kept
+# 14 days, the reaper being the backstop.
 resource "aws_sqs_queue" "jobs_dlq" {
-  name                      = "${var.queue_name}-dlq"
-  message_retention_seconds = 1209600
-  sqs_managed_sse_enabled   = true
+  name                       = "${var.queue_name}-dlq"
+  message_retention_seconds  = 1209600
+  visibility_timeout_seconds = 720
+  sqs_managed_sse_enabled    = true
 }
 
 # S3 may only send to the queue with an explicit queue policy (a common gotcha). Scoped to

@@ -120,6 +120,80 @@
       "Effect": "Allow",
       "Action": "logs:DescribeLogGroups",
       "Resource": "*"
+    },
+    {
+      "Sid": "DatabaseRead",
+      "Effect": "Allow",
+      "Action": ["rds:Describe*", "rds:ListTagsForResource"],
+      "Resource": "*"
+    },
+    {
+      "Sid": "DatabaseOnlyNeurolens",
+      "Effect": "Allow",
+      "Action": "rds:*",
+      "Resource": [
+        "arn:aws:rds:us-east-1:*:cluster:neurolens-*",
+        "arn:aws:rds:us-east-1:*:db:neurolens-*",
+        "arn:aws:rds:us-east-1:*:subgrp:neurolens-*",
+        "arn:aws:rds:us-east-1:*:cluster-pg:neurolens-*"
+      ]
+    },
+    {
+      "Sid": "DatabaseCreateUsesTheDefaultGroups",
+      "Effect": "Allow",
+      "Action": ["rds:CreateDBCluster", "rds:CreateDBInstance"],
+      "Resource": [
+        "arn:aws:rds:us-east-1:*:cluster-pg:default.*",
+        "arn:aws:rds:us-east-1:*:pg:default.*",
+        "arn:aws:rds:us-east-1:*:og:default:*"
+      ]
+    },
+    {
+      "Sid": "RdsCreatesTheDatabasePasswordSecret",
+      "Effect": "Allow",
+      "Action": ["secretsmanager:CreateSecret", "secretsmanager:TagResource"],
+      "Resource": "arn:aws:secretsmanager:us-east-1:*:secret:rds!*"
+    },
+    {
+      "Sid": "OnlyTheNeurolensDatabaseSecret",
+      "Effect": "Allow",
+      "Action": [
+        "secretsmanager:GetSecretValue", "secretsmanager:DescribeSecret", "secretsmanager:RotateSecret",
+        "secretsmanager:DeleteSecret", "secretsmanager:UntagResource"
+      ],
+      "Resource": "arn:aws:secretsmanager:us-east-1:*:secret:rds!*",
+      "Condition": {"StringLike": {"secretsmanager:ResourceTag/aws:rds:primaryDBClusterArn": "arn:aws:rds:us-east-1:*:cluster:neurolens-*"}}
+    },
+    {
+      "Sid": "KeyInfoForTheEncryptedDatabase",
+      "Effect": "Allow",
+      "Action": "kms:DescribeKey",
+      "Resource": "*"
+    },
+    {
+      "Sid": "DataApiOnlyNeurolensDatabase",
+      "Effect": "Allow",
+      "Action": [
+        "rds-data:ExecuteStatement", "rds-data:BeginTransaction",
+        "rds-data:CommitTransaction", "rds-data:RollbackTransaction"
+      ],
+      "Resource": "arn:aws:rds:us-east-1:*:cluster:neurolens-*"
+    },
+    {
+      "Sid": "QueueTriggersOnlyForNeurolensFunctions",
+      "Effect": "Allow",
+      "Action": "lambda:CreateEventSourceMapping",
+      "Resource": "*",
+      "Condition": {"ArnLike": {"lambda:FunctionArn": "arn:aws:lambda:us-east-1:*:function:neurolens-*"}}
+    },
+    {
+      "Sid": "QueueTriggers",
+      "Effect": "Allow",
+      "Action": [
+        "lambda:GetEventSourceMapping", "lambda:UpdateEventSourceMapping", "lambda:DeleteEventSourceMapping",
+        "lambda:TagResource", "lambda:UntagResource", "lambda:ListTags"
+      ],
+      "Resource": "arn:aws:lambda:us-east-1:*:event-source-mapping:*"
     }
   ]
 }

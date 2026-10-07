@@ -10,6 +10,8 @@ set -uo pipefail   # no -e on purpose: a failed call is recorded and the script 
 ASG=neurolens-workers
 ALARMS="neurolens-worker-idle neurolens-worker-scale-out neurolens-worker-scale-in"
 HOLD_END=neurolens-warm-hold-end
+REAPER=neurolens-reaper
+REAPER_RULE=neurolens-reaper-every-5-min
 PROBLEMS=""
 problem() { PROBLEMS="$PROBLEMS  - $*"$'\n'; echo "PROBLEM: $*" >&2; }
 
@@ -100,6 +102,20 @@ else
   done
 fi
 
+# 2b. Reaper (M3a §7): one last run, so jobs left stuck in this session are settled or refunded now,
+# then its schedule off, so Aurora can pause (about 10 minutes later) until the next session.
+REAPER_OUT=$(mktemp)
+if ! REAPER_ERR=$(aws lambda invoke --function-name "$REAPER" --cli-read-timeout 150     --query FunctionError --output text "$REAPER_OUT"); then
+  problem "could not run the reaper $REAPER (above)"
+elif [ "$REAPER_ERR" != "None" ]; then
+  problem "the reaper failed ($REAPER_ERR): $(head -c 300 "$REAPER_OUT"); see its log /aws/lambda/$REAPER"
+else
+  echo "Reaper ran once (stuck jobs settled or refunded)."
+fi
+rm -f "$REAPER_OUT"
+aws events disable-rule --name "$REAPER_RULE" \
+  || problem "could not disable the reaper's schedule $REAPER_RULE: Aurora will not pause"
+
 # 3. NAT instance. It exists in every state but terminated; none at all means a wrong region.
 if ! ANY_NAT=$(aws ec2 describe-instances \
     --filters Name=tag:Project,Values=neurolens Name=tag:Role,Values=nat \
@@ -123,7 +139,13 @@ elif [ -n "$NAT" ]; then
   fi
 fi
 
-# 4. Check: no hold timer, the group reads 0/0/0 and no neurolens machine may be billing.
+# 4. Check: no hold timer, the reaper's schedule off, the group reads 0/0/0 and no neurolens machine
+# may be billing.
+if ! RULE_STATE=$(aws events describe-rule --name "$REAPER_RULE" --query State --output text); then
+  problem "could not read the reaper's schedule $REAPER_RULE (if it does not exist yet: terraform apply)"
+elif [ "$RULE_STATE" != DISABLED ]; then
+  problem "the reaper's schedule $REAPER_RULE is $RULE_STATE: Aurora will not pause"
+fi
 if ! HOLD=$(hold_end); then
   problem "could not re-check the warm hold's end timer"
 elif [ -n "$HOLD" ] && [ "$HOLD" != "None" ]; then
@@ -155,4 +177,5 @@ if [ -n "$PROBLEMS" ]; then
   printf 'NOT CONFIRMED in %s:\n%s' "$AWS_REGION" "$PROBLEMS" >&2
   exit 1
 fi
-echo "ALL STOPPED in $AWS_REGION: worker group at 0, no warm hold, no neurolens machine running."
+echo "ALL STOPPED in $AWS_REGION: worker group at 0, no warm hold, reaper off, no neurolens machine running."
+echo "Aurora pauses by itself about 10 minutes after its last use."

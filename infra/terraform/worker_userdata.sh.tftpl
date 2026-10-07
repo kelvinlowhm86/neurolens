@@ -41,7 +41,8 @@ aws s3 sync "s3://${bucket}/models/" "$CACHE/" --region "${region}" --only-show-
 log "weight sync done in $SECONDS s"
 %{ endif ~}
 
-# 4. Settings. env.conf: deployment identifiers only (region, bucket, queue), no secrets; plus the
+# 4. Settings. env.conf: deployment identifiers only (region, bucket, queue, database ARNs), no
+# secrets (the database password stays in Secrets Manager); plus the
 # offline switches: models and uvx's WhisperX environment come only from the image (UV_OFFLINE: M2b §8,
 # else uvx rebuilds it with whatever PyPI has that day).
 # config.json: the committed file with this machine's absolute paths (Terraform fills it in).
@@ -53,6 +54,9 @@ NEUROLENS_S3_BUCKET=${bucket}
 NEUROLENS_SQS_QUEUE_URL=${queue_url}
 NEUROLENS_AWS_REGION=${region}
 NEUROLENS_WORKER_GROUP=${worker_group}
+NEUROLENS_DB_CLUSTER_ARN=${db_cluster_arn}
+NEUROLENS_DB_SECRET_ARN=${db_secret_arn}
+NEUROLENS_DB_NAME=${db_name}
 NEUROLENS_DEPLOYED=1
 HF_HUB_OFFLINE=1
 UV_OFFLINE=1
