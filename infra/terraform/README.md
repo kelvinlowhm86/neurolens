@@ -150,7 +150,7 @@ After the first apply (from the repo root):
 terraform -chdir=infra/terraform output db_cluster_arn db_secret_arn db_name
 # copy the three into .env as NEUROLENS_DB_CLUSTER_ARN, NEUROLENS_DB_SECRET_ARN, NEUROLENS_DB_NAME
 python infra/apply_schema.py --backend data_api    # creates the tables; a second run changes nothing
-python infra/db_smoke.py --backend data_api        # one throwaway job through billing: PASS expected
+python infra/check_aurora.py --backend data_api    # throwaway jobs and sign-ins on Aurora: PASS expected
 ```
 
 Cost: about 6 cents an hour while awake (0.5 ACU), $0.40 a month for the secret, storage cents.

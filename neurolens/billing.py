@@ -14,6 +14,7 @@ Pure Python (the Lambdas import this): no numpy, no psycopg.
 """
 
 import json
+import uuid
 from datetime import UTC, datetime
 
 from neurolens.pricing import estimate_cost_cents
@@ -87,23 +88,110 @@ def _refund(tx, job_id, job, reason, message):
 # ---------------------------------------------------------------- users and balances
 
 
-def ensure_user(db, user_id, email, starter_cents):
-    """Create the user with the starter credit, once. Two simultaneous first calls both succeed
-    and grant it once; a later call changes nothing (not even the email)."""
-    with db.transaction() as tx:
-        created = tx.execute(
-            "INSERT INTO users (user_id, email) VALUES (:user_id, :email) "
-            "ON CONFLICT DO NOTHING RETURNING user_id",
-            {"user_id": user_id, "email": email},
-        )
-        if not created:
-            return
-        tx.execute(
-            "INSERT INTO balances (user_id, available_cents, reserved_cents) "
-            "VALUES (:user_id, 0, 0)",
-            {"user_id": user_id},
-        )
+def _create_user(tx, user_id, email, starter_cents):
+    """Insert the user with its balance and the starter credit (no ledger row for 0). False,
+    changing nothing, when the user ID or the email (any letter case) is already taken: the
+    insert waits for a simultaneous one to commit, then does nothing."""
+    created = tx.execute(
+        "INSERT INTO users (user_id, email) VALUES (:user_id, :email) "
+        "ON CONFLICT DO NOTHING RETURNING user_id",
+        {"user_id": user_id, "email": email},
+    )
+    if not created:
+        return False
+    tx.execute(
+        "INSERT INTO balances (user_id, available_cents, reserved_cents) VALUES (:user_id, 0, 0)",
+        {"user_id": user_id},
+    )
+    if starter_cents:
         _move(tx, user_id, None, "starter", starter_cents, 0)
+    return True
+
+
+def _user_by_email(tx, email):
+    rows = tx.execute(
+        "SELECT user_id FROM users WHERE lower(email) = lower(:email)", {"email": email}
+    )
+    return rows[0]["user_id"] if rows else None
+
+
+def ensure_user(db, user_id, email, starter_cents):
+    """Create the user with the starter credit, once (dev mode's fixed user, M3b §2b). Two
+    simultaneous first calls both succeed and grant it once; a later call changes nothing (not
+    even the email)."""
+    with db.transaction() as tx:
+        _create_user(tx, user_id, email, starter_cents)
+
+
+def sign_in(db, issuer, subject, email, starter_cents):
+    """The user for a verified sign-in (M3b §2c), in one transaction: the sign-in's own
+    `(issuer, subject)` first; else the user with this email (any letter case), linked to it;
+    else a new user with a random UUID and the starter credit. Every insert uses
+    ON CONFLICT DO NOTHING and re-reads the winner, because a caught unique-violation would
+    abort the transaction (on Postgres and the Data API alike)."""
+    key = {"issuer": issuer, "subject": subject}
+    find_identity = "SELECT user_id FROM identities WHERE issuer = :issuer AND subject = :subject"
+    with db.transaction() as tx:
+        rows = tx.execute(find_identity, key)
+        if rows:
+            return rows[0]["user_id"]
+        user_id = _user_by_email(tx, email)
+        if user_id is None:
+            user_id = str(uuid.uuid4())
+            if not _create_user(tx, user_id, email, starter_cents):
+                user_id = _user_by_email(tx, email)
+        linked = tx.execute(
+            "INSERT INTO identities (issuer, subject, user_id) "
+            "VALUES (:issuer, :subject, :user_id) ON CONFLICT DO NOTHING RETURNING user_id",
+            {**key, "user_id": user_id},
+        )
+        return linked[0]["user_id"] if linked else tx.execute(find_identity, key)[0]["user_id"]
+
+
+def get_email(db, user_id):
+    """The user's email, or None for an unknown user."""
+    with db.transaction() as tx:
+        rows = tx.execute("SELECT email FROM users WHERE user_id = :user_id", {"user_id": user_id})
+    return rows[0]["email"] if rows else None
+
+
+def grant_credit(db, email, cents):
+    """Add credit to the user with this email (any letter case), with a `grant` ledger row
+    (M3b §7a). Returns the user ID."""
+    if not isinstance(cents, int) or isinstance(cents, bool) or cents <= 0:
+        raise ValueError(f"cents must be a positive whole number, not {cents!r}")
+    with db.transaction() as tx:
+        user_id = _user_by_email(tx, email)
+        if user_id is None:
+            raise LookupError(f"no user with email {email!r}")
+        _move(tx, user_id, None, "grant", cents, 0)
+    return user_id
+
+
+def credit_test_topup(db, event_id, session_id, user_id, cents):
+    """Credit one Stripe test-mode payment (M3b §7b), once per event and once per session: True
+    only when it credited."""
+    with db.transaction() as tx:
+        recorded = tx.execute(
+            "INSERT INTO stripe_test_events (event_id, session_id, user_id, cents) "
+            "VALUES (:event_id, :session_id, :user_id, :cents) "
+            "ON CONFLICT DO NOTHING RETURNING event_id",
+            {"event_id": event_id, "session_id": session_id, "user_id": user_id, "cents": cents},
+        )
+        if not recorded:
+            return False
+        _move(tx, user_id, None, "test_topup", cents, 0)
+    return True
+
+
+def list_jobs(db, user_id, limit):
+    """The user's jobs, newest first, at most `limit` (M3b §4a)."""
+    with db.transaction() as tx:
+        return tx.execute(
+            "SELECT job_id, filename, status, created_at, verified_duration_ms, captured_cents, "
+            "error_code FROM jobs WHERE user_id = :user_id ORDER BY created_at DESC LIMIT :limit",
+            {"user_id": user_id, "limit": limit},
+        )
 
 
 def get_balance(db, user_id):

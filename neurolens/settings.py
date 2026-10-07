@@ -72,8 +72,11 @@ def apply_env(cfg):
     NEUROLENS_WORKER_GROUP -> aws.region / aws.s3_bucket / aws.sqs_queue_url / aws.worker_group
     (the last only on AWS workers); NEUROLENS_DB_CLUSTER_ARN / _SECRET_ARN / _NAME ->
     aws.db_cluster_arn / aws.db_secret_arn / aws.db_name; NEUROLENS_DB_DSN -> db.dsn (a local
-    PostgreSQL DSN holds a password, so it never goes in config.json). Only variables that are
-    set and non-empty change anything. The input is never modified.
+    PostgreSQL DSN holds a password, so it never goes in config.json). M3b's web functions:
+    NEUROLENS_AUTH_MODE / _COGNITO_ISSUER / _COGNITO_CLIENT_ID / _COGNITO_DOMAIN -> auth.mode /
+    auth.cognito_issuer / auth.cognito_client_id / auth.cognito_domain, NEUROLENS_PUBLIC_BASE_URL
+    -> public_base_url, and NEUROLENS_DEPLOYED -> deployed: true. Only variables that are set and
+    non-empty change anything. The input is never modified.
     """
     out = copy.deepcopy(cfg)
     token = os.environ.get("HF_TOKEN")
@@ -88,11 +91,24 @@ def apply_env(cfg):
         ("NEUROLENS_DB_SECRET_ARN", "aws", "db_secret_arn"),
         ("NEUROLENS_DB_NAME", "aws", "db_name"),
         ("NEUROLENS_DB_DSN", "db", "dsn"),
+        ("NEUROLENS_AUTH_MODE", "auth", "mode"),
+        ("NEUROLENS_COGNITO_ISSUER", "auth", "cognito_issuer"),
+        ("NEUROLENS_COGNITO_CLIENT_ID", "auth", "cognito_client_id"),
+        ("NEUROLENS_COGNITO_DOMAIN", "auth", "cognito_domain"),
     ):
         value = os.environ.get(var)
         if value:
             out.setdefault(section, {})[key] = value
+    if os.environ.get("NEUROLENS_PUBLIC_BASE_URL"):
+        out["public_base_url"] = os.environ["NEUROLENS_PUBLIC_BASE_URL"]
+    if os.environ.get("NEUROLENS_DEPLOYED"):
+        out["deployed"] = True
     return out
+
+
+def get_parameter(ssm_client, name):
+    """One Parameter Store SecureString, decrypted (M3b §2b). Raises if it does not exist."""
+    return ssm_client.get_parameter(Name=name, WithDecryption=True)["Parameter"]["Value"]
 
 
 def load_settings(root=None):

@@ -232,8 +232,9 @@ def _from_field(field, type_name):
 # ---------------------------------------------------------------- config
 
 
-def from_config(cfg):
-    """The configured backend: `db.backend` is "data_api" (AWS) or "postgres" (laptop, tests)."""
+def from_config(cfg, resume_wait_s=60):
+    """The configured backend: `db.backend` is "data_api" (AWS) or "postgres" (laptop, tests).
+    `resume_wait_s` is how long a Data API transaction waits for Aurora to wake."""
     db_cfg = cfg.get("db") or {}
     backend = db_cfg.get("backend")
     if backend == "postgres":
@@ -257,5 +258,6 @@ def from_config(cfg):
             aws["db_cluster_arn"],
             aws["db_secret_arn"],
             aws["db_name"],
+            resume_wait_s=resume_wait_s,
         )
     raise ValueError(f"db.backend must be 'data_api' or 'postgres', not {backend!r}")

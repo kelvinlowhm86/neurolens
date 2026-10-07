@@ -1,15 +1,21 @@
-"""Database smoke test (M3a §3d, §8 step 2): throwaway jobs through billing on a real database.
+"""Check the database code on the real database (M3a §3d, M3b §7c): throwaway jobs and sign-ins.
 
-    python infra/db_smoke.py --backend data_api   # Aurora (NEUROLENS_DB_* in .env)
-    python infra/db_smoke.py --backend postgres   # local PostgreSQL (NEUROLENS_DB_DSN in .env)
+    python infra/check_aurora.py --backend data_api   # Aurora (NEUROLENS_DB_* in .env)
+    python infra/check_aurora.py --backend postgres   # local PostgreSQL (NEUROLENS_DB_DSN in .env)
+
+CI tests only the PostgreSQL backend, so this is the one check of the Data API backend's value
+formats. Run it after changing neurolens/db.py's Data API code or adding a migration, and once on
+a new account.
 
 Runs ensure_user, reserve, claim, set_stage, verify and settle_success for a throwaway user,
 then a second job through touch, release_for_retry (no message) and issue_refund (whose re-check
 reads boolean columns), checks the ledger invariant, reads the whole `jobs` row back and checks
 the Python type of every column against what the PostgreSQL backend returns (§3d), so a wrong
-guess about the Data API's formats is caught here, not in production. Prints how long the first
-call took (it includes waking Aurora from pause). The throwaway user's rows are deleted at the
-end, pass or fail. Exit code 0 only if every check passed.
+guess about the Data API's formats is caught here, not in production. Then signs a throwaway
+identity in three times: created, found again, and linked by the same email in other letter case
+(M3b §2c). Prints how long the first call took (it includes waking Aurora from pause). The
+throwaway users' rows (and their identities) are deleted at the end, pass or fail. Exit code 0
+only if every check passed.
 """
 
 import argparse
@@ -43,6 +49,7 @@ EXPECTED_TYPES = {
     "updated_at": (datetime,),
 }
 CLEANUP = [  # children before parents
+    "DELETE FROM identities WHERE user_id = :user_id",
     "DELETE FROM ledger WHERE user_id = :user_id",
     "DELETE FROM refunds WHERE job_id IN (SELECT job_id FROM jobs WHERE user_id = :user_id)",
     "DELETE FROM jobs WHERE user_id = :user_id",
@@ -88,10 +95,25 @@ def check_invariant(db, user_id):
     return []
 
 
+def check_sign_in(db, created):
+    """A throwaway identity signed in three times; `created` collects the user IDs to delete."""
+    subject = f"check-{uuid.uuid4()}"
+    email = f"{subject}@example.invalid"
+    first = billing.sign_in(db, "check-aurora", subject, email, 0)
+    created.append(first)
+    problems = []
+    if billing.sign_in(db, "check-aurora", subject, email, 0) != first:
+        problems.append("sign_in: the same identity did not return the same user")
+    if billing.sign_in(db, "check-aurora", f"{subject}-b", email.upper(), 0) != first:
+        problems.append("sign_in: another identity with the same email was not linked")
+    return problems
+
+
 def smoke(db):
     user_id = f"smoke-{uuid.uuid4()}"
     job_id = str(uuid.uuid4())
     problems = []
+    created = [user_id]
     try:
         started = time.monotonic()
         billing.ensure_user(db, user_id, "smoke@localhost", 500)
@@ -125,10 +147,12 @@ def smoke(db):
                 "SELECT * FROM jobs WHERE job_id = CAST(:job_id AS uuid)", {"job_id": job_id}
             )
         problems += check_row(row)
+        problems += check_sign_in(db, created)
     finally:
         with db.transaction() as tx:
-            for statement in CLEANUP:
-                tx.execute(statement, {"user_id": user_id})
+            for created_id in created:
+                for statement in CLEANUP:
+                    tx.execute(statement, {"user_id": created_id})
     return problems
 
 
@@ -141,7 +165,11 @@ def main(argv=None):
     problems = smoke(dbmod.from_config(cfg))
     for problem in problems:
         print(f"FAIL {problem}")
-    print("PASS: billing round trip, ledger invariant and column types" if not problems else "")
+    print(
+        "PASS: billing round trip, ledger invariant, column types and sign-in"
+        if not problems
+        else ""
+    )
     return 1 if problems else 0
 
 
