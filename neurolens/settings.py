@@ -6,10 +6,12 @@ import os
 import sys
 from pathlib import Path
 
-# Local dev server address. 127.0.0.1 keeps it reachable from this machine only: the presign
-# endpoint has no sign-in until M3 (see M1 spec security note).
-HOST = "127.0.0.1"
-PORT = 5003
+
+def server_address(cfg):
+    """(host, port) the web app binds to: config `server.host` / `server.port`, by default
+    127.0.0.1:5003 (this machine only; the development identity requires it, M3a §2)."""
+    server = (cfg or {}).get("server") or {}
+    return server.get("host", "127.0.0.1"), server.get("port", 5003)
 
 
 class UnsafeConfigError(Exception):

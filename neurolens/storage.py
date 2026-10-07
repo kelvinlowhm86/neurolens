@@ -1,7 +1,6 @@
 """S3 helpers shared by the web app and the worker. No torch, no neurolens.inference."""
 
 import json
-import uuid
 from datetime import UTC
 from pathlib import PurePosixPath
 from urllib.parse import unquote_plus
@@ -15,22 +14,27 @@ CONTENT_TYPE_EXTENSIONS = {
     "video/quicktime": ".mov",
     "video/webm": ".webm",
 }
+EXTENSION_CONTENT_TYPES = {ext: ct for ct, ext in CONTENT_TYPE_EXTENSIONS.items()}
 
 UPLOAD_PREFIX = "uploads/"
 NOT_FOUND_CODES = ("404", "NoSuchKey", "NotFound")
 TIME_FORMAT = "%Y-%m-%dT%H:%M:%SZ"  # every timestamp in job stages and boot records
 
 
-def presign_upload(s3, bucket, content_type, max_bytes, expires_in=300):
+def object_key(user_id, job_id, content_type):
+    """uploads/{user_id}/{job_id}{ext}, the extension from the content type (KeyError for an
+    unsupported type)."""
+    return f"{UPLOAD_PREFIX}{user_id}/{job_id}{CONTENT_TYPE_EXTENSIONS[content_type]}"
+
+
+def presign_upload(s3, bucket, object_key, max_bytes, expires_in=300):
     """A presigned POST: the browser uploads straight to S3, bounded to max_bytes.
 
     Uses a POST policy (not a presigned PUT) because only a POST policy can make S3 itself
-    enforce a size cap (`content-length-range`).
+    enforce a size cap (`content-length-range`). The form pins the Content-Type that the key's
+    extension stands for.
     """
-    ext = CONTENT_TYPE_EXTENSIONS[content_type]  # KeyError for an unsupported type
-    job_id = str(uuid.uuid4())
-    # TODO(M3): replace placeholder-user with authenticated user_id
-    object_key = f"{UPLOAD_PREFIX}placeholder-user/{job_id}{ext}"
+    content_type = EXTENSION_CONTENT_TYPES[PurePosixPath(object_key).suffix]
     post = s3.generate_presigned_post(
         Bucket=bucket,
         Key=object_key,
@@ -41,13 +45,7 @@ def presign_upload(s3, bucket, content_type, max_bytes, expires_in=300):
         ],
         ExpiresIn=expires_in,
     )
-    return {
-        "job_id": job_id,
-        "url": post["url"],
-        "fields": post["fields"],
-        "object_key": object_key,
-        "expires_in": expires_in,
-    }
+    return {"url": post["url"], "fields": post["fields"], "expires_in": expires_in}
 
 
 def parse_s3_event(body):
