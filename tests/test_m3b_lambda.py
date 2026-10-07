@@ -120,6 +120,19 @@ def test_a_request_with_two_cookies_reaches_flask_with_both(lambda_env, monkeypa
     assert json.loads(body_of(resp)) == {"a": "1", "b": "2"}
 
 
+def test_the_public_address_comes_from_parameter_store_when_the_environment_has_none(
+    lambda_env, ssm, idp, auth_seam, count_create_app, monkeypatch
+):
+    """CloudFront's address cannot be an environment variable of the function it fronts."""
+    monkeypatch.delenv("NEUROLENS_PUBLIC_BASE_URL")
+    ssm.put_parameter(
+        Name="/neurolens/web/public_base_url", Value="https://abc.cloudfront.net", Type="String"
+    )
+    module = fresh_import("neurolens.web.lambda_handler")
+    module.handler(function_url_event("GET", "/healthz"), LambdaContext())
+    assert count_create_app[0]["cfg"]["public_base_url"] == "https://abc.cloudfront.net"
+
+
 # ---------------------------------------------------------------- import hygiene
 
 
