@@ -165,18 +165,20 @@ def test_presign_failing_after_the_reservation_refunds_it(client, pg, patch_ever
 
 
 def test_me_returns_email_and_balance(client):
+    """M3b §4a's shape: the balance grouped under one key; no top-ups in dev mode."""
     resp = client.get("/api/me")
     assert resp.status_code == 200
     assert resp.get_json() == {
+        "user_id": WEB_USER_ID,
         "email": WEB_USER_EMAIL,
-        "available_cents": STARTER_CENTS,
-        "reserved_cents": 0,
+        "balance": {"available_cents": STARTER_CENTS, "reserved_cents": 0},
+        "can_top_up": False,
     }
 
 
 def test_me_shows_a_reservation(client):
     client.post("/api/uploads/presign", json=body())
-    assert client.get("/api/me").get_json()["reserved_cents"] == 90
+    assert client.get("/api/me").get_json()["balance"]["reserved_cents"] == 90
 
 
 def test_me_uses_create_apps_built_in_dev_user_without_a_cfg(aws, db, tmp_path):
@@ -184,9 +186,10 @@ def test_me_uses_create_apps_built_in_dev_user_without_a_cfg(aws, db, tmp_path):
     resp = app.test_client().get("/api/me")
     assert resp.status_code == 200
     assert resp.get_json() == {
+        "user_id": "dev-user",
         "email": "dev@localhost",
-        "available_cents": 500,
-        "reserved_cents": 0,
+        "balance": {"available_cents": 500, "reserved_cents": 0},
+        "can_top_up": False,
     }
 
 
@@ -365,7 +368,7 @@ def test_result_of_an_unfinished_job_without_a_result_is_404(client, db, claimed
         billing.claim(db, job_id)
     resp = client.get(f"/api/jobs/{job_id}/result")
     assert resp.status_code == 404
-    assert resp.get_json()["error"] == "not_found"
+    assert resp.get_json()["error"] == "result_not_ready"  # M3b §4a
 
 
 def test_result_of_a_failed_job_is_404_even_when_a_result_exists(aws, client, db):

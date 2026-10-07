@@ -411,12 +411,13 @@ def test_committed_config_keeps_the_shared_shape(committed_cfg):
     assert "max_video_duration_seconds" in committed_cfg
 
 
-def test_committed_config_keeps_m3a_development_mode_local(committed_cfg):
+def test_committed_config_keeps_development_mode_local_and_no_starter_credit(committed_cfg):
     """M3a §2, §9: the shared config runs the development identity on a local-only address (the
-    database's identifiers come only from the environment, checked by the aws test above)."""
+    database's identifiers come only from the environment, checked by the aws test above).
+    M3b §7a: new accounts start with 0 credit, so open sign-up gives no free GPU time."""
     assert committed_cfg.get("auth", {}).get("mode", "dev") == "dev"
     assert committed_cfg.get("server", {}).get("host", "127.0.0.1") == "127.0.0.1"
-    assert committed_cfg.get("billing", {}).get("starter_cents", 500) == 500
+    assert committed_cfg["billing"]["starter_cents"] == 0
 
 
 def test_env_example_is_committed_with_placeholders():

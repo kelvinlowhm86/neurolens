@@ -170,6 +170,19 @@ def test_can_top_up_is_false_for_a_user_not_on_the_allowlist(cognito_client, idp
     assert cognito_client.get("/api/me").get_json()["can_top_up"] is False
 
 
+def test_the_allowlist_ignores_letter_case_and_spaces(cognito_app, ssm, idp):
+    """§7b: a capital letter or a space typed into the parameter must not block a teammate."""
+    ssm.put_parameter(
+        Name="/neurolens/web/topup_allowlist",
+        Value=f" {ALLOWED_EMAIL.upper()} , other-team-member@example.com",
+        Type="SecureString",
+        Overwrite=True,
+    )
+    client = cognito_app().test_client()
+    sign_in(client, idp, email=ALLOWED_EMAIL)
+    assert client.get("/api/me").get_json()["can_top_up"] is True
+
+
 def test_can_top_up_is_false_when_stripe_is_disabled(cognito_app, idp):
     client = cognito_app(stripe={"enabled": False, "packs": dict(PACKS)}).test_client()
     sign_in(client, idp, email=ALLOWED_EMAIL)
@@ -336,8 +349,14 @@ def test_the_signature_is_checked_over_the_raw_body(webhook, team, pg):
     assert pg.balance(team) == (500, 0)
 
 
+def unpaid(event):
+    event["data"]["object"]["payment_status"] = "unpaid"
+    return event
+
+
 def refused_events(team, stranger):
     return {
+        "not paid": unpaid(checkout_completed(team)),
         "livemode": checkout_completed(team, livemode=True),
         "other event type": checkout_completed(team, type="payment_intent.succeeded"),
         "unknown pack": checkout_completed(team, pack="7"),
@@ -347,7 +366,15 @@ def refused_events(team, stranger):
 
 
 @pytest.mark.parametrize(
-    "case", ["livemode", "other event type", "unknown pack", "unknown user", "not on the allowlist"]
+    "case",
+    [
+        "not paid",
+        "livemode",
+        "other event type",
+        "unknown pack",
+        "unknown user",
+        "not on the allowlist",
+    ],
 )
 def test_a_valid_but_refused_event_is_200_with_no_credit(webhook, team, stranger, pg, case):
     before = pg.snapshot()

@@ -139,13 +139,13 @@ def test_result_returns_the_stored_json(client, aws, db, owned):
     assert resp.get_json() == result
 
 
-def test_result_is_404_not_found_when_missing_for_a_job_in_progress(client, db, owned):
+def test_result_is_404_result_not_ready_when_missing_for_a_job_in_progress(client, db, owned):
     job_id = owned()
     attempt = billing.claim(db, job_id)
     billing.set_stage(db, job_id, attempt, "transcribing")
     resp = client.get(f"/api/jobs/{job_id}/result")
     assert resp.status_code == 404
-    assert resp.get_json()["error"] == "not_found"
+    assert resp.get_json()["error"] == "result_not_ready"  # M3b §4a
 
 
 @pytest.mark.parametrize("bad", BAD_IDS)
