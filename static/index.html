@@ -118,6 +118,27 @@
   .btn-primary { background: var(--accent); color: #FFF; border: none; border-radius: var(--radius-sm); padding: 8px 16px; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; }
   .btn-primary:disabled { opacity: 0.5; cursor: default; }
 
+  /* Account, sign-in, history, top-up */
+  a.btn-primary { display: inline-block; text-decoration: none; text-align: center; }
+  .header-link { font-size: 12px; color: #CBD5E1; background: none; border: 1px solid #334155; border-radius: var(--radius-sm); padding: 4px 10px; cursor: pointer; font-family: inherit; }
+  .header-link:hover { color: #FFF; border-color: #94A3B8; }
+  .panel-box { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 20px; box-shadow: var(--shadow-sm); display: none; flex-direction: column; gap: 10px; }
+  .panel-box.active { display: flex; }
+  .panel-title { font-size: 15px; font-weight: 600; }
+  .panel-text { font-size: 12px; color: var(--text-secondary); line-height: 1.5; }
+  .panel-text.error { color: var(--red); }
+  .panel-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .history-label { font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+  .history-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0; border-top: 1px solid var(--border); font-size: 12px; }
+  .history-row:first-of-type { border-top: none; }
+  .history-main { min-width: 0; }
+  .history-name { font-weight: 600; word-break: break-all; }
+  .history-sub { color: var(--text-muted); font-size: 11px; margin-top: 2px; }
+  .history-actions { display: flex; gap: 6px; flex-shrink: 0; }
+  .history-actions a { text-decoration: none; }
+  .page-note { font-size: 11px; color: var(--text-muted); margin-top: auto; }
+  .page-note a { color: var(--text-muted); }
+
   /* Charts */
   .charts-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 12px; color: var(--text-muted); font-size: 14px; }
   .charts-empty svg { width: 48px; height: 48px; opacity: 0.3; }
@@ -154,12 +175,28 @@
   <div class="header-right">
     <div class="header-meta" id="headerMeta">Select a video to view analysis</div>
     <div class="header-meta" id="balance"></div>
+    <div class="header-meta" id="account"></div>
+    <button class="header-link" id="signOut" hidden>Sign out</button>
   </div>
 </header>
 
 <div class="layout">
   <div class="panel-left">
-    <!-- Upload (only with ?pass=) -->
+    <!-- Start-up: waiting for the database to wake, or an error with a retry -->
+    <div class="panel-box active" id="startupPanel">
+      <div class="panel-title" id="startupTitle">Starting up…</div>
+      <div class="panel-text" id="startupText"></div>
+      <div class="panel-actions"><button class="btn-new" id="startupRetry" hidden>Try again</button></div>
+    </div>
+
+    <!-- Signed out -->
+    <div class="panel-box" id="signInPanel">
+      <div class="panel-title">Sign in to analyse your own videos</div>
+      <div class="panel-text">Use Google, or an email address and password. Samples can be browsed without signing in.</div>
+      <div class="panel-actions"><a class="btn-primary" href="/login">Sign in</a></div>
+    </div>
+
+    <!-- Signed in -->
     <div class="upload-zone hidden" id="uploadZone">
       <div class="upload-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>
       <div class="upload-title">Upload a video for analysis</div>
@@ -167,6 +204,17 @@
       <input type="file" accept="video/mp4,video/quicktime,video/webm" id="fileInput">
     </div>
     <div class="upload-note" id="uploadNote"></div>
+    <div class="panel-box" id="noCreditPanel">
+      <div class="panel-text">You have no credit yet. Ask the NeuroLens team for test credit.</div>
+    </div>
+    <div class="panel-box" id="topUpPanel">
+      <div class="panel-title">Add test credit — no real charge</div>
+      <div class="panel-text" id="topUpText">Pays with Stripe's test card; nothing is billed.</div>
+      <div class="panel-actions">
+        <button class="btn-new" data-pack="5">Add $5</button>
+        <button class="btn-new" data-pack="10">Add $10</button>
+      </div>
+    </div>
 
     <!-- Upload: confirm, progress, result -->
     <div class="upload-panel" id="uploadPanel">
@@ -185,7 +233,17 @@
     <div class="samples-section" id="samplesSection">
       <div class="samples-label">Sample Videos</div>
       <div class="samples-grid" id="samplesGrid"></div>
+      <div class="panel-text" id="samplesEmpty" hidden>Sample videos coming soon.</div>
     </div>
+
+    <!-- Your earlier analyses -->
+    <div class="panel-box" id="historyPanel">
+      <div class="history-label">Your analyses</div>
+      <div id="historyList"></div>
+      <div class="panel-text" id="historyNote"></div>
+    </div>
+
+    <div class="page-note"><a href="/static/privacy.html">Privacy policy</a></div>
 
     <!-- Processing -->
     <div class="processing" id="processing">
@@ -257,28 +315,189 @@ let analysisData = null, charts = [], videoFile = null, samplesData = null;
 const $ = id => document.getElementById(id);
 const video = $('videoPlayer');
 
-// ─── Pass gate ──────────────────────────────────────────────────────────────
+// ─── Account: who is signed in, and what they can do ───────────────────────
 const params = new URLSearchParams(window.location.search);
-const hasPass = params.has('pass');
+let signedIn = false, me = null;
+const dollars = cents => `$${(cents / 100).toFixed(2)}`;
+const IDLE_HEADER = () => (signedIn ? 'Upload a video or select a sample' : 'Select a video to view analysis');
 
-if (hasPass) {
-  $('uploadZone').classList.remove('hidden');
-  $('headerMeta').textContent = 'Upload a video or select a sample';
+// Every POST goes through here. Behind CloudFront's Lambda origin access control, Lambda accepts
+// a POST only when x-amz-content-sha256 holds the hex SHA-256 of the body (docs/M3b_spec.md §3b);
+// on the laptop Flask ignores the header.
+async function postJSON(url, body) {
+  const text = JSON.stringify(body);
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  const hash = Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join('');
+  return fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-amz-content-sha256': hash },
+    body: text,
+  });
 }
 
-// ─── Credit balance (GET /api/me) ───────────────────────────────────────────
-const dollars = cents => `$${(cents / 100).toFixed(2)}`;
+function showBalance() {
+  const b = me.balance;
+  const held = b.reserved_cents ? ` (${dollars(b.reserved_cents)} held)` : '';
+  $('balance').textContent = `Credit: ${dollars(b.available_cents)}${held}`;
+  $('noCreditPanel').classList.toggle('active', b.available_cents === 0 && b.reserved_cents === 0);
+}
+
 async function loadBalance() {
-  if (!hasPass) return;
+  if (!signedIn) return;
   try {
     const res = await fetch('/api/me');
+    if (res.status === 401) return window.location.reload();  // the session ended: show sign-in
     if (!res.ok) return;
-    const me = await res.json();
-    const held = me.reserved_cents ? ` (${dollars(me.reserved_cents)} held)` : '';
-    $('balance').textContent = `Credit: ${dollars(me.available_cents)}${held}`;
+    me = await res.json();
+    showBalance();
   } catch (e) { /* the balance is shown for information only */ }
 }
-loadBalance();
+
+const refreshAccount = () => { loadBalance(); loadHistory(); };
+
+// After a Stripe top-up the credit arrives through the webhook a moment later.
+function watchForCredit(before, tries = 10) {
+  if (tries === 0) return;
+  setTimeout(async () => {
+    await loadBalance();
+    if (me.balance.available_cents > before) { $('topUpText').textContent = 'Credit added.'; return; }
+    watchForCredit(before, tries - 1);
+  }, 3000);
+}
+
+// Start-up: /api/me decides which screen to show. 503 means the database is still waking.
+const STARTUP_RETRIES = 3, STARTUP_RETRY_MS = 5000;
+function startupFailed() {
+  $('startupTitle').textContent = 'Something went wrong';
+  $('startupText').textContent = 'Please try again in a minute.';
+  $('startupRetry').hidden = false;
+}
+async function start(attempt = 0) {
+  $('startupPanel').classList.add('active');
+  $('startupTitle').textContent = 'Starting up…';
+  $('startupText').textContent = '';
+  $('startupRetry').hidden = true;
+  let res;
+  try { res = await fetch('/api/me'); } catch (e) { return startupFailed(); }
+  if (res.status === 200) return showApp(await res.json());
+  if (res.status === 401) return showSignedOut();
+  if (res.status === 503 && attempt < STARTUP_RETRIES) {
+    $('startupText').textContent = 'Waking the database; this can take up to a minute.';
+    return setTimeout(() => start(attempt + 1), STARTUP_RETRY_MS);
+  }
+  startupFailed();
+}
+$('startupRetry').addEventListener('click', () => start());
+
+function showSignedOut() {
+  signedIn = false;
+  $('startupPanel').classList.remove('active');
+  $('signInPanel').classList.add('active');
+  $('headerMeta').textContent = IDLE_HEADER();
+}
+
+function showApp(meJson) {
+  me = meJson; signedIn = true;
+  $('startupPanel').classList.remove('active');
+  $('account').textContent = me.email;
+  $('signOut').hidden = false;
+  $('uploadZone').classList.remove('hidden');
+  $('headerMeta').textContent = IDLE_HEADER();
+  showBalance();
+  loadLimits();
+  loadHistory();
+  if (me.can_top_up) {
+    $('topUpPanel').classList.add('active');
+    const topUp = params.get('top_up');
+    if (topUp) {
+      setParam('top_up', null);
+      $('topUpText').textContent = topUp === 'done'
+        ? 'Payment received. Your credit appears in a few seconds.'
+        : 'Top-up cancelled. Nothing was charged.';
+      if (topUp === 'done') watchForCredit(me.balance.available_cents);
+    }
+  }
+  // A link with ?job=<id> resumes that job.
+  const jobParam = params.get('job');
+  if (jobParam && /^[0-9a-f-]{36}$/i.test(jobParam)) trackJob(jobParam, null);
+}
+
+$('topUpPanel').addEventListener('click', async ev => {
+  const pack = ev.target.dataset && ev.target.dataset.pack;  // packs mirror config.json stripe.packs
+  if (!pack) return;
+  $('topUpText').textContent = 'Opening Stripe…';
+  try {
+    const res = await postJSON('/api/top-up/checkout', { pack });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || data.error);
+    window.location.assign(data.url);
+  } catch (e) { $('topUpText').textContent = `Couldn't start the top-up: ${e.message}`; }
+});
+
+$('signOut').addEventListener('click', async () => {
+  try {
+    const res = await postJSON('/logout', {});
+    window.location.assign((await res.json()).logout_url);  // Cognito's own logout, then back here
+  } catch (e) { $('headerMeta').textContent = "Couldn't sign out. Please try again."; }
+});
+
+// ─── Earlier analyses (GET /api/jobs) ───────────────────────────────────────
+const RESULT_DAYS = 30;  // the server deletes results after this (S3 lifecycle rule)
+async function loadHistory() {
+  if (!signedIn) return;
+  try {
+    const res = await fetch('/api/jobs');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    renderHistory(await res.json());
+  } catch (e) {
+    $('historyPanel').classList.add('active');
+    $('historyNote').textContent = "Couldn't load your earlier analyses.";
+  }
+}
+
+function renderHistory(jobs) {
+  const list = $('historyList');
+  list.replaceChildren(...jobs.map(historyRow));
+  $('historyPanel').classList.toggle('active', jobs.length > 0);
+  $('historyNote').textContent = jobs.length ? `Results are kept for ${RESULT_DAYS} days.` : '';
+}
+
+// Filenames and error messages come from users: only textContent, never innerHTML.
+function historyRow(job) {
+  const row = document.createElement('div'); row.className = 'history-row';
+  const main = document.createElement('div'); main.className = 'history-main';
+  const name = document.createElement('div'); name.className = 'history-name';
+  name.textContent = job.filename || `Job ${job.job_id.slice(0, 8)}`;
+  const sub = document.createElement('div'); sub.className = 'history-sub';
+  sub.textContent = historyDetail(job);
+  main.append(name, sub);
+  const actions = document.createElement('div'); actions.className = 'history-actions';
+  if (job.result_available || job.status === 'queued' || job.status === 'processing') {
+    const open = document.createElement('button'); open.className = 'btn-new'; open.textContent = 'Open';
+    open.addEventListener('click', () => { resetUI(); trackJob(job.job_id, null); });
+    actions.append(open);
+  }
+  if (job.result_available) {
+    const csv = document.createElement('a'); csv.className = 'btn-new'; csv.textContent = 'CSV';
+    csv.href = `/api/jobs/${job.job_id}/result.csv`;
+    actions.append(csv);
+  }
+  row.append(main, actions);
+  return row;
+}
+
+function historyDetail(job) {
+  const created = new Date(job.created_at);
+  const day = created.toLocaleDateString();
+  if (job.status === 'done') {
+    const cost = job.captured_cents != null ? ` · ${dollars(job.captured_cents)}` : '';
+    if (!job.result_available) return `${day}${cost} · result expired`;
+    const expires = new Date(created.getTime() + RESULT_DAYS * 86400000).toLocaleDateString();
+    return `${day}${cost} · result kept until ${expires}`;
+  }
+  if (job.status === 'failed') return `${day} · ${failureText(job.error_code)}${NOT_CHARGED}`;
+  return `${day} · ${job.status}`;
+}
 
 // ─── Chart.js setup ─────────────────────────────────────────────────────────
 Chart.defaults.color = '#94A3B8';
@@ -307,20 +526,24 @@ Chart.register(playheadPlugin);
 // ─── Load samples ───────────────────────────────────────────────────────────
 async function loadSamples() {
   try {
-    const res = await fetch('/api/samples');
+    const res = await fetch('/data/samples.json');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
     samplesData = await res.json();
     renderSamples();
   } catch (e) {
     console.warn('Could not load samples:', e);
+    $('samplesEmpty').textContent = "Sample videos couldn't be loaded.";
+    $('samplesEmpty').hidden = false;
   }
 }
 
 function renderSamples() {
   const grid = $('samplesGrid');
   if (!samplesData || !samplesData.samples || samplesData.samples.length === 0) {
-    $('samplesSection').style.display = 'none';
+    $('samplesEmpty').hidden = false;  // "Sample videos coming soon."
     return;
   }
+  $('samplesEmpty').hidden = true;
   grid.innerHTML = '';
   samplesData.samples.forEach((s, idx) => {
     const card = document.createElement('div');
@@ -389,7 +612,6 @@ async function loadLimits() {
     $('limitsText').textContent = `MP4, MOV, or WebM — max ${limits.max_video_duration_seconds} seconds`;
   } catch (e) { /* handled in handleFile */ }
 }
-loadLimits();
 const ACCEPTED_TYPES = ['video/mp4', 'video/quicktime', 'video/webm'];
 function estimateCostCents(d) { return 90 * Math.max(1, Math.ceil((d - 0.5) / 30)); }
 
@@ -460,22 +682,22 @@ async function startUpload() {
 
   let presign;
   try {
-    const res = await fetch('/api/uploads/presign', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        filename: file.name, content_type: file.type,
-        client_duration_seconds: duration, client_declared_bytes: file.size,
-      }),
+    const res = await postJSON('/api/uploads/presign', {
+      filename: file.name, content_type: file.type,
+      client_duration_seconds: duration, client_declared_bytes: file.size,
     });
     presign = await res.json();
+    if (res.status === 401) return window.location.reload();  // the session ended
     if (res.status === 402) {
-      return uploadFailed(`Not enough credit: this video needs ${dollars(presign.required_cents)}, ` +
-        `you have ${dollars(presign.available_cents)}.`);
+      return uploadFailed(`${knownFailure('insufficient_credit')} It needs ${dollars(presign.required_cents)}; ` +
+        `you have ${dollars(presign.available_cents)}.${NOT_CHARGED}`);
     }
-    if (!res.ok) throw new Error(presign.message || presign.error || `HTTP ${res.status}`);
+    if (!res.ok) {
+      const known = knownFailure(presign.error);
+      return uploadFailed(known ? known + NOT_CHARGED : (presign.message || `HTTP ${res.status}`) + NOT_CHARGED);
+    }
   } catch (err) { return uploadFailed(`Couldn't start the upload: ${err.message}`); }
-  loadBalance();  // the estimate is now held
+  refreshAccount();  // the estimate is now held
 
   // Every signed field first; the file goes last, under the key "file".
   const fd = new FormData();
@@ -508,9 +730,9 @@ function resetUpload() {
   $('uploadPanel').classList.remove('active');
   $('uploadNote').textContent = '';
   fileInput.value = '';
-  if (hasPass) uploadZone.classList.remove('hidden');
+  if (signedIn) uploadZone.classList.remove('hidden');
   $('samplesSection').style.display = '';
-  $('headerMeta').textContent = hasPass ? 'Upload a video or select a sample' : 'Select a video to view analysis';
+  $('headerMeta').textContent = IDLE_HEADER();
 }
 
 // ─── Job tracking (poll the status, show the result) ───────────────────────
@@ -522,12 +744,29 @@ const SLOW_AFTER_MS = 30 * 60 * 1000;  // after this, add "taking longer than ex
 // open tab from keeping the database awake after a session.
 const STOP_AFTER_MS = 60 * 60 * 1000;
 const STOPPED_TEXT = 'Still not finished. Reload this page (the link keeps your job) to check again.';
-const REFUNDED = ' Your credit was refunded.';
-const FAILURE_TEXT = {  // for refunds that carry no message of their own (M3b refines these)
-  duration_exceeds_max_verified: 'The video is longer than the maximum length.',
-  insufficient_credit_for_actual_duration:
-    'The video is longer than your browser reported, and your credit does not cover the difference.',
-};
+const NOT_CHARGED = ' You have not been charged.';
+// The wording for each error_code (docs/M3b_spec.md §4b). Null for a code this page does not know.
+function knownFailure(code, message) {
+  const maxSeconds = limits ? limits.max_video_duration_seconds : 120;
+  switch (code) {
+    case 'insufficient_credit': return 'Not enough credit for this video.';
+    case 'insufficient_credit_for_actual_duration':
+      return "Your video is longer than the length we estimated, and your credit doesn't cover the difference.";
+    case 'duration_exceeds_max_estimated':
+    case 'duration_exceeds_max_verified': return `This video is longer than the ${maxSeconds}-second maximum.`;
+    case 'file_too_large': return 'This file is larger than the upload limit.';
+    case 'unreadable_video': return 'This file is not a readable video.';
+    case 'processing_failed':
+    case 'stalled': return 'Processing failed after retrying.' + (message ? ` ${message}` : '');
+    case 'upload_not_received': return "The upload didn't finish. Please try again.";
+    case 'upload_missing':
+      return 'The uploaded file was no longer available (uploads are kept 2 days). Please upload it again.';
+    case 'presign_failed': return "The upload couldn't be started. Please try again.";
+    case 'processing_paused': return 'Processing is paused right now, so no video can be analysed.';
+    default: return null;
+  }
+}
+const failureText = (code, message) => knownFailure(code, message) || 'Processing failed.';
 const QUEUED_TEXT = 'Queued. If no GPU worker is running, starting one can take up to about 20 minutes. ' +
   'You can close this page and come back with this link.';
 const STEP_TEXT = {
@@ -549,13 +788,14 @@ document.addEventListener('visibilitychange', () => {
   }
 });
 
-function setJobInUrl(jobId) {
+function setParam(name, value) {
   try {
     const u = new URL(window.location.href);
-    if (jobId) u.searchParams.set('job', jobId); else u.searchParams.delete('job');
+    if (value) u.searchParams.set(name, value); else u.searchParams.delete(name);
     history.replaceState(null, '', u);
   } catch (e) { /* the address is a convenience only */ }
 }
+const setJobInUrl = jobId => setParam('job', jobId);
 
 function stopTracking() {
   trackedJob = null;
@@ -613,13 +853,12 @@ async function pollJob(jobId, file) {
       if (trackedJob !== jobId) return;
       if (st.status === 'done') {
         again = !(await showResult(jobId, file));
-        if (!again) loadBalance();  // the held amount is now charged
+        if (!again) refreshAccount();  // the held amount is now charged
       } else if (st.status === 'failed') {
         again = false;
         $('upProgress').classList.remove('active');
-        const text = st.error_message || FAILURE_TEXT[st.error_code] || 'The analysis failed.';
-        showJobMsg(text + REFUNDED, true);
-        loadBalance();
+        showJobMsg(failureText(st.error_code, st.error_message) + NOT_CHARGED, true);
+        refreshAccount();
       } else if (st.status === 'queued') {
         $('upProgress').classList.remove('active');
         // attempt > 0: handed back after an error or a stopped worker (its message is meant for
@@ -680,10 +919,6 @@ async function showResult(jobId, file) {
   }));
   return true;
 }
-
-// A link with ?job=<id> resumes that job.
-const jobParam = params.get('job');
-if (jobParam && /^[0-9a-f-]{36}$/i.test(jobParam)) trackJob(jobParam, null);
 
 function renderStats() {
   const ts = analysisData.timesteps;
@@ -759,16 +994,19 @@ video.addEventListener('seeked', () => { charts.forEach(c => c.update('none')); 
 function resetUI() {
   analysisData = null; videoFile = null; video.src = '';
   charts.forEach(c => c.destroy()); charts = [];
-  if (hasPass) $('uploadZone').classList.remove('hidden');
+  if (signedIn) $('uploadZone').classList.remove('hidden');
   $('samplesSection').style.display = '';
   $('processing').classList.remove('active');
   $('videoContainer').classList.remove('active');
   $('chartsEmpty').style.display = '';
   $('chartsContainer').classList.remove('active');
-  $('headerMeta').textContent = hasPass ? 'Upload a video or select a sample' : 'Select a video to view analysis';
+  $('headerMeta').textContent = IDLE_HEADER();
   resetUpload();
   document.querySelectorAll('.sample-card').forEach(c => c.classList.remove('active'));
 }
+
+// ─── Start ──────────────────────────────────────────────────────────────────
+start();
 </script>
 </body>
 </html>
