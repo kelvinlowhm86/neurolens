@@ -7,9 +7,9 @@
 
 locals {
   db_name = "neurolens"
-  # 16.3 or later is needed to scale to zero. Checked against `aws rds describe-db-engine-versions`
-  # before the first apply.
-  db_engine_version = "16.6"
+  # 16.3 or later is needed to scale to zero. The newest 16.x offered in us-east-1 on 2026-10-07
+  # (`aws rds describe-db-engine-versions`: ServerlessV2 MinCapacity 0); minor upgrades are off.
+  db_engine_version = "16.15"
 }
 
 resource "aws_db_subnet_group" "db" {
