@@ -5,7 +5,7 @@ terraform {
   required_providers {
     aws = {
       source  = "hashicorp/aws"
-      version = "~> 5.0"
+      version = "~> 6.28"
     }
     # Zips the circuit breaker's code for Lambda (M2b §2c).
     archive = {
