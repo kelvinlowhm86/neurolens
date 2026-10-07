@@ -88,3 +88,23 @@ variable "worker_fake_inference" {
   type        = bool
   default     = false
 }
+
+variable "auth_domain_prefix" {
+  description = <<-EOT
+    The Cognito sign-in page's address prefix (M3b §2a): <prefix>.auth.<region>.amazoncognito.com.
+    Unique in the region; lowercase letters, numbers and hyphens; no "aws", "amazon" or
+    "cognito". Google's authorized redirect URI is built from it (output google_redirect_uri).
+  EOT
+  type        = string
+}
+
+variable "google_client_id" {
+  description = "The Google OAuth client's ID (not secret). Set in terraform.tfvars."
+  type        = string
+}
+
+variable "google_client_secret" {
+  description = "The Google OAuth client's secret. Only from the environment (TF_VAR_google_client_secret), never committed; it ends up in the encrypted Terraform state, as for any identity provider."
+  type        = string
+  sensitive   = true
+}

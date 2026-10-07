@@ -21,3 +21,10 @@ alert_email = "you@example.com"
 # worker_ami_id         = "ami-..."
 # worker_instance_types = ["g6e.xlarge", "g6e.2xlarge"]
 # worker_fake_inference = false      # true only for the CPU wiring rehearsal
+
+# M3b sign-in (§2a). The Cognito page prefix (unique in the region, lowercase, no "aws",
+# "amazon" or "cognito"), e.g. "neurolens-<something of yours>":
+# auth_domain_prefix = "neurolens-REPLACE-ME"
+# The Google OAuth client's ID (not secret). Its secret only from the environment:
+#   read -rs TF_VAR_google_client_secret && export TF_VAR_google_client_secret
+# google_client_id = "1234567890-abc.apps.googleusercontent.com"

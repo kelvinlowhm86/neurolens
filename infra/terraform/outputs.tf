@@ -56,3 +56,30 @@ output "region" {
   description = "The region everything runs in (M2a §4i); the scripts in infra/ read it from here."
   value       = var.region
 }
+
+output "public_base_url" {
+  description = "The website's HTTPS address (CloudFront's free *.cloudfront.net name)."
+  value       = local.public_base_url
+}
+
+output "cognito_issuer" {
+  value = "https://cognito-idp.${var.region}.amazonaws.com/${aws_cognito_user_pool.users.id}"
+}
+
+output "cognito_client_id" {
+  value = aws_cognito_user_pool_client.web.id
+}
+
+output "cognito_domain" {
+  value = local.cognito_domain
+}
+
+output "google_redirect_uri" {
+  description = "Paste into the Google OAuth client's authorized redirect URIs."
+  value       = "https://${local.cognito_domain}/oauth2/idpresponse"
+}
+
+output "sign_in_test_url" {
+  description = "Day-one check (M3b): Cognito's sign-in page; a successful sign-in lands on <public_base_url>/auth/callback?code=..."
+  value       = "https://${local.cognito_domain}/oauth2/authorize?client_id=${aws_cognito_user_pool_client.web.id}&response_type=code&scope=openid+email&redirect_uri=${local.public_base_url}/auth/callback"
+}

@@ -1,12 +1,13 @@
 # Permissions for the `neurolens-deploy` IAM user
 
 The deploy user can only touch NeuroLens resources, so it cannot see or change anything else in the AWS
-account (other projects' buckets or machines, for example). Three policy files:
+account (other projects' buckets or machines, for example). Four policy files:
 
 | File | Attached to | What it allows |
 |---|---|---|
 | `neurolens-deploy-services.json` | the deploy user | S3 buckets and SQS queues named `neurolens-*`; Auto Scaling groups, alarms (and their history) and email topics named `neurolens-*`; Lambda functions, EventBridge rules and Lambda log groups named `neurolens-*` (M2b circuit breaker; M3a's functions reuse them) and the queue trigger of a `neurolens-*` function; the `neurolens-*` Aurora database, its RDS-created password secret and the Data API on it (M3a); Parameter Store under `/neurolens/`; remote commands and sessions only on machines tagged `Project=neurolens` |
 | `neurolens-deploy-compute.json` | the deploy user | EC2 and networking: anything may be *read*; new things may be created only if tagged `Project=neurolens`; only things already tagged `Project=neurolens` may be changed, stopped or deleted. Machines only of the types the project uses (`g6e.xlarge`, `g6e.2xlarge`; `g6.2xlarge` and `g5.2xlarge` for the GPU benchmark; `t3.large`, `t4g.micro`). Roles and instance profiles named `neurolens-*`, handed only to EC2 and Lambda |
+| `neurolens-deploy-web.json` | the deploy user | M3b's website: Cognito user pools and CloudFront distributions may be created only tagged `Project=neurolens` and changed only when so tagged; CloudFront's origin signing settings and AWS's managed cache policies (untaggable, harmless alone); reading the account's Lambda limits |
 | `neurolens-role-boundary.json` | nobody directly (a *permissions boundary*) | The most any `neurolens-*` role may ever do, whatever is written into it |
 
 **Why the boundary.** The deploy user creates the roles that machines use. Without a limit, someone holding
@@ -24,10 +25,11 @@ Terraform must set `permissions_boundary` on every role it creates, or AWS refus
 
 1. IAM, Policies, Create policy, JSON tab: paste `neurolens-role-boundary.json`, name it exactly
    `neurolens-role-boundary`. Do not attach it to anything.
-2. Same again for `neurolens-deploy-services.json` (name `neurolens-deploy-services`) and
-   `neurolens-deploy-compute.json` (name `neurolens-deploy-compute`).
+2. Same again for `neurolens-deploy-services.json` (name `neurolens-deploy-services`),
+   `neurolens-deploy-compute.json` (name `neurolens-deploy-compute`) and `neurolens-deploy-web.json`
+   (name `neurolens-deploy-web`, M3b).
 3. IAM, Users, `neurolens-deploy`, Permissions, Add permissions, Attach policies directly: tick
-   `neurolens-deploy-services` and `neurolens-deploy-compute`.
+   `neurolens-deploy-services`, `neurolens-deploy-compute` and `neurolens-deploy-web`.
 4. Only then remove the old inline policy `neurolens-deploy-scoped` (its two statements are now in
    `neurolens-deploy-services`). Inline policies are capped at 2,048 characters per user, which is why these
    are managed policies now.

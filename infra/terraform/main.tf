@@ -35,25 +35,39 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "main" {
   }
 }
 
-# Refuse any request that is not over HTTPS, including the presigned POST and any GET.
+# Refuse any request that is not over HTTPS, including the presigned POST and any GET. CloudFront
+# (only this distribution) may read the site/ prefix and nothing else (M3b §3b): uploads and
+# results stay unreachable through it.
 resource "aws_s3_bucket_policy" "main" {
   bucket = aws_s3_bucket.main.id
 
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [{
-      Sid       = "DenyInsecureTransport"
-      Effect    = "Deny"
-      Principal = "*"
-      Action    = "s3:*"
-      Resource = [
-        aws_s3_bucket.main.arn,
-        "${aws_s3_bucket.main.arn}/*",
-      ]
-      Condition = {
-        Bool = { "aws:SecureTransport" = "false" }
-      }
-    }]
+    Statement = [
+      {
+        Sid       = "DenyInsecureTransport"
+        Effect    = "Deny"
+        Principal = "*"
+        Action    = "s3:*"
+        Resource = [
+          aws_s3_bucket.main.arn,
+          "${aws_s3_bucket.main.arn}/*",
+        ]
+        Condition = {
+          Bool = { "aws:SecureTransport" = "false" }
+        }
+      },
+      {
+        Sid       = "CloudFrontReadsTheSiteOnly"
+        Effect    = "Allow"
+        Principal = { Service = "cloudfront.amazonaws.com" }
+        Action    = "s3:GetObject"
+        Resource  = "${aws_s3_bucket.main.arn}/site/*"
+        Condition = {
+          StringEquals = { "AWS:SourceArn" = aws_cloudfront_distribution.site.arn }
+        }
+      },
+    ]
   })
 
   # The public access block must exist before a policy is attached.
