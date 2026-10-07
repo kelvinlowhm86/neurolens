@@ -4,7 +4,7 @@ job to the end and add one row to experiment-1/<run_id>/runs.csv in S3.
     python experiments/latency_run.py data/videos/_test_clips/clip_15s.mp4 \
         --api http://localhost:5003 --run-id exp1-20261014 --label J1
 
-Needs the web app running (`python app.py`) and a warm worker (`infra/start_work.sh --worker`,
+Needs the web app running (`python app.py`) and a warm worker (`infra/start_work.sh --keep-worker`,
 then one warm-up job). The stage times come from the status endpoint's `stages`, which it keeps
 for a finished job (docs/M3a_spec.md §5); the job's end is its `updated_at`. Stage times have
 one-second resolution, so the stage columns are whole seconds. `render_ms` is left empty: read

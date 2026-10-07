@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
-# Ends a work session (M2a §4d, M2b §2d). Run at the end of every session.
+# Ends a work session (M2a §4d, M2b §2d, M3b §5). Run at the end of every session.
 # Re-enables the alarms' actions, removes a warm hold's end timer and the workers' scale-in protection
 # (a stop means stop: a running job is handed back for the next session), sets the worker group to
 # 0/0/0 (even while it is still waiting for GPU capacity and has no machine yet), waits for workers
-# to go, stops the NAT instance, then checks. It prints ALL STOPPED only when every check succeeded;
-# anything unproven prints NOT CONFIRMED and exits 1. An image-build machine is listed, not stopped (it may be running on
-# purpose; it has its own guards).
+# to go, puts Aurora's minimum back to 0, then checks. It prints ALL STOPPED only when every check
+# succeeded; anything unproven prints NOT CONFIRMED and exits 1. A NAT Gateway or Elastic IP that
+# still exists is reported too (about $1.20 a day): set nat_gateway = false and apply. An image-build
+# machine is listed, not stopped (it may be running on purpose; it has its own guards).
 set -uo pipefail   # no -e on purpose: a failed call is recorded and the script goes on stopping the rest
 ASG=neurolens-workers
 ALARMS="neurolens-worker-idle neurolens-worker-scale-out neurolens-worker-scale-in"
 HOLD_END=neurolens-warm-hold-end
-REAPER=neurolens-reaper
-REAPER_RULE=neurolens-reaper-every-5-min
+DB=neurolens-db
 DLQ=neurolens-jobs-dlq
 DLQ_HANDLER=neurolens-dlq-handler
 PROBLEMS=""
@@ -38,6 +38,10 @@ group_sizes() {  # "min max desired", "None" if there is no group; fails if the 
 hold_end() {  # the warm hold's end timer: its name, or "" if there is none; fails if the call fails
   aws autoscaling describe-scheduled-actions --auto-scaling-group-name "$ASG" \
     --scheduled-action-names "$HOLD_END" --query 'ScheduledUpdateGroupActions[].ScheduledActionName' --output text
+}
+db_min() {  # Aurora's minimum capacity (ACU); fails if the call fails
+  aws rds describe-db-clusters --db-cluster-identifier "$DB" \
+    --query 'DBClusters[0].ServerlessV2ScalingConfiguration.MinCapacity' --output text
 }
 group_machines() {  # how many machines the group still tracks (it knows a launch before EC2 lists it)
   aws autoscaling describe-auto-scaling-groups --auto-scaling-group-names "$ASG" \
@@ -70,14 +74,6 @@ elif [ "$SIZES" = "None" ]; then
   problem "no worker group $ASG in $AWS_REGION: is this the right region?"
 else
   read -r MIN MAX DES <<<"$SIZES"
-  # Max 0 while the NAT instance runs: the session was not ended by this script, usually because the
-  # circuit breaker stopped the workers (M2b §2c; its email says why). A note, not a problem.
-  if [ "$MAX" = 0 ] && [ -n "$(aws ec2 describe-instances --filters Name=tag:Project,Values=neurolens \
-      Name=tag:Role,Values=nat Name=instance-state-name,Values=running \
-      --query 'Reservations[].Instances[].InstanceId' --output text 2>/dev/null)" ]; then
-    echo "Note: the worker group was already at max 0 with the NAT instance running. The circuit"
-    echo "breaker probably stopped the workers during this session (see the alarm email)."
-  fi
   # A busy worker protects itself from scale-in (M2b §1a); without this it would outlive the stop.
   if ! IDS=$(aws autoscaling describe-auto-scaling-groups --auto-scaling-group-names "$ASG" \
       --query 'AutoScalingGroups[0].Instances[].InstanceId' --output text); then
@@ -109,49 +105,35 @@ else
   done
 fi
 
-# 2b. Reaper (M3a §7): one last run, so jobs left stuck in this session are settled or refunded now,
-# then its schedule off, so Aurora can pause (about 10 minutes later) until the next session.
-REAPER_OUT=$(mktemp)
-if ! REAPER_ERR=$(aws lambda invoke --function-name "$REAPER" --cli-read-timeout 150     --query FunctionError --output text "$REAPER_OUT"); then
-  problem "could not run the reaper $REAPER (above)"
-elif [ "$REAPER_ERR" != "None" ]; then
-  problem "the reaper failed ($REAPER_ERR): $(head -c 300 "$REAPER_OUT"); see its log /aws/lambda/$REAPER"
-else
-  echo "Reaper ran once (stuck jobs settled or refunded)."
-fi
-rm -f "$REAPER_OUT"
-aws events disable-rule --name "$REAPER_RULE" \
-  || problem "could not disable the reaper's schedule $REAPER_RULE: Aurora will not pause"
-
-# 3. NAT instance. It exists in every state but terminated; none at all means a wrong region.
-if ! ANY_NAT=$(aws ec2 describe-instances \
-    --filters Name=tag:Project,Values=neurolens Name=tag:Role,Values=nat \
-              Name=instance-state-name,Values=pending,running,stopping,stopped \
-    --query 'Reservations[].Instances[].InstanceId' --output text); then
-  problem "could not look for the NAT instance"
-elif [ -z "$ANY_NAT" ]; then
-  problem "no NAT instance in $AWS_REGION: is this the right region?"
-fi
-if ! NAT=$(aws ec2 describe-instances \
-    --filters Name=tag:Project,Values=neurolens Name=tag:Role,Values=nat Name=instance-state-name,Values=pending,running \
-    --query 'Reservations[].Instances[].InstanceId' --output text); then
-  problem "could not look for the NAT instance"
-elif [ -n "$NAT" ]; then
-  # shellcheck disable=SC2086  # NAT is a space-separated list on purpose
-  if aws ec2 stop-instances --instance-ids $NAT --output text >/dev/null \
-      && aws ec2 wait instance-stopped --instance-ids $NAT; then
-    echo "NAT instance $NAT stopped."
-  else
-    problem "could not stop the NAT instance $NAT"
-  fi
+# 3. Aurora's minimum back to 0 (start_work.sh --keep-worker-and-db raises it), so it can pause again.
+# Terraform ignores min_capacity, so nothing else resets it.
+if ! DB_MIN=$(db_min); then
+  problem "could not read Aurora's minimum capacity"
+elif [ "$DB_MIN" != "0" ] && [ "$DB_MIN" != "0.0" ]; then
+  aws rds modify-db-cluster --db-cluster-identifier "$DB" --apply-immediately \
+    --serverless-v2-scaling-configuration MinCapacity=0,MaxCapacity=2,SecondsUntilAutoPause=300 --output text >/dev/null \
+    && echo "Aurora's minimum put back to 0 (was $DB_MIN)." \
+    || problem "could not put Aurora's minimum back to 0 (was $DB_MIN): it will not pause"
 fi
 
-# 4. Check: no hold timer, the reaper's schedule off, the dead-letter queue empty, the group reads
-# 0/0/0 and no neurolens machine may be billing.
-if ! RULE_STATE=$(aws events describe-rule --name "$REAPER_RULE" --query State --output text); then
-  problem "could not read the reaper's schedule $REAPER_RULE (if it does not exist yet: terraform apply)"
-elif [ "$RULE_STATE" != DISABLED ]; then
-  problem "the reaper's schedule $REAPER_RULE is $RULE_STATE: Aurora will not pause"
+# 4. Check: no hold timer, Aurora's minimum 0, the dead-letter queue empty, the group reads 0/0/0,
+# no neurolens machine billing, and no NAT Gateway or Elastic IP left.
+if ! DB_MIN=$(db_min); then
+  problem "could not re-read Aurora's minimum capacity"
+elif [ "$DB_MIN" != "0" ] && [ "$DB_MIN" != "0.0" ]; then
+  problem "Aurora's minimum capacity is $DB_MIN, not 0: it will not pause (about \$1.40 a day)"
+fi
+if ! NATS=$(aws ec2 describe-nat-gateways --filter Name=tag:Project,Values=neurolens \
+    Name=state,Values=pending,available,deleting --query 'NatGateways[].NatGatewayId' --output text); then
+  problem "could not look for a NAT Gateway"
+elif [ -n "$NATS" ]; then
+  problem "NAT Gateway $NATS still exists (about \$1.20 a day). Set nat_gateway = false in terraform.tfvars and run terraform apply"
+fi
+if ! EIPS=$(aws ec2 describe-addresses --filters Name=tag:Project,Values=neurolens \
+    --query 'Addresses[].[AllocationId,AssociationId]' --output text); then
+  problem "could not look for an Elastic IP"
+elif [ -n "$EIPS" ] && [ -z "$NATS" ]; then
+  problem "Elastic IP $(echo "$EIPS" | awk '{print $1}' | tr '\n' ' ')still exists with no NAT Gateway (billed while it exists). Set nat_gateway = false and run terraform apply"
 fi
 # A message still in the dead-letter queue means the refund handler has not finished with it. It
 # retries every 12 minutes for up to 14 days, waking Aurora each time (M3a §7).
@@ -196,5 +178,5 @@ if [ -n "$PROBLEMS" ]; then
   printf 'NOT CONFIRMED in %s:\n%s' "$AWS_REGION" "$PROBLEMS" >&2
   exit 1
 fi
-echo "ALL STOPPED in $AWS_REGION: worker group at 0, no warm hold, reaper off, dead-letter queue empty, no neurolens machine running."
-echo "Aurora pauses by itself about 10 minutes after its last use."
+echo "ALL STOPPED in $AWS_REGION: worker group at 0, no warm hold, Aurora minimum 0, dead-letter queue empty, no neurolens machine running, no NAT Gateway."
+echo "Aurora pauses by itself about 5 minutes after its last use (the hourly reaper wakes it briefly)."

@@ -1,6 +1,6 @@
 # ─── GPU worker Launch Template and Auto Scaling group (M2a §4b) ───────────
 # Created only once worker_ami_id is set (after infra/build_ami.sh has made the image). The group
-# stands at zero; the queue scales it (scaling.tf, M2b) and infra/start_work.sh --worker starts a
+# stands at zero; the queue scales it (scaling.tf, M2b) and infra/start_work.sh --keep-worker starts a
 # warm hold by hand.
 
 locals {

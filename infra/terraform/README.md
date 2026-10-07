@@ -1,7 +1,7 @@
 # NeuroLens: AWS resources (Terraform)
 
 Creates everything NeuroLens needs on AWS: the S3 bucket and SQS queue (M1), and the network, roles,
-NAT instance, GPU worker group and alarm (M2a). Terraform keeps a record of what it created, so
+GPU worker group and alarms (M2a), and the website, sign-in and NAT Gateway switch (M3b). Terraform keeps a record of what it created, so
 running `apply` twice is safe (the second run reports no changes) and `destroy` removes everything
 it created. The region is one setting (`region` in `terraform.tfvars`, default `us-east-1`).
 
@@ -12,21 +12,25 @@ it created. The region is one setting (`region` in `terraform.tfvars`, default `
   `results/` after 30 days, `code/`, `models/` and `experiments/` never).
 - One SQS queue (visibility timeout 120 s, kept extended by the worker's heartbeat) and the wiring that sends a message to it whenever a file
   lands under `uploads/`. A second queue (`neurolens-jobs-dlq`) receives a job that failed twice.
-- A network (VPC): public subnets (one holds the NAT instance, the others only host image builds) and
+- A network (VPC): public subnets (one holds the NAT Gateway, the others only host image builds) and
   private subnets for the GPU workers, which have no inbound access from the internet. A free S3
-  gateway endpoint keeps S3 traffic off the NAT.
-- A NAT instance (`t4g.micro`): the workers' only way out to the internet (HuggingFace, SQS). It is
-  stopped between sessions.
-- Three roles (image build, worker, NAT), each limited to what it needs and capped by a permission
-  boundary.
+  gateway endpoint keeps S3 traffic off the NAT Gateway.
+- A **NAT Gateway** (`nat_gateway` in `terraform.tfvars`, default `false`): the workers' only way out to
+  the internet (HuggingFace, SQS, the database). It exists only while the variable is `true`, which
+  costs about $1.20 a day: set it for days with GPU work and the deployed window, then back. Terraform
+  refuses to switch it off while the worker group's max is above 0 (run `infra/stop_work.sh` first).
+  The website never needs it.
+- Roles (image build, worker, circuit breaker, web, Stripe webhook, dead-letter handler, reaper), each
+  limited to what it needs and capped by a permission boundary.
 - A launch template and Auto Scaling group `neurolens-workers` (0 machines until you start a
   session), created only once `worker_ami_id` is set.
-- Two alarms on one SNS email topic: the **idle alarm** ends a worker itself (AWS sets the group to 0)
-  when a worker has been in service for 90 minutes with no job picked up or finished; a second alarm
-  only emails `alert_email` when a worker has been running for 3 hours.
+- Alarms on one SNS email topic: the **idle alarm** emails when a worker has been in service for 90
+  minutes with no job picked up or finished (the circuit breaker then stops the group, below); one
+  emails when a worker has been running for 3 hours; one emails when Aurora has been awake for over
+  30% of each of 6 hours; and one emails when any Lambda run fails.
 
 **Cost:** with everything stopped, the running cost is the stored image and disks and the S3 files,
-roughly $3 a month. Machines bill only while a session is open: the NAT about 0.84 cents an hour, a
+roughly $3 a month (plus about $4 for the hourly reaper waking Aurora). Machines bill only while a session is open: the NAT Gateway about $1.20 a day while `nat_gateway` is true, a
 GPU worker $1.86 an hour (g6e.xlarge; $2.24 for the g6e.2xlarge fallback). A worker ends itself after
 30 idle minutes, but always end a session with `infra/stop_work.sh` (section 5).
 
@@ -119,12 +123,12 @@ Only AWS decides; the worker never ends its own machine.
   A worker holding a job protects its own machine from scale-in until the job ends, because the
   queue's numbers reach CloudWatch a few minutes late.
 - **Circuit breaker:** if a worker is in service but nothing has moved in the queue for 90 minutes
-  (the idle alarm), AWS ends it and you get an email. A small Lambda (`infra/lambda/breaker.py`)
-  runs when that alarm fires and again every 5 minutes: while that alarm is on and no warm hold is running, it removes the
+  (the idle alarm), you get an email. A small Lambda (`infra/lambda/breaker.py`)
+  runs every 5 minutes: while that alarm is on and no warm hold is running, it removes the
   workers' protection and sets the group's max to 0, so a broken worker is not replaced over and
   over. Nothing launches again until the next `start_work.sh`. This caps a failure at about
   1.5-2 hours of GPU (about $3-4). If the Lambda itself fails, a second alarm emails you.
-- **Warm hold:** `start_work.sh --worker --hours N` keeps one worker for N hours (1 to 4) even with no
+- **Warm hold:** `start_work.sh --keep-worker --hours N` keeps one worker for N hours (1 to 4) even with no
   jobs: the group's minimum is 1, which scale-in, the idle alarm and the breaker all respect. An
   AWS-side timer (`neurolens-warm-hold-end`) sets the minimum back to 0 at the end, even if your
   laptop is off; then the worker goes once the queue has been empty for 15 minutes.
@@ -188,13 +192,16 @@ CORS document, so the list is the single place.
 Nothing runs between sessions. From the repo root:
 
 ```bash
-infra/start_work.sh                     # NAT instance on; an upload now starts a worker by itself
-                                        # (refuses unless every alarm and the breaker are on)
+infra/start_work.sh                     # needs the NAT Gateway (nat_gateway = true, applied); an upload now
+                                        # starts a worker by itself (refuses unless every alarm and the breaker are on)
 infra/start_work.sh --max 2             # the same with up to two workers (Experiment 2 only)
-infra/start_work.sh --worker --hours 3  # warm hold: one GPU worker now, kept 3 hours (billed from now)
-infra/deploy_code.sh                    # after a commit: ship new code (workers pick it up on restart)
-infra/restart_workers.sh                # restart the worker service on running workers, show the revision (refuses while one has a job; --now forces)
-infra/connect_worker.sh                 # open a shell on the worker (Session Manager), after a warning
+infra/start_work.sh --keep-worker --hours 3
+                                        # warm hold: one GPU worker now, kept 3 hours (billed from now)
+infra/start_work.sh --keep-worker-and-db --hours 3
+                                        # the same, and Aurora kept awake (for demos and study sessions)
+infra/deploy_code.sh                    # after a commit: ship new code and restart idle workers
+                                        # (a worker with a job is named and left alone; --now restarts it too)
+infra/debug_worker.sh                   # open a shell on the worker (Session Manager); needs a warm hold
 infra/stop_work.sh                      # END EVERY SESSION WITH THIS
 ```
 
@@ -204,9 +211,9 @@ running job back to the queue at once; another attempt finishes it.
 
 `stop_work.sh` ends a warm hold, removes the workers' scale-in protection (a running job is handed
 back and runs next session), sets the worker group to zero (even while it is still waiting for a
-GPU and has no machine yet), waits for the workers to go, runs the reaper once and switches its
-schedule off, stops the NAT instance and then checks (including that the dead-letter queue is
-empty: a message left there keeps waking Aurora). It prints
+GPU and has no machine yet), waits for the workers to go, puts Aurora's minimum back to 0 and then
+checks (including that the dead-letter queue is empty, a message left there keeps waking Aurora,
+and that no NAT Gateway or Elastic IP is left: if one is, set `nat_gateway = false` and apply). It prints
 **ALL STOPPED** only when every check succeeded. Anything it could not prove prints
 **NOT CONFIRMED** with the reason: read it and act on it. It needs the region from Terraform; if
 Terraform cannot answer, it stops nothing and prints the `terraform init` command to fix it. An
@@ -214,20 +221,19 @@ image-build machine is listed, not stopped, with the command to end it if no bui
 
 **Manual work on a worker.** Scale-in ends a worker 15 minutes after the queue empties, and none of
 the rules can see work done by hand (Session Manager). Start a warm hold first
-(`start_work.sh --worker --hours N`); run it again to extend. During a hold of more than 90 minutes
+(`start_work.sh --keep-worker --hours N`); run it again to extend. During a hold of more than 90 minutes
 without jobs, the idle alarm still emails, but changes nothing.
 
 **After a breaker email.** The group is at max 0. Look at the worker's log first (the email names no
-cause: a crash loop, broken code, a frozen job or a stopped NAT instance), fix it, then
-`start_work.sh` again. `start_work.sh` and `stop_work.sh` print a note when they find the group at
-max 0 with the NAT instance still running.
+cause: a crash loop, broken code, a frozen job or a missing NAT Gateway), fix it, then
+`start_work.sh` again.
 
 ## 5b. Demo routine (M2b)
 
 1. The day before (the week before for the TA demo): one full dry run of steps 2-5.
-2. 45-60 minutes before: `infra/start_work.sh --worker --hours 3` (demo length, early start and a
+2. 45-60 minutes before: `infra/start_work.sh --keep-worker-and-db --hours 3` (demo length, early start and a
    margin). Starting early leaves time to fall back to the no-AWS backup (M4) if no GPU is free.
-3. Wait for "Worker ready" (`infra/connect_worker.sh`, or the result of step 4).
+3. Wait for "Worker ready" (`infra/debug_worker.sh`, or the result of step 4).
 4. One warm-up job: upload a short sample clip, so the first-job costs are paid before the audience
    arrives and the whole chain is proven that day.
 5. Demo. If it overruns the hold, run step 2 again (it moves the end).

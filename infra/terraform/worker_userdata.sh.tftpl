@@ -102,13 +102,13 @@ StartLimitBurst=3
 TimeoutStopSec=110
 KillMode=mixed
 EOF
-# Manual work is invisible to the queue-based rules (M2b §2). infra/connect_worker.sh prints this
-# before every session; login shells on the machine (bash -l, sudo -i) show it too.
+# Manual work is invisible to the queue-based rules (M2b §2). infra/debug_worker.sh refuses to open
+# a shell without a warm hold; login shells on the machine (bash -l, sudo -i) show this reminder too.
 cat > /etc/profile.d/neurolens-idle-alarm.sh <<'EOF'
 case $- in *i*)  # interactive shells only, so scripted output stays clean
   echo
   echo "  NeuroLens worker: AWS ends this machine 15 minutes after the job queue empties, unless a warm"
-  echo "  hold is on. For manual work, run infra/start_work.sh --worker --hours N on your Mac first."
+  echo "  hold is on. For manual work, run infra/start_work.sh --keep-worker --hours N on your Mac first."
   echo ;;
 esac
 EOF

@@ -57,6 +57,12 @@ resource "aws_rds_cluster" "db" {
   apply_immediately        = true
 
   tags = { Milestone = "M3a" }
+
+  lifecycle {
+    # start_work.sh --keep-worker-and-db raises the minimum and stop_work.sh lowers it again;
+    # Terraform must not fight them.
+    ignore_changes = [serverlessv2_scaling_configuration[0].min_capacity]
+  }
 }
 
 resource "aws_rds_cluster_instance" "db" {

@@ -1,17 +1,16 @@
 #!/usr/bin/env bash
 # Builds the GPU worker image (M2a §2). Run from your Mac.
 #
-#   infra/build_ami.sh --cpu-rehearsal [--dlami]
+#   infra/build_ami.sh --cpu-rehearsal
 #       t3.large (about 8 cents an hour): installs the NVIDIA driver (with its reboot) and the
 #       software only (§2 steps 3-4), prints success or the failing step, and always terminates.
 #       No token, no weights, no image.
-#   infra/build_ami.sh <clip.mp4> [--refresh-weights] [--dlami]
+#   infra/build_ami.sh <clip.mp4> [--refresh-weights]
 #       g6e.xlarge on-demand ($1.86 an hour, about an hour; g6e.2xlarge at $2.24 if the smaller
 #       size is sold out in every zone): full build, weights to S3 models/,
 #       then the software-only image. Prints the AMI ID, snapshot size, peak RAM and VRAM.
 #
-# Base image: plain Ubuntu 22.04 plus the NVIDIA server driver (§2). --dlami builds from the AWS
-# Deep Learning Base GPU image instead (driver preinstalled, much larger): a fallback only.
+# Base image: plain Ubuntu 22.04 plus the NVIDIA server driver (§2).
 # Needs: terraform applied (network, roles), and infra/deploy_code.sh run (code/latest.zip).
 # Money guards: the build instance is terminated when this script exits (errors and Ctrl-C too);
 # every remote step has a deadline; and the instance shuts itself down (= terminates) after 4 hours
@@ -21,18 +20,17 @@ set -euo pipefail
 source "$(dirname "$0")/aws_env.sh"   # AWS_PROFILE, AWS_REGION (M2a §4i)
 cd "$(git rev-parse --show-toplevel)"
 
-REHEARSAL=0; DLAMI=0; REFRESH=0; CLIP=""
+REHEARSAL=0; REFRESH=0; CLIP=""
 for arg in "$@"; do
   case "$arg" in
     --cpu-rehearsal) REHEARSAL=1 ;;
-    --dlami) DLAMI=1 ;;
     --refresh-weights) REFRESH=1 ;;
     -*) echo "unknown option $arg" >&2; exit 2 ;;
     *) CLIP="$arg" ;;
   esac
 done
 if [ "$REHEARSAL" = 0 ] && [ ! -f "$CLIP" ]; then
-  echo "usage: $0 --cpu-rehearsal [--dlami]  |  $0 <clip.mp4> [--refresh-weights] [--dlami]" >&2; exit 2
+  echo "usage: $0 --cpu-rehearsal  |  $0 <clip.mp4> [--refresh-weights]" >&2; exit 2
 fi
 
 say() { echo "$(date +%H:%M:%S) $*"; }
@@ -43,18 +41,12 @@ SG=$(tf no_inbound_security_group_id); PROFILE=$(tf build_instance_profile)
 aws s3api head-object --bucket "$BUCKET" --key code/latest.zip >/dev/null 2>&1 \
   || { echo "s3://$BUCKET/code/latest.zip missing: run infra/deploy_code.sh first." >&2; exit 1; }
 
-if [ "$DLAMI" = 1 ]; then
-  AMI_PARAM=/aws/service/deeplearning/ami/x86_64/base-oss-nvidia-driver-gpu-ubuntu-22.04/latest/ami-id
-else
-  AMI_PARAM=/aws/service/canonical/ubuntu/server/22.04/stable/current/amd64/hvm/ebs-gp2/ami-id
-fi
+AMI_PARAM=/aws/service/canonical/ubuntu/server/22.04/stable/current/amd64/hvm/ebs-gp2/ami-id
 BASE_AMI=$(aws ssm get-parameter --name "$AMI_PARAM" --query Parameter.Value --output text)
-# Root disk: 50 GB gp3 (the base image's own 8 GB is too small; this size becomes the image's), or
-# the base image's size if larger (the Deep Learning image's is). It must be the image's root device.
-read -r ROOT_DEV BASE_GB <<<"$(aws ec2 describe-images --image-ids "$BASE_AMI" \
-  --query 'Images[0].[RootDeviceName,BlockDeviceMappings[0].Ebs.VolumeSize]' --output text)"
-[[ "$BASE_GB" =~ ^[0-9]+$ ]] || { echo "cannot read the base image's root disk size ($BASE_GB)" >&2; exit 1; }
-ROOT_GB=$(( BASE_GB > 50 ? BASE_GB : 50 ))
+# Root disk: 50 GB gp3 (the base image's own 8 GB is too small; this size becomes the image's). It
+# must be the image's root device.
+ROOT_DEV=$(aws ec2 describe-images --image-ids "$BASE_AMI" --query 'Images[0].RootDeviceName' --output text)
+ROOT_GB=50
 # Tried in order. g6e.2xlarge has the same GPU (more RAM and CPU, $2.24 an hour): only a fallback
 # when the smaller size is sold out everywhere. The image works on either; workers use the Terraform
 # worker_instance_types, whatever built the image.
@@ -485,22 +477,20 @@ for i in $(seq 1 60); do
   sleep 10
 done
 
-if [ "$DLAMI" = 0 ]; then
-  step_driver | ssm_run "NVIDIA driver" 1800
-  # The boot ID changes with every boot: a step that reports a new one ran after the reboot.
-  BOOT_BEFORE=$(remote_boot_id)
-  [ -n "$BOOT_BEFORE" ] || { say "FAILED: cannot read the instance's boot ID"; exit 1; }
-  say "rebooting to load the driver"
-  aws ec2 reboot-instances --instance-ids "$INSTANCE"
-  for i in $(seq 1 40); do
-    sleep 15
-    BOOT_NOW=$(remote_boot_id)
-    [ -n "$BOOT_NOW" ] && [ "$BOOT_NOW" != "$BOOT_BEFORE" ] && break
-    [ "$i" = 40 ] && { say "FAILED: the instance did not come back from its reboot within 10 minutes"; exit 1; }
-  done
-  say "back after the reboot"
-  step_driver_check | ssm_run "driver check" 600
-fi
+step_driver | ssm_run "NVIDIA driver" 1800
+# The boot ID changes with every boot: a step that reports a new one ran after the reboot.
+BOOT_BEFORE=$(remote_boot_id)
+[ -n "$BOOT_BEFORE" ] || { say "FAILED: cannot read the instance's boot ID"; exit 1; }
+say "rebooting to load the driver"
+aws ec2 reboot-instances --instance-ids "$INSTANCE"
+for i in $(seq 1 40); do
+  sleep 15
+  BOOT_NOW=$(remote_boot_id)
+  [ -n "$BOOT_NOW" ] && [ "$BOOT_NOW" != "$BOOT_BEFORE" ] && break
+  [ "$i" = 40 ] && { say "FAILED: the instance did not come back from its reboot within 10 minutes"; exit 1; }
+done
+say "back after the reboot"
+step_driver_check | ssm_run "driver check" 600
 
 STEP_ENV="export BUCKET=$BUCKET"
 step_install | ssm_run "install software" 3600
