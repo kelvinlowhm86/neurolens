@@ -12,6 +12,11 @@ HOST = "127.0.0.1"
 PORT = 5003
 
 
+class UnsafeConfigError(Exception):
+    """A setting combination that must never run, e.g. the development identity on a public
+    address (M3a §2)."""
+
+
 def get_root():
     """Project root: NEUROLENS_ROOT if set, else the repo root (two folders above this file).
 
@@ -63,22 +68,28 @@ def apply_env(cfg):
 
     HF_TOKEN -> hf_token; NEUROLENS_AWS_REGION / NEUROLENS_S3_BUCKET / NEUROLENS_SQS_QUEUE_URL /
     NEUROLENS_WORKER_GROUP -> aws.region / aws.s3_bucket / aws.sqs_queue_url / aws.worker_group
-    (the last only on AWS workers). Only variables that are set and non-empty change anything.
-    The input is never modified.
+    (the last only on AWS workers); NEUROLENS_DB_CLUSTER_ARN / _SECRET_ARN / _NAME ->
+    aws.db_cluster_arn / aws.db_secret_arn / aws.db_name; NEUROLENS_DB_DSN -> db.dsn (a local
+    PostgreSQL DSN holds a password, so it never goes in config.json). Only variables that are
+    set and non-empty change anything. The input is never modified.
     """
     out = copy.deepcopy(cfg)
     token = os.environ.get("HF_TOKEN")
     if token:
         out["hf_token"] = token
-    for var, key in (
-        ("NEUROLENS_AWS_REGION", "region"),
-        ("NEUROLENS_S3_BUCKET", "s3_bucket"),
-        ("NEUROLENS_SQS_QUEUE_URL", "sqs_queue_url"),
-        ("NEUROLENS_WORKER_GROUP", "worker_group"),
+    for var, section, key in (
+        ("NEUROLENS_AWS_REGION", "aws", "region"),
+        ("NEUROLENS_S3_BUCKET", "aws", "s3_bucket"),
+        ("NEUROLENS_SQS_QUEUE_URL", "aws", "sqs_queue_url"),
+        ("NEUROLENS_WORKER_GROUP", "aws", "worker_group"),
+        ("NEUROLENS_DB_CLUSTER_ARN", "aws", "db_cluster_arn"),
+        ("NEUROLENS_DB_SECRET_ARN", "aws", "db_secret_arn"),
+        ("NEUROLENS_DB_NAME", "aws", "db_name"),
+        ("NEUROLENS_DB_DSN", "db", "dsn"),
     ):
         value = os.environ.get(var)
         if value:
-            out.setdefault("aws", {})[key] = value
+            out.setdefault(section, {})[key] = value
     return out
 
 
