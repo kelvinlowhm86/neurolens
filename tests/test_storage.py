@@ -1,13 +1,20 @@
-"""Tests for neurolens.storage (moto, no real AWS). Written from docs/M1_spec.md 1, 4a, 6a."""
+"""Tests for neurolens.storage (moto, no real AWS). Written from docs/M1_spec.md 1, 4a, 6a.
+
+The presign tests follow the M3a interface (docs/M3a_spec.md §6, a spec'd change): the key comes
+from `object_key(user_id, job_id, content_type)` (uploads/{user_id}/{job_id}{ext}, retiring
+test-user), and `presign_upload(s3, bucket, object_key, max_bytes, expires_in=300)`
+returns {"url", "fields", "expires_in"}; the route creates the job id itself.
+"""
 
 import base64
 import json
 import uuid
 
 import pytest
-from neurolens.storage import job_id_from_key, parse_s3_event, presign_upload
+from neurolens.storage import job_id_from_key, object_key, parse_s3_event, presign_upload
 
 BUCKET = "neurolens-test-bucket"
+USER = "google-sub-1234"
 
 
 def s3_event(*pairs):
@@ -34,21 +41,21 @@ def policy_conditions(fields):
 
 
 def test_parse_single_record():
-    key = "uploads/placeholder-user/abc.mp4"
+    key = "uploads/test-user/abc.mp4"
     assert parse_s3_event(s3_event(("b1", key))) == [("b1", key)]
 
 
 def test_parse_several_records_in_order():
     pairs = [
-        ("b1", "uploads/placeholder-user/a.mp4"),
-        ("b2", "uploads/placeholder-user/b.mov"),
-        ("b1", "uploads/placeholder-user/c.webm"),
+        ("b1", "uploads/test-user/a.mp4"),
+        ("b2", "uploads/test-user/b.mov"),
+        ("b1", "uploads/test-user/c.webm"),
     ]
     assert parse_s3_event(s3_event(*pairs)) == pairs
 
 
 def test_parse_drops_keys_outside_uploads():
-    keep = ("b1", "uploads/placeholder-user/a.mp4")
+    keep = ("b1", "uploads/test-user/a.mp4")
     body = s3_event(
         ("b1", "status/a.json"),
         keep,
@@ -79,7 +86,7 @@ def test_parse_test_event_returns_empty_list():
 
 
 def test_parse_returns_tuples_of_strings():
-    [(bucket, key)] = parse_s3_event(s3_event(("b1", "uploads/placeholder-user/a.mp4")))
+    [(bucket, key)] = parse_s3_event(s3_event(("b1", "uploads/test-user/a.mp4")))
     assert isinstance(bucket, str) and isinstance(key, str)
 
 
@@ -88,43 +95,55 @@ def test_parse_returns_tuples_of_strings():
 
 def test_job_id_from_key():
     job_id = str(uuid.uuid4())
-    assert job_id_from_key(f"uploads/placeholder-user/{job_id}.mp4") == job_id
-    assert job_id_from_key(f"uploads/placeholder-user/{job_id}.mov") == job_id
-    assert job_id_from_key(f"uploads/placeholder-user/{job_id}.webm") == job_id
+    assert job_id_from_key(f"uploads/test-user/{job_id}.mp4") == job_id
+    assert job_id_from_key(f"uploads/test-user/{job_id}.mov") == job_id
+    assert job_id_from_key(f"uploads/test-user/{job_id}.webm") == job_id
 
 
-# ---------------------------------------------------------------- presign_upload
-
-
-def test_presign_upload_result_shape(aws):
-    out = presign_upload(aws.s3, BUCKET, "video/mp4", 1000)
-    assert set(out) == {"job_id", "url", "fields", "object_key", "expires_in"}
-    assert isinstance(out["url"], str) and BUCKET in out["url"]
-    assert isinstance(out["fields"], dict)
-    assert out["expires_in"] == 300  # the documented default
-
-
-def test_presign_upload_expires_in_is_passed_through(aws):
-    out = presign_upload(aws.s3, BUCKET, "video/mp4", 1000, expires_in=60)
-    assert out["expires_in"] == 60
-
-
-def test_presign_upload_job_id_is_a_fresh_uuid4(aws):
-    a = presign_upload(aws.s3, BUCKET, "video/mp4", 1000)
-    b = presign_upload(aws.s3, BUCKET, "video/mp4", 1000)
-    assert uuid.UUID(a["job_id"]).version == 4
-    assert a["job_id"] != b["job_id"]
+# ---------------------------------------------------------------- object_key
 
 
 @pytest.mark.parametrize(
     "content_type, ext",
     [("video/mp4", ".mp4"), ("video/quicktime", ".mov"), ("video/webm", ".webm")],
 )
-def test_presign_upload_key_extension_follows_content_type(aws, content_type, ext):
-    out = presign_upload(aws.s3, BUCKET, content_type, 1000)
-    assert out["object_key"] == f"uploads/placeholder-user/{out['job_id']}{ext}"
-    assert out["fields"]["key"] == out["object_key"]
-    assert job_id_from_key(out["object_key"]) == out["job_id"]
+def test_object_key_is_under_the_users_folder_with_the_content_types_extension(content_type, ext):
+    job_id = str(uuid.uuid4())
+    key = object_key(USER, job_id, content_type)
+    assert key == f"uploads/{USER}/{job_id}{ext}"
+    assert job_id_from_key(key) == job_id
+    assert parse_s3_event(s3_event(("b1", key))) == [("b1", key)]
+
+
+def test_object_key_rejects_an_unsupported_content_type():
+    with pytest.raises(KeyError):
+        object_key(USER, str(uuid.uuid4()), "application/pdf")
+
+
+# ---------------------------------------------------------------- presign_upload
+
+
+def new_object_key(content_type="video/mp4"):
+    return object_key(USER, str(uuid.uuid4()), content_type)
+
+
+def test_presign_upload_result_shape(aws):
+    out = presign_upload(aws.s3, BUCKET, new_object_key(), 1000)
+    assert set(out) == {"url", "fields", "expires_in"}
+    assert isinstance(out["url"], str) and BUCKET in out["url"]
+    assert isinstance(out["fields"], dict)
+    assert out["expires_in"] == 300  # the documented default
+
+
+def test_presign_upload_expires_in_is_passed_through(aws):
+    out = presign_upload(aws.s3, BUCKET, new_object_key(), 1000, expires_in=60)
+    assert out["expires_in"] == 60
+
+
+def test_presign_upload_signs_exactly_the_given_key(aws):
+    key = new_object_key("video/webm")
+    out = presign_upload(aws.s3, BUCKET, key, 1000)
+    assert out["fields"]["key"] == key
 
 
 def test_presign_upload_is_a_post_policy_with_the_size_cap(aws):
@@ -133,7 +152,7 @@ def test_presign_upload_is_a_post_policy_with_the_size_cap(aws):
     moto-limited: moto does not enforce content-length-range when a file is uploaded, so
     real enforcement by S3 is checked by hand in chunk E (M1 spec section 9, item 11).
     """
-    out = presign_upload(aws.s3, BUCKET, "video/mp4", 12345)
+    out = presign_upload(aws.s3, BUCKET, new_object_key(), 12345)
     assert "policy" in out["fields"]
     ranges = [
         c
@@ -145,16 +164,17 @@ def test_presign_upload_is_a_post_policy_with_the_size_cap(aws):
 
 
 def test_presign_upload_policy_binds_bucket_and_key(aws):
-    out = presign_upload(aws.s3, BUCKET, "video/mp4", 1000)
+    key = new_object_key()
+    out = presign_upload(aws.s3, BUCKET, key, 1000)
     conditions = policy_conditions(out["fields"])
     assert {"bucket": BUCKET} in conditions
-    key = out["object_key"]
     assert {"key": key} in conditions or ["eq", "$key", key] in conditions
 
 
 @pytest.mark.parametrize("content_type", ["video/mp4", "video/quicktime", "video/webm"])
 def test_presign_upload_pins_the_content_type(aws, content_type):
-    """moto-limited: only the form and policy our code builds are checked."""
-    out = presign_upload(aws.s3, BUCKET, content_type, 1000)
+    """moto-limited: only the form and policy our code builds are checked. The content type is
+    the one the key's extension stands for."""
+    out = presign_upload(aws.s3, BUCKET, new_object_key(content_type), 1000)
     assert out["fields"]["Content-Type"] == content_type
     assert {"Content-Type": content_type} in policy_conditions(out["fields"])

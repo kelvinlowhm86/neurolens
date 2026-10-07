@@ -23,6 +23,7 @@ from neurolens import settings, worker
 from neurolens.worker import Outcome
 
 GROUP = "neurolens-workers"
+NO_DB = object()  # M3a §5: poll_once hands the database on; the scripted records never use it
 MAX_RECEIVES = 2  # the job queue's maxReceiveCount (M2a §4h); every message here is receive 1
 
 
@@ -183,16 +184,16 @@ def s3_event(bucket, key):
 
 
 def send_job(aws):
-    key = f"uploads/placeholder-user/{uuid.uuid4()}.mp4"
+    key = f"uploads/test-user/{uuid.uuid4()}.mp4"
     aws.sqs.send_message(QueueUrl=aws.queue_url, MessageBody=s3_event(aws.bucket, key))
     return key
 
 
 def fake_record(monkeypatch, body):
-    """Replace handle_record (the §1a signature) with body(); records each key it is given."""
+    """Replace handle_record (the M3a §5 signature) with body(); records each key it is given."""
     seen = []
 
-    def fake(bucket, key, *, s3, cfg, roi_masks, heartbeat):
+    def fake(bucket, key, *, s3, db, cfg, roi_masks, heartbeat):
         seen.append(key)
         return body()
 
@@ -204,6 +205,7 @@ def poll(aws, make_cfg, roi_masks, *, shutdown=None, protection=None):
     return worker.poll_once(
         s3=aws.s3,
         sqs=ShortPollSqs(aws.sqs),
+        db=NO_DB,
         cfg=make_cfg(),
         roi_masks=roi_masks,
         shutdown=shutdown or worker.ShutdownSignal(),
@@ -301,6 +303,7 @@ def test_poll_once_protection_defaults_to_none(aws, make_cfg, roi_masks_small, m
     ok = worker.poll_once(
         s3=aws.s3,
         sqs=ShortPollSqs(aws.sqs),
+        db=NO_DB,
         cfg=make_cfg(),
         roi_masks=roi_masks_small,
         shutdown=worker.ShutdownSignal(),

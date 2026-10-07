@@ -98,6 +98,10 @@ CFG_WITHOUT_AWS = {
     "paths": {"models": "m", "data": "d", "output": "o"},
     "max_video_duration_seconds": 120,
     "max_upload_bytes": 300000000,
+    # M3a §9: config.json's development identity and local-only address
+    "auth": {"mode": "dev", "dev_user_id": "dev-user", "dev_email": "dev@localhost"},
+    "billing": {"starter_cents": 500},
+    "server": {"host": "127.0.0.1", "port": 5003},
 }
 
 

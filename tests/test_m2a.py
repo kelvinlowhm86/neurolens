@@ -3,7 +3,8 @@
 Covers: put_result (S3 results, never overwritten), the worker publishing through it and the
 DUPLICATE outcome, and resolve_paths keeping absolute paths. M2b §1a removed the idle exit of
 run() and its tests (no-idle-exit is now tested in tests/test_m2b_shutdown.py), and changed a
-result that exists before any work from DUPLICATE to SKIPPED (§5). Calls use the §1a signatures.
+result that exists before any work from DUPLICATE to SKIPPED (§5). Calls use the M3a §5
+signatures (db, heartbeat(on_beat)), with each record's job seeded in PostgreSQL first.
 """
 
 import contextlib
@@ -19,8 +20,8 @@ MODULES = ("neurolens.inference", "neurolens.worker")
 MAX_RECEIVES = 2  # the job queue's maxReceiveCount (M2a §4h); every message here is receive 1
 
 
-def no_heartbeat():
-    """M2b §1a: handle_record's heartbeat factory. These tests do not exercise the heartbeat."""
+def no_heartbeat(on_beat=None):
+    """handle_record's heartbeat factory (M3a §5: heartbeat(on_beat)). Not exercised here."""
     return contextlib.nullcontext()
 
 
@@ -122,18 +123,24 @@ def test_put_result_treats_a_simulated_412_as_already_exists(aws):
 
 def test_outcome_has_duplicate():
     assert "DUPLICATE" in Outcome.__members__
-    assert Outcome.DUPLICATE not in (Outcome.DONE, Outcome.REJECTED, Outcome.GONE)
+    assert Outcome.DUPLICATE not in (Outcome.DONE, Outcome.REJECTED, Outcome.SKIPPED)
 
 
 def test_worker_result_lands_in_s3_and_nothing_in_the_local_output_folder(
-    aws, make_cfg, roi_masks_small, new_key, clip_path
+    aws, make_cfg, roi_masks_small, db, new_job, clip_path
 ):
     cfg = make_cfg()
-    job_id, key = new_key()
+    job_id, key = new_job()
     aws.s3.upload_file(str(clip_path), aws.bucket, key)
 
     outcome = handle_record(
-        aws.bucket, key, s3=aws.s3, cfg=cfg, roi_masks=roi_masks_small, heartbeat=no_heartbeat
+        aws.bucket,
+        key,
+        s3=aws.s3,
+        db=db,
+        cfg=cfg,
+        roi_masks=roi_masks_small,
+        heartbeat=no_heartbeat,
     )
 
     assert outcome is Outcome.DONE
@@ -142,7 +149,7 @@ def test_worker_result_lands_in_s3_and_nothing_in_the_local_output_folder(
 
 
 def test_worker_publishes_through_put_result(
-    aws, make_cfg, roi_masks_small, new_key, clip_path, monkeypatch
+    aws, make_cfg, roi_masks_small, db, new_job, clip_path, monkeypatch
 ):
     seen = []
     real = storage.put_result
@@ -152,12 +159,13 @@ def test_worker_publishes_through_put_result(
         return real(s3, bucket, job_id, result)
 
     monkeypatch.setattr(storage, "put_result", spy)
-    job_id, key = new_key()
+    job_id, key = new_job()
     aws.s3.upload_file(str(clip_path), aws.bucket, key)
     handle_record(
         aws.bucket,
         key,
         s3=aws.s3,
+        db=db,
         cfg=make_cfg(),
         roi_masks=roi_masks_small,
         heartbeat=no_heartbeat,
@@ -166,11 +174,11 @@ def test_worker_publishes_through_put_result(
 
 
 def test_existing_result_gives_skipped_and_is_left_unchanged(
-    aws, make_cfg, roi_masks_small, new_key, clip_path
+    aws, make_cfg, roi_masks_small, db, new_job, clip_path
 ):
     """M2b §5 changed the outcome: a result that exists before any work is SKIPPED (was
     DUPLICATE in M2a). The result is still left unchanged."""
-    job_id, key = new_key()
+    job_id, key = new_job()
     aws.s3.upload_file(str(clip_path), aws.bucket, key)
     earlier = {"job_id": job_id, "marker": "written by an earlier run"}
     assert storage.put_result(aws.s3, aws.bucket, job_id, earlier) is True
@@ -179,6 +187,7 @@ def test_existing_result_gives_skipped_and_is_left_unchanged(
         aws.bucket,
         key,
         s3=aws.s3,
+        db=db,
         cfg=make_cfg(),
         roi_masks=roi_masks_small,
         heartbeat=no_heartbeat,
@@ -189,33 +198,36 @@ def test_existing_result_gives_skipped_and_is_left_unchanged(
 
 
 def test_duplicate_when_put_result_returns_false(
-    aws, make_cfg, roi_masks_small, new_key, clip_path, patch_everywhere
+    aws, make_cfg, roi_masks_small, db, new_job, pg, clip_path, patch_everywhere
 ):
     patch_everywhere("put_result", lambda *a, **kw: False, "neurolens.storage", "neurolens.worker")
-    _, key = new_key()
+    job_id, key = new_job()
     aws.s3.upload_file(str(clip_path), aws.bucket, key)
     outcome = handle_record(
         aws.bucket,
         key,
         s3=aws.s3,
+        db=db,
         cfg=make_cfg(),
         roi_masks=roi_masks_small,
         heartbeat=no_heartbeat,
     )
     assert outcome is Outcome.DUPLICATE
+    assert pg.job(job_id)["status"] == "done"  # M3a §5 step 8: settled all the same
 
 
 def test_duplicate_message_is_deleted(
-    aws, make_cfg, roi_masks_small, new_key, clip_path, queue_message, remaining
+    aws, make_cfg, roi_masks_small, db, new_job, clip_path, queue_message, remaining
 ):
     """DUPLICATE is final: a redelivered notice for an already-finished job leaves the queue."""
-    job_id, key = new_key()
+    job_id, key = new_job()
     aws.s3.upload_file(str(clip_path), aws.bucket, key)
     storage.put_result(aws.s3, aws.bucket, job_id, {"job_id": job_id, "marker": "first"})
 
     process_message(
         queue_message(s3_event((aws.bucket, key))),
         s3=aws.s3,
+        db=db,
         sqs=aws.sqs,
         cfg=make_cfg(),
         roi_masks=roi_masks_small,
@@ -228,17 +240,26 @@ def test_duplicate_message_is_deleted(
 
 
 def test_a_put_result_error_leaves_the_message_for_retry(
-    aws, make_cfg, roi_masks_small, new_key, clip_path, queue_message, remaining, patch_everywhere
+    aws,
+    make_cfg,
+    roi_masks_small,
+    db,
+    new_job,
+    clip_path,
+    queue_message,
+    remaining,
+    patch_everywhere,
 ):
     def boom(*a, **kw):
         raise client_error("ConditionalRequestConflict", 409)
 
     patch_everywhere("put_result", boom, "neurolens.storage", "neurolens.worker")
-    _, key = new_key()
+    _, key = new_job()
     aws.s3.upload_file(str(clip_path), aws.bucket, key)
     process_message(
         queue_message(s3_event((aws.bucket, key))),
         s3=aws.s3,
+        db=db,
         sqs=aws.sqs,
         cfg=make_cfg(),
         roi_masks=roi_masks_small,

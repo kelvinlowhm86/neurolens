@@ -308,3 +308,54 @@ def test_cold_start_command_line_takes_since_and_run_id():
     assert proc.returncode == 0, proc.stderr
     assert "--since" in proc.stdout
     assert "--run-id" in proc.stdout
+
+
+# ---------------------------------------------------------------- latency_run (M3a §5)
+# M3a retires the S3 status objects: latency_run reads `stages` from the status endpoint, whose
+# response (docs/M3a_spec.md §6) carries `stages` and `updated_at` in the same format, including
+# for a done job. Its stage-duration helper is unchanged.
+
+OLD_STATUS_OBJECT = {
+    "job_id": "8a6d2f8e-0000-4000-8000-000000000001",
+    "status": "done",
+    "stage": "extracting_roi",
+    "updated_at": "2026-10-14T03:26:40Z",
+    "stages": [
+        {"stage": "downloading", "at": "2026-10-14T03:22:10Z"},
+        {"stage": "transcribing", "at": "2026-10-14T03:22:12Z"},
+        {"stage": "inference_full", "at": "2026-10-14T03:22:41Z"},
+        {"stage": "inference_noaudio", "at": "2026-10-14T03:25:02Z"},
+        {"stage": "extracting_roi", "at": "2026-10-14T03:26:30Z"},
+    ],
+    "error": None,
+}
+STATUS_ENDPOINT_RESPONSE = {
+    "job_id": OLD_STATUS_OBJECT["job_id"],
+    "status": "done",
+    "stage": "extracting_roi",
+    "stages": OLD_STATUS_OBJECT["stages"],
+    "attempt": 1,
+    "updated_at": "2026-10-14T03:26:40Z",
+    "error_code": None,
+    "error_message": None,
+}
+
+
+def test_latency_run_stage_durations_are_the_same_from_the_status_endpoint():
+    latency_run = load("latency_run")
+    upload_end = at(3, 22, 4)
+    from_endpoint = latency_run.stage_durations_ms(STATUS_ENDPOINT_RESPONSE, upload_end)
+    assert from_endpoint == latency_run.stage_durations_ms(OLD_STATUS_OBJECT, upload_end)
+    assert from_endpoint == {
+        "queue_wait_ms": 6000,
+        "downloading_ms": 2000,
+        "transcribing_ms": 29000,
+        "inference_full_ms": 141000,
+        "inference_noaudio_ms": 88000,
+        "extracting_roi_ms": 10000,
+    }
+
+
+def test_latency_run_no_longer_reads_the_s3_status_object():
+    source = (EXPERIMENTS / "latency_run.py").read_text()
+    assert "get_status" not in source  # storage.get_status is removed in M3a

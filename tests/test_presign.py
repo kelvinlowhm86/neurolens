@@ -1,4 +1,10 @@
-"""Tests for POST /api/uploads/presign (Flask test client + moto). docs/M1_spec.md 4 and 4a."""
+"""Tests for POST /api/uploads/presign (Flask test client + moto). docs/M1_spec.md 4 and 4a.
+
+Updated for docs/M3a_spec.md §6 (a spec'd change): the app gets a PostgreSQL database (the route
+reserves credit first) and the key is under the development user's folder,
+uploads/{user_id}/{job_id}{ext}, retiring placeholder-user. A route without an S3 client answers
+500 `not_configured`. The reservation itself is tested in tests/test_m3a_web.py.
+"""
 
 import base64
 import json
@@ -6,16 +12,19 @@ import re
 import uuid
 
 import pytest
+from conftest import STARTER_CENTS, WEB_USER_ID
 from neurolens.web.app import create_app
 
-KEY_RE = re.compile(r"^uploads/placeholder-user/([0-9a-f-]{36})(\.[a-z0-9]+)$")
+KEY_RE = re.compile(rf"^uploads/{WEB_USER_ID}/([0-9a-f-]{{36}})(\.[a-z0-9]+)$")
 
 
 @pytest.fixture
-def client_for(make_cfg, tmp_path):
-    def make(**cfg_overrides):
+def client_for(aws, db, make_cfg, tmp_path):
+    def make(with_s3=True, **cfg_overrides):
         cfg = make_cfg(**cfg_overrides)
-        app = create_app(data_dir=tmp_path / "data", cfg=cfg)
+        app = create_app(
+            data_dir=tmp_path / "data", cfg=cfg, db=db, s3_client=aws.s3 if with_s3 else None
+        )
         app.config["TESTING"] = True
         return app.test_client(), cfg
 
@@ -52,7 +61,7 @@ def test_success_shape(client):
     assert data["expires_in"] == 300
 
 
-def test_success_key_is_under_placeholder_user_and_contains_job_id(client):
+def test_success_key_is_under_the_users_folder_and_contains_job_id(client):
     data = client.post("/api/uploads/presign", json=body()).get_json()
     match = KEY_RE.match(data["object_key"])
     assert match, data["object_key"]
@@ -124,7 +133,7 @@ def test_key_extension_follows_content_type_not_filename(client, content_type, f
     )
     assert resp.status_code == 200
     data = resp.get_json()
-    assert data["object_key"] == f"uploads/placeholder-user/{data['job_id']}{ext}"
+    assert data["object_key"] == f"uploads/{WEB_USER_ID}/{data['job_id']}{ext}"
 
 
 # ---------------------------------------------------------------- errors
@@ -179,13 +188,17 @@ def test_error_responses_do_not_hand_out_upload_fields(client):
         assert "fields" not in data and "url" not in data and "job_id" not in data
 
 
-def test_no_aws_block_gives_presign_failed(client_for):
-    client, _ = client_for(with_aws=False)
+def test_no_s3_client_gives_not_configured_and_holds_no_money(client_for, pg):
+    """M3a §6: a route that needs an S3 client the app doesn't have returns 500 not_configured
+    (M1 said presign_failed)."""
+    client, _ = client_for(with_s3=False, with_aws=False)
     resp = client.post("/api/uploads/presign", json=body())
     assert resp.status_code == 500
     data = resp.get_json()
-    assert data["error"] == "presign_failed"
-    assert isinstance(data["message"], str) and data["message"]
+    assert data["error"] == "not_configured"
+    assert "fields" not in data and "url" not in data
+    assert pg.rows("SELECT 1 FROM jobs WHERE status IN ('queued', 'processing')") == []
+    assert pg.balance(WEB_USER_ID) in (None, (STARTER_CENTS, 0))
 
 
 def test_boto_failure_gives_presign_failed(client, patch_everywhere):
@@ -237,10 +250,10 @@ def test_nan_declared_bytes_is_ignored_like_an_absent_one(client):
 # ------------------------------------------------ missing size limit (hardening)
 
 
-def test_config_without_max_upload_bytes_cannot_presign(make_cfg, tmp_path):
+def test_config_without_max_upload_bytes_cannot_presign(aws, db, pg, make_cfg, tmp_path):
     cfg = make_cfg()
     del cfg["max_upload_bytes"]
-    app = create_app(data_dir=tmp_path / "data", cfg=cfg)
+    app = create_app(data_dir=tmp_path / "data", cfg=cfg, db=db, s3_client=aws.s3)
     app.config["TESTING"] = True
     client = app.test_client()
     resp = client.post("/api/uploads/presign", json=body())
@@ -248,6 +261,9 @@ def test_config_without_max_upload_bytes_cannot_presign(make_cfg, tmp_path):
     data = resp.get_json()
     assert data["error"] == "presign_failed"
     assert "fields" not in data and "url" not in data
+    # M3a: no money is left held (nothing reserved, or the reservation refunded)
+    assert pg.rows("SELECT 1 FROM jobs WHERE status IN ('queued', 'processing')") == []
+    assert pg.balance(WEB_USER_ID) in (None, (STARTER_CENTS, 0))
     # the limits endpoint still answers, reporting the missing limit as null
     limits = client.get("/api/limits")
     assert limits.status_code == 200

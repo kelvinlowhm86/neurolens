@@ -1,8 +1,11 @@
 """M1 hardening tests. Written from docs/M1_spec.md sections 1, 5 and 6a.
 
-Covers: config validation, delete failure, GONE outcome, unparseable messages, poll_once,
-audio-only videos and subprocess timeouts. Calls use the M2b §1a signatures (heartbeat,
-shutdown, max_receives); the behaviour checked is unchanged.
+Covers: config validation, delete failure, missing uploads, unparseable messages, poll_once,
+audio-only videos and subprocess timeouts. Calls use the M3a §5 signatures (db,
+heartbeat(on_beat), shutdown, max_receives) and each record's job is seeded in PostgreSQL first;
+the behaviour checked is unchanged except where M3a §5 changes it: M2b's GONE is removed, a
+missing upload after the claim is refunded and REJECTED, and a duplicate notice for a job already
+rejected fails its claim (SKIPPED).
 """
 
 import contextlib
@@ -20,9 +23,13 @@ MODULES = ("neurolens.inference", "neurolens.worker")
 MAX_RECEIVES = 2  # the job queue's maxReceiveCount (M2a §4h); every message here is receive 1
 
 
-def no_heartbeat():
-    """M2b §1a: handle_record's heartbeat factory. These tests do not exercise the heartbeat."""
+def no_heartbeat(on_beat=None):
+    """handle_record's heartbeat factory (M3a §5: heartbeat(on_beat)). Not exercised here."""
     return contextlib.nullcontext()
+
+
+NO_DB = object()  # for calls whose records never reach a real handle_record
+RUN_DB_CFG = {"backend": "postgres", "dsn": "postgresql://unused.invalid/neurolens"}
 
 
 @pytest.fixture(autouse=True)
@@ -105,22 +112,23 @@ def audio_only_path(tmp_path_factory):
     return path
 
 
-# ---------------------------------------------------------------- Outcome.GONE
+# ---------------------------------------------------------------- Outcome.GONE (removed in M3a)
 
 
-def test_outcome_has_gone():
-    assert "GONE" in Outcome.__members__
-    assert Outcome.GONE not in (Outcome.DONE, Outcome.REJECTED)
+def test_outcome_gone_is_removed():
+    """M3a §5: a missing upload after a claim is refunded (REJECTED); GONE is removed."""
+    assert "GONE" not in Outcome.__members__
+    assert Outcome.REJECTED is not Outcome.DONE
 
 
 # ---------------------------------------------------------------- 3. delete failure
 
 
 def test_failed_message_delete_is_logged_not_raised_and_message_stays(
-    aws, make_cfg, roi_masks_small, new_key, queue_message, remaining, caplog
+    aws, db, make_cfg, roi_masks_small, new_job, queue_message, remaining, caplog
 ):
     cfg = make_cfg(max_upload_bytes=1000)
-    _, key = new_key()
+    _, key = new_job()
     aws.s3.put_object(Bucket=aws.bucket, Key=key, Body=b"x" * 2000)  # REJECTED, then delete
     sqs = Wrapped(aws.sqs, delete_message=raiser(client_error("ServiceUnavailable", "Delete")))
     message = queue_message(s3_event((aws.bucket, key)))
@@ -129,6 +137,7 @@ def test_failed_message_delete_is_logged_not_raised_and_message_stays(
             message,
             s3=aws.s3,
             sqs=sqs,
+            db=db,
             cfg=cfg,
             roi_masks=roi_masks_small,
             shutdown=worker.ShutdownSignal(),
@@ -151,9 +160,9 @@ MISSING_KEYS = [
 
 @pytest.mark.parametrize("section, leaf", MISSING_KEYS, ids=[k[1] for k in MISSING_KEYS])
 def test_run_rejects_a_config_with_a_missing_key_before_loading_the_model(
-    make_cfg, monkeypatch, section, leaf
+    make_cfg, monkeypatch, patch_everywhere, section, leaf
 ):
-    cfg = make_cfg()
+    cfg = make_cfg(db=dict(RUN_DB_CFG))
     if section is None:
         del cfg[leaf]
     else:
@@ -173,6 +182,8 @@ def test_run_rejects_a_config_with_a_missing_key_before_loading_the_model(
         monkeypatch.setattr(worker, "load_model", load_model)
     # should validation be missing, never enter the forever loop
     monkeypatch.setattr(worker, "poll_once", raiser(ModelLoadedTooEarly()), raising=False)
+    # M3a §5: run() builds the database from config; never a real connection here
+    patch_everywhere("from_config", lambda *a, **kw: NO_DB, "neurolens.db", "neurolens.worker")
 
     with pytest.raises(Exception, match=re.escape(leaf)):
         worker.run()
@@ -183,19 +194,25 @@ def test_run_rejects_a_config_with_a_missing_key_before_loading_the_model(
 
 
 def test_unusable_output_folder_fails_before_the_download(
-    aws, make_cfg, roi_masks_small, new_key, clip_path, tmp_path, spy_s3, patch_everywhere
+    aws, db, make_cfg, roi_masks_small, new_job, clip_path, tmp_path, spy_s3, patch_everywhere
 ):
     blocker = tmp_path / "a_regular_file"
     blocker.write_text("not a folder")
     cfg = make_cfg(paths={**make_cfg()["paths"], "output": str(blocker / "results")})
-    _, key = new_key()
+    _, key = new_job()
     aws.s3.upload_file(str(clip_path), aws.bucket, key)
     never_inference(patch_everywhere)
     s3 = spy_s3(forbid=("download_file", "download_fileobj"), forbid_on_uploads=("get_object",))
 
     with pytest.raises(Exception):  # noqa: B017 - the exact type is not specified
         handle_record(
-            aws.bucket, key, s3=s3, cfg=cfg, roi_masks=roi_masks_small, heartbeat=no_heartbeat
+            aws.bucket,
+            key,
+            s3=s3,
+            db=db,
+            cfg=cfg,
+            roi_masks=roi_masks_small,
+            heartbeat=no_heartbeat,
         )
 
     assert "download_file" not in s3.names()
@@ -215,31 +232,39 @@ def test_probe_duration_still_accepts_a_normal_clip(clip_path):
 
 
 def test_audio_only_upload_is_rejected_and_deleted_without_inference(
-    aws, make_cfg, roi_masks_small, new_key, audio_only_path, patch_everywhere
+    aws, db, pg, make_cfg, roi_masks_small, new_job, audio_only_path, patch_everywhere
 ):
     cfg = make_cfg()
-    job_id, key = new_key()
+    job_id, key = new_job()
     aws.s3.upload_file(str(audio_only_path), aws.bucket, key)
     never_inference(patch_everywhere)
 
     outcome = handle_record(
-        aws.bucket, key, s3=aws.s3, cfg=cfg, roi_masks=roi_masks_small, heartbeat=no_heartbeat
+        aws.bucket,
+        key,
+        s3=aws.s3,
+        db=db,
+        cfg=cfg,
+        roi_masks=roi_masks_small,
+        heartbeat=no_heartbeat,
     )
 
     assert outcome is Outcome.REJECTED
     assert not object_exists(aws, key)
     assert not (Path(cfg["paths"]["output"]) / f"{job_id}.json").exists()
+    assert pg.job(job_id)["error_code"] == "unreadable_video"
 
 
 def test_normal_video_still_passes_after_the_audio_only_rule(
-    aws, make_cfg, roi_masks_small, new_key, clip_path
+    aws, db, make_cfg, roi_masks_small, new_job, clip_path
 ):
-    _, key = new_key()
+    _, key = new_job()
     aws.s3.upload_file(str(clip_path), aws.bucket, key)
     outcome = handle_record(
         aws.bucket,
         key,
         s3=aws.s3,
+        db=db,
         cfg=make_cfg(),
         roi_masks=roi_masks_small,
         heartbeat=no_heartbeat,
@@ -247,14 +272,14 @@ def test_normal_video_still_passes_after_the_audio_only_rule(
     assert outcome is Outcome.DONE
 
 
-# ---------------------------------------------------------------- B. GONE
+# ---------------------------------------------------------------- B. missing uploads (M3a §5)
 
 
-def test_missing_object_is_gone_and_nothing_else_happens(
-    aws, make_cfg, roi_masks_small, new_key, spy_s3, patch_everywhere
+def test_missing_upload_is_refunded_and_nothing_else_happens(
+    aws, db, pg, make_cfg, roi_masks_small, new_job, spy_s3, patch_everywhere
 ):
     cfg = make_cfg()
-    job_id, key = new_key()
+    job_id, key = new_job()
     never_inference(patch_everywhere)
     s3 = spy_s3(
         forbid=("download_file", "download_fileobj", "delete_object"),
@@ -262,67 +287,92 @@ def test_missing_object_is_gone_and_nothing_else_happens(
     )
 
     outcome = handle_record(
-        aws.bucket, key, s3=s3, cfg=cfg, roi_masks=roi_masks_small, heartbeat=no_heartbeat
+        aws.bucket, key, s3=s3, db=db, cfg=cfg, roi_masks=roi_masks_small, heartbeat=no_heartbeat
     )
 
-    assert outcome is Outcome.GONE
+    assert outcome is Outcome.REJECTED
+    assert pg.job(job_id)["error_code"] == "upload_missing"
+    assert pg.balance() == (500, 0)
     assert not (Path(cfg["paths"]["output"]) / f"{job_id}.json").exists()
 
 
-def test_duplicate_event_for_an_oversize_object_is_rejected_then_gone(
-    aws, make_cfg, roi_masks_small, new_key
+def test_duplicate_event_for_an_oversize_object_is_rejected_then_skipped(
+    aws, db, pg, make_cfg, roi_masks_small, new_job
 ):
     cfg = make_cfg(max_upload_bytes=1000)
-    _, key = new_key()
+    job_id, key = new_job()
     aws.s3.put_object(Bucket=aws.bucket, Key=key, Body=b"x" * 2000)
 
     first = handle_record(
-        aws.bucket, key, s3=aws.s3, cfg=cfg, roi_masks=roi_masks_small, heartbeat=no_heartbeat
+        aws.bucket,
+        key,
+        s3=aws.s3,
+        db=db,
+        cfg=cfg,
+        roi_masks=roi_masks_small,
+        heartbeat=no_heartbeat,
     )
     assert first is Outcome.REJECTED
     assert not object_exists(aws, key)
+    after_first = pg.snapshot()
 
     second = handle_record(
-        aws.bucket, key, s3=aws.s3, cfg=cfg, roi_masks=roi_masks_small, heartbeat=no_heartbeat
+        aws.bucket,
+        key,
+        s3=aws.s3,
+        db=db,
+        cfg=cfg,
+        roi_masks=roi_masks_small,
+        heartbeat=no_heartbeat,
     )
-    assert second is Outcome.GONE
+    assert second is Outcome.SKIPPED  # its claim fails on the refunded job
+    assert pg.snapshot() == after_first  # refunded once
 
 
-def test_message_for_a_gone_object_is_deleted(
-    aws, make_cfg, roi_masks_small, new_key, queue_message, remaining
+def test_message_for_a_missing_upload_is_deleted(
+    aws, db, pg, make_cfg, roi_masks_small, new_job, queue_message, remaining
 ):
-    _, key = new_key()
+    job_id, key = new_job()
     process_message(
         queue_message(s3_event((aws.bucket, key))),
         s3=aws.s3,
         sqs=aws.sqs,
+        db=db,
         cfg=make_cfg(),
         roi_masks=roi_masks_small,
         shutdown=worker.ShutdownSignal(),
         max_receives=MAX_RECEIVES,
     )
     assert remaining() == []
+    assert pg.job(job_id)["error_code"] == "upload_missing"
 
 
 @pytest.mark.parametrize("code", ["404", "NoSuchKey"])
-def test_download_reporting_not_found_is_gone(
-    aws, make_cfg, roi_masks_small, new_key, clip_path, code
+def test_download_reporting_not_found_is_refunded_as_missing(
+    aws, db, pg, make_cfg, roi_masks_small, new_job, clip_path, code
 ):
     """The object vanishes between head_object and download_file (for example it expired)."""
-    _, key = new_key()
+    job_id, key = new_job()
     aws.s3.upload_file(str(clip_path), aws.bucket, key)
     s3 = Wrapped(aws.s3, download_file=raiser(client_error(code)))
     outcome = handle_record(
-        aws.bucket, key, s3=s3, cfg=make_cfg(), roi_masks=roi_masks_small, heartbeat=no_heartbeat
+        aws.bucket,
+        key,
+        s3=s3,
+        db=db,
+        cfg=make_cfg(),
+        roi_masks=roi_masks_small,
+        heartbeat=no_heartbeat,
     )
-    assert outcome is Outcome.GONE
+    assert outcome is Outcome.REJECTED
+    assert pg.job(job_id)["error_code"] == "upload_missing"
 
 
 @pytest.mark.parametrize("code", ["AccessDenied", "500"])
 def test_download_with_any_other_error_still_raises_and_keeps_the_message(
-    aws, make_cfg, roi_masks_small, new_key, clip_path, queue_message, remaining, code
+    aws, db, make_cfg, roi_masks_small, new_job, clip_path, queue_message, remaining, code
 ):
-    _, key = new_key()
+    _, key = new_job()
     aws.s3.upload_file(str(clip_path), aws.bucket, key)
     s3 = Wrapped(aws.s3, download_file=raiser(client_error(code)))
 
@@ -331,6 +381,7 @@ def test_download_with_any_other_error_still_raises_and_keeps_the_message(
             aws.bucket,
             key,
             s3=s3,
+            db=db,
             cfg=make_cfg(),
             roi_masks=roi_masks_small,
             heartbeat=no_heartbeat,
@@ -340,6 +391,7 @@ def test_download_with_any_other_error_still_raises_and_keeps_the_message(
         queue_message(s3_event((aws.bucket, key))),
         s3=s3,
         sqs=aws.sqs,
+        db=db,
         cfg=make_cfg(),
         roi_masks=roi_masks_small,
         shutdown=worker.ShutdownSignal(),
@@ -372,6 +424,7 @@ def test_unparseable_message_is_deleted_without_calling_handle_record(
         queue_message(body),
         s3=aws.s3,
         sqs=aws.sqs,
+        db=NO_DB,
         cfg=make_cfg(),
         roi_masks=roi_masks_small,
         shutdown=worker.ShutdownSignal(),
@@ -401,16 +454,17 @@ class ShortPollSqs:
 
 
 def test_poll_once_processes_a_waiting_message(
-    aws, make_cfg, roi_masks_small, new_key, clip_path, remaining
+    aws, db, make_cfg, roi_masks_small, new_job, clip_path, remaining
 ):
     cfg = make_cfg()
-    job_id, key = new_key()
+    job_id, key = new_job()
     aws.s3.upload_file(str(clip_path), aws.bucket, key)
     aws.sqs.send_message(QueueUrl=aws.queue_url, MessageBody=s3_event((aws.bucket, key)))
 
     ok = worker.poll_once(
         s3=aws.s3,
         sqs=ShortPollSqs(aws.sqs),
+        db=db,
         cfg=cfg,
         roi_masks=roi_masks_small,
         shutdown=worker.ShutdownSignal(),
@@ -427,6 +481,7 @@ def test_poll_once_with_an_empty_queue_returns_true(aws, make_cfg, roi_masks_sma
     ok = worker.poll_once(
         s3=aws.s3,
         sqs=ShortPollSqs(aws.sqs),
+        db=NO_DB,
         cfg=make_cfg(),
         roi_masks=roi_masks_small,
         shutdown=worker.ShutdownSignal(),
@@ -440,6 +495,7 @@ def test_poll_once_survives_a_failing_receive_message(aws, make_cfg, roi_masks_s
     ok = worker.poll_once(
         s3=aws.s3,
         sqs=sqs,
+        db=NO_DB,
         cfg=make_cfg(),
         roi_masks=roi_masks_small,
         shutdown=worker.ShutdownSignal(),
@@ -459,6 +515,7 @@ def test_poll_once_asks_for_one_message_with_a_long_poll(aws, make_cfg, roi_mask
     ok = worker.poll_once(
         s3=aws.s3,
         sqs=sqs,
+        db=NO_DB,
         cfg=make_cfg(),
         roi_masks=roi_masks_small,
         shutdown=worker.ShutdownSignal(),

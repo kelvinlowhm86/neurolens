@@ -21,6 +21,10 @@ ENV_TO_KEY = {
     "NEUROLENS_AWS_REGION": ("aws", "region"),
     "NEUROLENS_S3_BUCKET": ("aws", "s3_bucket"),
     "NEUROLENS_SQS_QUEUE_URL": ("aws", "sqs_queue_url"),
+    # M3a §3a / §9: the database's deployment-specific identifiers
+    "NEUROLENS_DB_CLUSTER_ARN": ("aws", "db_cluster_arn"),
+    "NEUROLENS_DB_SECRET_ARN": ("aws", "db_secret_arn"),
+    "NEUROLENS_DB_NAME": ("aws", "db_name"),
 }
 
 
@@ -327,8 +331,10 @@ def test_configure_env_with_hf_token_still_sets_it(hf_clean, tmp_path):
 # ------------------------------------------------------------------ entry points use load_settings
 
 
-def test_worker_run_reads_its_config_through_load_settings(make_cfg, monkeypatch):
-    cfg = make_cfg()
+def test_worker_run_reads_its_config_through_load_settings(make_cfg, monkeypatch, patch_everywhere):
+    cfg = make_cfg(db={"backend": "postgres", "dsn": "postgresql://unused.invalid/neurolens"})
+    # M3a §5: run() builds the database from config; never a real connection here
+    patch_everywhere("from_config", lambda *a, **kw: object(), "neurolens.db", "neurolens.worker")
     del cfg["aws"]["s3_bucket"]
     loaded = []
 
@@ -405,11 +411,26 @@ def test_committed_config_keeps_the_shared_shape(committed_cfg):
     assert "max_video_duration_seconds" in committed_cfg
 
 
+def test_committed_config_keeps_m3a_development_mode_local(committed_cfg):
+    """M3a §2, §9: the shared config runs the development identity on a local-only address (the
+    database's identifiers come only from the environment, checked by the aws test above)."""
+    assert committed_cfg.get("auth", {}).get("mode", "dev") == "dev"
+    assert committed_cfg.get("server", {}).get("host", "127.0.0.1") == "127.0.0.1"
+    assert committed_cfg.get("billing", {}).get("starter_cents", 500) == 500
+
+
 def test_env_example_is_committed_with_placeholders():
     path = REPO_ROOT / ".env.example"
     assert path.is_file()
     text = path.read_text()
-    for name in ("HF_TOKEN", "NEUROLENS_S3_BUCKET", "NEUROLENS_SQS_QUEUE_URL"):
+    for name in (
+        "HF_TOKEN",
+        "NEUROLENS_S3_BUCKET",
+        "NEUROLENS_SQS_QUEUE_URL",
+        "NEUROLENS_DB_CLUSTER_ARN",
+        "NEUROLENS_DB_SECRET_ARN",
+        "NEUROLENS_DB_NAME",
+    ):
         assert name in text
     for line in text.splitlines():
         assert not re.search(r"hf_[A-Za-z0-9]{20,}", line), "looks like a real token"

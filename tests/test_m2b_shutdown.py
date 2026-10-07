@@ -1,5 +1,9 @@
 """M2b shutdown handling and run(). Written from docs/M2b_spec.md §1a (ShutdownRequested,
-ShutdownSignal, process_message, run), §6 and §11.
+ShutdownSignal, process_message, run), §6 and §11, rewritten for docs/M3a_spec.md §5: the new
+signatures (db, heartbeat(on_beat)); process_message no longer writes any status (M2b's
+"interrupted" final-attempt status moves into handle_record's release_for_retry, checked here on
+the real pipeline); max_receives is kept only for the log line; run() builds the database with
+neurolens.db.from_config and refuses a heartbeat interval over 50 s.
 
 Every test that installs a ShutdownSignal uninstalls it (the `shutdown` fixture), and
 tests/conftest.py restores pytest's SIGTERM handler after every test as a second guard. Only one
@@ -14,11 +18,14 @@ import uuid
 
 import pytest
 from botocore.exceptions import ClientError
-from neurolens import inference, settings, storage, worker
+from conftest import USER_ID
+from neurolens import inference, settings, worker
 from neurolens.worker import Outcome, process_message
 
 MODULES = ("neurolens.inference", "neurolens.worker")
 INTERRUPTED = "The job was interrupted. Please upload it again."
+NO_DB = object()  # process_message only hands the database on to (a scripted) handle_record
+RUN_DB_CFG = {"backend": "postgres", "dsn": "postgresql://unused.invalid/neurolens"}
 
 
 @pytest.fixture(autouse=True)
@@ -52,18 +59,9 @@ def s3_event(*pairs):
     )
 
 
-def status_of(aws, job_id):
-    try:
-        body = aws.s3.get_object(Bucket=aws.bucket, Key=f"status/{job_id}.json")["Body"]
-    except ClientError as err:
-        assert err.response["Error"]["Code"] in ("404", "NoSuchKey", "NotFound")
-        return None
-    return json.loads(body.read())
-
-
-def new_job():
+def new_upload():
     job_id = str(uuid.uuid4())
-    return job_id, f"uploads/placeholder-user/{job_id}.mp4"
+    return job_id, f"uploads/{USER_ID}/{job_id}.mp4"
 
 
 @pytest.fixture
@@ -107,7 +105,7 @@ def fake_record(monkeypatch):
     def install(fn):
         seen = []
 
-        def fake(bucket, key, *, s3, cfg, roi_masks, heartbeat):
+        def fake(bucket, key, *, s3, db, cfg, roi_masks, heartbeat):
             seen.append(key)
             return fn(heartbeat)
 
@@ -115,13 +113,6 @@ def fake_record(monkeypatch):
         return seen
 
     return install
-
-
-def write_progress(aws, job_id):
-    """The status a real record would have written before the signal arrived."""
-    storage.put_status(aws.s3, aws.bucket, job_id, "processing", stage="downloading")
-    storage.put_status(aws.s3, aws.bucket, job_id, "processing", stage="transcribing")
-    return status_of(aws, job_id)
 
 
 # ---------------------------------------------------------------- ShutdownRequested
@@ -220,7 +211,7 @@ def signal_mid_record(shutdown, then=None):
     ShutdownRequested into another exception, as when a killed subprocess fails first."""
 
     def run(heartbeat):
-        with heartbeat():
+        with heartbeat(None):
             if then is None:
                 shutdown.handle(signal.SIGTERM, None)
                 raise AssertionError("handle should have raised ShutdownRequested")
@@ -233,11 +224,12 @@ def signal_mid_record(shutdown, then=None):
     return run
 
 
-def call_process(aws, message, cfg, masks, shutdown, max_receives, sqs=None):
+def call_process(aws, message, cfg, masks, shutdown, max_receives, sqs=None, db=NO_DB):
     return process_message(
         message,
         s3=aws.s3,
         sqs=sqs or aws.sqs,
+        db=db,
         cfg=cfg,
         roi_masks=masks,
         shutdown=shutdown,
@@ -245,63 +237,30 @@ def call_process(aws, message, cfg, masks, shutdown, max_receives, sqs=None):
     )
 
 
+@pytest.mark.parametrize("max_receives", [2, 1], ids=["non_final", "final"])
 @pytest.mark.parametrize(
     "then", [None, RuntimeError("ffmpeg was killed")], ids=["shutdown_requested", "other_error"]
 )
-def test_shutdown_on_a_non_final_attempt_releases_keeps_status_and_reraises(
-    aws, make_cfg, roi_masks_small, received, fake_record, shutdown, then
+def test_shutdown_releases_the_message_and_reraises_on_any_attempt(
+    aws, make_cfg, roi_masks_small, received, fake_record, shutdown, then, max_receives
 ):
-    job_id, key = new_job()
-    before = write_progress(aws, job_id)
+    """M3a §5: on a shutdown process_message releases the message and re-raises; it writes no
+    status on any attempt (handle_record has already released the job, and the dead-letter
+    handler settles one that never comes back)."""
+    _, key = new_upload()
     fake_record(signal_mid_record(shutdown, then))
     message = received(s3_event((aws.bucket, key)))
 
     with pytest.raises(worker.ShutdownRequested):
-        call_process(aws, message, make_cfg(), roi_masks_small, shutdown, max_receives=2)
+        call_process(aws, message, make_cfg(), roi_masks_small, shutdown, max_receives=max_receives)
 
-    assert status_of(aws, job_id) == before  # not "retrying": a shutdown is not a failure
     assert len(visible(aws)) == 1  # released, not deleted
-
-
-@pytest.mark.parametrize(
-    "then", [None, RuntimeError("ffmpeg was killed")], ids=["shutdown_requested", "other_error"]
-)
-def test_shutdown_on_the_final_attempt_writes_interrupted_failed(
-    aws, make_cfg, roi_masks_small, received, fake_record, shutdown, then
-):
-    job_id, key = new_job()
-    write_progress(aws, job_id)
-    fake_record(signal_mid_record(shutdown, then))
-    message = received(s3_event((aws.bucket, key)))
-
-    with pytest.raises(worker.ShutdownRequested):
-        call_process(aws, message, make_cfg(), roi_masks_small, shutdown, max_receives=1)
-
-    status = status_of(aws, job_id)
-    assert status["status"] == "failed"
-    assert status["error"] == INTERRUPTED
-    assert len(visible(aws)) == 1
-
-
-def test_shutdown_on_the_final_attempt_with_a_result_changes_no_status(
-    aws, make_cfg, roi_masks_small, received, fake_record, shutdown
-):
-    job_id, key = new_job()
-    storage.put_result(aws.s3, aws.bucket, job_id, {"job_id": job_id})
-    fake_record(signal_mid_record(shutdown))
-    message = received(s3_event((aws.bucket, key)))
-
-    with pytest.raises(worker.ShutdownRequested):
-        call_process(aws, message, make_cfg(), roi_masks_small, shutdown, max_receives=1)
-
-    assert status_of(aws, job_id) is None
-    assert len(visible(aws)) == 1
 
 
 def test_a_message_received_after_a_request_is_released_untouched(
     aws, make_cfg, roi_masks_small, received, fake_record, shutdown
 ):
-    job_id, key = new_job()
+    _, key = new_upload()
     seen = fake_record(lambda heartbeat: Outcome.DONE)
     message = received(s3_event((aws.bucket, key)))
     shutdown.handle(signal.SIGTERM, None)  # between messages: only recorded
@@ -310,7 +269,6 @@ def test_a_message_received_after_a_request_is_released_untouched(
         call_process(aws, message, make_cfg(), roi_masks_small, shutdown, max_receives=1)
 
     assert seen == []  # no record work at all
-    assert status_of(aws, job_id) is None
     assert len(visible(aws)) == 1
 
 
@@ -318,7 +276,7 @@ def test_a_signal_during_the_message_delete_does_not_interrupt_it(
     aws, make_cfg, roi_masks_small, received, fake_record, shutdown
 ):
     """Only the record work is inside job(): the delete after it cannot be cut short."""
-    _, key = new_job()
+    _, key = new_upload()
     fake_record(lambda heartbeat: Outcome.DONE)
     raised_inside_delete = []
 
@@ -356,9 +314,12 @@ def test_a_signal_during_the_message_delete_does_not_interrupt_it(
 
 
 def test_real_pipeline_interrupted_mid_inference_is_released_with_its_last_stage(
-    aws, make_cfg, roi_masks_small, new_key, clip_path, received, shutdown, patch_everywhere
+    aws, db, pg, make_cfg, roi_masks_small, new_job, clip_path, received, shutdown, patch_everywhere
 ):
-    job_id, key = new_key()
+    """M3a §5: handle_record hands the job back with release_for_retry and M2b's "interrupted"
+    message (so a job dead-lettered after a shutdown still shows a reason); money stays
+    reserved; process_message releases the message and re-raises."""
+    job_id, key = new_job()
     aws.s3.upload_file(str(clip_path), aws.bucket, key)
 
     def predict(*a, **kw):
@@ -369,11 +330,13 @@ def test_real_pipeline_interrupted_mid_inference_is_released_with_its_last_stage
     message = received(s3_event((aws.bucket, key)))
 
     with pytest.raises(worker.ShutdownRequested):
-        call_process(aws, message, make_cfg(), roi_masks_small, shutdown, max_receives=2)
+        call_process(aws, message, make_cfg(), roi_masks_small, shutdown, max_receives=2, db=db)
 
-    status = status_of(aws, job_id)
-    assert status["status"] == "processing"
-    assert status["stage"] == "inference_full"
+    job = pg.job(job_id)
+    assert job["status"] == "queued"
+    assert job["error_message"] == INTERRUPTED
+    assert job["stages"][-1]["stage"] == "inference_full"
+    assert pg.balance() == (410, 90)
     assert len(visible(aws)) == 1
     with pytest.raises(ClientError):
         aws.s3.head_object(Bucket=aws.bucket, Key=f"results/{job_id}.json")
@@ -447,13 +410,15 @@ class RunSqs:
 
 
 @pytest.fixture
-def run_env(aws, make_cfg, monkeypatch, roi_masks_small):
-    """Wire worker.run() to a config, a no-op model, moto S3 and a fake SQS."""
+def run_env(aws, make_cfg, monkeypatch, roi_masks_small, patch_everywhere):
+    """Wire worker.run() to a config, a no-op model, moto S3, a fake SQS and a stand-in database
+    (neurolens.db.from_config returns NO_DB; the scripted records never use it)."""
     import boto3
 
     def setup(sqs, **cfg_overrides):
-        cfg = make_cfg(**cfg_overrides)
+        cfg = make_cfg(**{"db": dict(RUN_DB_CFG), **cfg_overrides})
         monkeypatch.setattr(settings, "load_settings", lambda *a, **kw: cfg)
+        built.clear()
         monkeypatch.setattr(inference, "load_model", lambda *a, **kw: None)
         monkeypatch.setattr(inference, "roi_masks", lambda *a, **kw: roi_masks_small)
 
@@ -463,14 +428,15 @@ def run_env(aws, make_cfg, monkeypatch, roi_masks_small):
         monkeypatch.setattr(boto3, "client", fake_client)
         return cfg
 
+    built = []
+
+    def from_config(cfg):
+        built.append(cfg)
+        return NO_DB
+
+    patch_everywhere("from_config", from_config, "neurolens.db", "neurolens.worker")
+    setup.built = built
     return setup
-
-
-def failing_handle_record(monkeypatch):
-    def fake(bucket, key, *, s3, cfg, roi_masks, heartbeat):
-        raise RuntimeError("model crashed")
-
-    monkeypatch.setattr(worker, "handle_record", fake)
 
 
 def test_run_has_no_idle_exit_and_keeps_polling_until_a_shutdown_request(run_env, aws):
@@ -489,36 +455,74 @@ def test_run_receives_with_the_approximate_receive_count(run_env, aws):
     assert "ApproximateReceiveCount" in names or "All" in names
 
 
-@pytest.mark.parametrize(
-    "policy_count, receive_count, expected",
-    [
-        ("10", "9", "processing"),  # compared as integers: 9 < 10, not "9" >= "10"
-        ("10", "10", "failed"),
-        (2, "2", "failed"),
-        (2, "1", "processing"),
-    ],
-)
+@pytest.mark.parametrize("policy_count", ["10", 2], ids=["string", "integer"])
 def test_run_reads_max_receives_from_the_redrive_policy_as_an_integer(
-    run_env, aws, monkeypatch, policy_count, receive_count, expected
+    run_env, aws, monkeypatch, policy_count
 ):
-    job_id, key = new_job()
+    """M3a §5: max_receives is kept only for the log line ("attempt 1 of 2"); run() still reads
+    it once from the queue's RedrivePolicy, as an integer, and passes it on."""
+    _, key = new_upload()
     sqs = RunSqs(
         aws.bucket,
         policy={
             "deadLetterTargetArn": "arn:aws:sqs:us-east-1:1:dlq",
             "maxReceiveCount": policy_count,
         },
-        deliver={1: (key, receive_count)},
+        deliver={1: (key, "1")},
         shutdown_on=2,
     )
     run_env(sqs)
-    failing_handle_record(monkeypatch)
+    passed = []
+
+    def fake_process_message(message, **kwargs):
+        passed.append(kwargs)
+
+    monkeypatch.setattr(worker, "process_message", fake_process_message)
     worker.run()
-    status = status_of(aws, job_id)
-    assert status["status"] == expected
-    if expected == "processing":
-        assert status["stage"] == "retrying"
-    assert 0 in sqs.visibility and sqs.deleted == 0  # released, not deleted
+    assert [kw["max_receives"] for kw in passed] == [int(policy_count)]
+    assert type(passed[0]["max_receives"]) is int
+
+
+def test_run_builds_the_database_from_config_and_hands_it_to_each_record(run_env, aws, monkeypatch):
+    _, key = new_upload()
+    sqs = RunSqs(aws.bucket, policy={"maxReceiveCount": 2}, deliver={1: (key, "1")}, shutdown_on=2)
+    cfg = run_env(sqs)
+    seen = []
+
+    def fake(bucket, key, *, s3, db, cfg, roi_masks, heartbeat):
+        seen.append(db)
+        return Outcome.DONE
+
+    monkeypatch.setattr(worker, "handle_record", fake)
+    worker.run()
+    assert run_env.built == [cfg]
+    assert seen == [NO_DB]
+
+
+@pytest.mark.parametrize("seconds", [51, 120])
+def test_run_refuses_a_heartbeat_interval_over_50_seconds(run_env, aws, caplog, seconds):
+    """M3a §5: a redelivery comes no sooner than 120 s after the last heartbeat, and a claim is
+    stale after 90 s, so the heartbeat must refresh it every 50 s or less."""
+    sqs = RunSqs(aws.bucket, policy={"maxReceiveCount": 2}, shutdown_on=1, limit=5)
+    run_env(sqs, worker={"heartbeat_seconds": seconds, "max_job_minutes": 75})
+    error = None
+    with caplog.at_level("DEBUG"):
+        try:
+            worker.run()
+        except Stop:
+            pytest.fail("run() started polling with a heartbeat interval over 50 s")
+        except Exception as err:  # raising or logging are both a refusal
+            error = err
+    assert sqs.receives == []
+    said = str(error or "") + " ".join(r.getMessage() for r in caplog.records)
+    assert "heartbeat_seconds" in said
+
+
+def test_run_accepts_a_heartbeat_interval_of_50_seconds(run_env, aws):
+    sqs = RunSqs(aws.bucket, policy={"maxReceiveCount": 2}, shutdown_on=1)
+    run_env(sqs, worker={"heartbeat_seconds": 50, "max_job_minutes": 75})
+    worker.run()
+    assert len(sqs.receives) == 1
 
 
 def test_run_refuses_to_start_when_the_queue_has_no_redrive_policy(run_env, aws, caplog):
@@ -538,11 +542,11 @@ def test_run_refuses_to_start_when_the_queue_has_no_redrive_policy(run_env, aws,
 
 
 def test_run_stops_and_returns_after_a_shutdown_inside_a_job(run_env, aws, monkeypatch):
-    _, key = new_job()
+    _, key = new_upload()
     sqs = RunSqs(aws.bucket, policy={"maxReceiveCount": 2}, deliver={1: (key, "1")})
 
-    def fake(bucket, key, *, s3, cfg, roi_masks, heartbeat):
-        with heartbeat():
+    def fake(bucket, key, *, s3, db, cfg, roi_masks, heartbeat):
+        with heartbeat(None):
             sigterm_handler_now()  # inside the record's work: raises ShutdownRequested
         raise AssertionError("the handler should have raised")
 
@@ -555,7 +559,7 @@ def test_run_stops_and_returns_after_a_shutdown_inside_a_job(run_env, aws, monke
 
 
 def test_run_stops_after_a_shutdown_request_between_messages(run_env, aws, monkeypatch):
-    _, key = new_job()
+    _, key = new_upload()
     sqs = RunSqs(
         aws.bucket,
         policy={"maxReceiveCount": 2},

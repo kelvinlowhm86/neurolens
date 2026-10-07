@@ -5,3 +5,5 @@
 pytest>=8.0
 ruff>=0.6
 moto[s3,sqs,autoscaling]>=5.0
+# M3a: the billing tests run against a real PostgreSQL 16 (NEUROLENS_TEST_DSN)
+psycopg[binary]>=3.1

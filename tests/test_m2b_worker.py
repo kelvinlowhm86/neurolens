@@ -1,6 +1,13 @@
-"""M2b worker behaviour: status writes, SKIPPED, DUPLICATE, failure status and fast release,
-multi-record messages. Written from docs/M2b_spec.md §1a, §4, §5, §6 and §11 (moto, fake
-inference).
+"""M2b worker behaviour, rewritten for M3a: heartbeat, rejections, failure release, multi-record
+messages. Written from docs/M2b_spec.md §1a, §5, §6 and §11, with the M3a §5 signatures (db,
+heartbeat(on_beat)) and each record's job seeded in PostgreSQL first (moto, fake inference).
+
+M3a retires the S3 status objects (docs/M3a_spec.md §5, §10): a rejection's plain reason is now the
+job's refund reason (`error_code`), a failure hands the job back with `release_for_retry`, and
+process_message writes no status. Removed with their Aurora equivalents in tests/test_m3a_worker.py
+(§10): the status-object and `stages` tests, "a record that raises on the final attempt leads to
+status failed", "a lost conditional write leaves the done status untouched" and "a record whose
+result exists is skipped with no status change".
 
 Receive counts: the installed moto (5.2.x) honours MessageSystemAttributeNames, so messages are
 received with ApproximateReceiveCount="1" and the attempt is made final or not through
@@ -14,19 +21,12 @@ import time
 import uuid
 
 import pytest
-from botocore.exceptions import ClientError
-from neurolens import inference, storage, worker
+from conftest import USER_ID
+from neurolens import billing, inference, storage, worker
 from neurolens.worker import Outcome, handle_record, process_message
 
 MODULES = ("neurolens.inference", "neurolens.worker")
-STAGE_ORDER = [
-    "downloading",
-    "transcribing",
-    "inference_full",
-    "inference_noaudio",
-    "extracting_roi",
-]
-INTERRUPTED = "The job was interrupted. Please upload it again."
+NO_DB = object()  # process_message only hands the database on to (a scripted) handle_record
 
 
 @pytest.fixture(autouse=True)
@@ -50,13 +50,16 @@ def s3_event(*pairs):
 
 
 class TrackingHeartbeat:
-    """Stands in for the Heartbeat handle_record gets: records whether a block is active."""
+    """Stands in for the heartbeat factory handle_record gets: records whether a block is active
+    and the on_beat it was given."""
 
     def __init__(self):
         self.active = False
         self.entered = 0
+        self.on_beats = []
 
-    def __call__(self):
+    def __call__(self, on_beat=None):
+        self.on_beats.append(on_beat)
         return self
 
     def __enter__(self):
@@ -69,25 +72,8 @@ class TrackingHeartbeat:
         return False
 
 
-def no_heartbeat():
+def no_heartbeat(on_beat=None):
     return contextlib.nullcontext()
-
-
-def status_of(aws, job_id):
-    try:
-        body = aws.s3.get_object(Bucket=aws.bucket, Key=f"status/{job_id}.json")["Body"]
-    except ClientError as err:
-        assert err.response["Error"]["Code"] in ("404", "NoSuchKey", "NotFound")
-        return None
-    return json.loads(body.read())
-
-
-def result_of(aws, job_id):
-    try:
-        body = aws.s3.get_object(Bucket=aws.bucket, Key=f"results/{job_id}.json")["Body"]
-    except ClientError:
-        return None
-    return json.loads(body.read())
 
 
 def never_inference(patch_everywhere):
@@ -98,9 +84,9 @@ def never_inference(patch_everywhere):
         patch_everywhere(name, boom, *MODULES)
 
 
-def run_record(aws, key, cfg, masks, heartbeat=no_heartbeat, s3=None):
+def run_record(aws, db, key, cfg, masks, heartbeat=no_heartbeat, s3=None):
     return handle_record(
-        aws.bucket, key, s3=s3 or aws.s3, cfg=cfg, roi_masks=masks, heartbeat=heartbeat
+        aws.bucket, key, s3=s3 or aws.s3, db=db, cfg=cfg, roi_masks=masks, heartbeat=heartbeat
     )
 
 
@@ -168,13 +154,14 @@ class RecordingSqs:
 
 @pytest.fixture
 def fake_record(monkeypatch):
-    """Replace handle_record with a scripted one (the §1a signature). A script value is an Outcome
-    to return, an exception to raise, or a callable(heartbeat) run in place of the record."""
+    """Replace handle_record with a scripted one (the M3a §5 signature). A script value is an
+    Outcome to return, an exception to raise, or a callable(heartbeat) run in place of the
+    record."""
 
     def install(script):
         seen = []
 
-        def fake(bucket, key, *, s3, cfg, roi_masks, heartbeat):
+        def fake(bucket, key, *, s3, db, cfg, roi_masks, heartbeat):
             seen.append(key)
             action = script[key]
             if isinstance(action, BaseException):
@@ -189,11 +176,12 @@ def fake_record(monkeypatch):
     return install
 
 
-def call_process(aws, message, cfg, masks, *, max_receives, sqs=None, shutdown=None):
+def call_process(aws, message, cfg, masks, *, max_receives, db=NO_DB, sqs=None, shutdown=None):
     return process_message(
         message,
         s3=aws.s3,
         sqs=sqs or aws.sqs,
+        db=db,
         cfg=cfg,
         roi_masks=masks,
         shutdown=shutdown or worker.ShutdownSignal(),
@@ -201,116 +189,53 @@ def call_process(aws, message, cfg, masks, *, max_receives, sqs=None, shutdown=N
     )
 
 
+def upload_key():
+    return f"uploads/{USER_ID}/{uuid.uuid4()}.mp4"
+
+
 # ---------------------------------------------------------------- Outcome
 
 
-def test_outcome_gains_skipped():
-    assert {"DONE", "REJECTED", "GONE", "DUPLICATE", "SKIPPED"} <= set(Outcome.__members__)
-    assert (
-        len({Outcome.DONE, Outcome.REJECTED, Outcome.GONE, Outcome.DUPLICATE, Outcome.SKIPPED}) == 5
-    )
-
-
-# ---------------------------------------------------------------- handle_record: status and stages
-
-
-def test_done_job_ends_with_status_done_and_stages_in_section_4_order(
-    aws, make_cfg, roi_masks_small, new_key, clip_path
-):
-    job_id, key = new_key()
-    aws.s3.upload_file(str(clip_path), aws.bucket, key)
-    outcome = run_record(aws, key, make_cfg(), roi_masks_small)
-    assert outcome is Outcome.DONE
-    status = status_of(aws, job_id)
-    assert status["job_id"] == job_id
-    assert status["status"] == "done"
-    assert status["error"] is None
-    assert [s["stage"] for s in status["stages"]] == STAGE_ORDER
-    times = [s["at"] for s in status["stages"]]
-    assert times == sorted(times)
-
-
-def test_each_pipeline_step_runs_under_its_own_stage(
-    aws, make_cfg, roi_masks_small, new_key, clip_path, patch_everywhere
-):
-    """§4: processing is written before any real work, and `stage` names the step running."""
-    job_id, key = new_key()
-    aws.s3.upload_file(str(clip_path), aws.bucket, key)
-    seen = {}
-
-    def current():
-        obj = status_of(aws, job_id)
-        return None if obj is None else (obj["status"], obj["stage"])
-
-    real_build, real_predict = inference.build_events, inference.predict
-    from neurolens import engagement
-
-    real_extract = engagement.extract_engagement
-
-    def build(path, *a, **kw):
-        seen["build_events"] = current()
-        return real_build(path, *a, **kw)
-
-    def predict(events, duration, *a, **kw):
-        seen.setdefault("predict", []).append(current())
-        return real_predict(events, duration, *a, **kw)
-
-    def extract(*a, **kw):
-        seen["extract"] = current()
-        return real_extract(*a, **kw)
-
-    patch_everywhere("build_events", build, *MODULES)
-    patch_everywhere("predict", predict, *MODULES)
-    patch_everywhere("extract_engagement", extract, "neurolens.engagement", "neurolens.worker")
-
-    class StatusAtDownload:
-        def __init__(self, inner):
-            self._inner = inner
-
-        def download_file(self, *a, **kw):
-            seen["download"] = current()
-            return self._inner.download_file(*a, **kw)
-
-        def __getattr__(self, name):
-            return getattr(self._inner, name)
-
-    outcome = run_record(aws, key, make_cfg(), roi_masks_small, s3=StatusAtDownload(aws.s3))
-
-    assert outcome is Outcome.DONE
-    assert seen["download"] == ("processing", "downloading")
-    assert seen["build_events"] == ("processing", "transcribing")
-    assert seen["predict"] == [
-        ("processing", "inference_full"),
-        ("processing", "inference_noaudio"),
+def test_outcomes_from_m3a_on():
+    """M2b's SKIPPED stays; M3a §5 removes GONE and adds BUSY and LOST_CLAIM."""
+    names = set(Outcome.__members__)
+    assert {"DONE", "REJECTED", "DUPLICATE", "SKIPPED", "BUSY", "LOST_CLAIM"} <= names
+    assert "GONE" not in names
+    members = [
+        Outcome[n] for n in ("DONE", "REJECTED", "DUPLICATE", "SKIPPED", "BUSY", "LOST_CLAIM")
     ]
-    assert seen["extract"] == ("processing", "extracting_roi")
+    assert len(set(members)) == 6
 
 
-def test_result_is_written_before_the_done_status(
-    aws, make_cfg, roi_masks_small, new_key, clip_path, monkeypatch
+# ---------------------------------------------------------------- handle_record: heartbeat, order
+
+
+def test_result_is_written_before_the_job_is_settled(
+    aws, db, pg, make_cfg, roi_masks_small, new_job, clip_path, monkeypatch
 ):
-    job_id, key = new_key()
+    """M2b §4's write order, in Aurora: put_result first, then settle_success (status done)."""
+    job_id, key = new_job()
     aws.s3.upload_file(str(clip_path), aws.bucket, key)
     at_put_result = []
     real = storage.put_result
 
     def spy(s3, bucket, jid, result):
-        at_put_result.append(status_of(aws, jid))
+        at_put_result.append(pg.job(jid)["status"])
         return real(s3, bucket, jid, result)
 
     monkeypatch.setattr(storage, "put_result", spy)
     if hasattr(worker, "put_result"):
         monkeypatch.setattr(worker, "put_result", spy)
-    run_record(aws, key, make_cfg(), roi_masks_small)
+    assert run_record(aws, db, key, make_cfg(), roi_masks_small) is Outcome.DONE
     assert len(at_put_result) == 1
-    assert at_put_result[0] is None or at_put_result[0]["status"] != "done"
-    assert status_of(aws, job_id)["status"] == "done"
+    assert at_put_result[0] != "done"
+    assert pg.job(job_id)["status"] == "done"
 
 
 def test_record_work_runs_inside_the_heartbeat(
-    aws, make_cfg, roi_masks_small, new_key, clip_path, patch_everywhere
+    aws, db, make_cfg, roi_masks_small, new_job, clip_path, patch_everywhere
 ):
-    job_id, key = new_key()
+    _, key = new_job()
     aws.s3.upload_file(str(clip_path), aws.bucket, key)
     hb = TrackingHeartbeat()
     inside = []
@@ -326,149 +251,91 @@ def test_record_work_runs_inside_the_heartbeat(
 
     patch_everywhere("build_events", build, *MODULES)
     patch_everywhere("predict", predict, *MODULES)
-    assert run_record(aws, key, make_cfg(), roi_masks_small, heartbeat=hb) is Outcome.DONE
+    assert run_record(aws, db, key, make_cfg(), roi_masks_small, heartbeat=hb) is Outcome.DONE
     assert inside == [True, True, True]
     assert hb.active is False  # left before returning
+    assert len(hb.on_beats) == 1 and callable(hb.on_beats[0])  # M3a: the touch callback
 
 
-# ---------------------------------------------------------------- GONE leaves status untouched
+# ---------------------------------------------------------------- missing uploads (was GONE)
 
 
-def test_gone_upload_leaves_an_existing_failed_status_untouched(
-    aws, make_cfg, roi_masks_small, new_key
+def test_a_notice_for_a_refunded_job_whose_upload_is_gone_changes_nothing(
+    aws, db, pg, make_cfg, roi_masks_small, new_job, patch_everywhere
 ):
-    """§4: a duplicate notice for a video already rejected (and deleted) must not turn its
-    failed status back into processing."""
-    job_id, key = new_key()
-    failed = {
-        "job_id": job_id,
-        "status": "failed",
-        "stage": None,
-        "updated_at": "2026-10-14T03:22:10Z",
-        "stages": [],
-        "error": "The file is not a readable video.",
-    }
-    aws.s3.put_object(Bucket=aws.bucket, Key=f"status/{job_id}.json", Body=json.dumps(failed))
-    outcome = run_record(aws, key, make_cfg(), roi_masks_small)  # the upload does not exist
-    assert outcome is Outcome.GONE
-    assert status_of(aws, job_id) == failed
-
-
-def test_gone_upload_writes_no_status_when_there_is_none(aws, make_cfg, roi_masks_small, new_key):
-    job_id, key = new_key()
-    outcome = run_record(aws, key, make_cfg(), roi_masks_small)
-    assert outcome is Outcome.GONE
-    assert status_of(aws, job_id) is None
-
-
-# ---------------------------------------------------------------- SKIPPED / DUPLICATE
-
-
-@pytest.mark.parametrize("existing_status", [None, "done", "processing"])
-def test_existing_result_is_skipped_with_no_inference_and_no_status_change(
-    aws, make_cfg, roi_masks_small, new_key, clip_path, patch_everywhere, existing_status
-):
-    job_id, key = new_key()
-    aws.s3.upload_file(str(clip_path), aws.bucket, key)
-    earlier = {"job_id": job_id, "marker": "earlier"}
-    storage.put_result(aws.s3, aws.bucket, job_id, earlier)
-    if existing_status is not None:
-        obj = {
-            "job_id": job_id,
-            "status": existing_status,
-            "stage": None,
-            "updated_at": "2026-10-14T03:22:10Z",
-            "stages": [],
-            "error": None,
-        }
-        aws.s3.put_object(Bucket=aws.bucket, Key=f"status/{job_id}.json", Body=json.dumps(obj))
-    before = status_of(aws, job_id)
+    """§4 (M2b): a duplicate notice for a video already rejected (and deleted) must not undo its
+    failure. M3a §5: its claim fails, so it is SKIPPED."""
+    job_id, key = new_job()
+    billing.claim(db, job_id)
+    billing.issue_refund(db, job_id, "unreadable_video", "Not a video.", attempt=1)
+    before = pg.snapshot()
     never_inference(patch_everywhere)
-
-    outcome = run_record(aws, key, make_cfg(), roi_masks_small)
-
-    assert outcome is Outcome.SKIPPED
-    assert status_of(aws, job_id) == before
-    assert result_of(aws, job_id) == earlier
+    assert run_record(aws, db, key, make_cfg(), roi_masks_small) is Outcome.SKIPPED
+    assert pg.snapshot() == before
 
 
-def test_lost_conditional_write_is_duplicate_and_leaves_result_and_done_status(
-    aws, make_cfg, roi_masks_small, new_key, clip_path, patch_everywhere
+def test_a_missing_upload_on_a_waiting_job_is_refunded(
+    aws, db, pg, make_cfg, roi_masks_small, new_job, patch_everywhere
 ):
-    """Another worker finishes the same job while this one runs: its result and done status
-    stay exactly as it wrote them."""
-    job_id, key = new_key()
-    aws.s3.upload_file(str(clip_path), aws.bucket, key)
-    theirs = {"job_id": job_id, "marker": "the other worker"}
-    snapshot = {}
-    real_predict = inference.predict
-
-    def predict(events, duration, *a, **kw):
-        if not snapshot:  # during the first pass, the other worker finishes
-            assert storage.put_result(aws.s3, aws.bucket, job_id, theirs) is True
-            storage.put_status(aws.s3, aws.bucket, job_id, "done")
-            snapshot["status"] = status_of(aws, job_id)
-        return real_predict(events, duration, *a, **kw)
-
-    patch_everywhere("predict", predict, *MODULES)
-
-    outcome = run_record(aws, key, make_cfg(), roi_masks_small)
-
-    assert outcome is Outcome.DUPLICATE
-    assert result_of(aws, job_id) == theirs
-    assert status_of(aws, job_id) == snapshot["status"]
-    assert snapshot["status"]["status"] == "done"
+    job_id, key = new_job()  # reserved, never uploaded
+    never_inference(patch_everywhere)
+    assert run_record(aws, db, key, make_cfg(), roi_masks_small) is Outcome.REJECTED
+    job = pg.job(job_id)
+    assert job["status"] == "failed" and job["error_code"] == "upload_missing"
+    assert pg.balance() == (500, 0)
 
 
-# ---------------------------------------------------------------- rejections write failed
+# ---------------------------------------------------------------- rejections are refunded
 
 
-def test_oversize_rejection_writes_failed_with_its_plain_reason(
-    aws, make_cfg, roi_masks_small, new_key
+def assert_rejected(pg, job_id, reason):
+    job = pg.job(job_id)
+    assert job["status"] == "failed"
+    assert job["error_code"] == reason
+    assert pg.refund_reason(job_id) == reason
+    assert pg.balance() == (500, 0)
+
+
+def test_oversize_rejection_is_refunded_with_its_reason(
+    aws, db, pg, make_cfg, roi_masks_small, new_job
 ):
-    job_id, key = new_key()
+    job_id, key = new_job()
     aws.s3.put_object(Bucket=aws.bucket, Key=key, Body=b"x" * 2000)
-    outcome = run_record(aws, key, make_cfg(max_upload_bytes=1000), roi_masks_small)
+    outcome = run_record(aws, db, key, make_cfg(max_upload_bytes=1000), roi_masks_small)
     assert outcome is Outcome.REJECTED
-    status = status_of(aws, job_id)
-    assert status["status"] == "failed"
-    assert status["error"] == "The file is larger than the upload limit."
+    assert_rejected(pg, job_id, "file_too_large")
 
 
-def test_too_long_rejection_writes_failed_with_its_plain_reason(
-    aws, make_cfg, roi_masks_small, new_key, patch_everywhere
+def test_too_long_rejection_is_refunded_with_its_reason(
+    aws, db, pg, make_cfg, roi_masks_small, new_job, patch_everywhere
 ):
     patch_everywhere("probe_duration", lambda path: 500.0, *MODULES)
-    job_id, key = new_key()
+    job_id, key = new_job()
     aws.s3.put_object(Bucket=aws.bucket, Key=key, Body=b"some bytes")
-    outcome = run_record(aws, key, make_cfg(), roi_masks_small)  # max 120 s
+    outcome = run_record(aws, db, key, make_cfg(), roi_masks_small)  # max 120 s
     assert outcome is Outcome.REJECTED
-    status = status_of(aws, job_id)
-    assert status["status"] == "failed"
-    assert status["error"] == "The video is longer than 120 seconds."
+    assert_rejected(pg, job_id, "duration_exceeds_max_verified")
 
 
-def test_unreadable_rejection_writes_failed_with_its_plain_reason(
-    aws, make_cfg, roi_masks_small, new_key
+def test_unreadable_rejection_is_refunded_with_its_reason(
+    aws, db, pg, make_cfg, roi_masks_small, new_job
 ):
-    job_id, key = new_key()
+    job_id, key = new_job()
     aws.s3.put_object(Bucket=aws.bucket, Key=key, Body=b"this is not a video")
-    outcome = run_record(aws, key, make_cfg(), roi_masks_small)
+    outcome = run_record(aws, db, key, make_cfg(), roi_masks_small)
     assert outcome is Outcome.REJECTED
-    status = status_of(aws, job_id)
-    assert status["status"] == "failed"
-    assert status["error"] == "The file is not a readable video."
+    assert_rejected(pg, job_id, "unreadable_video")
 
 
 def test_rejection_is_final_even_on_a_first_attempt(
-    aws, make_cfg, roi_masks_small, new_key, received
+    aws, db, pg, make_cfg, roi_masks_small, new_job, received
 ):
-    """A rejection is always final (§4): failed, and the message is deleted, with retries left."""
-    job_id, key = new_key()
+    """A rejection is always final: refunded, and the message is deleted, with retries left."""
+    job_id, key = new_job()
     aws.s3.put_object(Bucket=aws.bucket, Key=key, Body=b"this is not a video")
     message = received(s3_event((aws.bucket, key)))
-    call_process(aws, message, make_cfg(), roi_masks_small, max_receives=2)
-    assert status_of(aws, job_id)["status"] == "failed"
+    call_process(aws, message, make_cfg(), roi_masks_small, max_receives=2, db=db)
+    assert_rejected(pg, job_id, "unreadable_video")
     assert queue_counts(aws) == 0
 
 
@@ -479,90 +346,75 @@ def failing_record(seconds=0.0, error=None):
     """A record that runs inside its heartbeat for `seconds`, then raises."""
 
     def run(heartbeat):
-        with heartbeat():
+        with heartbeat(None):
             time.sleep(seconds)
             raise error or RuntimeError("model crashed")
 
     return run
 
 
-def check_error_text(error):
-    assert isinstance(error, str) and error
-    assert len(error) <= 200
-    assert "Traceback" not in error
-
-
-def test_failure_on_a_non_final_attempt_writes_retrying_and_releases(
-    aws, make_cfg, roi_masks_small, received, fake_record
-):
-    job_id = str(uuid.uuid4())
-    key = f"uploads/placeholder-user/{job_id}.mp4"
-    fake_record({key: failing_record()})
-    message = received(s3_event((aws.bucket, key)))
-
-    call_process(aws, message, make_cfg(), roi_masks_small, max_receives=2)  # returns normally
-
-    status = status_of(aws, job_id)
-    assert status["status"] == "processing"
-    assert status["stage"] == "retrying"
-    check_error_text(status["error"])
-    assert len(visible(aws)) == 1  # released: visible again at once, not deleted
-
-
-def test_failure_on_the_final_attempt_writes_failed_and_releases(
-    aws, make_cfg, roi_masks_small, received, fake_record
-):
-    job_id = str(uuid.uuid4())
-    key = f"uploads/placeholder-user/{job_id}.mp4"
-    fake_record({key: failing_record()})
-    message = received(s3_event((aws.bucket, key)))
-
-    call_process(aws, message, make_cfg(), roi_masks_small, max_receives=1)  # receive 1 of 1
-
-    status = status_of(aws, job_id)
-    assert status["status"] == "failed"
-    check_error_text(status["error"])
-    assert len(visible(aws)) == 1  # not deleted: SQS moves it to the dead-letter queue
-
-
-def test_failure_error_text_is_short_with_no_traceback_even_for_a_huge_message(
-    aws, make_cfg, roi_masks_small, received, fake_record
-):
-    job_id = str(uuid.uuid4())
-    key = f"uploads/placeholder-user/{job_id}.mp4"
-    huge = "line one of a long error\n" + "x" * 5000  # a formatted traceback would say "Traceback"
-    fake_record({key: failing_record(error=RuntimeError(huge))})
-    call_process(
-        aws, received(s3_event((aws.bucket, key))), make_cfg(), roi_masks_small, max_receives=1
-    )
-    check_error_text(status_of(aws, job_id)["error"])
-
-
-@pytest.mark.parametrize("max_receives", [1, 2], ids=["final", "non_final"])
-def test_failure_after_a_result_exists_changes_no_status(
+@pytest.mark.parametrize("max_receives", [2, 1], ids=["non_final", "final"])
+def test_a_failing_record_releases_the_message_and_does_not_delete_it(
     aws, make_cfg, roi_masks_small, received, fake_record, max_receives
 ):
-    """A crash after the result write: the failure status is written only if no result exists."""
-    job_id = str(uuid.uuid4())
-    key = f"uploads/placeholder-user/{job_id}.mp4"
-    storage.put_result(aws.s3, aws.bucket, job_id, {"job_id": job_id})
+    key = upload_key()
     fake_record({key: failing_record()})
+    message = received(s3_event((aws.bucket, key)))
+    call_process(aws, message, make_cfg(), roi_masks_small, max_receives=max_receives)  # returns
+    assert len(visible(aws)) == 1  # released: visible again at once (SQS dead-letters it later)
+
+
+@pytest.mark.parametrize("with_result", [False, True], ids=["no_result", "result_exists"])
+def test_process_message_writes_no_status_itself(
+    aws, db, pg, make_cfg, roi_masks_small, new_job, received, fake_record, with_result
+):
+    """M3a §5: the M2b failure and final-attempt status writes are gone (on the final attempt
+    the dead-letter handler settles the job instead), with or without a result."""
+    job_id, key = new_job()
+    if with_result:
+        storage.put_result(aws.s3, aws.bucket, job_id, {"job_id": job_id})
+    fake_record({key: failing_record()})
+    before = pg.snapshot()
+    message = received(s3_event((aws.bucket, key)))
+    call_process(aws, message, make_cfg(), roi_masks_small, max_receives=1, db=db)
+    assert pg.snapshot() == before
+    assert len(visible(aws)) == 1
+
+
+def test_a_failing_real_record_is_released_for_retry_with_a_short_error(
+    aws, db, pg, make_cfg, roi_masks_small, new_job, clip_path, received, patch_everywhere
+):
+    job_id, key = new_job()
+    aws.s3.upload_file(str(clip_path), aws.bucket, key)
+    huge = "line one of a long error\n" + "x" * 5000  # a formatted traceback would say "Traceback"
+
+    def boom(*a, **kw):
+        raise RuntimeError(huge)
+
+    patch_everywhere("predict", boom, *MODULES)
     call_process(
         aws,
         received(s3_event((aws.bucket, key))),
         make_cfg(),
         roi_masks_small,
-        max_receives=max_receives,
+        max_receives=2,
+        db=db,
     )
-    assert status_of(aws, job_id) is None
+    job = pg.job(job_id)
+    assert job["status"] == "queued"
+    message = job["error_message"]
+    assert isinstance(message, str) and message
+    assert len(message) <= 200
+    assert "Traceback" not in message
+    assert pg.balance() == (410, 90)  # money stays reserved for the retry
     assert len(visible(aws)) == 1
+    assert not storage.result_exists(aws.s3, aws.bucket, job_id)
 
 
 def test_release_happens_after_the_last_heartbeat_call_and_no_delete(
     aws, make_cfg, roi_masks_small, received, fake_record
 ):
-    job_id = str(uuid.uuid4())
-    key = f"uploads/placeholder-user/{job_id}.mp4"
+    key = upload_key()
     fake_record({key: failing_record(seconds=0.3)})
     cfg = make_cfg(worker={"heartbeat_seconds": 0.03, "max_job_minutes": 75})
     sqs = RecordingSqs(aws.sqs)
@@ -583,33 +435,20 @@ def test_release_happens_after_the_last_heartbeat_call_and_no_delete(
     assert log[-1] == ("visibility", 0)
 
 
-def test_end_to_end_inference_failure_releases_and_reports_retrying(
-    aws, make_cfg, roi_masks_small, new_key, clip_path, received, patch_everywhere
-):
-    def boom(*a, **kw):
-        raise RuntimeError("GPU exploded")
-
-    patch_everywhere("predict", boom, *MODULES)
-    job_id, key = new_key()
-    aws.s3.upload_file(str(clip_path), aws.bucket, key)
-    call_process(
-        aws, received(s3_event((aws.bucket, key))), make_cfg(), roi_masks_small, max_receives=2
-    )
-    status = status_of(aws, job_id)
-    assert status["status"] == "processing"
-    assert status["stage"] == "retrying"
-    assert len(visible(aws)) == 1
-    assert result_of(aws, job_id) is None
-
-
 # ---------------------------------------------------------------- multi-record messages
 
 
 def test_multi_record_message_with_all_final_outcomes_is_deleted(
     aws, make_cfg, roi_masks_small, received, fake_record
 ):
-    keys = [f"uploads/placeholder-user/{uuid.uuid4()}.mp4" for _ in range(5)]
-    outcomes = [Outcome.DONE, Outcome.SKIPPED, Outcome.DUPLICATE, Outcome.GONE, Outcome.REJECTED]
+    keys = [upload_key() for _ in range(5)]
+    outcomes = [
+        Outcome.DONE,
+        Outcome.SKIPPED,
+        Outcome.DUPLICATE,
+        Outcome.REJECTED,
+        Outcome.LOST_CLAIM,
+    ]
     seen = fake_record(dict(zip(keys, outcomes, strict=True)))
     message = received(s3_event(*[(aws.bucket, k) for k in keys]))
     call_process(aws, message, make_cfg(), roi_masks_small, max_receives=2)
@@ -621,7 +460,7 @@ def test_multi_record_message_with_all_final_outcomes_is_deleted(
 def test_multi_record_message_is_not_deleted_when_a_record_fails(
     aws, make_cfg, roi_masks_small, received, fake_record, raising_position
 ):
-    keys = [f"uploads/placeholder-user/{uuid.uuid4()}.mp4" for _ in range(3)]
+    keys = [upload_key() for _ in range(3)]
     script = {k: Outcome.DONE for k in keys}
     script[keys[raising_position]] = failing_record()
     fake_record(script)

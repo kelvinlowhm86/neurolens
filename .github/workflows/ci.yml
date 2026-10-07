@@ -7,6 +7,19 @@ on:
 jobs:
   check:
     runs-on: ubuntu-latest
+    # M3a §10: the database tests need PostgreSQL 16; with CI=true an unset DSN fails the run.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -22,3 +35,4 @@ jobs:
       - run: pytest
         env:
           FAKE_INFERENCE: "1"
+          NEUROLENS_TEST_DSN: postgresql://postgres:test@localhost:5432/postgres

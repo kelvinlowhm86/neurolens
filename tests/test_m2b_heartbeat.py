@@ -136,7 +136,9 @@ def test_no_call_starts_after_exit_has_begun():
 
 
 def test_exit_waits_for_a_running_beat_to_finish():
-    """Exit waits for the thread: once the block has exited, no beat is still in progress."""
+    """Exit waits for a visibility call already in progress (M3a §5: it takes the beat's lock;
+    it no longer waits for the thread, see tests/test_m3a_heartbeat.py): once the block has
+    exited, no visibility call is still in progress."""
     finished = []
 
     class SlowSqs(RecordingSqs):
