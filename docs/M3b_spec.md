@@ -6,6 +6,20 @@
 
 **Ground rules for all of M3b:** region `us-east-1`. Python 3.12. All infrastructure is Terraform in `infra/terraform/`, tagged `Project=neurolens`, `Milestone=M3b`. Run AWS commands with the `neurolens` CLI profile only. **Tests first, as in M0 §5:** the §9 tests are written by a separate agent against §2–§5 before the implementation, and are not edited by the implementer. `/security-review` runs on the full M3 diff before M3 is merged, and its high-severity findings are fixed first.
 
+**Before building — decide where the web app runs (Josh decides; then this spec is rewritten for the choice).** §3 below assumes a small private server. Flask on Lambda was never weighed and is probably better here:
+
+| | Small server (§3 as written) | Flask on Lambda |
+|---|---|---|
+| Availability | only while started | always: sign-in and uploads work at any time |
+| Cost | about $0.008 an hour while started | near zero at our traffic |
+| Needs the NAT instance | yes (Google, Data API) | no: runs outside the VPC and calls them directly |
+| Start/stop scripts | must include it | nothing to start |
+| Load balancer for the study week | needed for self-healing | not needed |
+| Extra work | none: Flask as on the laptop | an adapter (Lambda Web Adapter), a function URL as CloudFront's origin (with origin access control), logs in CloudWatch |
+| Drawbacks | | 1–2 s on the first request after a quiet spell; 6 MB request/response limit (uploads go straight to S3, so unaffected) |
+
+Check before deciding: the Google sign-in flow (Authlib, signed session cookie) works unchanged behind a function URL; CloudFront origin access control for a Lambda function URL; the cold-start time with our imports. If Lambda is chosen, update §3, §8, §10, §12, Terraform and the architecture page together.
+
 **Day one — check the address works with Google.** Create the CloudFront distribution (§3; the origin can be added later), then add `https://<distribution>.cloudfront.net/auth/callback` as an authorized redirect URI in the Google Cloud console. Google requires HTTPS and a host under a public suffix; `cloudfront.net` should qualify, but confirm it before building anything else. If Google rejects it, stop and ask Josh: the fallbacks are a free dynamic-DNS name with Caddy, or a cheap bought domain.
 
 ## 1. Scope
