@@ -204,7 +204,9 @@ running job back to the queue at once; another attempt finishes it.
 
 `stop_work.sh` ends a warm hold, removes the workers' scale-in protection (a running job is handed
 back and runs next session), sets the worker group to zero (even while it is still waiting for a
-GPU and has no machine yet), waits for the workers to go, stops the NAT instance and then checks. It prints
+GPU and has no machine yet), waits for the workers to go, runs the reaper once and switches its
+schedule off, stops the NAT instance and then checks (including that the dead-letter queue is
+empty: a message left there keeps waking Aurora). It prints
 **ALL STOPPED** only when every check succeeded. Anything it could not prove prints
 **NOT CONFIRMED** with the reason: read it and act on it. It needs the region from Terraform; if
 Terraform cannot answer, it stops nothing and prints the `terraform init` command to fix it. An

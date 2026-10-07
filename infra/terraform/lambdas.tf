@@ -13,7 +13,6 @@ locals {
     "neurolens/billing.py",
     "neurolens/pricing.py",
     "neurolens/storage.py",
-    "neurolens/settings.py",
     "neurolens/lambdas/__init__.py",
     "neurolens/lambdas/dlq_handler.py",
     "neurolens/lambdas/reaper.py",

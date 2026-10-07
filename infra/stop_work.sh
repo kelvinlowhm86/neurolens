@@ -12,6 +12,8 @@ ALARMS="neurolens-worker-idle neurolens-worker-scale-out neurolens-worker-scale-
 HOLD_END=neurolens-warm-hold-end
 REAPER=neurolens-reaper
 REAPER_RULE=neurolens-reaper-every-5-min
+DLQ=neurolens-jobs-dlq
+DLQ_HANDLER=neurolens-dlq-handler
 PROBLEMS=""
 problem() { PROBLEMS="$PROBLEMS  - $*"$'\n'; echo "PROBLEM: $*" >&2; }
 
@@ -139,12 +141,24 @@ elif [ -n "$NAT" ]; then
   fi
 fi
 
-# 4. Check: no hold timer, the reaper's schedule off, the group reads 0/0/0 and no neurolens machine
-# may be billing.
+# 4. Check: no hold timer, the reaper's schedule off, the dead-letter queue empty, the group reads
+# 0/0/0 and no neurolens machine may be billing.
 if ! RULE_STATE=$(aws events describe-rule --name "$REAPER_RULE" --query State --output text); then
   problem "could not read the reaper's schedule $REAPER_RULE (if it does not exist yet: terraform apply)"
 elif [ "$RULE_STATE" != DISABLED ]; then
   problem "the reaper's schedule $REAPER_RULE is $RULE_STATE: Aurora will not pause"
+fi
+# A message still in the dead-letter queue means the refund handler has not finished with it. It
+# retries every 12 minutes for up to 14 days, waking Aurora each time (M3a §7).
+if ! DLQ_URL=$(aws sqs get-queue-url --queue-name "$DLQ" --query QueueUrl --output text) \
+    || ! DLQ_COUNTS=$(aws sqs get-queue-attributes --queue-url "$DLQ_URL" --attribute-names \
+      ApproximateNumberOfMessages ApproximateNumberOfMessagesNotVisible \
+      --query 'Attributes.[ApproximateNumberOfMessages,ApproximateNumberOfMessagesNotVisible]' --output text); then
+  problem "could not read the dead-letter queue $DLQ"
+elif [ "$(echo "$DLQ_COUNTS" | awk '{print $1 + $2}')" != 0 ]; then
+  problem "the dead-letter queue $DLQ holds messages (waiting, in progress: $DLQ_COUNTS): the refund
+      handler has not settled them, and each retry wakes Aurora. Run this script again in a few minutes;
+      if they stay, see the log /aws/lambda/$DLQ_HANDLER"
 fi
 if ! HOLD=$(hold_end); then
   problem "could not re-check the warm hold's end timer"
@@ -177,5 +191,5 @@ if [ -n "$PROBLEMS" ]; then
   printf 'NOT CONFIRMED in %s:\n%s' "$AWS_REGION" "$PROBLEMS" >&2
   exit 1
 fi
-echo "ALL STOPPED in $AWS_REGION: worker group at 0, no warm hold, reaper off, no neurolens machine running."
+echo "ALL STOPPED in $AWS_REGION: worker group at 0, no warm hold, reaper off, dead-letter queue empty, no neurolens machine running."
 echo "Aurora pauses by itself about 10 minutes after its last use."

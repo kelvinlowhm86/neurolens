@@ -90,16 +90,18 @@ locals {
   ]
 }
 
-# Forgotten-database alarm (M3a §7): awake every minute of 6 hours means something keeps waking
-# it (a forgotten stop_work.sh, an open tab, a retrying Lambda): about $1.40 a day at 0.5 ACU.
+# Forgotten-database alarm (M3a §7): awake at some point in each of 6 hours in a row means something
+# keeps waking it (a forgotten stop_work.sh, an open tab, a retrying Lambda): about $1.40 a day at
+# 0.5 ACU. "At some point", not "all hour": a caller every 12 minutes (the dead-letter handler's
+# retry) lets it pause for a minute or two each time, yet keeps it awake most of the hour.
 resource "aws_cloudwatch_metric_alarm" "db_awake_long" {
   alarm_name        = "neurolens-db-awake-6h"
-  alarm_description = "NeuroLens Aurora has not paused for 6 hours (about $1.40 a day while awake). Run infra/stop_work.sh; if it stays awake, look for whatever keeps calling it (an open page, a Lambda retrying: see /aws/lambda/neurolens-*)."
+  alarm_description = "NeuroLens Aurora has been awake in each of the last 6 hours (about $1.40 a day while awake). Run infra/stop_work.sh; if it stays awake, look for whatever keeps calling it (an open page, a Lambda retrying: see /aws/lambda/neurolens-*)."
 
   namespace   = "AWS/RDS"
   metric_name = "ServerlessDatabaseCapacity"
   dimensions  = { DBClusterIdentifier = aws_rds_cluster.db.cluster_identifier }
-  statistic   = "Minimum" # above 0 for the whole hour: it never paused in it
+  statistic   = "Maximum" # above 0 at some point in the hour: it was awake in it
 
   period              = 3600
   evaluation_periods  = 6
