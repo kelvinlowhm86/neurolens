@@ -61,7 +61,7 @@ resource "aws_s3_bucket_policy" "main" {
 }
 
 # Prefix-scoped expiry, not one blanket rule. Days are the smallest unit S3 lifecycle uses.
-#   uploads/ and status/  2 days (S3 rounds to midnight UTC: 2-3 days)   transient per-job files (the input videos are the big ones)
+#   uploads/              2 days (S3 rounds to midnight UTC: 2-3 days)   the input videos (job status lives in Aurora)
 #   results/              30 d   how long a result stays viewable / downloadable (product decision)
 #   code/ and experiments/ never expire: M2a's boot pulls code/latest.zip on every GPU launch
 #   (a 404 would stop the worker coming up) and M4 reads experiments/* for the final report.
@@ -73,17 +73,6 @@ resource "aws_s3_bucket_lifecycle_configuration" "main" {
     status = "Enabled"
     filter {
       prefix = "uploads/"
-    }
-    expiration {
-      days = 2
-    }
-  }
-
-  rule {
-    id     = "expire-status"
-    status = "Enabled"
-    filter {
-      prefix = "status/"
     }
     expiration {
       days = 2
@@ -169,7 +158,7 @@ resource "aws_sqs_queue_policy" "allow_s3" {
   })
 }
 
-# Tell the queue about new uploads. Filtered to uploads/ only: later milestones write status/,
+# Tell the queue about new uploads. Filtered to uploads/ only: the app also writes
 # results/, code/ and experiments/ objects to the same bucket, and an unfiltered notification
 # would enqueue them as spurious jobs.
 resource "aws_s3_bucket_notification" "uploads" {
