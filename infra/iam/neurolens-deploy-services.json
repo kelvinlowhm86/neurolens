@@ -38,7 +38,7 @@
         "cloudwatch:PutMetricAlarm", "cloudwatch:DeleteAlarms",
         "cloudwatch:EnableAlarmActions", "cloudwatch:DisableAlarmActions",
         "cloudwatch:TagResource", "cloudwatch:UntagResource", "cloudwatch:ListTagsForResource",
-        "cloudwatch:DescribeAlarmHistory", "cloudwatch:SetAlarmState"
+        "cloudwatch:DescribeAlarmHistory"
       ],
       "Resource": "arn:aws:cloudwatch:us-east-1:*:alarm:neurolens-*"
     },
