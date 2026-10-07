@@ -119,8 +119,10 @@ Terraform ignores changes to Aurora's `min_capacity` so the scripts and Terrafor
   - `insufficient_credit_for_actual_duration`: "Your video is longer than the length we estimated, and your credit doesn't cover the difference."
   - `duration_exceeds_max_estimated` (400 at presign) and `duration_exceeds_max_verified`: "This video is longer than the 120-second maximum."
   - `file_too_large`: "This file is larger than the upload limit."
-  - `processing_failed`, `stalled`, `stuck_in_queue`: "Processing failed after retrying." plus the job's `error_message` when present.
+  - `unreadable_video`: "This file is not a readable video."
+  - `processing_failed`, `stalled`: "Processing failed after retrying." plus the job's `error_message` when present.
   - `upload_not_received`: "The upload didn't finish. Please try again."
+  - `upload_missing`: "The uploaded file was no longer available (uploads are kept 2 days). Please upload it again."
   - `presign_failed`: "The upload couldn't be started. Please try again."
 
 ### 4c. Credit grants
