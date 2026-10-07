@@ -114,14 +114,19 @@ def _get_json(s3, bucket, key):
     return json.loads(body.read())
 
 
-def result_exists(s3, bucket, job_id):
+def object_exists(s3, bucket, key):
+    """True if the object exists; False for S3's "no such object". Other errors are raised."""
     try:
-        s3.head_object(Bucket=bucket, Key=f"results/{job_id}.json")
+        s3.head_object(Bucket=bucket, Key=key)
     except ClientError as err:
         if is_not_found(err):
             return False
         raise
     return True
+
+
+def result_exists(s3, bucket, job_id):
+    return object_exists(s3, bucket, f"results/{job_id}.json")
 
 
 def get_result(s3, bucket, job_id):
