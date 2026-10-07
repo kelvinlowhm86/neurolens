@@ -8,9 +8,9 @@ it created. The region is one setting (`region` in `terraform.tfvars`, default `
 **What it creates**
 
 - One S3 bucket: public access blocked, encrypted, HTTPS-only, ACLs disabled, browser upload (CORS)
-  allowed from `allowed_origins`, and prefix-scoped expiry (`uploads/` and `status/` after 2 days, rounded to midnight UTC,
+  allowed from `allowed_origins`, and prefix-scoped expiry (`uploads/` after 2 days, rounded to midnight UTC,
   `results/` after 30 days, `code/`, `models/` and `experiments/` never).
-- One SQS queue (visibility timeout 1800 s) and the wiring that sends a message to it whenever a file
+- One SQS queue (visibility timeout 120 s, kept extended by the worker's heartbeat) and the wiring that sends a message to it whenever a file
   lands under `uploads/`. A second queue (`neurolens-jobs-dlq`) receives a job that failed twice.
 - A network (VPC): public subnets (one holds the NAT instance, the others only host image builds) and
   private subnets for the GPU workers, which have no inbound access from the internet. A free S3
