@@ -1,4 +1,8 @@
-"""Tests for neurolens.web.app via create_app(). From docs/M0_spec.md."""
+"""Tests for neurolens.web.app via create_app(). From docs/M0_spec.md.
+
+M3b §8 retired `/api/samples` (the page reads /data/samples.json), and with it the test that
+the route equals data/samples.json.
+"""
 
 import json
 from pathlib import Path
@@ -22,12 +26,6 @@ def test_index_serves_index_html(client):
     assert resp.status_code == 200
     assert resp.data == (REPO_ROOT / "static" / "index.html").read_bytes()
     resp.close()
-
-
-def test_samples_equals_samples_json(client):
-    resp = client.get("/api/samples")
-    assert resp.status_code == 200
-    assert resp.get_json() == json.loads((DATA_DIR / "samples.json").read_text())
 
 
 def test_thumbnail_is_served(client):

@@ -291,11 +291,10 @@ def test_create_app_with_cfg_needs_no_config_json(monkeypatch, tmp_path, make_cf
     assert not (empty_root / "config.json").exists()
     data_dir = tmp_path / "data"
     data_dir.mkdir()
-    (data_dir / "samples.json").write_text('{"samples": []}')
     app = create_app(data_dir=data_dir, cfg=make_cfg())
-    resp = app.test_client().get("/api/samples")
+    resp = app.test_client().get("/api/limits")  # M3b §8: /api/samples is removed
     assert resp.status_code == 200
-    assert resp.get_json() == {"samples": []}
+    assert resp.get_json()["max_upload_bytes"] == make_cfg()["max_upload_bytes"]
 
 
 def test_create_app_without_cfg_or_aws_block_still_serves_other_routes(tmp_path):

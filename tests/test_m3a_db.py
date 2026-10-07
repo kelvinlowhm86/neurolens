@@ -1,7 +1,7 @@
 """M3a database layer: neurolens.db's PostgreSQL backend and the migrations. Written first from
 docs/M3a_spec.md §3c, §3d and §10 (real PostgreSQL 16 through NEUROLENS_TEST_DSN).
 
-The Data API backend has no scripted-reply tests (§10): infra/db_smoke.py checks it on Aurora.
+The Data API backend has no scripted-reply tests (§10): infra/check_aurora.py checks it on Aurora.
 """
 
 import re

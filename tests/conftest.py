@@ -6,15 +6,27 @@ are set for every test so that an accidental real AWS call fails instead of cost
 M3a (docs/M3a_spec.md §10): database tests run against a real PostgreSQL 16 named by
 NEUROLENS_TEST_DSN. Each test gets a fresh schema built from infra/migrations/*.sql, and the
 ledger invariants are checked for every user when the test ends.
+
+M3b (docs/M3b_spec.md §2, §7b, §8): Cognito-mode apps get their settings from `cognito_cfg` and
+their Parameter Store secrets from moto (`ssm`). Sign-in goes through §8's seam: `init_auth`
+receives fake `server_metadata`, and `responses` fakes only HTTP (the token endpoint returns an
+ID token signed with a test RSA key, the JWKS URL returns that key), so Authlib's real state,
+nonce and signature checks run and nothing contacts Cognito, Google or Stripe.
 """
 
+import base64
+import hashlib
+import hmac
 import importlib
+import json
 import os
 import subprocess
+import sys
 import time
 import uuid
 from pathlib import Path
 from types import SimpleNamespace
+from urllib.parse import parse_qs, urlparse
 
 import numpy as np
 import pytest
@@ -62,6 +74,11 @@ ENV_SETTING_VARS = [
     "NEUROLENS_DB_CLUSTER_ARN",  # M3a §3a: aws.db_cluster_arn
     "NEUROLENS_DB_SECRET_ARN",  # M3a §3a: aws.db_secret_arn
     "NEUROLENS_DB_NAME",  # M3a §3a: aws.db_name
+    "NEUROLENS_AUTH_MODE",  # M3b §2b: auth.mode
+    "NEUROLENS_COGNITO_ISSUER",  # M3b §2b: auth.cognito_issuer
+    "NEUROLENS_COGNITO_CLIENT_ID",  # M3b §2b: auth.cognito_client_id
+    "NEUROLENS_COGNITO_DOMAIN",  # M3b §2b: auth.cognito_domain
+    "NEUROLENS_PUBLIC_BASE_URL",  # M3b §2b: public_base_url
 ]
 
 
@@ -551,3 +568,365 @@ def remaining(aws):
         return resp.get("Messages", [])
 
     return look
+
+
+# ---------------------------------------------------------------- M3b (docs/M3b_spec.md)
+
+ISSUER = "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_TestPool"
+CLIENT_ID = "test-client-id"
+COGNITO_DOMAIN = "neurolens-test.auth.us-east-1.amazoncognito.com"
+PUBLIC_BASE_URL = "https://d111111abcdef8.cloudfront.net"
+WORKER_GROUP = "neurolens-workers"
+# §8's sign-in seam: fake URLs that only `responses` answers.
+SERVER_METADATA = {
+    "issuer": ISSUER,
+    "authorization_endpoint": "https://idp.test/oauth2/authorize",
+    "token_endpoint": "https://idp.test/oauth2/token",
+    "jwks_uri": "https://idp.test/oauth2/jwks.json",
+}
+ALLOWED_EMAIL = "team@example.com"  # on the top-up allowlist (§7b)
+STRIPE_SECRET_KEY = "sk_test_not_a_real_key"
+STRIPE_WEBHOOK_SECRET = "whsec_test_not_a_real_secret"
+PACKS = {"5": 500, "10": 1000}
+WEB_PARAMETERS = {
+    "/neurolens/web/cognito_client_secret": "test-client-secret",
+    "/neurolens/web/flask_secret_key": "k" * 64,
+    "/neurolens/web/stripe_secret_key": STRIPE_SECRET_KEY,
+    "/neurolens/web/stripe_webhook_secret": STRIPE_WEBHOOK_SECRET,
+    "/neurolens/web/topup_allowlist": f"{ALLOWED_EMAIL},other-team-member@example.com",
+}
+STRIPE_PARAMETERS = [
+    "/neurolens/web/stripe_secret_key",
+    "/neurolens/web/stripe_webhook_secret",
+    "/neurolens/web/topup_allowlist",
+]
+STRIPE_SESSIONS_URL = "https://api.stripe.com/v1/checkout/sessions"
+CHECKOUT_URL = "https://checkout.stripe.com/c/pay/cs_test_fake"
+MISSING = object()  # a claim left out of the ID token
+
+
+@pytest.fixture
+def ssm(aws):
+    """moto's Parameter Store holding the five /neurolens/web/* SecureStrings (§2b)."""
+    import boto3
+
+    client = boto3.client("ssm", region_name="us-east-1")
+    for name, value in WEB_PARAMETERS.items():
+        client.put_parameter(Name=name, Value=value, Type="SecureString")
+    return client
+
+
+@pytest.fixture
+def cognito_cfg(make_cfg):
+    """A Cognito-mode config as the web Lambda has it after settings.apply_env (§2b): every
+    required setting present, Stripe test top-ups on."""
+
+    def make(**overrides):
+        settings_ = {
+            "auth": {
+                "mode": "cognito",
+                "cognito_issuer": ISSUER,
+                "cognito_client_id": CLIENT_ID,
+                "cognito_domain": COGNITO_DOMAIN,
+            },
+            "public_base_url": PUBLIC_BASE_URL,
+            "deployed": True,
+            "db": {"backend": "data_api"},
+            "stripe": {"enabled": True, "packs": dict(PACKS)},
+        }
+        settings_.update(overrides)
+        cfg = make_cfg(**settings_)
+        cfg["aws"].update(
+            worker_group=WORKER_GROUP,
+            db_cluster_arn="arn:aws:rds:us-east-1:000000000000:cluster:neurolens-db",
+            db_secret_arn="arn:aws:secretsmanager:us-east-1:000000000000:secret:rds!cluster-x",
+            db_name="neurolens",
+        )
+        return cfg
+
+    return make
+
+
+@pytest.fixture
+def auth_seam(patch_everywhere):
+    """§8: every init_auth call gets the fake server_metadata, so Authlib never downloads
+    Cognito's OpenID configuration."""
+    from neurolens.web import auth
+
+    real = auth.init_auth
+
+    def init_auth(*args, **kwargs):
+        kwargs["server_metadata"] = dict(SERVER_METADATA)
+        return real(*args, **kwargs)
+
+    patch_everywhere("init_auth", init_auth, "neurolens.web.auth", "neurolens.web.app")
+
+
+@pytest.fixture(scope="session")
+def rsa_keys():
+    """The identity provider's signing key, and another key with the same key ID (a token signed
+    with it must fail the signature check, not the key lookup)."""
+    from joserfc.jwk import RSAKey
+
+    return (
+        RSAKey.generate_key(2048, parameters={"kid": "test-key"}),
+        RSAKey.generate_key(2048, parameters={"kid": "test-key"}),
+    )
+
+
+@pytest.fixture
+def fake_http(aws):
+    """Every HTTP request made with `requests` (Authlib, Stripe) must match a registered fake;
+    anything else fails with a connection error instead of reaching the internet."""
+    import responses
+
+    with responses.RequestsMock(assert_all_requests_are_fired=False) as rsps:
+        yield rsps
+
+
+class FakeIdP:
+    """Cognito's token and key endpoints over HTTP. `claims` and `signing_key` describe the next
+    ID token the token endpoint hands out."""
+
+    def __init__(self, rsps, key, wrong_key):
+        import responses
+
+        self.key = key
+        self.wrong_key = wrong_key
+        self.claims = None
+        self.signing_key = key
+        rsps.add(
+            responses.GET, SERVER_METADATA["jwks_uri"], json={"keys": [key.as_dict(private=False)]}
+        )
+        rsps.add_callback(responses.POST, SERVER_METADATA["token_endpoint"], callback=self._token)
+
+    def _token(self, request):
+        from joserfc import jwt
+
+        id_token = jwt.encode({"alg": "RS256", "kid": "test-key"}, self.claims, self.signing_key)
+        body = {
+            "access_token": "test-access-token",
+            "token_type": "Bearer",
+            "expires_in": 3600,
+            "id_token": id_token,
+        }
+        return 200, {"Content-Type": "application/json"}, json.dumps(body)
+
+
+@pytest.fixture
+def idp(fake_http, rsa_keys):
+    return FakeIdP(fake_http, *rsa_keys)
+
+
+def sign_in(
+    client,
+    idp,
+    *,
+    sub="google_1001",
+    email="ann@example.com",
+    email_verified=True,
+    signing_key=None,
+    state=None,
+    **claims,
+):
+    """The browser's round trip: /login, Cognito (faked: the token endpoint's next ID token
+    carries the nonce /login sent), then /auth/callback. Returns the callback's response."""
+    login = client.get("/login")
+    assert login.status_code in (302, 303), login.status_code
+    query = parse_qs(urlparse(login.headers["Location"]).query)
+    now = int(time.time())
+    idp.claims = {
+        "iss": ISSUER,
+        "aud": CLIENT_ID,
+        "sub": sub,
+        "email": email,
+        "token_use": "id",
+        "iat": now,
+        "auth_time": now,
+        "exp": now + 3600,
+        "nonce": query["nonce"][0],
+    }
+    if email_verified is not MISSING:
+        idp.claims["email_verified"] = email_verified
+    idp.claims.update(claims)
+    idp.signing_key = signing_key or idp.key
+    return client.get(
+        "/auth/callback", query_string={"code": "test-code", "state": state or query["state"][0]}
+    )
+
+
+@pytest.fixture
+def cognito_app(aws, db, cognito_cfg, ssm, idp, auth_seam, tmp_path):
+    """create_app in Cognito mode (§8: create_app(..., ssm_client=...)) on the test database,
+    moto S3 and Parameter Store, with the sign-in seam in place."""
+    from neurolens.web.app import create_app
+
+    data_dir = tmp_path / "data"
+    data_dir.mkdir(exist_ok=True)
+
+    def make(cfg=None, *, database=None, s3_client=None, **overrides):
+        app = create_app(
+            cfg=cfg if cfg is not None else cognito_cfg(**overrides),
+            data_dir=data_dir,
+            db=database if database is not None else db,
+            s3_client=s3_client if s3_client is not None else aws.s3,
+            ssm_client=ssm,
+        )
+        app.config["TESTING"] = True
+        return app
+
+    return make
+
+
+@pytest.fixture
+def cognito_client(cognito_app):
+    return cognito_app().test_client()
+
+
+class FakeClock:
+    """Stands in for neurolens.db's `time` module: sleeping only moves the clock."""
+
+    def __init__(self):
+        self.start = self.now = 1_000_000.0
+
+    def monotonic(self):
+        return self.now
+
+    def time(self):
+        return self.now
+
+    def sleep(self, seconds):
+        self.now += seconds
+
+    @property
+    def elapsed(self):
+        return self.now - self.start
+
+
+@pytest.fixture
+def waking_aurora(monkeypatch):
+    """An rds-data client (built as M3a requires, without retries) whose every call answers
+    DatabaseResumingException, as Aurora does while it wakes; neurolens.db runs on a fake clock.
+    Returns (client, clock)."""
+    from botocore.exceptions import ClientError
+    from neurolens import db as dbmod
+
+    client = dbmod.data_api_client("us-east-1")
+
+    def resuming(*args, **kwargs):
+        raise ClientError(
+            {"Error": {"Code": "DatabaseResumingException", "Message": "resuming"}},
+            "BeginTransaction",
+        )
+
+    for name in ("begin_transaction", "execute_statement", "commit_transaction"):
+        setattr(client, name, resuming)
+    clock = FakeClock()
+    monkeypatch.setattr(dbmod, "time", clock)
+    return client, clock
+
+
+def fresh_import(name):
+    """Import a module anew, so state it keeps per container (the Lambda handlers) starts empty."""
+    sys.modules.pop(name, None)
+    return importlib.import_module(name)
+
+
+def function_url_event(
+    method="GET", path="/", *, body=None, headers=None, cookies=None, base64_body=False
+):
+    """A Lambda function URL event (payload format 2.0). Header names arrive lowercased."""
+    headers = {k.lower(): v for k, v in (headers or {}).items()}
+    headers.setdefault("host", "abcdefgh.lambda-url.us-east-1.on.aws")
+    event = {
+        "version": "2.0",
+        "routeKey": "$default",
+        "rawPath": path,
+        "rawQueryString": "",
+        "headers": headers,
+        "requestContext": {
+            "accountId": "anonymous",
+            "apiId": "abcdefgh",
+            "domainName": headers["host"],
+            "domainPrefix": "abcdefgh",
+            "http": {
+                "method": method,
+                "path": path,
+                "protocol": "HTTP/1.1",
+                "sourceIp": "203.0.113.7",
+                "userAgent": "test",
+            },
+            "requestId": str(uuid.uuid4()),
+            "routeKey": "$default",
+            "stage": "$default",
+            "time": "08/Oct/2026:00:00:00 +0000",
+            "timeEpoch": 0,
+        },
+        "isBase64Encoded": False,
+    }
+    if cookies:
+        event["cookies"] = list(cookies)
+    if body is not None:
+        raw = body if isinstance(body, bytes) else body.encode()
+        if base64_body:
+            event["body"] = base64.b64encode(raw).decode()
+            event["isBase64Encoded"] = True
+        else:
+            event["body"] = raw.decode()
+    return event
+
+
+class LambdaContext:
+    function_name = "neurolens-test"
+    memory_limit_in_mb = 512
+    invoked_function_arn = "arn:aws:lambda:us-east-1:000000000000:function:neurolens-test"
+    aws_request_id = "test-request"
+
+    def get_remaining_time_in_millis(self):
+        return 60_000
+
+
+@pytest.fixture
+def lambda_env(aws, ssm, make_cfg, tmp_path, monkeypatch):
+    """What Terraform gives the web and webhook functions (§2b, §3a, §7b): config.json in the code
+    bundle's root, deployment values in environment variables, secrets in Parameter Store.
+    `write_config(**overrides)` rewrites config.json."""
+    root = tmp_path / "bundle"
+    (root / "data").mkdir(parents=True)
+
+    def write_config(**overrides):
+        cfg = make_cfg()
+        for name in ("aws", "hf_token"):
+            del cfg[name]  # never in the committed config.json
+        cfg["paths"] = {"models": "./models", "data": "./data"}
+        cfg["db"] = {"backend": "data_api"}
+        cfg["stripe"] = {"enabled": True, "packs": dict(PACKS)}
+        cfg.update(overrides)
+        (root / "config.json").write_text(json.dumps(cfg))
+
+    write_config()
+    env = {
+        "NEUROLENS_ROOT": str(root),
+        "NEUROLENS_DEPLOYED": "1",
+        "NEUROLENS_AUTH_MODE": "cognito",
+        "NEUROLENS_COGNITO_ISSUER": ISSUER,
+        "NEUROLENS_COGNITO_CLIENT_ID": CLIENT_ID,
+        "NEUROLENS_COGNITO_DOMAIN": COGNITO_DOMAIN,
+        "NEUROLENS_PUBLIC_BASE_URL": PUBLIC_BASE_URL,
+        "NEUROLENS_WORKER_GROUP": WORKER_GROUP,
+        "NEUROLENS_S3_BUCKET": aws.bucket,
+        "NEUROLENS_AWS_REGION": "us-east-1",
+        "NEUROLENS_DB_CLUSTER_ARN": "arn:aws:rds:us-east-1:000000000000:cluster:neurolens-db",
+        "NEUROLENS_DB_SECRET_ARN": "arn:aws:secretsmanager:us-east-1:000000000000:secret:x",
+        "NEUROLENS_DB_NAME": "neurolens",
+    }
+    for name, value in env.items():
+        monkeypatch.setenv(name, value)
+    return SimpleNamespace(root=root, write_config=write_config)
+
+
+def stripe_signature(payload, secret=STRIPE_WEBHOOK_SECRET, timestamp=None):
+    """Stripe's `Stripe-Signature` header: t=<unix time>,v1=<HMAC-SHA256 of "<t>.<raw body>">."""
+    t = int(time.time()) if timestamp is None else timestamp
+    mac = hmac.new(secret.encode(), f"{t}.".encode() + payload, hashlib.sha256).hexdigest()
+    return f"t={t},v1={mac}"

@@ -4,6 +4,9 @@
 -r experiments.txt
 pytest>=8.0
 ruff>=0.6
-moto[s3,sqs,autoscaling]>=5.0
+moto[s3,sqs,autoscaling,ssm]>=5.0
 # M3a: the billing tests run against a real PostgreSQL 16 (NEUROLENS_TEST_DSN)
 psycopg[binary]>=3.1
+# M3b: the sign-in tests fake only HTTP (responses) and sign ID tokens with a test RSA key (joserfc)
+responses>=0.25
+joserfc>=1.0
