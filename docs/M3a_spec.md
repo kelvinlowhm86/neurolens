@@ -192,7 +192,7 @@ Both use Python 3.12, `DataApiDatabase`, and only pure-Python modules (`neurolen
   - otherwise `issue_refund(..., "processing_failed", <the job's last error_message>, queued_before_s=0, processing_stale_s=90)`. If that returns `False` because a worker holds a fresh claim (a duplicate message for a job still running), **raise**, so the message is retried later, by which time the job has finished or gone stale.
 
   The handler returns normally (and SQS deletes the message) only when every job in it is settled, refunded or already terminal.
-- **`reaper.handler(event, context)`**, every 5 minutes. Both rules measure age from **`updated_at`**, which `claim`, every heartbeat and `release_for_retry` refresh, so a job just handed back to the queue is not mistaken for an old one. For each job found:
+- **`reaper.handler(event, context)`**, every hour (M3b §6). Both rules measure age from **`updated_at`**, which `claim`, every heartbeat and `release_for_retry` refresh, so a job just handed back to the queue is not mistaken for an old one. For each job found:
   - `processing`, `updated_at` more than **10 minutes** ago (no heartbeat, and no redelivery re-claimed it): result exists → `settle_success`, otherwise `issue_refund(..., "stalled", processing_stale_s=600)`.
   - `queued`, `updated_at` more than **60 minutes** ago: result exists → `settle_success`; else if the upload object does not exist → `issue_refund(..., "upload_not_received", queued_before_s=3600)` (the presigned POST expired after 5 minutes, so it never will; or the upload expired after 2 days before any worker took it); **else leave it alone**. A queued job whose upload exists is waiting for a worker, not stuck: an upload between sessions waits for the next one, and a large burst can wait over an hour. Its SQS message still exists, because uploads expire after 2 days and queue messages after 4 (M2a's lifecycle rule and SQS's default retention; this rule depends on that order), so it either runs, is refunded by the worker (§5), or reaches the dead-letter handler. Refunding it here would leave a paid-back job that never runs.
   - The conditions are re-checked under the row lock inside `issue_refund`, so a job claimed by a worker between the reaper's query and its refund is left alone.
@@ -201,7 +201,7 @@ Both use Python 3.12, `DataApiDatabase`, and only pure-Python modules (`neurolen
 - **Lambda settings:** timeout **120 s** (the database wake-up retry alone can take about 60 s), memory 256 MB. The dead-letter queue's visibility timeout is **720 s**, six times the function timeout as AWS recommends (at least the function timeout, or AWS rejects the event-source mapping); it is also how long a message the handler cannot finish yet waits before its next try. Its message retention is **14 days**. The reaper is the backstop for anything the dead-letter handler cannot finish.
 - **Lambda error alarms:** each Lambda's `Errors` metric emails Josh through M2a's SNS topic (one 5-minute period at 1 or more), like the breaker's. The dead-letter handler also errors by design when a worker still holds a job, so a single email can be expected; repeated ones cannot.
 - **Forgotten-database alarm:** a CloudWatch alarm on the cluster's `ServerlessDatabaseCapacity` above 0 at some point in each of **6 hours** in a row (hourly Maximum) emails Josh through M2a's SNS topic. It catches a forgotten `stop_work.sh` or anything else keeping Aurora awake (about $1.40 a day at 0.5 ACU), including a caller every 12 minutes, such as the dead-letter handler retrying, which lets Aurora pause briefly between calls.
-- **Cost trap:** a schedule that queries Aurora every 5 minutes would stop it ever pausing, costing about $1.40 a day at 0.5 ACU. So the EventBridge rule is created **disabled** (Terraform ignores changes to its state). `start_work.sh` enables it; `stop_work.sh` invokes the reaper once, then disables it, and prints NOT CONFIRMED while the dead-letter queue still holds messages (each retry of the handler wakes Aurora). Between sessions, abandoned reservations simply wait for the next session.
+- **Cost trap:** a schedule that queries Aurora every 5 minutes would stop it ever pausing, costing about $1.40 a day at 0.5 ACU. So the EventBridge rule `neurolens-reaper-hourly` runs hourly and is always enabled (M3b §6): each run wakes Aurora for about 5 minutes (about $4 a month). `stop_work.sh` prints NOT CONFIRMED while the dead-letter queue still holds messages (each retry of the handler wakes Aurora). A stuck job waits at most about 70 minutes before it is settled or refunded.
 - Lambda IAM (one role per function): the same `rds-data` and secret permissions as the worker; `s3:GetObject` on `results/*` and `uploads/*` with `s3:ListBucket` on the bucket without a prefix condition (so a missing object reads as 404, not 403; a HEAD carries no prefix, as for the worker); for the DLQ handler, `sqs:ReceiveMessage`, `DeleteMessage`, `GetQueueAttributes` on the dead-letter queue; CloudWatch Logs.
 
 ### 7a. IAM text for Josh to paste (prepared alongside the Terraform, before the first apply)
@@ -282,7 +282,7 @@ infra/db_smoke.py                NEW
 infra/iam/*.json                 MODIFIED: §7a
 experiments/latency_run.py       MODIFIED: stages from the status endpoint (§5)
 infra/terraform/                 MODIFIED: Aurora, Lambdas, EventBridge rule, IAM
-infra/start_work.sh, stop_work.sh  MODIFIED: reaper rule on/off
+infra/start_work.sh, stop_work.sh  MODIFIED: dead-letter queue check
 static/                          MODIFIED: balance, 402, queued
 tests/                           MODIFIED: §10
 ```
@@ -300,14 +300,14 @@ tests/                           MODIFIED: §10
 9. Concurrent `settle_success` and `issue_refund` on one job always end in exactly one outcome (the concurrency test, and one manual run against Aurora).
 10. Another user's job returns 404 from the status and result endpoints, with no S3 request made.
 11. An IAM principal without `rds-data` permissions cannot read the database; Aurora's security group has no inbound rules.
-12. With `stop_work.sh` run, the reaper rule is disabled and Aurora pauses (visible as 0 ACU in CloudWatch after about 10 minutes).
+12. With `stop_work.sh` run, Aurora pauses between the hourly reaper runs (visible as 0 ACU in CloudWatch about 5 minutes after the last use).
 13. `FAKE_INFERENCE=1 pytest` passes locally and in CI, the tests were committed before the implementation, and the break-it check was done.
 
 ## 13. Cost
 - Aurora: about $0.12 per ACU-hour **only while awake** (it wakes for work sessions and jobs), storage about $0.10 per GB-month (the database is tiny), backups free at this size.
 - Secrets Manager: $0.40 a month for the database secret.
 - Data API, Lambda and EventBridge: free tier at this volume.
-- The main risk is Aurora never pausing. §7's reaper switch and acceptance criterion 12 guard it; check the ACU graph after the first session.
+- The main risk is Aurora never pausing. the hourly reaper, the database alarm (M3b §6) and acceptance criterion 12 guard it; check the ACU graph after the first session.
 
 ## 14. Explicitly not in this milestone
 Everything listed for M3b in §1. No live payments of any kind. No changes to the model, the image, or the scaling rules.
