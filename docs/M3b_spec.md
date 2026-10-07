@@ -20,6 +20,18 @@
 
 Check before deciding: the Google sign-in flow (Authlib, signed session cookie) works unchanged behind a function URL; CloudFront origin access control for a Lambda function URL; the cold-start time with our imports. If Lambda is chosen, update §3, §8, §10, §12, Terraform and the architecture page together.
 
+**Before building — decide how users sign in (Josh decides; then §2 is rewritten for the choice).** §2 assumes Google sign-in directly, which is fine for the course's known users but assumes every user has a Google account; a real product can't (many marketing teams use Microsoft 365).
+
+| | Google directly (§2 as written) | Amazon Cognito, Google as the first option |
+|---|---|---|
+| Sign-in options | Google only | Google now; email-and-password, Microsoft, Apple or a company's login later without code changes |
+| Our code | Authlib against Google (OpenID Connect) | the same Authlib code against Cognito's OpenID Connect address |
+| User IDs in `users.user_id` | Google's `sub`; moving to Cognito later gives every user a new ID (a migration) | Cognito's `sub` from day one |
+| Extra setup | none | Terraform: user pool, app client, hosted sign-in domain, Google as an identity provider |
+| Cost | free | free at our size |
+
+Check before deciding: Cognito's hosted sign-in works with the `*.cloudfront.net` callback; the dev-mode guard and session cookie are unchanged; how much the hosted pages can match the site. If Cognito is chosen, update §2, §5, §9, §10, Terraform and the architecture page together.
+
 **Day one — check the address works with Google.** Create the CloudFront distribution (§3; the origin can be added later), then add `https://<distribution>.cloudfront.net/auth/callback` as an authorized redirect URI in the Google Cloud console. Google requires HTTPS and a host under a public suffix; `cloudfront.net` should qualify, but confirm it before building anything else. If Google rejects it, stop and ask Josh: the fallbacks are a free dynamic-DNS name with Caddy, or a cheap bought domain.
 
 ## 1. Scope
