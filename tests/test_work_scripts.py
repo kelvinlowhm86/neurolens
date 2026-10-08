@@ -353,6 +353,16 @@ def test_stop_resets_aurora_minimum_then_all_stopped(sandbox):
     assert r.code == 0 and "ALL STOPPED" in r.out
 
 
+def test_scripts_change_only_aurora_minimum_never_its_maximum(sandbox):
+    """Terraform owns the maximum (M3b §6); a script that set it would undo a Terraform change."""
+    start = sandbox("start_work.sh", started_world(), "--keep-worker-and-db")
+    stop = sandbox("stop_work.sh", healthy_world(db_min="0.5"))
+    for r in (start, stop):
+        modify = r.find("rds", "modify-db-cluster")
+        assert len(modify) == 1
+        assert "MaxCapacity" not in " ".join(r.calls[modify[0]])
+
+
 def test_stop_aurora_reset_failure_not_confirmed(sandbox):
     r = sandbox("stop_work.sh", healthy_world(db_min="0.5", fail=["rds modify-db-cluster"]))
     assert r.code != 0

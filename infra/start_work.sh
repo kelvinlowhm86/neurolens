@@ -119,9 +119,10 @@ if [ "$WORKER" = 1 ]; then
 fi
 
 if [ "$DB_AWAKE" = 1 ]; then
-  # Terraform ignores min_capacity, so this does not fight it. stop_work.sh puts it back to 0.
+  # Only the minimum: Terraform ignores min_capacity, so this does not fight it, and owns the
+  # maximum (M3b §6), so never pass MaxCapacity here. stop_work.sh puts the minimum back to 0.
   if ! aws rds modify-db-cluster --db-cluster-identifier "$DB" --apply-immediately \
-      --serverless-v2-scaling-configuration MinCapacity=0.5,MaxCapacity=2 --output text >/dev/null; then
+      --serverless-v2-scaling-configuration MinCapacity=0.5 --output text >/dev/null; then
     echo "Could not keep Aurora awake (above). Nothing was started; end with infra/stop_work.sh if needed." >&2
     exit 1
   fi

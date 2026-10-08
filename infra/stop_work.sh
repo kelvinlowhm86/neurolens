@@ -106,12 +106,12 @@ else
 fi
 
 # 3. Aurora's minimum back to 0 (start_work.sh --keep-worker-and-db raises it), so it can pause again.
-# Terraform ignores min_capacity, so nothing else resets it.
+# Terraform ignores min_capacity, so nothing else resets it. Never pass MaxCapacity: Terraform owns it.
 if ! DB_MIN=$(db_min); then
   problem "could not read Aurora's minimum capacity"
 elif [ "$DB_MIN" != "0" ] && [ "$DB_MIN" != "0.0" ]; then
   aws rds modify-db-cluster --db-cluster-identifier "$DB" --apply-immediately \
-    --serverless-v2-scaling-configuration MinCapacity=0,MaxCapacity=2,SecondsUntilAutoPause=300 --output text >/dev/null \
+    --serverless-v2-scaling-configuration MinCapacity=0,SecondsUntilAutoPause=300 --output text >/dev/null \
     && echo "Aurora's minimum put back to 0 (was $DB_MIN)." \
     || problem "could not put Aurora's minimum back to 0 (was $DB_MIN): it will not pause"
 fi
