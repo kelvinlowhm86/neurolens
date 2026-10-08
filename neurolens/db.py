@@ -27,6 +27,9 @@ logger = logging.getLogger("neurolens")
 # `:name` but not the second colon of a `::` cast (application SQL never uses `::` anyway).
 _PARAM = re.compile(r"(?<!:):([A-Za-z_][A-Za-z0-9_]*)")
 
+# Data API error codes that mean Aurora is still resuming from auto-pause.
+_WAKING_CODES = ("DatabaseResumingException", "ThrottlingException")
+
 
 class DatabaseWaking(Exception):
     """Aurora was still resuming from auto-pause when the wait budget ran out."""
@@ -146,7 +149,9 @@ class DataApiDatabase:
                 resp = self._client.begin_transaction(**self._arns, database=self._database)
                 return resp["transactionId"]
             except ClientError as exc:
-                if exc.response.get("Error", {}).get("Code") != "DatabaseResumingException":
+                # While resuming, Aurora answers either code. Retrying BeginTransaction is
+                # safe: it runs no statement.
+                if exc.response.get("Error", {}).get("Code") not in _WAKING_CODES:
                     raise
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
