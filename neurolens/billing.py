@@ -14,11 +14,14 @@ Pure Python (the Lambdas import this): no numpy, no psycopg.
 """
 
 import json
+import logging
 import uuid
 from datetime import UTC, datetime
 
 from neurolens.pricing import estimate_cost_cents
 from neurolens.storage import TIME_FORMAT
+
+logger = logging.getLogger("neurolens")
 
 QUEUED, PROCESSING, DONE, FAILED = "queued", "processing", "done", "failed"
 TERMINAL = (DONE, FAILED)
@@ -115,6 +118,24 @@ def _user_by_email(tx, email):
     return rows[0]["user_id"] if rows else None
 
 
+def _keep_email_current(tx, user_id, email):
+    """Store a returning sign-in's verified email (M3b §2c), so an address the user has given up
+    no longer links a stranger to their account. Left unchanged when another user holds it."""
+    stored = tx.execute("SELECT email FROM users WHERE user_id = :user_id", {"user_id": user_id})
+    if stored[0]["email"].lower() == email.lower():
+        return
+    # One conditional statement: a unique-violation error would abort the whole transaction.
+    updated = tx.execute(
+        "UPDATE users SET email = :email WHERE user_id = :user_id AND NOT EXISTS "
+        "(SELECT 1 FROM users WHERE lower(email) = lower(:email)) RETURNING user_id",
+        {"user_id": user_id, "email": email},
+    )
+    if not updated:
+        logger.warning(
+            f"user {user_id} signed in with an email another user holds: stored email kept"
+        )
+
+
 def ensure_user(db, user_id, email, starter_cents):
     """Create the user with the starter credit, once (dev mode's fixed user, M3b §2b). Two
     simultaneous first calls both succeed and grant it once; a later call changes nothing (not
@@ -134,7 +155,9 @@ def sign_in(db, issuer, subject, email, starter_cents):
     with db.transaction() as tx:
         rows = tx.execute(find_identity, key)
         if rows:
-            return rows[0]["user_id"]
+            user_id = rows[0]["user_id"]
+            _keep_email_current(tx, user_id, email)
+            return user_id
         user_id = _user_by_email(tx, email)
         if user_id is None:
             user_id = str(uuid.uuid4())
