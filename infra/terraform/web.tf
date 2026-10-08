@@ -268,7 +268,7 @@ resource "aws_lambda_function" "web" {
   handler       = each.value.handler
   filename      = local.web_zip
   timeout       = 60
-  memory_size   = 512
+  memory_size   = 1769 # one full vCPU: startup (AWS clients) is CPU-bound; measured 4.6-5.5 s at 512
 
   environment {
     variables = merge(local.db_env, each.value.environment)

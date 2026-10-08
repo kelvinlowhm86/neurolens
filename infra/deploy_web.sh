@@ -48,6 +48,10 @@ for s in public:
 print(f"{len(public)} of {len(samples)} samples are public.")
 PY
 aws s3 sync "$STAGE" "s3://$BUCKET/site/" --delete --only-show-errors
+# The page itself: browsers must check for a new version on every load, or a tab can keep running
+# an old page after a deploy (without Cache-Control they guess how long to keep it).
+aws s3 cp "$STAGE/index.html" "s3://$BUCKET/site/index.html" --cache-control no-cache \
+  --content-type "text/html; charset=utf-8" --only-show-errors
 aws cloudfront create-invalidation --distribution-id "$DISTRIBUTION" --paths '/*' \
   --query Invalidation.Id --output text >/dev/null
 echo "Deployed $(git rev-parse --short HEAD) to $($TF output -raw public_base_url)"
