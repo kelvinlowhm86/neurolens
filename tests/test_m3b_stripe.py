@@ -95,15 +95,17 @@ def test_checkout_creates_a_session_for_the_packs_amount_and_returns_only_its_ur
         assert form[name][0].startswith(f"{PUBLIC_BASE_URL}/"), form[name]
 
 
-def test_checkout_is_card_only_with_managed_payments_off(cognito_client, idp, stripe_api):
-    """Managed Payments (Stripe as merchant of record) is on by default for some accounts and
-    refuses card-only sessions and items without tax codes (seen on the first live calls)."""
+def test_checkout_turns_managed_payments_off_and_names_no_payment_methods(
+    cognito_client, idp, stripe_api
+):
+    """Checked against Stripe's test API: Managed Payments (on by default for the account)
+    requires tax codes, and the current API refuses `payment_method_types`."""
     sign_in(cognito_client, idp, email=ALLOWED_EMAIL)
     assert checkout(cognito_client, pack="5").status_code == 200
     [request] = stripe_api()
     form = form_of(request)
     assert form["managed_payments[enabled]"] == ["false"]
-    assert values(form, "payment_method_types") == ["card"]
+    assert values(form, "payment_method_types") == []
 
 
 def test_checkout_never_takes_an_amount_user_or_session_from_the_request(

@@ -475,11 +475,10 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
         checkout = stripe.checkout.Session.create(
             api_key=stripe_cfg["secret_key"],
             mode="payment",
-            # We are the seller and this is test credit, not a sale through Stripe as merchant of
-            # record: Managed Payments off whatever the account's default (it refuses card-only and
-            # requires tax codes), so card only can be named here.
+            # We are the seller of test credit, not selling through Stripe as merchant of record:
+            # Managed Payments off whatever the account's default (it requires tax codes). Payment
+            # methods are not named: Stripe's current API refuses that, they are dashboard settings.
             managed_payments={"enabled": False},
-            payment_method_types=["card"],
             line_items=[
                 {
                     "quantity": 1,
