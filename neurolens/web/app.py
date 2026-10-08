@@ -475,7 +475,6 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
         checkout = stripe.checkout.Session.create(
             api_key=stripe_cfg["secret_key"],
             mode="payment",
-            payment_method_types=["card"],
             line_items=[
                 {
                     "quantity": 1,
