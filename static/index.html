@@ -425,20 +425,33 @@ function showApp(meJson) {
 $('topUpPanel').addEventListener('click', async ev => {
   const pack = ev.target.dataset && ev.target.dataset.pack;  // packs mirror config.json stripe.packs
   if (!pack) return;
+  const buttons = $('topUpPanel').querySelectorAll('button');
+  buttons.forEach(b => { b.disabled = true; });  // one checkout at a time
   $('topUpText').textContent = 'Opening Stripe…';
   try {
     const res = await postJSON('/api/top-up/checkout', { pack });
     const data = await res.json();
     if (!res.ok) throw new Error(data.message || data.error);
     window.location.assign(data.url);
-  } catch (e) { $('topUpText').textContent = `Couldn't start the top-up: ${e.message}`; }
+  } catch (e) {
+    buttons.forEach(b => { b.disabled = false; });
+    $('topUpText').textContent = `Couldn't start the top-up: ${e.message}`;
+  }
 });
 
 $('signOut').addEventListener('click', async () => {
+  const button = $('signOut');
+  button.disabled = true;  // one sign-out at a time; it can take a few seconds
+  button.textContent = 'Signing out…';
   try {
     const res = await postJSON('/logout', {});
+    if (!res.ok) throw new Error(`error ${res.status}`);
     window.location.assign((await res.json()).logout_url);  // Cognito's own logout, then back here
-  } catch (e) { $('headerMeta').textContent = "Couldn't sign out. Please try again."; }
+  } catch (e) {
+    button.disabled = false;
+    button.textContent = 'Sign out';
+    $('headerMeta').textContent = `Couldn't sign out (${e.message}). Please try again.`;
+  }
 });
 
 // ─── Earlier analyses (GET /api/jobs) ───────────────────────────────────────

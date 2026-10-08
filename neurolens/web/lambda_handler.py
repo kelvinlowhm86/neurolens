@@ -7,7 +7,14 @@ reused while the container lives. Two values are the exception: CloudFront's add
 Cognito app client (whose callback address contains it), depend on this function's URL, so they
 cannot be its environment variables (a Terraform cycle). Terraform stores them in Parameter Store
 instead, and they are read here when the environment has none.
+
+Each request logs one line (method, path, status, milliseconds; never the query string, which
+carries the sign-in code), and the first request logs how long building the app took, so a slow
+or refused request can be traced in CloudWatch.
 """
+
+import logging
+import time
 
 from neurolens import settings
 from neurolens.web.app import create_app
@@ -18,6 +25,8 @@ DEPLOYMENT_PARAMETERS = {
     "/neurolens/web/cognito_client_id": ("auth", "cognito_client_id"),
 }
 _handler = None
+logger = logging.getLogger("neurolens")
+logger.setLevel(logging.INFO)
 
 
 def _load_settings():
@@ -37,8 +46,21 @@ def _load_settings():
 
 def handler(event, context):
     global _handler
+    started = time.monotonic()
     if _handler is None:
         from apig_wsgi import make_lambda_handler
 
-        _handler = make_lambda_handler(create_app(cfg=_load_settings()), binary_support=True)
-    return _handler(event, context)
+        cfg = _load_settings()
+        loaded = time.monotonic()
+        _handler = make_lambda_handler(create_app(cfg=cfg), binary_support=True)
+        logger.info(
+            f"app built in {time.monotonic() - started:.2f} s "
+            f"(settings {loaded - started:.2f} s, create_app {time.monotonic() - loaded:.2f} s)"
+        )
+    response = _handler(event, context)
+    http = (event.get("requestContext") or {}).get("http") or {}
+    logger.info(
+        f"{http.get('method')} {event.get('rawPath')} {response.get('statusCode')} "
+        f"{(time.monotonic() - started) * 1000:.0f} ms"
+    )
+    return response
