@@ -21,6 +21,6 @@ Do these in this order. Each step says what it costs and how to know it worked.
 Run `terraform apply` for anything else only after `stop_work.sh` (a held session changes Aurora's settings by hand).
 
 If a step fails, do not skip ahead: the scripts name the cause. Aurora pauses by itself about 5 minutes
-after its last use; the hourly reaper wakes it briefly (about $4 a month).
+after its last use; the reaper wakes it every 3 hours (about $3 a month).
 
 After a code change that adds a file to `infra/migrations/`, run `python infra/apply_schema.py --backend data_api` (with the `NEUROLENS_DB_*` values from `terraform output`) before the site is used; the deploy scripts do not apply migrations. It wakes Aurora for a few minutes.

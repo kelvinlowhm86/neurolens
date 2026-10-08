@@ -30,7 +30,7 @@ it created. The region is one setting (`region` in `terraform.tfvars`, default `
   30% of each of 6 hours; and one emails when any Lambda run fails.
 
 **Cost:** with everything stopped, the running cost is the stored image and disks and the S3 files,
-roughly $3 a month (plus about $4 for the hourly reaper waking Aurora). Machines bill only while a session is open: the NAT Gateway about $1.20 a day while `nat_gateway` is true, a
+roughly $3 a month (plus about $3 for the reaper waking Aurora every 3 hours). Machines bill only while a session is open: the NAT Gateway about $1.20 a day while `nat_gateway` is true, a
 GPU worker $1.86 an hour (g6e.xlarge; $2.24 for the g6e.2xlarge fallback). A worker ends itself after
 30 idle minutes, but always end a session with `infra/stop_work.sh` (section 5).
 
@@ -139,14 +139,13 @@ from `aws_env.sh`, which asks Terraform only (never a copy such as `.env`). Regi
 
 ## 2e. The database and the settlement Lambdas (M3a)
 
-`database.tf` creates Aurora PostgreSQL (Serverless v2, 0-2 ACU): users, credit and job state. It
-pauses after 10 idle minutes (0 ACU, storage only) and wakes in about 15 s on the next call. Nothing
+`database.tf` creates Aurora PostgreSQL (Serverless v2, 0-1 ACU): users, credit and job state. It
+pauses 5 minutes after its last use (0 ACU, storage only) and wakes in about 15 s on the next call. Nothing
 connects to it over the network: the app, the worker and the Lambdas use the RDS Data API (HTTPS,
 checked by IAM), and the password lives only in Secrets Manager, created and rotated by RDS.
 `lambdas.tf` adds two Lambdas: the **dead-letter handler** settles or refunds every job that failed
-twice, and the **reaper** settles or refunds stuck jobs every 5 minutes, but only during a session:
-`start_work.sh` switches its schedule on and `stop_work.sh` runs it once and switches it off, so
-Aurora can pause between sessions. Alarms email you if Aurora stays awake for 6 hours or a Lambda fails.
+twice, and the **reaper** settles or refunds stuck jobs every 3 hours, always on; each run wakes
+Aurora for about 11 minutes. Alarms email you if Aurora stays awake for much of 6 hours or a Lambda fails.
 
 After the first apply (from the repo root):
 

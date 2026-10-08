@@ -1,7 +1,7 @@
 # NeuroLens — M3b Implementation Spec
 **Milestone:** sign-in, the public HTTPS website on AWS, credit top-ups, job history, and the switch to a product that runs by itself (20 – 30 Oct)
 
-**Operating model: product mode.** Nothing waits for a person. The website, sign-in, history and results are always available. GPU workers still scale from zero on the job queue (M2b), and the hourly reaper settles stuck jobs (§6). The only by-hand parts are operator tools: the NAT Gateway switch for days with GPU work (§5), the warm hold for demos and study sessions, and `stop_work.sh` to pause GPU work.
+**Operating model: product mode.** Nothing waits for a person. The website, sign-in, history and results are always available. GPU workers still scale from zero on the job queue (M2b), and the reaper settles stuck jobs every 3 hours (§6). The only by-hand parts are operator tools: the NAT Gateway switch for days with GPU work (§5), the warm hold for demos and study sessions, and `stop_work.sh` to pause GPU work.
 **Builds on:** M3a (Aurora via the Data API, three-stage billing, refunds, dead-letter and reaper Lambdas, Aurora-backed status and result endpoints, a development user on `127.0.0.1`). M3b replaces the development user with real accounts, runs the web app on Lambda behind CloudFront's free HTTPS address, replaces the NAT instance with an on-demand NAT Gateway, and adds history, CSV export, credit grants and Stripe test-mode top-ups. It ends with the product ready for the GPU batch and M4's usability study.
 
 **Ground rules for all of M3b:** region `us-east-1`. Python 3.12. All infrastructure is Terraform in `infra/terraform/`, tagged `Project=neurolens`, `Milestone=M3b`. Run AWS commands with the `neurolens` CLI profile only. **Tests first, as in M0 §5:** the §11 tests are written by a separate agent against §2–§8 before the implementation, and are not edited by the implementer. Money and sign-in code (§2, §7) get the full treatment: tests first, 2–3 break-it checks on committed code, and an independent Opus review. `/security-review` runs on the full M3 diff before M3 is merged, and its high-severity findings are fixed first.
@@ -12,7 +12,7 @@
 | A | **Amazon Cognito** for sign-in: Google and email-and-password at launch, more providers later without code changes. Our own user IDs, with a table mapping each sign-in to a user; one person signing in two ways with the **same verified email is one user**. | A provider's ID as our user ID makes every later change a migration of all users. Linking on a verified email is what most products do (Slack, Notion, Atlassian). Cognito is free up to 10,000 monthly users. |
 | B | **Flask on AWS Lambda** behind CloudFront (function URL with origin access control). The page and samples come from S3 through the same CloudFront address. | There is no machine to keep alive (no patching, restarts or replacement), and the website works even when the NAT Gateway is off. About $0 at our traffic. |
 | C | **No load balancer.** | Nothing takes traffic on servers: Lambda runs more copies by itself, and GPU workers pull jobs from the queue. Growth is limited by Lambda's account concurrency, Aurora's maximum capacity, the GPU quota and the worker group's maximum size (the queue wait), not by a missing load balancer. |
-| D | **Product mode** (above), used for the GPU batch, the study and the demo. GPU workers stay in **private subnets**; a **NAT Gateway** (managed by AWS) replaces the NAT instance and exists only on days with GPU work and in the final deployed window. The reaper runs **hourly, always**, with Aurora's auto-pause at 5 minutes. | A NAT instance is a machine we patch and a single point of failure, the wrong fit for a product nobody watches. A NAT Gateway is the standard managed choice, and deleting it between GPU days keeps the cost to about $1.20 a day of use. Every reaper query wakes Aurora, so a reaper that checks often would keep it awake forever; hourly costs about $4 a month and can never silently miss a refund. |
+| D | **Product mode** (above), used for the GPU batch, the study and the demo. GPU workers stay in **private subnets**; a **NAT Gateway** (managed by AWS) replaces the NAT instance and exists only on days with GPU work and in the final deployed window. The reaper runs **every 3 hours, always**, with Aurora's auto-pause at 5 minutes and its maximum at 1 ACU. | A NAT instance is a machine we patch and a single point of failure, the wrong fit for a product nobody watches. A NAT Gateway is the standard managed choice, and deleting it between GPU days keeps the cost to about $1.20 a day of use. Every reaper query wakes Aurora (measured: about 11 minutes at its maximum capacity per run), so a reaper that checks often would keep it awake forever; hourly measured about $15 a month, every 3 hours at 1 ACU is about $3 a month (estimate, to be measured: each run measured 0.18 ACU-hours at a 2 ACU maximum; at 1 ACU it should be about half), and it can never silently miss a refund. |
 
 **Open sign-up is safe:** new accounts start with **0 credit**. Credit comes from `grant_credit.py` (§7a) or, for the team only, Stripe test top-ups (§7b). A stranger can sign up and browse the samples, but cannot run a GPU job. The Google OAuth app is **published** (not "Testing"), so anyone with Google can sign up without being added to a list; the consent screen links a one-page privacy policy (`static/privacy.html`).
 
@@ -27,7 +27,7 @@
 - The web app on Lambda behind CloudFront; the page and samples from S3 (§3)
 - The page: sign-in, balance, history, CSV, top-up, specific failure messages (§4)
 - The NAT Gateway switch replacing the NAT instance (§5)
-- The hourly reaper and 5-minute auto-pause (§6)
+- The reaper every 3 hours, 5-minute auto-pause and 1 ACU maximum (§6)
 - 0 starter credit, `grant_credit.py`, Stripe test-mode top-ups for an allowlist (§7)
 - Experiment 3, an independent track (§9)
 - Deleting the scaffolding before `aws-josh` is merged into `main` (§10)
@@ -139,11 +139,11 @@ Terraform ignores changes to Aurora's `min_capacity`, so the scripts and Terrafo
 
 - Deploy-user permissions (paste into `neurolens-deploy-compute`): create, delete and describe NAT Gateways, allocate, release and associate Elastic IPs, all limited to `Project=neurolens` tags as for other EC2 resources.
 
-## 6. Reaper: hourly, always on
-- The reaper rule `neurolens-reaper-hourly` runs `rate(1 hour)` and is always enabled (Terraform). It **replaces** M3a's `neurolens-reaper-every-5-min` (created disabled, with `ignore_changes = [state]` so the scripts could switch it): that rule and its `ignore_changes` are removed, so Terraform alone owns the new rule's state. `start_work.sh` and `stop_work.sh` no longer touch it.
-- Aurora's `seconds_until_auto_pause` becomes **300** (the minimum). Each hourly run wakes Aurora for about 5 minutes (about 15 s to resume, M3a's resume wait covers it): about $4 a month.
-- What it guards against (unchanged rules, M3a §7): an upload that never arrived (credit reserved, nothing will run), a job whose worker died and whose queue message is gone (`processing` forever), and a published result whose charge was not recorded. Worst case, such a job waits about 70 minutes (its 10- or 60-minute threshold plus the hour) before it is settled or refunded; the dead-letter handler still refunds the common failures within seconds.
-- **The forgotten-database alarm changes what it measures.** M3a's `neurolens-db-awake-6h` fires when Aurora was awake *at some point* in each of 6 hours in a row; the hourly reaper wakes it every hour, so that rule would fire every day with nothing wrong. It now fires when Aurora was awake for **a large share of each hour**: the hourly **70th percentile** of `ServerlessDatabaseCapacity` above **0** in each of 6 hours in a row: the metric reads 0 while paused, so this means awake in more than 30% of the hour's minutes, whatever capacity it ran at. The reaper's wake (about 6 minutes, 10%) stays below it, while a caller every 12 minutes (about 45%, M3a's example) and a forgotten `--keep-worker-and-db` (100%) are above it.
+## 6. Reaper: every 3 hours, always on
+- The reaper rule `neurolens-reaper-schedule` runs `rate(3 hours)` and is always enabled (Terraform). It **replaces** M3a's `neurolens-reaper-every-5-min` (created disabled, with `ignore_changes = [state]` so the scripts could switch it): that rule and its `ignore_changes` are removed, so Terraform alone owns the new rule's state. `start_work.sh` and `stop_work.sh` no longer touch it.
+- Aurora's `seconds_until_auto_pause` becomes **300** (the minimum) and its `max_capacity` becomes **1 ACU** (M3a had 2; our load is a few small queries). Each run wakes Aurora for about 11 minutes (measured: it resumes straight to its maximum, and the 300 s count starts only when the last connection closes; about 15 s to resume, M3a's resume wait covers it). Cost: about $3 a month (estimate, to be measured: each run measured 0.18 ACU-hours at a 2 ACU maximum; at 1 ACU it should be about half). Hourly at 2 ACU measured about $15 a month, which is why the interval is 3 hours.
+- What it guards against (unchanged rules, M3a §7): an upload that never arrived (credit reserved, nothing will run), a job whose worker died and whose queue message is gone (`processing` forever), and a published result whose charge was not recorded. Worst case, such a job waits about 3 to 4 hours (its 10- or 60-minute threshold plus the 3-hour interval) before it is settled or refunded; the dead-letter handler still refunds the common failures within seconds.
+- **The forgotten-database alarm changes what it measures.** M3a's `neurolens-db-awake-6h` fires when Aurora was awake *at some point* in each of 6 hours in a row; the reaper wakes it every 3 hours, so that rule would fire every day with nothing wrong. It now fires when Aurora was awake for **a large share of each hour**: the hourly **70th percentile** of `ServerlessDatabaseCapacity` above **0** in each of 6 hours in a row: the metric reads 0 while paused, so this means awake in more than 30% of the hour's minutes, whatever capacity it ran at. A reaper wake (about 11 minutes, measured) stays below it, while a caller every 12 minutes (about 45%, M3a's example) and a forgotten `--keep-worker-and-db` (100%) are above it.
 
 ## 6b. Alarms simplified
 - **The idle alarm only detects and emails.** Its "set to 0" action and its direct call to the breaker are removed, with the breaker's alarm-invoke permission. Reasons:
@@ -240,7 +240,7 @@ What stays: **product** (scale-out and scale-in alarms, idle alarm and breaker, 
 6. The website, sign-in and history work while `nat_gateway = false` and no GPU worker exists.
 7. With `nat_gateway = true` and `start_work.sh`, one fake job runs end to end through the deployed website (upload, worker, result, history, CSV). With `nat_gateway = false`, `start_work.sh` refuses to start workers, and `terraform apply` refuses `nat_gateway = false` while the group's max is above 0. After `stop_work.sh`, an upload through the deployed site is refused with "Processing is paused" and the balance is unchanged.
 8. `stop_work.sh` reports NOT CONFIRMED while a NAT Gateway or an unattached Elastic IP exists, and ALL STOPPED after `nat_gateway = false` is applied.
-9. The reaper runs hourly with nothing else active, Aurora pauses again within about 10 minutes of each run (visible in CloudWatch), and the forgotten-database alarm stays OK through 6 such hours.
+9. The reaper runs every 3 hours with nothing else active, Aurora pauses again within about 15 minutes of each run (visible in CloudWatch), and the forgotten-database alarm stays OK through 6 idle hours.
 10. A team member on the allowlist completes a Stripe test Checkout and receives exactly one matching credit; replays never credit twice; a non-allowlisted user sees no top-up control and the checkout endpoint refuses them.
 11. `grant_credit.py` gives a participant credit by email.
 12. The S3 bucket and the web app no longer allow arbitrary origins.
@@ -269,7 +269,7 @@ infra/restart_workers.sh           DELETED (folded into deploy_code.sh)
 infra/connect_worker.sh            RENAMED infra/debug_worker.sh, refuses without a warm hold
 infra/build_ami.sh                 MODIFIED: --dlami removed
 infra/db_smoke.py                  RENAMED infra/check_aurora.py, gains a sign_in round trip
-infra/terraform/                   MODIFIED: Cognito, CloudFront, web and webhook Lambdas, NAT Gateway switch (NAT instance removed) with its max-0 precondition, reaper hourly, auto-pause 300 s, database alarm on hourly average, idle alarm detect-and-email only, one error alarm per Lambda
+infra/terraform/                   MODIFIED: Cognito, CloudFront, web and webhook Lambdas, NAT Gateway switch (NAT instance removed) with its max-0 precondition, reaper every 3 hours, auto-pause 300 s, Aurora maximum 1 ACU, database alarm on hourly average, idle alarm detect-and-email only, one error alarm per Lambda
 infra/iam/neurolens-deploy-*.json  MODIFIED: Cognito, CloudFront, NAT Gateway, Elastic IP, new Lambdas
 static/                            MODIFIED: sign-in, balance, history, CSV, top-up, messages, postJSON, empty samples state; privacy.html NEW
 docs/session_checklist.md          NEW: nat_gateway on, start_work.sh --keep-worker-and-db, sign-in check, grant credit, stop_work.sh, nat_gateway off (in that order)
@@ -281,7 +281,7 @@ tests/                             MODIFIED: §11
 ## 14. Cost
 - Lambda, CloudFront, Cognito, Parameter Store standard parameters, Stripe test mode: free at our use.
 - NAT Gateway: about $1.20 a day while it exists (GPU days and the deployed window only).
-- Reaper: about $4 a month in Aurora wake-ups.
+- Reaper: about $3 a month (estimate, to be measured: each run measured 0.18 ACU-hours at a 2 ACU maximum; at 1 ACU it should be about half) in Aurora wake-ups. Measure it from the ACU graph in the first day after any change to the schedule or capacity.
 - S3 site files: cents a month.
 - Experiment 3: no new GPU time (the cloud leg reuses Experiment 1).
 

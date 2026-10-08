@@ -179,4 +179,4 @@ if [ -n "$PROBLEMS" ]; then
   exit 1
 fi
 echo "ALL STOPPED in $AWS_REGION: worker group at 0, no warm hold, Aurora minimum 0, dead-letter queue empty, no neurolens machine running, no NAT Gateway."
-echo "Aurora pauses by itself about 5 minutes after its last use (the hourly reaper wakes it briefly)."
+echo "Aurora pauses by itself about 5 minutes after its last use (the reaper wakes it every 3 hours)."

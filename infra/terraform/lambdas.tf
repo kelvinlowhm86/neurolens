@@ -133,13 +133,14 @@ resource "aws_lambda_event_source_mapping" "dlq" {
   batch_size       = 1
 }
 
-# Always on, owned by Terraform alone (M3b §6). Each run wakes Aurora for about 5 minutes (it pauses
-# after 300 s idle): about $4 a month. A stuck job waits at most about 70 minutes (its 10- or 60-minute
-# threshold plus the hour); the dead-letter handler still refunds the common failures in seconds.
+# Always on, owned by Terraform alone (M3b §6). Each run wakes Aurora for about 11 minutes (measured;
+# it pauses 300 s after the last connection closes). Every 3 hours costs about $3 a month; hourly
+# measured about $15. A stuck job waits at most about 3 to 4 hours (its 10- or 60-minute threshold
+# plus the interval); the dead-letter handler still refunds the common failures in seconds.
 resource "aws_cloudwatch_event_rule" "reaper" {
-  name                = "neurolens-reaper-hourly"
-  description         = "Run the NeuroLens reaper (settles or refunds stuck jobs) every hour."
-  schedule_expression = "rate(1 hour)"
+  name                = "neurolens-reaper-schedule"
+  description         = "Run the NeuroLens reaper (settles or refunds stuck jobs) every 3 hours."
+  schedule_expression = "rate(3 hours)"
   state               = "ENABLED"
   tags                = { Milestone = "M3b" }
 }
