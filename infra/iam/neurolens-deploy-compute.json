@@ -110,6 +110,12 @@
       "Condition": {"StringEquals": {"ec2:ResourceTag/Project": "neurolens"}}
     },
     {
+      "Sid": "ExplainOwnDenialsReadOnly",
+      "Effect": "Allow",
+      "Action": "sts:DecodeAuthorizationMessage",
+      "Resource": "*"
+    },
+    {
       "Sid": "RolesOnlyNeurolensAndOnlyInsideTheBoundary",
       "Effect": "Allow",
       "Action": [
