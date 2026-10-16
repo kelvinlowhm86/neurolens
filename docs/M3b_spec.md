@@ -281,7 +281,7 @@ tests/                             MODIFIED: §11
 ## 14. Cost
 - Lambda, CloudFront, Cognito, Parameter Store standard parameters, Stripe test mode: free at our use.
 - NAT Gateway: about $1.20 a day while it exists (GPU days and the deployed window only).
-- Reaper: about $3 a month (estimate, to be measured: each run measured 0.18 ACU-hours at a 2 ACU maximum; at 1 ACU it should be about half) in Aurora wake-ups. Measure it from the ACU graph in the first day after any change to the schedule or capacity.
+- Reaper: about $3.50 a month in Aurora wake-ups (measured over 67 runs: 0.12 ACU-hours a run, 8 runs a day, $0.12 per ACU-hour). Measure it again from the ACU graph in the first day after any change to the schedule or capacity.
 - S3 site files: cents a month.
 - Experiment 3: no new GPU time (the cloud leg reuses Experiment 1).
 

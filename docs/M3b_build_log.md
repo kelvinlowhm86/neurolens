@@ -15,7 +15,7 @@ sections, not appended as a diary.
 | 6 | Pass (2026-10-08) | Sign-in, `/api/me` and `/api/jobs` answered 200 at 08:28 UTC, after the NAT Gateway was destroyed |
 | 7 | Pass (2026-10-08) | Fake-job rehearsal below |
 | 8 | Pass (2026-10-08) | `stop_work.sh`: NOT CONFIRMED while the NAT Gateway existed; ALL STOPPED after `nat_gateway = false` was applied |
-| 9 | **Open** | Re-check under the 3-hour schedule (below): Aurora pauses after each run, the database alarm stays OK through 6 idle hours, and the cost of one run |
+| 9 | **Pass** (2026-10-16) | Re-check under the 3-hour schedule: Aurora fell to 0 ACU after each of 67 runs (10-11 minutes awake), `neurolens-db-awake-6h` stayed OK from 2026-10-08 to 2026-10-16, and one run costs 0.12 ACU-hours (Measurements). The alarm firing for a forgotten database is a separate live check |
 | 10 | Pass (2026-10-08) | Stripe test top-up of $5: one `test_topup` ledger row, one `stripe_test_events` row of 500 cents, webhook "credited"; replays credit once (tests; break-it ignoring the "already recorded" answer failed 5 tests) |
 | 11 | Pass (2026-10-08) | `grant_credit.py` on Aurora: unknown email refused, unconfirmed grant refused, mixed-case email granted 100 cents; balance 600 = ledger sum, rows `grant` 1 + `test_topup` 1 |
 | 12 | Pass (2026-10-08) | Bucket CORS allows POST only from the site and `localhost:5003` / `127.0.0.1:5003` (the laptop app); the web app sends no CORS headers |
@@ -41,8 +41,13 @@ Cost: about an hour of NAT Gateway and 10 minutes of `t3.large`, about $0.10.
 - **Reaper, hourly (2026-10-08, 02:00-06:00 UTC, 4 runs):** each wake resumed Aurora at its maximum
   (2 ACU) and kept it awake about 11 minutes (the 300 s pause timer starts when the last connection
   closes): 0.18 ACU-hours a run, about $15 a month at $0.12 per ACU-hour. The spec's $4 a month had
-  assumed 0.5 ACU for 5 minutes. Changed to every 3 hours with a 1 ACU maximum (580b408); the new
-  cost per run is measured with criterion 9.
+  assumed 0.5 ACU for 5 minutes. Changed to every 3 hours with a 1 ACU maximum (580b408).
+- **Reaper, every 3 hours (2026-10-08 to 2026-10-16, 67 runs counted from the ACU graph):** each run
+  wakes Aurora at 1 ACU for 10-11 minutes: 0.12 ACU-hours a run (mean 0.125, range 0.11-0.13), about
+  29 ACU-hours a month, about $3.50 a month at $0.12 per ACU-hour. Runs that coincided with a
+  sign-in or a test kept it awake longer (0.24-0.41 ACU-hours). The only reaper error in those nine
+  days was the one ThrottlingException on 2026-10-08 (before the retry fix); no throttle has
+  happened since, so the retry-then-success path has not been seen live (unit-tested only).
 - **Aurora wake-up:** 15-21 s for the reaper; 19.7 s for a sign-in callback.
 - **Web function cold start:** at 512 MB, app setup 4.57-5.45 s (settings 2.25-2.65 s, `create_app`
   2.33-2.79 s) plus 0.49-0.72 s container start; at 1,769 MB (one vCPU), 1.41 s (0.60 s and 0.82 s)
