@@ -72,6 +72,9 @@ Cost: about an hour of NAT Gateway and 10 minutes of `t3.large`, about $0.10.
 ## Known limitations (accepted)
 
 - A sign-in whose new email already belongs to another user keeps the old email and logs a warning.
+- If a returning user's email change and a new user's sign-in with that same address commit at the
+  same instant, one sign-in fails with a 500 (an `UPDATE` cannot skip a unique-index clash); a
+  retry takes the warn-and-keep path above. Nothing is corrupted.
 - Logout can't cancel a copied session cookie before its 12-hour limit.
 - The first request after Aurora pauses waits about 20 s; demos and study sessions hold it awake.
 - A signed-in stranger calling the API every few minutes could keep Aurora awake (about $1.40 a day);
