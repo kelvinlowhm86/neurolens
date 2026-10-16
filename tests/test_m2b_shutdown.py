@@ -571,3 +571,30 @@ def test_run_stops_after_a_shutdown_request_between_messages(run_env, aws, monke
     assert worker.run() is None
     assert len(sqs.receives) == 2  # poll 3's message is never received
     assert sqs.deleted == 1
+
+
+class OutageSqs(RunSqs):
+    """The queue is unreachable for the first `outage_polls` receives, then a shutdown arrives."""
+
+    def __init__(self, bucket, *, outage_polls, **kwargs):
+        super().__init__(bucket, **kwargs)
+        self.outage_polls = outage_polls
+
+    def receive_message(self, **kwargs):
+        self.receives.append(kwargs)
+        if len(self.receives) <= self.outage_polls:
+            raise ClientError({"Error": {"Code": "ServiceUnavailable", "Message": "x"}}, "Receive")
+        sigterm_handler_now()
+        return {}
+
+
+def test_run_backs_off_through_a_queue_outage_and_keeps_going(run_env, aws, monkeypatch):
+    """An unreachable queue neither kills the worker nor makes it spin: it waits 2 s, 4 s, 8 s ...
+    up to 30 s between tries, and carries on once the queue is back."""
+    sqs = OutageSqs(aws.bucket, outage_polls=7, policy={"maxReceiveCount": 2})
+    run_env(sqs)
+    waits = []
+    monkeypatch.setattr(worker.time, "sleep", waits.append)
+    assert worker.run() is None
+    assert waits == [2, 4, 8, 16, 30, 30, 30]
+    assert len(sqs.receives) == 8  # 7 failures, then the receive that worked

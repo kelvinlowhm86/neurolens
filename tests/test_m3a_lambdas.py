@@ -273,6 +273,36 @@ def test_reaper_leaves_a_queued_job_younger_than_60_minutes_without_an_upload(
     assert pg.snapshot() == before
 
 
+@pytest.mark.parametrize(
+    "age_s, refunded",
+    [(590, False), (610, True)],
+    ids=["just_under_10_minutes", "just_over_10_minutes"],
+)
+def test_reaper_cuts_off_a_silent_processing_job_at_10_minutes(
+    aws, db, pg, lambda_env, new_job, age_s, refunded
+):
+    job_id, key = new_job()
+    upload(aws, key)
+    assert billing.claim(db, job_id) == 1
+    pg.age(job_id, updated_s=age_s)
+    run_reaper()
+    assert (pg.job(job_id)["status"] == "failed") is refunded
+
+
+@pytest.mark.parametrize(
+    "age_s, refunded",
+    [(3590, False), (3610, True)],
+    ids=["just_under_60_minutes", "just_over_60_minutes"],
+)
+def test_reaper_cuts_off_a_queued_job_with_no_upload_at_60_minutes(
+    aws, db, pg, lambda_env, new_job, age_s, refunded
+):
+    job_id, _ = new_job()
+    pg.age(job_id, updated_s=age_s, created_s=age_s)
+    run_reaper()
+    assert (pg.job(job_id)["status"] == "failed") is refunded
+
+
 def test_reaper_leaves_terminal_jobs_and_runs_twice_safely(aws, db, pg, lambda_env, new_job):
     stalled, key = new_job()
     upload(aws, key)

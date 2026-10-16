@@ -3,7 +3,8 @@
 
 Each beat first extends SQS visibility, then calls on_beat, after releasing its lock. Exit waits
 only for a visibility call already in progress, never for a running on_beat (a database call can
-wait up to 60 s for Aurora to wake). Timing tests use tiny intervals and generous tolerances.
+wait up to 60 s for Aurora to wake). Timing tests use tiny intervals and wait for a condition
+(with a generous limit) instead of sleeping a fixed time, so a slow machine only makes them slower.
 """
 
 import threading
@@ -13,6 +14,14 @@ from neurolens import worker
 
 QUEUE = "https://sqs.us-east-1.amazonaws.com/123456789012/neurolens-test-queue"
 RECEIPT = "receipt-handle-1"
+
+
+def wait_until(condition, timeout=10.0):
+    """Poll until `condition()` is true; fail loudly if it never becomes true."""
+    deadline = time.monotonic() + timeout
+    while not condition():
+        assert time.monotonic() < deadline, "condition not reached in time"
+        time.sleep(0.01)
 
 
 class Events:
@@ -56,7 +65,7 @@ def test_each_beat_extends_visibility_before_calling_on_beat():
         interval_seconds=0.05,
         on_beat=lambda: events.add("on_beat"),
     ):
-        time.sleep(0.6)
+        wait_until(lambda: events.names().count("on_beat") >= 3)
     names = events.names()
     assert names.count("on_beat") >= 3
     assert names[0] == "visibility"
@@ -68,7 +77,7 @@ def test_each_beat_extends_visibility_before_calling_on_beat():
 def test_on_beat_is_optional():
     events = Events()
     with worker.Heartbeat(EventSqs(events), QUEUE, RECEIPT, interval_seconds=0.05):
-        time.sleep(0.3)
+        wait_until(lambda: events.names().count("visibility") >= 2)
     assert events.names().count("visibility") >= 2
 
 
@@ -83,8 +92,7 @@ def test_no_on_beat_before_the_first_interval():
     ):
         time.sleep(0.15)
         assert events.names() == []
-        time.sleep(1.0)
-        assert "on_beat" in events.names()
+        wait_until(lambda: "on_beat" in events.names())
 
 
 def test_an_on_beat_exception_is_logged_and_beats_continue(caplog):
@@ -98,7 +106,8 @@ def test_an_on_beat_exception_is_logged_and_beats_continue(caplog):
         with worker.Heartbeat(
             EventSqs(events), QUEUE, RECEIPT, interval_seconds=0.05, on_beat=failing
         ):
-            time.sleep(0.6)
+            wait_until(lambda: events.names().count("on_beat") >= 3)
+            wait_until(lambda: events.names().count("visibility") >= 3)
     assert events.names().count("on_beat") >= 3
     assert events.names().count("visibility") >= 3
     assert any(r.levelname in ("WARNING", "ERROR", "CRITICAL") for r in caplog.records)
