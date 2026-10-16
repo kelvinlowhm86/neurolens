@@ -158,6 +158,31 @@ resource "aws_cloudwatch_metric_alarm" "lambda_errors" {
   tags          = { Milestone = "M3b" }
 }
 
+# The breaker's own heartbeat: the error alarm above catches a run that fails, not one that never
+# happens (its 5-minute schedule switched off or removed). Lambda publishes no Invocations datapoint
+# in a period with none, so missing data counts as breaching.
+resource "aws_cloudwatch_metric_alarm" "breaker_not_running" {
+  count = local.workers_enabled ? 1 : 0
+
+  alarm_name        = "neurolens-breaker-not-running"
+  alarm_description = "The NeuroLens circuit breaker has not run for 15 minutes (it should run every 5). Nothing would stop a stuck GPU worker. Check the neurolens-breaker-every-5-min rule is ENABLED; run infra/stop_work.sh if in doubt."
+
+  namespace   = "AWS/Lambda"
+  metric_name = "Invocations"
+  dimensions  = { FunctionName = aws_lambda_function.breaker[0].function_name }
+  statistic   = "Sum"
+
+  period              = 900
+  evaluation_periods  = 1
+  comparison_operator = "LessThanThreshold"
+  threshold           = 1
+  treat_missing_data  = "breaching"
+
+  alarm_actions = [aws_sns_topic.alerts.arn]
+  ok_actions    = [aws_sns_topic.alerts.arn]
+  tags          = { Milestone = "M3b" }
+}
+
 # The breaker's and M3a's alarms keep their names and move into the block above.
 moved {
   from = aws_cloudwatch_metric_alarm.breaker_errors[0]
