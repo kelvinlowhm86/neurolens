@@ -1,4 +1,4 @@
-"""Reaper (docs/M3a_spec.md §7), every 5 minutes while a work session runs: settles or refunds
+"""Reaper (docs/M3a_spec.md §7), every 3 hours, always on: settles or refunds
 stuck jobs. Ages are measured from `updated_at`, which claim, every heartbeat and
 release_for_retry refresh, so a job just handed back to the queue is not mistaken for an old one.
 

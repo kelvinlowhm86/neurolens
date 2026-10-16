@@ -3,9 +3,9 @@
 NeuroLens predicts brain activity for a video (TRIBE v2) and turns it into per-region "engagement" curves, served by a Flask web app. Course project: not for commercial use (the model is CC BY-NC).
 
 ## Layout
-- `neurolens/` the package: `settings.py` (config + paths), `engagement.py` (pure maths, numpy only), `inference.py` (model + atlas loading, `build_events`, `without_audio`, `predict`, `probe_duration`, fake mode), `pricing.py`, `storage.py` (S3 helpers), `worker.py` (SQS poll loop), `web/app.py` (`create_app()`, Flask routes).
-- `app.py` thin launcher (`python app.py`, port 5003). `static/` the page. `data/` samples, videos, thumbnails.
-- `notebooks/` the two `.ipynb` files (need a GPU). `requirements/` per-machine dependency lists. `infra/` AWS-only files (later milestones). `tests/` pytest. `docs/` specs.
+- `neurolens/` the package: `settings.py` (config + paths), `engagement.py` (pure maths, numpy only), `inference.py` (model + atlas loading, `build_events`, `without_audio`, `predict`, `probe_duration`, fake mode), `pricing.py`, `storage.py` (S3 helpers), `db.py` (Aurora/Postgres access), `billing.py` (credits, ledger, sign-in users), `results.py`, `experiment_runs.py`, `worker.py` (SQS poll loop), `lambdas/` (reaper, dead-letter handler), `web/` (`app.py` `create_app()` and Flask routes, `auth.py`, `lambda_handler.py`).
+- `app.py` and `worker.py` at the root are thin launchers (`python app.py`, port 5003). `static/` the page. `data/` samples, videos, thumbnails.
+- `notebooks/` the two `.ipynb` files (need a GPU). `requirements/` per-machine dependency lists. `infra/` Terraform, IAM policies, deploy and start/stop scripts, the circuit-breaker Lambda, DB migrations. `experiments/` operator scripts for the study runs. `tests/` pytest. `docs/` specs.
 
 ## Commands
 - Set up: `python3.12 -m venv .venv && source .venv/bin/activate && pip install -e . -r requirements/dev.txt`
