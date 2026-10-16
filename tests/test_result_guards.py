@@ -1,0 +1,93 @@
+"""Guards against a silently wrong result or a wrong price: an empty ROI mask or a NaN must stop
+the job loudly (it is then retried and refunded) instead of publishing a result the browser cannot
+parse after the user was charged; probe_duration's unreadable and negative-start paths.
+"""
+
+import json
+import subprocess
+
+import numpy as np
+import pytest
+from neurolens import engagement, inference, storage
+
+
+def masks(**sizes):
+    return {name: np.arange(10) < n for name, n in sizes.items()}
+
+
+# ---------------------------------------------------------------- empty ROI masks
+
+
+def test_require_nonempty_masks_accepts_masks_that_all_have_vertices():
+    engagement.require_nonempty_masks(masks(ffa_faces=3, auditory=1))
+
+
+def test_require_nonempty_masks_names_every_empty_roi():
+    with pytest.raises(ValueError) as err:
+        engagement.require_nonempty_masks(masks(ffa_faces=0, eba_bodies=2, auditory=0))
+    assert "ffa_faces" in str(err.value)
+    assert "auditory" in str(err.value)
+    assert "eba_bodies" not in str(err.value)
+
+
+# ---------------------------------------------------------------- NaN is never published
+
+
+def test_put_result_refuses_nan_and_writes_nothing(aws):
+    result = {"job_id": "j1", "timesteps": [{"t": 0, "engagement_overall": float("nan")}]}
+    with pytest.raises(ValueError):
+        storage.put_result(aws.s3, aws.bucket, "j1", result)
+    assert not storage.result_exists(aws.s3, aws.bucket, "j1")
+
+
+def test_put_result_refuses_infinity(aws):
+    with pytest.raises(ValueError):
+        storage.put_result(aws.s3, aws.bucket, "j1", {"value": float("inf")})
+    assert not storage.result_exists(aws.s3, aws.bucket, "j1")
+
+
+# ---------------------------------------------------------------- probe_duration paths
+
+
+def fake_ffprobe(monkeypatch, stdout):
+    def run(*args, **kwargs):
+        return subprocess.CompletedProcess(args, 0, stdout=stdout, stderr="")
+
+    monkeypatch.setattr(inference.subprocess, "run", run)
+
+
+def test_probe_duration_timeout_is_an_unreadable_video(monkeypatch):
+    def run(*args, **kwargs):
+        raise subprocess.TimeoutExpired("ffprobe", 30)
+
+    monkeypatch.setattr(inference.subprocess, "run", run)
+    with pytest.raises(inference.UnreadableVideo):
+        inference.probe_duration("clip.mp4")
+
+
+def test_probe_duration_counts_a_negative_start_as_zero(monkeypatch):
+    info = {
+        "streams": [{"codec_type": "video"}],
+        "packets": [
+            {"pts_time": "-0.5", "duration_time": "1.0"},
+            {"pts_time": "3.0", "duration_time": "1.0"},
+        ],
+    }
+    fake_ffprobe(monkeypatch, json.dumps(info))
+    # earliest start -0.5 counts as 0; latest end is 4.0
+    assert inference.probe_duration("clip.mp4") == pytest.approx(4.0)
+
+
+def test_probe_duration_ignores_packets_without_a_timestamp(monkeypatch):
+    info = {
+        "streams": [{"codec_type": "video"}],
+        "packets": [{"duration_time": "9"}, {"pts_time": "1.0", "duration_time": "2.0"}],
+    }
+    fake_ffprobe(monkeypatch, json.dumps(info))
+    assert inference.probe_duration("clip.mp4") == pytest.approx(2.0)
+
+
+def test_probe_duration_with_no_output_is_an_unreadable_video(monkeypatch):
+    fake_ffprobe(monkeypatch, "")
+    with pytest.raises(inference.UnreadableVideo):
+        inference.probe_duration("clip.mp4")

@@ -42,6 +42,14 @@ def build_roi_masks(labels_full, label_names, roi_label_map=ROI_LABEL_MAP):
     return roi_masks
 
 
+def require_nonempty_masks(roi_masks):
+    """Raise if any ROI has no vertices. An empty mask averages to NaN, which would otherwise
+    reach a published result (the atlas labels or their spelling changed)."""
+    empty = [name for name, mask in roi_masks.items() if not mask.any()]
+    if empty:
+        raise ValueError(f"ROI masks with no vertices (atlas labels changed?): {', '.join(empty)}")
+
+
 def extract_engagement(preds_full, preds_noaudio, roi_masks):
     """Extract per-ROI engagement timeseries from prediction matrices."""
     T = preds_full.shape[0]

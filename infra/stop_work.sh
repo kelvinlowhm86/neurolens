@@ -75,8 +75,9 @@ elif [ "$SIZES" = "None" ]; then
 else
   read -r MIN MAX DES <<<"$SIZES"
   # A busy worker protects itself from scale-in (M2b §1a); without this it would outlive the stop.
+  # In-service machines only, like the breaker: AWS may refuse one that is starting or ending.
   if ! IDS=$(aws autoscaling describe-auto-scaling-groups --auto-scaling-group-names "$ASG" \
-      --query 'AutoScalingGroups[0].Instances[].InstanceId' --output text); then
+      --query "AutoScalingGroups[0].Instances[?LifecycleState=='InService'].InstanceId" --output text); then
     problem "could not list the workers' scale-in protection"
   elif [ -n "$IDS" ] && [ "$IDS" != "None" ]; then
     # shellcheck disable=SC2086  # IDS is a space-separated list on purpose

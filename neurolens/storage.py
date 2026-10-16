@@ -79,13 +79,15 @@ def put_result(s3, bucket, job_id, result):
     """Publish results/<job_id>.json, never replacing an existing result.
 
     True if written; False if a result already exists (S3 answers 412 to a conditional write
-    with IfNoneMatch="*"). Any other error is raised so the caller retries the job.
+    with IfNoneMatch="*"). Any other error is raised so the caller retries the job. NaN or
+    infinity raises ValueError before anything is written: JSON cannot carry them, so the job
+    fails (and is refunded) instead of publishing a result the browser cannot parse.
     """
     try:
         s3.put_object(
             Bucket=bucket,
             Key=f"results/{job_id}.json",
-            Body=json.dumps(result).encode(),
+            Body=json.dumps(result, allow_nan=False).encode(),
             ContentType="application/json",
             IfNoneMatch="*",
         )
