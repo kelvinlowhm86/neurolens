@@ -13,8 +13,8 @@
 - Autoscaling on the SQS queue, standing at zero; up to two workers for Experiment 2
 - A circuit breaker that stops automatic launches after a failure; removal of the worker's self-termination
 - A warm hold for demos and study sessions, ended by an AWS-side timer
-- Visibility timeout 120 s with a heartbeat, fast failure release, retry-aware status, and shutdown handling
-- S3-based job status and Flask status/result endpoints
+- Visibility timeout 120 s with a heartbeat, fast failure release, retry-aware job status, and shutdown handling
+- Job status stages and the Flask status/result endpoints (job state lives in Aurora: M3a §4a, §6)
 - Duplicate-safe processing of multi-record and repeated messages
 - Real client-side polling, with a link that resumes a job
 - Removing the first-job WhisperX warm-up (§8)
@@ -22,35 +22,34 @@
 - Experiment 1 (latency) and Experiment 2 (scaling, Locust), including the cold-start breakdown
 
 ### Out of scope (M3)
-- Aurora, user accounts, credits/billing, Google sign-in, email notification, the web tier's load balancer
+- Aurora and job state, credits, billing and refunds (M3a); user accounts, Google sign-in, email notification, the public website (M3b)
 - EKS/Kubernetes, containers, image registries
 
 ### 1a. Interfaces fixed by this spec (the §11 tests are written against exactly these)
 - `neurolens.storage`:
   - `result_exists(s3, bucket, job_id) -> bool`
   - `get_result(s3, bucket, job_id) -> dict | None`
-  - `get_status(s3, bucket, job_id) -> dict | None`
-  - `put_status(s3, bucket, job_id, status, *, stage=None, error=None, now=None) -> None`: reads the current object (when there is none, starts from `{"job_id": job_id, "stages": []}`), sets `status`, `stage`, `error` and `updated_at`, appends `{"stage", "at"}` to `stages` when `stage` is given, and writes it back. It never changes an object whose status is already `done`. `now` (a `datetime`) is injectable for tests.
+  - `utc_text(moment)` / `utc_parse(text)`: the one UTC timestamp format, `2026-10-14T03:22:10Z`, used by stages, boot records and the experiment scripts.
 - `neurolens.worker`:
-  - `Outcome` gains `SKIPPED` (a result already existed before any work). The final outcomes are now `DONE`, `REJECTED`, `GONE`, `DUPLICATE`, `SKIPPED`.
-  - `Heartbeat(sqs, queue_url, receipt_handle, *, interval_seconds, visibility_seconds=120, max_seconds=None)`: a context manager that starts a daemon thread calling `change_message_visibility(..., VisibilityTimeout=visibility_seconds)` every `interval_seconds` (first call after one interval). A failed call is logged and beating continues. After `max_seconds` from entry it stops extending and logs an error (a hung job then becomes visible again and is retried). On exit it sets its stop flag first, then waits for the thread; the thread checks the flag under a lock immediately before each call, so **no call can start after exit has begun**.
+  - `Outcome`: `DONE`, `DUPLICATE`, `REJECTED`, `SKIPPED` (nothing to do: unknown job, result already existed, or the job is already finished), `LOST_CLAIM` (all final) and `BUSY` (not final: another worker holds a fresh claim, so the message is left to reappear). M3a §5 defines each.
+  - `Heartbeat(sqs, queue_url, receipt_handle, *, interval_seconds, visibility_seconds=120, max_seconds=None, on_beat=None)`: a context manager that starts a daemon thread calling `change_message_visibility(..., VisibilityTimeout=visibility_seconds)` every `interval_seconds` (first call after one interval), then `on_beat` (the claim's database touch, M3a §5). A failed call, or an `on_beat` exception, is logged and beating continues. After `max_seconds` from entry it stops extending and logs an error (a hung job then becomes visible again and is retried). On exit it takes the lock and sets its stop flag; the thread checks the flag under that lock immediately before each visibility call, so **no call can start after exit has begun**. Exit waits only for a visibility call already in progress, **not for the thread**: `on_beat` runs after the lock is released and can wait up to 60 s for Aurora to wake, while systemd allows 110 s to stop. A late `on_beat` is harmless (a touch after release or settlement changes nothing, M3a §4a).
   - `release(sqs, queue_url, receipt_handle) -> None`: `change_message_visibility(..., VisibilityTimeout=0)`. Never raises: an error (expired receipt handle, NAT down) is logged, and the message becomes visible on its own within 120 s.
   - `ShutdownRequested`: subclass of **`BaseException`** (like `KeyboardInterrupt`), so a library's `except Exception:` cannot swallow it.
   - `ShutdownSignal`: `install()` registers `handle` for `SIGTERM` and keeps the previous handler; `uninstall()` restores it; `requested() -> bool`; `job()` is a context manager marking "record work in progress"; `handle(signum, frame)` records the request and, **if inside `job()` and it has not raised before, raises `ShutdownRequested` at once** (at most once per `ShutdownSignal`). Reason: a pipeline stage lasts minutes (video encoding 3–7 minutes) and the machine's shutdown does not wait that long, so waiting for the next stage boundary would almost never release the job.
-  - `handle_record(bucket, key, *, s3, cfg, roi_masks, heartbeat) -> Outcome` (replaces M2a's signature): `heartbeat` is a zero-argument callable returning a `Heartbeat` for the current message (built by `process_message`); the record's work after the result-exists check runs inside it. It still never touches SQS itself. A rejection (oversize, too long, unreadable) writes status `failed` with a plain reason (§4) before returning `REJECTED`.
-  - `process_message(message, *, s3, sqs, cfg, roi_masks, shutdown, max_receives) -> None` (replaces M2a's signature; the queue URL comes from `cfg`). The attempt is final when the message's `ApproximateReceiveCount` (an integer string) is at least `max_receives`.
+  - `handle_record(bucket, key, *, s3, db, cfg, roi_masks, heartbeat) -> Outcome`: `heartbeat(on_beat)` returns the `Heartbeat` for the current message (built by `process_message`); the record's work after the claim runs inside it. It never touches SQS itself. A rejection (oversize, too long, unreadable) refunds the job with a plain reason (M3a §4a) before returning `REJECTED`. If anything raises after the claim, including `ShutdownRequested`, it hands the job back (`release_for_retry`, with "The job was interrupted. Please upload it again." for a shutdown) and re-raises; a failing hand-back is logged and never replaces the original exception.
+  - `process_message(message, *, s3, sqs, db, cfg, roi_masks, shutdown, max_receives) -> None` (the queue URL comes from `cfg`). `max_receives` only feeds the log line ("attempt 1 of 2"); it writes no status itself: the dead-letter handler (M3a §7) does what a final-attempt status once did.
     - If `shutdown.requested()` already: release the message untouched and raise `ShutdownRequested`.
-    - Otherwise run each record's `handle_record` inside `shutdown.job()`; **only the record work is inside `job()`**: the status writes, `release` and `delete_message` below run outside it, so a signal cannot interrupt them.
-    - Delete the message only when every record returned a final outcome.
-    - On `ShutdownRequested`, or any exception while `shutdown.requested()` is true: release the message; on the final attempt, if no result exists, write `failed` with "The job was interrupted. Please upload it again." (otherwise no status change); then raise `ShutdownRequested`.
-    - On any other exception: the §4 failure status (only if no result exists), then release; returns normally.
-  - `run() -> None`: installs a `ShutdownSignal`; reads `max_receives` once from the job queue's `RedrivePolicy` (`maxReceiveCount`, parsed as an integer; one source of truth in Terraform) and refuses to start, naming it, if the queue has none; receives with `MessageSystemAttributeNames=["ApproximateReceiveCount"]`; on `ShutdownRequested` or a shutdown request between messages it stops polling and **returns** (exit code 0, so systemd does not restart it).
+    - Otherwise run each record's `handle_record` inside `shutdown.job()`; **only the record work is inside `job()`**: `release` and `delete_message` below run outside it, so a signal cannot interrupt them.
+    - Delete the message only when every record returned a final outcome (`BUSY` is not final).
+    - On `ShutdownRequested`, or any exception while `shutdown.requested()` is true: release the message, then raise `ShutdownRequested`.
+    - On any other exception: release the message; returns normally.
+  - `run() -> None`: installs a `ShutdownSignal`; builds the database with `neurolens.db.from_config(cfg)`; reads `max_receives` once from the job queue's `RedrivePolicy` (`maxReceiveCount`, parsed as an integer; one source of truth in Terraform) and refuses to start, naming it, if the queue has none; receives with `MessageSystemAttributeNames=["ApproximateReceiveCount"]`; on `ShutdownRequested` or a shutdown request between messages it stops polling and **returns** (exit code 0, so systemd does not restart it).
   - The idle exit is removed: `worker.idle_exit_minutes`, its handling in `run()` and M2a's idle-exit test go (a spec'd test change by the test-writing agent). Scale-in (§2a) ends idle workers.
-  - `poll_once(*, s3, sqs, cfg, roi_masks, shutdown, max_receives, protection=None) -> bool` (M1's helper, same new inputs as `process_message`): `True` if the receive call worked (even with no message), `False` if it failed; never raises except `ShutdownRequested`. With `protection` (a `ScaleInProtection`), each received message is handled inside `protection.hold()`; `None` means no protection (laptop, tests).
+  - `poll_once(*, s3, sqs, db, cfg, roi_masks, shutdown, max_receives, protection=None) -> bool` (M1's helper, same new inputs as `process_message`): `True` if the receive call worked (even with no message), `False` if it failed; never raises except `ShutdownRequested`. With `protection` (a `ScaleInProtection`), each received message is handled inside `protection.hold()`; `None` means no protection (laptop, tests).
   - `ScaleInProtection(autoscaling, group_name, instance_id)`: `hold()` is a context manager that marks this machine protected from scale-in on entry (`set_instance_protection(InstanceIds=[instance_id], AutoScalingGroupName=group_name, ProtectedFromScaleIn=True)`) and unprotected on exit, including when the block raises (`ShutdownRequested` too). A failed call is logged and never raised (a failure on exit never replaces the block's own exception, `ShutdownRequested` included): the job then runs unprotected, exactly as safe as without protection (a scale-in sends SIGTERM and the job is handed back). AWS's documented pattern for long-running queue workers (Auto Scaling guide, "Amazon SQS and instance scale-in protection"). Reason: scale-in decides "the queue is empty" from metrics 1–3 minutes old, so without it a worker that has just taken a job can be removed.
   - `boot_record(boot_log_text, ready_utc, instance_id, instance_type) -> dict`: pure; `ready_utc` is a timezone-aware `datetime`. Returns only what the machine itself saw, as UTC timestamps in §4's format: `instance_id`, `instance_type`, `userdata_start_utc` (first boot-log line), `weight_sync_start_utc` and `weight_sync_end_utc` (the S3 sync step's start and end lines), `worker_start_utc` (the line that starts the worker service), `ready_utc`. A step missing from the log gives `null`. The machine cannot know its own launch time; `cold_start.py` computes every duration from these stamps and the launch time in AWS's scaling history. `run()` writes it to `experiments/boots/<instance-id>.json` once the model is loaded ("Worker ready"), and after the worker's first job writes `experiments/boots/<instance-id>-first-job.json` with that job's `transcribing` seconds. Both writes log and continue on error. Skipped in fake mode and when not on AWS (no `NEUROLENS_DEPLOYED`).
   - `run()` on AWS (`NEUROLENS_DEPLOYED` set) builds a `ScaleInProtection` from the machine's instance ID (instance metadata) and `aws.worker_group` (environment `NEUROLENS_WORKER_GROUP` through `settings.apply_env` like the other `NEUROLENS_*` values, an empty value adding nothing; written into `env.conf` by UserData) and passes it to every poll. It first clears this machine's protection once: a previous process killed mid-job (SIGKILL, out of memory) never removed it, and a protected idle machine cannot be scaled in. `validate_config` requires `aws.worker_group` when `NEUROLENS_DEPLOYED` is set (its error names `worker_group` / `NEUROLENS_WORKER_GROUP`), so a missing value fails the boot check instead of running unprotected. If the instance metadata cannot be read, `run()` logs an error and runs unprotected.
-  - Config (`config.json`): `worker.heartbeat_seconds` (50) and `worker.max_job_minutes` (75; the heartbeat's `max_seconds`). The longest job measured is a 120 s 4K video with the first-job warm-up, about 55 minutes.
+  - Config (`config.json`): `worker.heartbeat_seconds` (50; `run()` refuses to start above 50, since M3a's staleness limit assumes it) and `worker.max_job_minutes` (75; the heartbeat's `max_seconds`). The longest job measured is a 120 s 4K video with the first-job warm-up, about 55 minutes.
 - `neurolens.inference` fake mode: `FAKE_INFERENCE_SECONDS` (environment, default 0, ignored unless `FAKE_INFERENCE=1`) makes each fake `predict` call sleep that long, so rehearsals have a job long enough to interrupt. Terraform variable `worker_fake_job_seconds` writes it into `env.conf` on the rehearsal worker only.
 - `infra/lambda/breaker.py`, `handler(event, context)`: the circuit breaker (§2c), run every 5 minutes. Reads the idle alarm (name from the environment variable `IDLE_ALARM`, default `neurolens-worker-idle`): if the alarm exists and is not in `ALARM` (`OK` or `INSUFFICIENT_DATA`), changes nothing (a missing alarm counts as `ALARM`, so the breaker fails safe). Then reads the group (name from `WORKER_GROUP`): if its minimum is 1 or more (a warm hold), logs and changes nothing; otherwise removes scale-in protection from every in-service instance (one already ending cannot take the call), then sets min 0 / max 0 / desired 0, also when removing protection failed (the error is raised after it), and logs. The `event` is not read.
 - Experiment scripts (each also has a thin command line; importing one does nothing):
@@ -58,8 +57,7 @@
   - `experiments/latency_breakdown.py`: `summarise(rows) -> list[dict]`, pure: `rows` are `experiment-1/runs.csv` rows; returns one dict per `clip_seconds` with `clip_seconds`, `runs`, and the median, minimum and maximum of each `*_ms` column (empty values ignored).
 - `neurolens.web.app` routes (the web tier still never imports `neurolens.inference`):
   - `job_id` must be a UUID; anything else returns 400 `{"error": "bad_job_id"}`.
-  - `GET /api/jobs/<job_id>/status`: 200 with `{"job_id", "status": "done"}` if a result exists (whatever the status object says); otherwise 200 with the status object; otherwise 404 `{"error": "not_found"}` (the page treats 404 as "queued").
-  - `GET /api/jobs/<job_id>/result`: 200 with the result JSON, or 404 `{"error": "not_found"}`.
+  - `GET /api/jobs/<job_id>/status` and `GET /api/jobs/<job_id>/result`: owned by M3a §6 (Aurora-backed, signed-in owner only).
 
 ## 2. Machine count: scaling, circuit breaker, warm hold
 
@@ -107,7 +105,7 @@ The idle alarm (a worker in service and no message received or deleted for 90 mi
 Cost: about 1.5–2 hours of GPU, roughly $3–4.
 
 ### 2f. IAM additions to M2a's worker profile
-- `s3:GetObject` and `s3:PutObject` on `status/*`; `s3:PutObject` on `experiments/*`. (M2a's `s3:ListBucket` has no prefix condition, so a missing status object reads as 404. The boundary's `s3:*`/`sqs:*` on `neurolens-*` already covers these.)
+- `s3:PutObject` on `experiments/*` (boot records). (The boundary's `s3:*`/`sqs:*` on `neurolens-*` already covers it.)
 - `sqs:ChangeMessageVisibility` on the job queue.
 - `autoscaling:SetInstanceProtection` on the worker group (§1a). UserData writes `NEUROLENS_WORKER_GROUP` into `env.conf`.
 
@@ -116,32 +114,24 @@ Cost: about 1.5–2 hours of GPU, roughly $3–4.
 - The dead-letter queue (`maxReceiveCount = 2`, M2a §4h) is unchanged. Every receive counts, including one that ends in a shutdown release; §1a's final-attempt status covers that case. The worker reads `maxReceiveCount` at start (§1a); Experiment 2 reads the dead-letter count for its reliability numbers.
 
 ## 4. Job status tracking
-Status objects at `status/{job_id}.json` in the same bucket:
-```json
-{ "job_id": "...", "status": "processing|done|failed",
-  "stage": "downloading|transcribing|inference_full|inference_noaudio|extracting_roi|retrying|null",
-  "updated_at": "2026-10-14T03:22:10Z",
-  "stages": [{"stage": "downloading", "at": "2026-10-14T03:22:10Z"}],
-  "error": null }
-```
-- `job_id` is the UUID from the presign step. There is no `queued` status: before a worker takes the job, no status object exists and the endpoint returns 404.
-- The worker writes `processing` as soon as it takes a record, after the result-exists check and after `head_object` has confirmed the upload still exists, before any real work. A missing upload (`GONE`, for example a duplicate notice for a video already rejected and deleted) leaves the status untouched. It then updates `stage` at each pipeline step: `downloading`, `transcribing` (`build_events`, where WhisperX runs), `inference_full`, `inference_noaudio`, `extracting_roi`. Experiment 1 reads `stages`.
-- Write order: `put_result` first. Only if it returns `True`, write `status: "done"`. If it returns `False`, return `DUPLICATE` without touching status.
-- **Failures:** on a non-final attempt, `status: "processing"`, `stage: "retrying"`, `error` set (the job will run again). On the final attempt (§1a), `status: "failed"` with `error`. A shutdown on the final attempt writes `failed` with "The job was interrupted. Please upload it again." (§1a). A rejection is always final: `failed` with a plain reason ("The video is longer than 120 seconds.", "The file is not a readable video.", "The file is larger than the upload limit."). `error` is a short user-facing text (at most 200 characters, no traceback); the full traceback goes to the worker log.
+The job's state (`queued`, `processing`, `done`, `failed`), its current `stage` and its `stages` history live in the `jobs` row in Aurora (M3a §3c, §4a); there are no status objects in S3. A `stages` entry is `{"stage": "downloading", "at": "2026-10-14T03:22:10Z"}`, and each attempt starts with an empty list.
+- The stage names, in order: `downloading`, `transcribing` (`build_events`, where WhisperX runs), `inference_full`, `inference_noaudio`, `extracting_roi`. The worker sets each one with `billing.set_stage` as the step begins. Experiment 1 reads `stages`.
+- Write order: `put_result` first. Only if it returns `True`, settle the job (`done`, M3a §4a). If it returns `False`, return `DUPLICATE`: the other worker's result is the one charged.
+- **Failures:** a failed attempt hands the job back (`release_for_retry`, status `queued`, with the short error text), so the page shows it as queued again and the status history keeps the error. After the second receive the dead-letter handler refunds it (`failed`, M3a §7). A rejection is final: the job is refunded with a plain reason ("The video is longer than 120 seconds.", "The file is not a readable video.", "The file is larger than the upload limit."). Error text is short and user-facing (at most 200 characters, no traceback); the full traceback goes to the worker log.
 
 ## 5. Duplicate deliveries
 SQS may deliver a message more than once, and one S3 event message can hold several `Records`. `process_message` already handles each record independently and deletes the message only when every record has a final outcome (M1). M2b adds:
-- If `result_exists` is true before any work, return `SKIPPED` without running inference or changing status.
+- If `result_exists` is true before any work, return `SKIPPED` without running inference (the job is settled if it was not yet).
 - If `put_result` returns `False`, another worker finished first: `DUPLICATE`, as in M2a.
 
-With at most two workers, a duplicate that wastes one GPU run is rare and accepted; results and status are never duplicated. M3 adds a database lock that prevents the duplicate run itself. Do not add S3 lease or claim objects.
+Results are never duplicated, and M3a's claim (a database lock with a staleness limit, M3a §4a) stops two workers running the same job. Do not add S3 lease or claim objects.
 
 ## 6. Heartbeat, fast release and shutdown
 **Heartbeat:** every record's processing runs inside `Heartbeat(..., interval_seconds=worker.heartbeat_seconds, max_seconds=60 * worker.max_job_minutes)`. A silently dead worker stops the heartbeat, and the message becomes visible again within about 120 s. `release` always happens after the heartbeat block has exited (the record's exception passes out of it first), and §1a's flag-under-lock rule means no beat can hide the message again.
 
-**Fast release on any failure** (download, ffprobe, inference, ROI extraction): `process_message` writes the §4 failure status (only if no result exists), then calls `release(...)` so the message is immediately retryable. It does not delete it; after two receives it moves to the dead-letter queue.
+**Fast release on any failure** (download, ffprobe, inference, ROI extraction): `handle_record` hands the job back (§4), then `process_message` calls `release(...)` so the message is immediately retryable. It does not delete it; after two receives it moves to the dead-letter queue.
 
-**Shutdown** (AWS ends the machine, the group scales in, `stop_work.sh`, or `systemctl stop`/`restart`): systemd sends the worker `SIGTERM`. Inside a job, `ShutdownSignal` raises `ShutdownRequested` at once and `process_message` handles it as §1a says. Any exception caught while `shutdown.requested()` is true counts as a shutdown, not a failure (a safety net: `KillMode=mixed`, §2b, keeps systemd from signalling the helper programs first). Between jobs, `run()` stops after the current long poll (at most 20 s). If the process is killed anyway (`TimeoutStopSec=110`, §2b), the heartbeat dies with it and the message becomes visible again within about 120 s.
+**Shutdown** (AWS ends the machine, the group scales in, `stop_work.sh`, or `systemctl stop`/`restart`): systemd sends the worker `SIGTERM`. Inside a job, `ShutdownSignal` raises `ShutdownRequested` at once and `handle_record` and `process_message` handle it as §1a says. Any exception caught while `shutdown.requested()` is true counts as a shutdown, not a failure (a safety net: `KillMode=mixed`, §2b, keeps systemd from signalling the helper programs first). Between jobs, `run()` stops after the current long poll (at most 20 s). If the process is killed anyway (`TimeoutStopSec=110`, §2b), the heartbeat dies with it and the message becomes visible again within about 120 s.
 
 **One real-job check** (GPU, in the Experiment 1 session, about $0.10): `systemctl stop neurolens-worker` during a real job's video encoding; the message must be visible again within about 10 s. A fake job only sleeps, which reacts to the signal faster than real compiled code does, so the CPU rehearsal alone does not prove this.
 
@@ -149,9 +139,8 @@ With at most two workers, a duplicate that wastes one GPU run is rare and accept
 After the presigned S3 POST succeeds (204), the page currently shows "Uploaded — processing (job …)" and stops. Replace that with:
 - Put the job in the page's address (`history.replaceState` to `?job=<job_id>`). On load, a `?job=` parameter starts polling directly, so the user can close the tab and come back with the link (results are kept 30 days).
 - Poll `GET /api/jobs/{job_id}/status` every 5 s and show the state in the existing upload panel's message line and progress area (reuse the visual design):
-  - 404: "Queued. If no GPU worker is running, starting one can take up to about 20 minutes. You can close this page and come back with this link."
+  - `queued`: "Queued. If no GPU worker is running, starting one can take up to about 20 minutes. You can close this page and come back with this link."
   - `downloading` / `transcribing` / `inference_full` / `inference_noaudio` / `extracting_roi`: a plain description of each step.
-  - `retrying`: "Retrying after an error: <error>".
   - `failed`: the real `error` text, no `alert()`.
   - `done`: fetch `GET /api/jobs/{job_id}/result` and render it through the same code path as a sample result.
 - After 30 minutes without `done` or `failed`, add "This is taking longer than expected" (a constant at the top of the script). Polling continues.
@@ -200,7 +189,7 @@ A 55 s 4K clip took 4.4 times longer than a 480p clip of similar length (video e
   - `experiments/latency_run.py <clip>` does one run like a browser would: presign, upload via the presigned POST (timed), poll status every 2 s until `done`, fetch the result (timed). It saves the upload and fetch times and the job's `stages` list.
   - Queue wait = first stage time − upload end. Processing stages come from `stages`.
   - Client render: read `window.neurolensTimings.render_ms` in the browser console on 3 runs per clip length and add it to the run's CSV by hand.
-  - Rows follow the contract's `experiment-1/runs.csv`. Everything goes into `experiments/experiment-1/<run_id>/` straight away (`status/` objects expire after 48 hours, and M3a retires them). Analysis script `experiments/latency_breakdown.py`.
+  - Rows follow the contract's `experiment-1/runs.csv`. Everything goes into `experiments/experiment-1/<run_id>/` straight away (job rows are the live record, M3a). Analysis script `experiments/latency_breakdown.py`.
   - The same session also runs §9 Step A and the §6 real-job stop check. Estimate about $3–3.60 (about 1.6–1.9 GPU hours: 12 warm jobs about 50 minutes, boot and warm-up job, §9 Step A about 15 minutes, the stop check, manual timings); flag it before starting.
 - **Experiment 2 (scaling):** `locustfile.py` POSTs to `/api/uploads/presign`, uploads the fixed 15 s test video via the presigned POST (fields first, file last), then polls status to completion. Burst sizes match the report: **1, 5, 10 and 20** simultaneous jobs, `start_work.sh --max 2`.
   - **One session, bursts back to back** (each after the previous has drained, without waiting for scale-in): burst 1 starts from zero workers (scale-out from 0, ideally after a quiet day, so the SQS metric delay is included); burst 5 grows the pool from 1 to 2; bursts 10 and 20 go beyond the 2-worker ceiling on purpose, to show the queue absorbing the backlog, no dropped or duplicated results, and a full drain. After burst 20, the group returns to 0 by the scale-in alarm (measured once).
@@ -211,17 +200,17 @@ A 55 s 4K clip took 4.4 times longer than a 480p clip of similar length (video e
 
 ## 11. Tests (`FAKE_INFERENCE=1 pytest`, moto)
 Add to the suite, written first against §1a. `requirements/dev.txt` changes `moto[s3,sqs]` to `moto[s3,sqs,autoscaling]`. If the pinned moto ignores `MessageSystemAttributeNames`, the test sets the receive count through moto's own behaviour (receive the message twice) and says so in a comment.
-- `Heartbeat` with `interval_seconds=0.05` calls `change_message_visibility` with 120 repeatedly while the block runs and not after it exits; no call before the first interval; a failing call does not stop later beats; with a small `max_seconds` the beats stop after it while the block is still running.
+- `Heartbeat` with `interval_seconds=0.05` calls `change_message_visibility` with 120 repeatedly while the block runs and not after it exits; no call before the first interval; a failing call does not stop later beats; with a small `max_seconds` the beats stop after it while the block is still running; `on_beat` runs after each visibility call, a raising `on_beat` does not stop the beats, and leaving the block does not wait for a running `on_beat`.
 - `release` logs and does not raise when the call fails.
-- A record that raises on a non-final attempt leads to status `processing` / `retrying` with the error, and on the final attempt (`ApproximateReceiveCount` ≥ `max_receives`) to `failed`; both when no result exists; then `release` with `VisibilityTimeout=0`, after the last heartbeat call; the message is not deleted.
-- A rejected record (oversize, too long, unreadable) writes `failed` with its plain reason.
-- A record whose result already exists returns `SKIPPED` with no inference and no status change.
-- A lost conditional write returns `DUPLICATE` and leaves the existing result and `done` status untouched; `put_status` never changes a `done` object; `put_status` with no existing object creates one with `job_id` and `stages`.
-- `put_status` appends to `stages` in order, with the injected `now`; the worker's stages appear in §4's order, including `transcribing`.
+- A record that raises hands the job back (`release_for_retry`) and releases the message (`VisibilityTimeout=0`, after the last heartbeat call); the message is not deleted; `process_message` writes no status itself.
+- A rejected record (oversize, too long, unreadable) is refunded with its plain reason and returns `REJECTED`.
+- A record whose result already exists returns `SKIPPED` with no inference.
+- A lost conditional write returns `DUPLICATE` and leaves the existing result untouched.
+- The worker's stages are set in §4's order, including `transcribing`.
 - A multi-record message is deleted only after all its records have final outcomes.
 - Shutdown (each test installs and then uninstalls its `ShutdownSignal`):
   - `ShutdownSignal.handle` called from inside a fake pipeline stage, and once through a real `os.kill(os.getpid(), signal.SIGTERM)`, raises `ShutdownRequested` at once; a second signal does not raise again; outside `job()` it only records the request.
-  - `process_message` then releases the message (visibility 0), does not delete it, leaves status unchanged on a non-final attempt, writes the "interrupted" `failed` status on the final attempt when no result exists, and re-raises.
+  - `process_message` then releases the message (visibility 0), does not delete it, and re-raises; `handle_record` has handed the job back with "The job was interrupted. Please upload it again."
   - An ordinary exception raised after a shutdown request is treated the same way.
   - A message received after a request is released untouched.
   - `run()` then receives no more messages and returns normally.
@@ -229,13 +218,12 @@ Add to the suite, written first against §1a. `requirements/dev.txt` changes `mo
 - `run()` reads `max_receives` from the queue's `RedrivePolicy` (as an integer) and refuses to start when the queue has none; `run()` has no idle exit (with no messages it keeps polling until a shutdown request).
 - `boot_record` on a sample boot log (fixture built from the UserData log format, to be replaced by a real worker's `/var/log/neurolens-boot.log`) gives the expected timestamps, and `null` for a missing step.
 - `poll_once` with the new inputs keeps M1's behaviour (`True` on an empty or successful receive, `False` when the receive fails).
-- A missing upload (`GONE`) leaves an existing `failed` status untouched and writes no status when there is none.
 - Fake mode: `FAKE_INFERENCE_SECONDS` makes `predict` take that long; ignored without `FAKE_INFERENCE=1`.
 - Breaker (moto Auto Scaling and CloudWatch): with min 0 the group ends at 0 / 0 / 0; with min 1 it is unchanged. With the idle alarm present and in `OK`, the group is unchanged; in `ALARM` (or absent) with min 0, every instance's scale-in protection is removed and the group ends at 0 / 0 / 0.
 - `ScaleInProtection.hold()` (moto Auto Scaling): the instance is protected inside the block and unprotected after it, also when the block raises (an ordinary exception and `ShutdownRequested`); a failing call is logged and not raised, and the block still runs.
 - `poll_once` with a `protection`: a received message is handled inside `hold()` (protected while `process_message` runs, unprotected after, also when it raises `ShutdownRequested`); an empty receive makes no protection call; with `protection=None`, no Auto Scaling call at all.
 - `validate_config` requires `aws.worker_group` only when `NEUROLENS_DEPLOYED` is set.
-- Status endpoint: `done` when a result exists even if the status object says `processing`; the status object otherwise; 404 when neither exists; 400 for a non-UUID `job_id`. Result endpoint: 200 with the stored JSON, 404 when missing.
+- Result endpoint: 200 with the stored JSON, 404 when missing (M3a §10 tests the Aurora-backed status endpoint).
 - Import hygiene still holds: the web app with the new endpoints never loads `neurolens.inference` or `torch`.
 - §9 Step B only, if it goes ahead: `downscale_command` keeps the aspect ratio, is lossless and copies the audio; the worker downscales only when the setting is on and the video is taller than it, and uses the copy for both passes.
 - Experiment scripts: `cold_start.rows` on small hand-made inputs gives one row per boot with exactly the contract's columns, the right `trigger` (`alarm` vs `manual`) and durations computed from the stamps and the launch activity; `latency_breakdown.summarise` gives per-clip medians, minimums and maximums and ignores empty `render_ms`. Importing either script does nothing.
@@ -253,10 +241,10 @@ infra/start_work.sh       MODIFIED: --keep-worker --hours N warm hold with its s
 infra/stop_work.sh        MODIFIED: deletes the hold's scheduled action; reports a tripped breaker
 infra/self_terminate.sh   MODIFIED: stub until the next image rebuild (§2b)
 infra/terraform/README.md MODIFIED: §2e demo routine, breaker, no self-termination
-neurolens/worker.py       MODIFIED: status writes, SKIPPED, Heartbeat, release, ShutdownSignal, ScaleInProtection, boot_record; idle exit removed
-neurolens/storage.py      MODIFIED: result_exists, get_result, get_status, put_status
+neurolens/worker.py       MODIFIED: stage and hand-back calls, SKIPPED, Heartbeat, release, ShutdownSignal, ScaleInProtection, boot_record; idle exit removed
+neurolens/storage.py      MODIFIED: result_exists, get_result, utc_text, utc_parse
 neurolens/inference.py    MODIFIED: FAKE_INFERENCE_SECONDS (and §9 Step B, only if it goes ahead)
-neurolens/web/app.py      MODIFIED: /api/jobs/<id>/status and /api/jobs/<id>/result
+neurolens/web/app.py      MODIFIED: /api/jobs/<id>/status and /api/jobs/<id>/result (Aurora-backed from M3a)
 config.json               MODIFIED: worker.heartbeat_seconds, worker.max_job_minutes
 locustfile.py             NEW
 requirements/experiments.txt  NEW: locust, matplotlib (experiment scripts; M4's consolidation also uses matplotlib)
@@ -273,14 +261,14 @@ docs/M2b_build_log.md     NEW: §8 diagnosis, §9 results, measurements and choi
 ## 13. Acceptance criteria
 CPU = rehearsal worker in fake mode with a slow fake job; GPU = real worker.
 1. **Scaling (CPU):** with `start_work.sh` (no keep option), one upload scales the group 0 → 1 by the alarm, the job completes, and the group returns to 0 about 15 minutes after the queue empties, visible in CloudWatch; no worker is terminated mid-job. A scale-in forced by hand during a job (the scale-in policy run with `execute-policy`) leaves the busy worker running until its job is done, then removes it. With `--max 2`, one upload launches only one worker. (GPU, Experiment 2: 0 → 1 → 2 and back to 0.)
-2. **Duplicates (CPU):** two identical SQS messages for one `job_id` (manual re-send) produce exactly one result object and one `done` status; the second delivery returns `SKIPPED` or `DUPLICATE`.
+2. **Duplicates (CPU):** two identical SQS messages for one `job_id` (manual re-send) produce exactly one result object and one capture; the second delivery returns `SKIPPED` or `DUPLICATE`.
 3. **Crash (CPU):** `kill -9` of the worker process mid-job makes the job visible again within about 120 s, and a second attempt completes it.
 4. **Stop (CPU, then once on GPU):** `systemctl stop neurolens-worker` mid-job makes the job visible again within about 10 s, and the machine keeps running; on GPU during real video encoding (§6).
 5. **Warm hold (CPU):** after `start_work.sh --keep-worker --hours 1`, the worker **process** is still running and polling after 45 minutes with an empty queue (`systemctl is-active` and recent log lines). After the hold ends, the worker is removed without any command. `stop_work.sh` then leaves min 0 and no `neurolens-warm-hold-end` action. A plain `start_work.sh` during a hold leaves the minimum at 1. `--hours 5` is refused.
 6. **Breaker (CPU):** with a job waiting and the worker's code broken on purpose (as in M2a criterion 19), the group launches one worker, the idle alarm fires within about 90–100 minutes, the breaker sets max 0, the worker ends and **no further worker launches** while the job still waits (watch 15 minutes). The moment of firing is also checked on its own: with a worker in service and a job waiting, `aws cloudwatch set-alarm-state` puts the idle alarm into `ALARM`; the breaker's log shows a run within seconds, the worker ends and no worker launches (watch 15 minutes). During a warm hold the breaker changes nothing; when a 1-hour hold ends with a broken worker and a waiting job, the breaker stops the group within 5 minutes of the idle alarm firing, and no replacement loop follows. `start_work.sh` sets max 1 again.
-7. **Page:** shows real, changing status text; after a failed first attempt the job's status history records a `retrying` stage with the error (a released job is usually taken again within seconds, so the page rarely has time to show "Retrying"), and the page shows the real error after the final attempt; a non-video file renamed `.mp4` shows "not a readable video"; reopening the `?job=` link after closing the tab resumes and shows the result.
-8. **Dead-letter (CPU):** a job forced to fail twice lands in the dead-letter queue, with status `retrying` after the first failure and `failed` after the second.
-9. A crash after the result write but before the `done` status still reports `done` from `GET /api/jobs/{job_id}/status`, and a duplicate delivery does not reprocess (§11 tests).
+7. **Page:** shows real, changing status text; after a failed first attempt the job's `stages` history shows the error and the job is queued again (a released job is usually taken again within seconds, so the page rarely has time to show it), and the page shows the real error after the final attempt; a non-video file renamed `.mp4` shows "not a readable video"; reopening the `?job=` link after closing the tab resumes and shows the result.
+8. **Dead-letter (CPU):** a job forced to fail twice lands in the dead-letter queue and is refunded by the dead-letter handler (M3a §7).
+9. A crash after the result write but before settlement still reports `done` from `GET /api/jobs/{job_id}/status`, and a duplicate delivery does not reprocess (M3a tests).
 10. **Warm-up (GPU):** §8's cause recorded; on a fresh worker, the first job's `transcribing` stage is within 1 minute of a later job's.
 11. **4K (GPU):** §9 Step A results recorded against the fixed pass mark; Step B done and checked only if Step A passed.
 12. **Experiments:** Experiments 1 and 2 have manifests and data under `experiments/`, including the cold-start table with every M2b GPU boot.
@@ -298,8 +286,6 @@ No Aurora, no user accounts or sign-in, no email notification, no credits, billi
 
 **Known limitations** (accepted):
 - A broken worker runs up to about 95 minutes (about $3) before the breaker stops it; a worker that ended itself would have cost about 13 minutes, but caused relaunch loops with scale-out (§2, "one owner").
-- A job dead-lettered after two hard crashes (`kill -9`, power loss) never gets a `failed` status; the page shows its last stage and, after 30 minutes, "taking longer than expected". M3a's dead-letter handling fixes this.
 - With two workers, the idle alarm does not see one stuck worker while the other is active; the heartbeat's `max_job_minutes` releases a hung job (the other worker finishes it), the hung worker keeps its scale-in protection until the queue has been quiet for 90 minutes, then the breaker removes it; two workers run only during Experiment 2.
 - A warm hold with no jobs for 90 minutes makes the idle alarm send its email, although the hold keeps the worker (the email text says so).
 - A `?job=` link whose result has expired (30 days) shows "Queued".
-- The status and result endpoints answer anyone who knows a job's UUID (unguessable); M3a adds ownership checks.

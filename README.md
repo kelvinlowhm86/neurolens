@@ -40,6 +40,8 @@ By plotting these five region traces side by side against the video timeline, we
 
 ## Architecture
 
+> **Note:** this section and the two parts after it are the original plan, kept for the ideas. `POST /api/analyse` and the 2× RTX 4090 machine no longer exist: the web app lets the browser upload straight to S3, a queue feeds a separate GPU worker, and the model runs on one AWS GPU. For the current design see `AGENTS.md` and the specs in `docs/`.
+
 The project has two main parts: a **Python backend** that runs inference and serves results via API, and a **web frontend** that handles upload, playback, and visualisation.
 
 ```
