@@ -16,7 +16,7 @@
 
 ## 1. Scope
 ### In scope
-Migration 003; consent at upload; the dataset copy in the worker; the retention-curve upload; per-video and account deletion; Stripe removal (code, tests, Terraform, SSM parameters, page, privacy page, specs); the dataset lifecycle rule; the guide `docs/retention_curve_guide.md`.
+Migration 003; consent at upload; the dataset copy in the worker; the retention-curve upload; per-video and account deletion; Stripe removal (code, tests, Terraform, SSM parameters, page, privacy page, specs); the dataset lifecycle rule; the guide `static/retention_guide.html`.
 
 ### Out of scope
 - Drawing the real curve next to the predicted one (a possible later addition).
@@ -46,16 +46,17 @@ Migration 003; consent at upload; the dataset copy in the worker; the retention-
 - **Data:** `billing.job_state` returns `research_consent`.
 
 ### 3c. Retention curve
-- Route: `POST /api/jobs/<job_id>/retention`. The body is JSON, `{"csv": "<the file's text>"}`, with the text at most 64 KiB (65,536 bytes); a longer text → 400 or 413. Sending JSON keeps the app's one rule, that every `/api/*` POST is JSON, which is its cross-site form protection (`api_rules`). The page reads the chosen file and sends its text.
+- Source: the video owner's audience-retention report from the YouTube Analytics API (`reports.query`, docs updated 15 Oct 2026), saved as a file exactly as the API returns it. The API answers only in JSON, so the upload takes that JSON as is: nobody has to convert it.
+- Route: `POST /api/jobs/<job_id>/retention`. The body is JSON, `{"report": "<the file's text>"}`, with the text at most 64 KiB (65,536 bytes); a longer text → 413. Sending JSON keeps the app's one rule, that every `/api/*` POST is JSON, which is its cross-site form protection (`api_rules`). The page reads the chosen file and sends its text.
 - Conditions:
   - The job must be owned by the user and not deleted (otherwise 404, like `owned_job`).
   - The job must be `done` (otherwise 409 `job_not_done`).
   - The job must have consent (otherwise 409 `no_consent`).
-- CSV rules: the header is exactly `elapsed_ratio,watch_ratio`. There are 2 to 1000 rows. `elapsed_ratio` is in 0–1 and strictly increasing. `watch_ratio` is ≥ 0 and finite (YouTube's ratio can exceed 1 when viewers rewatch). Any rule broken → 400 `invalid_retention_csv` with the line number.
-- Stored at `dataset/<job_id>/retention.csv`. A new upload replaces the old one.
-- The page shows "Add real audience retention (CSV)" on a finished consented job, with a link to the guide. To know this, the job status response includes `research_consent` once the job is `done` (it stays hidden before).
-- The parser is a pure function, `neurolens.results.parse_retention_csv(text) -> list[tuple[float, float]]`, which raises `ValueError` with the line number.
-- **Guide** (`docs/retention_curve_guide.md`, also served at `/static/retention_guide.html`): how the video's owner gets the curve from the YouTube Analytics API. Use the API page's in-browser "Try this API" panel: dimension `elapsedVideoTimeRatio`, metric `audienceWatchRatio`, filter `video==<id>`, then save the two columns. Claude tries the steps on a real channel before the guide is written. If the in-browser route does not work, Josh decides between a small helper script and dropping the guide.
+- Report rules: the text is a JSON object whose `columnHeaders` list includes columns named `elapsedVideoTimeRatio` and `audienceWatchRatio` (other columns, such as `relativeRetentionPerformance`, are allowed and ignored; columns are found by name, not position). `rows` holds 2 to 1000 rows (a missing `rows` means YouTube had no data for the video). `elapsedVideoTimeRatio` is in 0–1 and strictly increasing. `audienceWatchRatio` is ≥ 0 and finite (it can exceed 1 when viewers rewatch). Any rule broken → 400 `invalid_retention_report` with the row number (1-based) where a row is at fault.
+- Stored at `dataset/<job_id>/retention.csv` as two columns, header `elapsed_ratio,watch_ratio`, so the dataset stays one plain format whatever the source. A new upload replaces the old one.
+- The page shows "Add real audience retention" on a finished consented job, with a link to the guide. To know this, the job status response includes `research_consent` once the job is `done` (it stays hidden before).
+- The parser is a pure function, `neurolens.results.parse_retention_report(text) -> list[tuple[float, float]]`, which raises `ValueError` with the row number.
+- **Guide** (`static/retention_guide.html`, served at `/static/retention_guide.html`): how the video's owner gets the report in Google's APIs Explorer for `youtubeAnalytics.reports.query` (`ids=channel==MINE`, `startDate`/`endDate`, `metrics=audienceWatchRatio`, `dimensions=elapsedVideoTimeRatio`, `filters=video==<id>`), then saves the response as a `.json` file. Written from the API docs (it states their date), not tried on a real channel: none was available (Josh, 21 Oct).
 
 ## 4. Deleting a video: `DELETE /api/jobs/<job_id>`
 1. The job must be owned and not deleted (otherwise 404).
@@ -122,11 +123,11 @@ S3 is deleted first, so a failure part-way leaves a job that still shows but who
   - `storage.put_dataset(s3, bucket, job_id, upload_key, result)`;
   - `billing.delete_account(db, user_id) -> list[tuple[str, str]]` (the deleted `(issuer, subject)` identities; raises `JobActive`);
   - `billing.list_jobs` skips deleted jobs;
-  - `results.parse_retention_csv`.
+  - `results.parse_retention_report`.
 - **Tests** (`tests/test_m3c_*.py`, written first; PostgreSQL for the billing ones):
   - consent stored, defaulting to false, with a non-boolean refused;
   - the worker copies only consented jobs; a failed dataset write fails the job without settling it; the dataset write happens before `put_result`; a worker that lost its claim writes nothing to `dataset/`;
-  - CSV rules, each rule broken once; a retention POST with a JSON body reaches the handler;
+  - report rules, each rule broken once; the stored file is the two-column CSV; a retention POST with a JSON body reaches the handler;
   - retention refused for jobs not done, without consent, or not owned;
   - per-video delete: the S3 keys are gone, the job is hidden from every route, its ledger is intact, it is refused while active, repeating it is safe, and a failed S3 delete leaves `deleted_at` empty;
   - account delete:
@@ -142,7 +143,7 @@ S3 is deleted first, so a failure part-way leaves a job that still shows but who
 ## 9. Acceptance criteria
 1. Full suite passes with PostgreSQL. `ruff` is clean. `git grep -i stripe` finds only specs, git history notes and the ledger kind `test_topup`.
 2. Live: a consented fake job leaves `dataset/<job_id>/video…` and `result.json`; an unconsented one leaves nothing under `dataset/`.
-3. Live: a valid YouTube-format CSV is stored; a broken one is refused with its line number.
+3. Live: a valid YouTube Analytics report is stored as the two-column CSV; a broken one is refused with its row number.
 4. Live: per-video delete removes every file, and the job leaves the history.
 5. Live: deleting a test account removes its rows and its Cognito login, and signing in again gives a new empty account.
 6. `terraform plan` shows the webhook removed, the new lifecycle rule, the new permissions and the Cognito-delete alarm, and nothing else. The role boundary has the Cognito statement.
