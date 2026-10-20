@@ -182,6 +182,12 @@ def get_email(db, user_id):
     return rows[0]["email"] if rows else None
 
 
+def user_by_email(db, email):
+    """The user ID for this email (any letter case), or None."""
+    with db.transaction() as tx:
+        return _user_by_email(tx, email)
+
+
 def grant_credit(db, email, cents):
     """Add credit to the user with this email (any letter case), with a `grant` ledger row
     (M3b §7a). Returns the user ID."""

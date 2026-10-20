@@ -46,7 +46,7 @@ A second Google Form, email collection off: participant code; the standard 10 SU
 - **Timing:** hold all sessions by about **5–6 November**, batched back-to-back on one or two days so they share one start-up, leaving a week for export, consolidation and writing. The load balancer (`web_mode = "alb"`, M3b §3b) is switched on shortly before (about 2 November) and stays until the presentation: about $6–7 in total.
 - Before the sessions: add each participant as a Google test user (M3b §2); set up both forms from §2.
 - A batch that keeps a GPU warm for more than 3 hours will trigger M2a's long-running GPU alarm email. That is expected during a batch; after `stop_work.sh`, an alarm email means something was left running.
-- Each session follows M3b's `docs/session_checklist.md`: `start_work.sh --study` about 15 minutes ahead (once per batch); consent form; the participant signs in; `grant_credit.py 500` (it asks for the email); the task; the questionnaire; `stop_work.sh` after the batch.
+- Each session follows M3b's `docs/session_checklist.md`: `start_work.sh --study` about 15 minutes ahead (once per batch); consent form; the participant signs in; `grant_credit.py 5` ($5.00; it asks for the email); the task; the questionnaire; `stop_work.sh` after the batch.
 
 ## 4. Study data
 ### 4a. Export (`experiments/export_study_jobs.py`)

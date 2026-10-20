@@ -8,7 +8,7 @@
 **Full treatment** (tests first by a separate agent, break-it checks, Opus review): account deletion and per-video deletion (data loss, sign-in, credit), and the consent copy in the worker (it runs after a charge).
 
 ## Decisions (20 Oct)
-- **Free allowance, granted only.** New accounts start at 0. `infra/grant_credit.py` adds credit for course members (M3b §7a, unchanged). This means a stranger who signs in with Google cannot spend GPU money.
+- **Free allowance, granted only.** New accounts start at 0. `infra/grant_credit.py` adds credit for course members (M3b §7a; the amount is typed in dollars). This means a stranger who signs in with Google cannot spend GPU money.
 - **Stripe removed from the service.** Before the removal, the last commit with Stripe (the custom GPU workers, after one real GPU job) is tagged `custom-gpu-stripe`. The report cites the tag as the working prototype of the future paid phase. No code is kept behind a switch.
 - **Consent is opt-in, per upload.** The box is unticked by default, and analysis works the same either way. Only consented videos are kept beyond the normal 2 days.
 - **Retention: 12 months**, enforced by an S3 lifecycle rule on `dataset/`, so nobody has to remember to delete anything. Teardown after the course deletes everything earlier.
