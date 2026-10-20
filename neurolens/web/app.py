@@ -496,7 +496,7 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
 
     @app.route("/api/jobs/<job_id>/retention", methods=["POST"])
     def job_retention(job_id):
-        """Store a consented, finished job's real audience-retention CSV (M3c §3c)."""
+        """Store a consented, finished job's real audience-retention report (M3c §3c)."""
         job, error = owned_job(job_id)
         if error:
             return error
@@ -506,19 +506,19 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
             return _error("no_consent", "This video was not kept for research.", status=409)
 
         data = request.get_json(silent=True)
-        text = data.get("csv") if isinstance(data, dict) else None
+        text = data.get("report") if isinstance(data, dict) else None
         if not isinstance(text, str):
-            return _error("invalid_request", "The request body must contain the CSV text.")
+            return _error("invalid_request", "The request body must contain the report text.")
         if len(text.encode()) > RETENTION_MAX_BYTES:
             return _error(
-                "invalid_retention_csv",
-                f"The CSV must be at most {RETENTION_MAX_BYTES} bytes.",
+                "invalid_retention_report",
+                f"The report must be at most {RETENTION_MAX_BYTES} bytes.",
                 status=413,
             )
         try:
-            results.parse_retention_csv(text)
+            pairs = results.parse_retention_report(text)
         except ValueError as err:
-            return _error("invalid_retention_csv", str(err))
+            return _error("invalid_retention_report", str(err))
 
         if s3 is None or not bucket:
             return _not_configured()
@@ -526,14 +526,14 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
             s3.put_object(
                 Bucket=bucket,
                 Key=f"dataset/{job['job_id']}/retention.csv",
-                Body=text.encode(),
+                Body=results.retention_csv(pairs).encode(),
                 ContentType="text/csv",
             )
         except Exception:
-            logger.exception(f"Could not store the retention CSV for {job['job_id']}")
+            logger.exception(f"Could not store the retention report for {job['job_id']}")
             return _error(
                 "retention_store_failed",
-                "Could not store the CSV. Please try again.",
+                "Could not store the report. Please try again.",
                 status=500,
             )
         return jsonify({"stored": True})

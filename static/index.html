@@ -238,11 +238,11 @@
     <!-- Real audience retention for a finished, consented job -->
     <div class="panel-box" id="retentionPanel">
       <div class="panel-title">Real audience retention</div>
-      <div class="panel-text">Add the video's real audience-retention curve to keep with its analysis. <a href="/static/retention_guide.html">How to get the CSV</a></div>
+      <div class="panel-text">Add the video's real audience-retention curve to keep with its analysis. <a href="/static/retention_guide.html">How to get the report</a></div>
       <div class="panel-actions">
-        <button class="btn-new" id="retentionPick">Add real audience retention (CSV)</button>
+        <button class="btn-new" id="retentionPick">Add real audience retention</button>
       </div>
-      <input type="file" accept=".csv,text/csv" id="retentionInput" hidden>
+      <input type="file" accept=".json,application/json" id="retentionInput" hidden>
       <div class="panel-text" id="retentionMsg"></div>
     </div>
 
@@ -967,13 +967,13 @@ $('retentionInput').addEventListener('change', async ev => {
   ev.target.value = '';
   if (!file || !retentionJob) return;
   $('retentionMsg').classList.remove('error');
-  $('retentionMsg').textContent = 'Reading the CSV...';
+  $('retentionMsg').textContent = 'Reading the report...';
   try {
-    const res = await postJSON(`/api/jobs/${retentionJob}/retention`, { csv: await file.text() });
+    const res = await postJSON(`/api/jobs/${retentionJob}/retention`, { report: await file.text() });
     const data = await res.json().catch(() => ({}));
     if (res.status === 401) return window.location.reload();  // the session ended
     if (!res.ok) {
-      $('retentionMsg').textContent = data.message || `Couldn't save the CSV (HTTP ${res.status}).`;
+      $('retentionMsg').textContent = data.message || `Couldn't save the report (HTTP ${res.status}).`;
       $('retentionMsg').classList.add('error');
       return;
     }

@@ -14,43 +14,84 @@ def _cell(value):
     return "" if value is None else json.dumps(value)
 
 
-def parse_retention_csv(text):
-    """The (elapsed_ratio, watch_ratio) rows of a real audience-retention CSV (M3c §3c).
+RETENTION_COLUMNS = ("elapsedVideoTimeRatio", "audienceWatchRatio")
 
-    The header is exactly `elapsed_ratio,watch_ratio`, with 2 to 1000 data rows. elapsed_ratio is
-    in 0-1 and strictly increasing; watch_ratio is finite and >= 0. A broken rule raises
-    ValueError naming the line.
+
+def _retention_number(value):
+    """A JSON number that is finite; bool is an int in Python but not a number here."""
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        return False
+    try:
+        return math.isfinite(value)
+    except OverflowError:  # an integer too large for a float
+        return False
+
+
+def parse_retention_report(text):
+    """The (elapsed_ratio, watch_ratio) rows of a YouTube Analytics `reports.query` response.
+
+    The text is a JSON object whose `columnHeaders` name both columns (other columns are
+    ignored); `rows` holds 2 to 1000 rows. elapsedVideoTimeRatio is in 0-1 and strictly
+    increasing; audienceWatchRatio is finite and >= 0. A broken rule raises ValueError naming
+    the 1-based row at fault.
     """
-    header = "elapsed_ratio,watch_ratio"
-    lines = [(n, line) for n, line in enumerate(text.splitlines(), start=1) if line.strip()]
-    if not lines or lines[0][1] != header:
-        line = lines[0][0] if lines else 1
-        raise ValueError(f"line {line}: the header must be exactly {header}")
-    rows = lines[1:]
+    try:
+        report = json.loads(text)
+    except (TypeError, ValueError):
+        raise ValueError("The report is not valid JSON.") from None
+    if not isinstance(report, dict):
+        raise ValueError("The report must be a JSON object.")
+
+    headers = report.get("columnHeaders")
+    names = (
+        [header.get("name") for header in headers if isinstance(header, dict)]
+        if isinstance(headers, list)
+        else []
+    )
+    for name in RETENTION_COLUMNS:
+        if name not in names:
+            raise ValueError(f"The report has no {name} column.")
+    elapsed_index = names.index("elapsedVideoTimeRatio")
+    watch_index = names.index("audienceWatchRatio")
+
+    rows = report.get("rows")
+    if rows is None:
+        raise ValueError("YouTube had no data for this video: the report has no rows.")
+    if not isinstance(rows, list):
+        raise ValueError("The report's rows must be a list.")
     if len(rows) < 2:
-        raise ValueError("the CSV needs at least 2 rows after the header")
+        raise ValueError("The report needs at least 2 rows.")
     if len(rows) > 1000:
-        raise ValueError(f"line {rows[1000][0]}: the CSV has more than 1000 rows")
+        raise ValueError("row 1001: the report has more than 1000 rows.")
 
     pairs = []
     previous = None
-    for number, line in rows:
-        fields = line.split(",")
-        if len(fields) != 2:
-            raise ValueError(f"line {number}: expected exactly 2 columns")
-        try:
-            elapsed, watch = float(fields[0]), float(fields[1])
-        except ValueError:
-            raise ValueError(f"line {number}: both columns must be numbers") from None
-        if not math.isfinite(elapsed) or not 0 <= elapsed <= 1:
-            raise ValueError(f"line {number}: elapsed_ratio must be between 0 and 1")
+    for number, row in enumerate(rows, start=1):
+        if not isinstance(row, list) or len(row) != len(names):
+            raise ValueError(f"row {number}: expected {len(names)} values")
+        elapsed, watch = row[elapsed_index], row[watch_index]
+        if not _retention_number(elapsed):
+            raise ValueError(f"row {number}: elapsedVideoTimeRatio must be a finite number")
+        if not 0 <= elapsed <= 1:
+            raise ValueError(f"row {number}: elapsedVideoTimeRatio must be between 0 and 1")
         if previous is not None and elapsed <= previous:
-            raise ValueError(f"line {number}: elapsed_ratio must be strictly increasing")
-        if not math.isfinite(watch) or watch < 0:
-            raise ValueError(f"line {number}: watch_ratio must be a finite number >= 0")
+            raise ValueError(f"row {number}: elapsedVideoTimeRatio must be strictly increasing")
+        if not _retention_number(watch):
+            raise ValueError(f"row {number}: audienceWatchRatio must be a finite number")
+        if watch < 0:
+            raise ValueError(f"row {number}: audienceWatchRatio must be at least 0")
         pairs.append((elapsed, watch))
         previous = elapsed
     return pairs
+
+
+def retention_csv(pairs):
+    """The stored two-column CSV for parsed retention pairs (M3c §3c)."""
+    out = io.StringIO()
+    writer = csv.writer(out, lineterminator="\n")
+    writer.writerow(["elapsed_ratio", "watch_ratio"])
+    writer.writerows(pairs)
+    return out.getvalue()
 
 
 def to_csv(result):
