@@ -234,6 +234,15 @@ def test_billing_delete_job_marks_it_deleted_and_keeps_the_row_and_ledger(db, pg
     assert pg.ledger() == ledger_before
 
 
+def test_billing_delete_job_only_touches_the_owners_job(db, pg, content_type):
+    job_id, _ = make_job(db, content_type=content_type)
+    filename = pg.job(job_id)["filename"]
+    billing.delete_job(db, "someone-else", job_id)
+    job = pg.job(job_id)
+    assert job["deleted_at"] is None
+    assert job["filename"] == filename
+
+
 def test_list_jobs_skips_deleted_jobs_but_job_state_still_sees_them(db, content_type):
     deleted, _ = make_job(db, content_type=content_type)
     kept, _ = make_job(db, content_type=content_type)

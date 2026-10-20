@@ -442,6 +442,10 @@ def _analyse(bucket, key, job_id, attempt, *, s3, db, cfg, roi_masks, research_c
         stage("saving_dataset")
         storage.put_dataset(s3, bucket, job_id, key, result)
 
+    # Check the claim again before writing the result, for a job with or without consent: a
+    # late worker must not leave a result behind for a job the reaper has refunded (M3c §3b).
+    stage("saving_result")
+
     # Publish to S3 without ever replacing an earlier result (a redelivered notice must not
     # overwrite the first answer). Either way the finished job is charged, once.
     published = storage.put_result(s3, bucket, job_id, result)

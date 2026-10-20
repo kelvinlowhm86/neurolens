@@ -38,6 +38,7 @@ Migration 003; consent at upload; the dataset copy in the worker; the retention-
 ### 3b. Worker
 - **When:** after the analysis and before `put_result`, if the job has `research_consent`.
 - **Claim check first:** the worker calls `set_stage(..., "saving_dataset")`. If the claim is lost (the reaper refunded a stalled job, or it settled elsewhere), it raises `_ClaimLost` and writes nothing. A late worker therefore cannot leave dataset files behind for a job that has been refunded and deleted. A window of a few seconds between this check and the writes remains; that is a known limitation.
+- **Result check:** before `put_result`, every job calls `set_stage(..., "saving_result")`; a job that lost its claim writes no result (a consented job checks twice).
 - **Writes**, through one helper, `storage.put_dataset(s3, bucket, job_id, upload_key, result)`:
   - `copy_object` from the upload key to `dataset/<job_id>/video<ext>`, where `<ext>` is `PurePosixPath(upload_key).suffix`. A single copy works up to 5 GB and uploads are capped at 300 MB. No local file is needed.
   - The result to `dataset/<job_id>/result.json`, serialised with `allow_nan=False`.

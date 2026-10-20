@@ -38,6 +38,8 @@ class FakeCognito:
         self.deleted = []
         self.users_empty = False
         self.fail_on = None
+        self.fail_operation = None
+        self.fail_subject = None
 
 
 @pytest.fixture
@@ -47,24 +49,30 @@ def cognito_admin(monkeypatch):
 
     def make_api_call(self, operation_name, api_params):
         if operation_name == "ListUsers":
-            if fake.fail_on == "ListUsers":
+            filt = api_params.get("Filter", "")
+            match = re.search(r'sub\s*=\s*"([^"]*)"', filt)
+            subject = match.group(1) if match else None
+            if fake.fail_on == "ListUsers" or (
+                fake.fail_operation == "ListUsers" and subject == fake.fail_subject
+            ):
                 raise ClientError(
                     {"Error": {"Code": "InternalError", "Message": "boom"}}, operation_name
                 )
-            filt = api_params.get("Filter", "")
             fake.filters.append(filt)
             if fake.users_empty:
                 return {"Users": []}
-            match = re.search(r'sub\s*=\s*"([^"]*)"', filt)
             if match is None:
                 raise AssertionError(f"ListUsers Filter does not name a sub: {filt!r}")
-            return {"Users": [{"Username": f"user-{match.group(1)}"}]}
+            return {"Users": [{"Username": f"user-{subject}"}]}
         if operation_name == "AdminDeleteUser":
-            if fake.fail_on == "AdminDeleteUser":
+            username = api_params.get("Username")
+            if fake.fail_on == "AdminDeleteUser" or (
+                fake.fail_operation == "AdminDeleteUser" and username == f"user-{fake.fail_subject}"
+            ):
                 raise ClientError(
                     {"Error": {"Code": "InternalError", "Message": "boom"}}, operation_name
                 )
-            fake.deleted.append(api_params.get("Username"))
+            fake.deleted.append(username)
             return {}
         return real(self, operation_name, api_params)
 
@@ -360,6 +368,26 @@ def test_a_list_users_failure_is_500_login_delete_failed_and_logs_the_sub(
     marker = [r.getMessage() for r in caplog.records if "COGNITO_DELETE_FAILED" in r.getMessage()]
     assert marker, "no COGNITO_DELETE_FAILED log line"
     assert any("google_1001" in line for line in marker)
+
+
+@pytest.mark.parametrize("operation", ["ListUsers", "AdminDeleteUser"])
+def test_a_failed_login_does_not_stop_the_other_cognito_login_being_deleted(
+    cognito_client, idp, db, pg, cognito_admin, caplog, operation
+):
+    user_id = signed_in_user_id(cognito_client, idp, pg, sub="google_1001")
+    add_identity(db, ISSUER, "email_2002", EMAIL)
+    cognito_admin.fail_operation = operation
+    cognito_admin.fail_subject = "google_1001"
+    with caplog.at_level(logging.DEBUG):
+        resp = delete_account(cognito_client, confirm="DELETE")
+    assert resp.status_code == 500
+    assert resp.get_json()["error"] == "login_delete_failed"
+    assert pg.one("SELECT * FROM users WHERE user_id = %s", user_id) is None
+    assert cognito_admin.deleted == ["user-email_2002"]
+    marker = [r.getMessage() for r in caplog.records if "COGNITO_DELETE_FAILED" in r.getMessage()]
+    assert len(marker) == 1, marker
+    assert "google_1001" in marker[0]
+    assert cognito_client.get("/api/me").status_code == 401
 
 
 def test_a_stale_session_after_deletion_is_401_not_500(cognito_client, idp, db, pg):

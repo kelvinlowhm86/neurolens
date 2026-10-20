@@ -585,6 +585,7 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
             identities = billing.delete_account(db, user_id)
         except billing.JobActive:
             return _job_active()
+        failed = False
         for issuer, subject in identities:
             if issuer != auth_cfg["cognito_issuer"]:
                 continue
@@ -601,13 +602,14 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
                 logger.error(
                     f"COGNITO_DELETE_FAILED sub={subject} username={username}", exc_info=True
                 )
-                return _error(
-                    "login_delete_failed",
-                    "Your data has been deleted. Removing your login failed; we have been "
-                    "notified.",
-                    status=500,
-                )
+                failed = True
         session.clear()
+        if failed:
+            return _error(
+                "login_delete_failed",
+                "Your data has been deleted. Removing your login failed; we have been notified.",
+                status=500,
+            )
         return jsonify({"deleted": True})
 
     return app

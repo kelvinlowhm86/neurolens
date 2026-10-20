@@ -283,6 +283,30 @@ def test_a_worker_that_lost_its_claim_before_saving_writes_nothing_to_the_datase
     assert job["status"] == "processing" and job["attempt"] == 2
 
 
+def test_an_unconsented_worker_that_lost_its_claim_writes_nothing(
+    aws, db, pg, make_cfg, roi_masks_small, clip_path, patch_everywhere
+):
+    job_id, key = make_job(db, consent=False)
+    aws.s3.upload_file(str(clip_path), aws.bucket, key)
+    real_extract = engagement.extract_engagement
+
+    def extract_then_lose(*args, **kwargs):
+        result = real_extract(*args, **kwargs)
+        pg.age(job_id, updated_s=120)  # this worker looked dead ...
+        assert billing.claim(db, job_id) == 2  # ... and another worker took the job
+        return result
+
+    patch_everywhere(
+        "extract_engagement", extract_then_lose, "neurolens.engagement", "neurolens.worker"
+    )
+    assert run_record(aws, db, key, make_cfg(), roi_masks_small) is worker.Outcome.LOST_CLAIM
+    assert dataset_keys(aws, job_id) == []
+    assert not object_exists(aws, f"results/{job_id}.json")
+    job = pg.job(job_id)
+    assert job["status"] == "processing" and job["attempt"] == 2
+    assert job["captured_cents"] is None
+
+
 # ---------------------------------------------------------------- storage.put_dataset
 
 

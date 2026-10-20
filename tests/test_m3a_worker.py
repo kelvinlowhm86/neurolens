@@ -28,6 +28,7 @@ STAGE_ORDER = [
     "inference_full",
     "inference_noaudio",
     "extracting_roi",
+    "saving_result",
 ]
 INTERRUPTED = "The job was interrupted. Please upload it again."
 
