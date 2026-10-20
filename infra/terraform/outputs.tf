@@ -85,11 +85,6 @@ output "sign_in_test_url" {
   value       = "https://${local.cognito_domain}/oauth2/authorize?client_id=${aws_cognito_user_pool_client.web.id}&response_type=code&scope=openid+email&redirect_uri=${local.public_base_url}/auth/callback"
 }
 
-output "stripe_webhook_url" {
-  description = "Paste into the Stripe test-mode webhook endpoint (event: checkout.session.completed)."
-  value       = aws_lambda_function_url.webhook.function_url
-}
-
 output "cloudfront_distribution_id" {
   description = "Read by infra/deploy_web.sh to clear the cache after a deploy."
   value       = aws_cloudfront_distribution.site.id

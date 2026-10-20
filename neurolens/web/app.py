@@ -4,7 +4,7 @@ From M3a the database owns users, credit and job state (docs/M3a_spec.md §6): p
 credit before handing out the upload form, and status and result answer only the job's owner,
 checked in the database before any S3 request. From M3b (docs/M3b_spec.md §2-§4, §7b): Cognito
 sign-in on AWS, every /api/* route needs a signed-in user, POSTs take JSON only, no CORS, job
-history and CSV export, uploads refused while GPU work is paused, Stripe test-mode top-ups.
+history and CSV export, uploads refused while GPU work is paused.
 """
 
 import logging
@@ -36,11 +36,6 @@ JOB_ACTIVE_MESSAGE = (
     "This video is still being processed. If you closed the page before the upload finished, "
     "it is released within about 4 hours; try again then."
 )
-STRIPE_PARAMETERS = {
-    "secret_key": "/neurolens/web/stripe_secret_key",
-    "webhook_secret": "/neurolens/web/stripe_webhook_secret",
-    "allowlist": "/neurolens/web/topup_allowlist",
-}
 
 
 def _is_number(value):
@@ -87,30 +82,6 @@ def _delete_keys(s3, bucket, keys):
             logger.error(f"S3 reported {len(reported)} failed deletes in {bucket}")
             return False
     return True
-
-
-def allowlist_emails(text):
-    """The top-up allowlist parameter as a set: emails trimmed and lowercased (M3b §7b)."""
-    return {email.strip().lower() for email in text.split(",") if email.strip()}
-
-
-def _stripe_settings(cfg, auth_cfg, ssm_client):
-    """Stripe's packs and secrets when test top-ups are on (Cognito mode and stripe.enabled),
-    else None. Refuses anything but a test-mode secret key, at startup."""
-    stripe_cfg = cfg.get("stripe") or {}
-    if auth_cfg["mode"] != "cognito" or not stripe_cfg.get("enabled"):
-        return None
-    get = settings.get_parameter
-    found = {key: get(ssm_client, name) for key, name in STRIPE_PARAMETERS.items()}
-    if not found["secret_key"].startswith("sk_test_"):
-        raise settings.UnsafeConfigError(
-            "The Stripe secret key must be a test-mode key (sk_test_...): the model's licence "
-            "forbids commercial use, so NeuroLens never takes real payments."
-        )
-    packs = stripe_cfg.get("packs") or {}
-    if not packs:
-        raise ValueError("Missing required setting: stripe.packs")
-    return {**found, "allowlist": allowlist_emails(found["allowlist"]), "packs": dict(packs)}
 
 
 def _worker_group_paused(autoscaling, group_name):
@@ -198,7 +169,6 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
     app.config["MAX_DURATION"] = max_seconds
     app.config["NEUROLENS_AUTH"] = auth_cfg
     oauth = auth.init_auth(app, cfg, ssm_client)
-    stripe_cfg = _stripe_settings(cfg, auth_cfg, ssm_client)
 
     @app.errorhandler(Exception)
     def unexpected(err):
@@ -248,9 +218,6 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
             with known_lock:
                 known_users.add(user_id)
         return user_id, email
-
-    def can_top_up(email):
-        return stripe_cfg is not None and email.strip().lower() in stripe_cfg["allowlist"]
 
     @app.route("/")
     def index():
@@ -310,7 +277,6 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
                 "user_id": user_id,
                 "email": email,
                 "balance": billing.get_balance(db, user_id),
-                "can_top_up": can_top_up(email),
             }
         )
 
@@ -498,10 +464,11 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
                 return _not_configured()
             if storage.result_exists(s3, bucket, job["job_id"]):
                 status = billing.DONE
+        # Consent gates the retention upload, which needs a done job, so it is reported only then.
         public = {
             key: value
             for key, value in job.items()
-            if key not in ("object_key", "research_consent")
+            if key != "object_key" and (key != "research_consent" or job["status"] == billing.DONE)
         }
         return jsonify(
             {**public, "status": status, "updated_at": storage.utc_text(job["updated_at"])}
@@ -642,44 +609,5 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
                 )
         session.clear()
         return jsonify({"deleted": True})
-
-    @app.route("/api/top-up/checkout", methods=["POST"])
-    def top_up_checkout():
-        """A Stripe Checkout Session for a server-defined pack (M3b §7b). The browser sends only
-        the pack's name: never an amount, user or session."""
-        if stripe_cfg is None:
-            return _not_found()
-        user_id, email = signed_in_user()
-        if not can_top_up(email):
-            return _error("top_up_not_allowed", "Top-ups are for the NeuroLens team.", status=403)
-        data = request.get_json(silent=True)
-        pack = data.get("pack") if isinstance(data, dict) else None
-        if not isinstance(pack, str) or pack not in stripe_cfg["packs"]:
-            return _error("unknown_pack", "Unknown top-up pack.")
-        import stripe
-
-        base = auth_cfg["public_base_url"]
-        checkout = stripe.checkout.Session.create(
-            api_key=stripe_cfg["secret_key"],
-            mode="payment",
-            # We are the seller of test credit, not selling through Stripe as merchant of record:
-            # Managed Payments off whatever the account's default (it requires tax codes). Payment
-            # methods are not named: Stripe's current API refuses that, they are dashboard settings.
-            managed_payments={"enabled": False},
-            line_items=[
-                {
-                    "quantity": 1,
-                    "price_data": {
-                        "currency": "usd",
-                        "unit_amount": stripe_cfg["packs"][pack],
-                        "product_data": {"name": f"NeuroLens test credit (pack {pack})"},
-                    },
-                }
-            ],
-            metadata={"user_id": user_id, "pack": pack},
-            success_url=f"{base}/?top_up=done",
-            cancel_url=f"{base}/?top_up=cancelled",
-        )
-        return jsonify({"url": checkout.url})
 
     return app

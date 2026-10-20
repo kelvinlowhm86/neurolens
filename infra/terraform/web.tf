@@ -197,11 +197,11 @@ resource "aws_cognito_user_pool_domain" "users" {
   managed_login_version = 1 # the classic hosted pages; the newer managed login needs Essentials
 }
 
-# ─── The web function and the Stripe webhook function (M3b §3a, §7b) ──────
+# ─── The web function (M3b §3a) ───────────────────────────────────────────
 #
-# Both run the same zip outside the VPC: they reach Cognito, Parameter Store, S3 and the Data API
-# over AWS's public endpoints, so they never depend on the NAT Gateway. Their roles are in
-# web_iam.tf. Terraform uploads the zip only when it creates the functions (build it first with
+# It runs outside the VPC: it reaches Cognito, Parameter Store, S3 and the Data API over AWS's
+# public endpoints, so it never depends on the NAT Gateway. Its role is in web_iam.tf. Terraform
+# uploads the zip only when it creates the function (build it first with
 # infra/build_web_lambda.sh); after that infra/deploy_web.sh ships code, so an apply for anything
 # else (the NAT Gateway switch) never needs a build and never changes the running code.
 
@@ -225,11 +225,6 @@ locals {
         NEUROLENS_COGNITO_DOMAIN = local.cognito_domain
         NEUROLENS_WORKER_GROUP   = local.worker_asg
       }
-    }
-    webhook = {
-      name        = "neurolens-stripe-webhook"
-      handler     = "neurolens.web.stripe_webhook.handler"
-      environment = {}
     }
   }
 }
@@ -304,29 +299,4 @@ resource "aws_lambda_permission" "cloudfront_invoke" {
   function_name = aws_lambda_function.web["web"].function_name
   principal     = "cloudfront.amazonaws.com"
   source_arn    = aws_cloudfront_distribution.site.arn
-}
-
-# The webhook: Stripe calls it directly, so its URL is public (NONE) and its lock is Stripe's
-# signature, checked over the raw body before anything is parsed.
-resource "aws_lambda_function_url" "webhook" {
-  function_name      = aws_lambda_function.web["webhook"].function_name
-  authorization_type = "NONE"
-}
-
-resource "aws_lambda_permission" "public_invoke_webhook_url" {
-  statement_id           = "AllowPublicInvokeFunctionUrl"
-  action                 = "lambda:InvokeFunctionUrl"
-  function_name          = aws_lambda_function.web["webhook"].function_name
-  principal              = "*"
-  function_url_auth_type = "NONE"
-}
-
-# The second statement AWS requires since October 2025, limited to calls through the function URL:
-# nobody can call the function directly with the Lambda API.
-resource "aws_lambda_permission" "public_invoke_webhook" {
-  statement_id             = "AllowPublicInvokeFunction"
-  action                   = "lambda:InvokeFunction"
-  function_name            = aws_lambda_function.web["webhook"].function_name
-  principal                = "*"
-  invoked_via_function_url = true
 }

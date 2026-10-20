@@ -1,5 +1,5 @@
-# Roles of the web and Stripe webhook functions (M3b §3a, §7b). Each may do only what its code
-# needs, and the permissions boundary caps both whatever is written here.
+# Role of the web function (M3b §3a, M3c §5, §7). It may do only what its code needs, and the
+# permissions boundary caps it whatever is written here.
 
 locals {
   ssm_arn = "arn:aws:ssm:${var.region}:${local.account_id}:parameter"
@@ -17,7 +17,7 @@ locals {
   web_role_statements = {
     web = [
       {
-        # Cognito client secret, Flask session key, Stripe keys, top-up allowlist, public address.
+        # Cognito client secret, Flask session key, public address.
         Sid      = "ReadOwnParameters"
         Effect   = "Allow"
         Action   = "ssm:GetParameter"
@@ -53,18 +53,32 @@ locals {
         Action   = "autoscaling:DescribeAutoScalingGroups"
         Resource = "*"
       },
-    ]
-    webhook = [
       {
-        Sid    = "ReadStripeWebhookParameters"
+        # Deleting a video or the whole account removes its upload, result and dataset files
+        # (M3c §4, §5). Missing keys are fine.
+        Sid    = "DeleteJobFiles"
         Effect = "Allow"
-        Action = "ssm:GetParameter"
+        Action = "s3:DeleteObject"
         Resource = [
-          "${local.ssm_arn}/neurolens/web/stripe_webhook_secret",
-          "${local.ssm_arn}/neurolens/web/topup_allowlist",
+          "${aws_s3_bucket.main.arn}/uploads/*",
+          "${aws_s3_bucket.main.arn}/results/*",
+          "${aws_s3_bucket.main.arn}/dataset/*",
         ]
       },
-      local.decrypt_parameters,
+      {
+        # A real audience-retention CSV for a consented job (M3c §3c).
+        Sid      = "StoreRetentionCsv"
+        Effect   = "Allow"
+        Action   = "s3:PutObject"
+        Resource = "${aws_s3_bucket.main.arn}/dataset/*/retention.csv"
+      },
+      {
+        # Account deletion removes the user's logins from our pool only (M3c §5).
+        Sid      = "DeleteCognitoLogins"
+        Effect   = "Allow"
+        Action   = ["cognito-idp:ListUsers", "cognito-idp:AdminDeleteUser"]
+        Resource = aws_cognito_user_pool.users.arn
+      },
     ]
   }
 }

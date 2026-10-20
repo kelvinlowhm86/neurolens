@@ -77,6 +77,7 @@ resource "aws_s3_bucket_policy" "main" {
 # Prefix-scoped expiry, not one blanket rule. Days are the smallest unit S3 lifecycle uses.
 #   uploads/              2 days (S3 rounds to midnight UTC: 2-3 days)   the input videos (job status lives in Aurora)
 #   results/              30 d   how long a result stays viewable / downloadable (product decision)
+#   dataset/              365 d  consented videos and their analysis, kept for future research (M3c §3b)
 #   code/ and experiments/ never expire: M2a's boot pulls code/latest.zip on every GPU launch
 #   (a 404 would stop the worker coming up) and M4 reads experiments/* for the final report.
 resource "aws_s3_bucket_lifecycle_configuration" "main" {
@@ -101,6 +102,17 @@ resource "aws_s3_bucket_lifecycle_configuration" "main" {
     }
     expiration {
       days = 30
+    }
+  }
+
+  rule {
+    id     = "expire-dataset"
+    status = "Enabled"
+    filter {
+      prefix = "dataset/"
+    }
+    expiration {
+      days = 365
     }
   }
 }

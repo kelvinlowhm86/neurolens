@@ -29,12 +29,5 @@
   "server": {
     "host": "127.0.0.1",
     "port": 5003
-  },
-  "stripe": {
-    "enabled": true,
-    "packs": {
-      "5": 500,
-      "10": 1000
-    }
   }
 }

@@ -19,7 +19,6 @@ from conftest import (
     MISSING,
     PUBLIC_BASE_URL,
     SERVER_METADATA,
-    STRIPE_PARAMETERS,
     WEB_PARAMETERS,
     sign_in,
 )
@@ -298,7 +297,6 @@ def test_every_api_route_is_401_json_when_signed_out(cognito_app):
         "/api/limits",
         "/api/jobs",
         "/api/uploads/presign",
-        "/api/top-up/checkout",
         "/api/jobs/<id>/status",
         "/api/jobs/<id>/result",
         "/api/jobs/<id>/result.csv",
@@ -365,10 +363,10 @@ def test_session_cookie_is_secure_httponly_and_samesite_lax(cognito_client, idp)
 @pytest.mark.parametrize(
     "data, content_type",
     [
-        ('{"pack": "5"}', "text/plain"),
-        ("pack=5", "application/x-www-form-urlencoded"),
+        ('{"content_type": "video/mp4"}', "text/plain"),
+        ("content_type=video/mp4", "application/x-www-form-urlencoded"),
         ("--b--", "multipart/form-data; boundary=b"),
-        ('{"pack": "5"}', None),
+        ('{"content_type": "video/mp4"}', None),
     ],
     ids=["text", "form", "multipart", "none"],
 )
@@ -377,7 +375,7 @@ def test_a_post_without_a_json_content_type_is_415(cognito_app, idp, data, conte
     client = app.test_client()
     sign_in(client, idp, email="team@example.com")
     posts = [url for url, method in api_rules(app) if method == "POST"]
-    assert "/api/uploads/presign" in posts and "/api/top-up/checkout" in posts
+    assert "/api/uploads/presign" in posts
     for url in posts:
         kwargs = {"data": data}
         if content_type:
@@ -458,24 +456,6 @@ def test_cognito_mode_with_a_missing_setting_fails_fast(cognito_app, cognito_cfg
 @pytest.mark.parametrize("name", list(WEB_PARAMETERS))
 def test_cognito_mode_with_a_missing_parameter_fails_fast(cognito_app, ssm, name):
     ssm.delete_parameter(Name=name)
-    with pytest.raises(Exception):  # noqa: B017
-        cognito_app()
-
-
-def test_stripe_parameters_are_not_needed_with_stripe_disabled(cognito_app, ssm):
-    for name in STRIPE_PARAMETERS:
-        ssm.delete_parameter(Name=name)
-    cognito_app(stripe={"enabled": False, "packs": {"5": 500}})
-
-
-@pytest.mark.parametrize("key", ["sk_live_not_a_real_key", "rk_live_x", "pk_test_x"])
-def test_a_stripe_key_that_is_not_a_test_key_fails_at_startup(cognito_app, ssm, key):
-    ssm.put_parameter(
-        Name="/neurolens/web/stripe_secret_key",
-        Value=key,
-        Type="SecureString",
-        Overwrite=True,
-    )
     with pytest.raises(Exception):  # noqa: B017
         cognito_app()
 

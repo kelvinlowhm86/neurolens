@@ -9,7 +9,7 @@ it created. The region is one setting (`region` in `terraform.tfvars`, default `
 
 - One S3 bucket: public access blocked, encrypted, HTTPS-only, ACLs disabled, browser upload (CORS)
   allowed from `allowed_origins`, and prefix-scoped expiry (`uploads/` after 2 days, rounded to midnight UTC,
-  `results/` after 30 days, `code/`, `models/` and `experiments/` never).
+  `results/` after 30 days, `dataset/` after 365, `code/`, `models/` and `experiments/` never).
 - One SQS queue (visibility timeout 120 s, kept extended by the worker's heartbeat) and the wiring that sends a message to it whenever a file
   lands under `uploads/`. A second queue (`neurolens-jobs-dlq`) receives a job that failed twice.
 - A network (VPC): public subnets (one holds the NAT Gateway, the others only host image builds) and
@@ -20,7 +20,7 @@ it created. The region is one setting (`region` in `terraform.tfvars`, default `
   costs about $1.20 a day: set it for days with GPU work and the deployed window, then back. Terraform
   refuses to switch it off while the worker group may start workers or one is running (run `infra/stop_work.sh` first).
   The website never needs it.
-- Roles (image build, worker, circuit breaker, web, Stripe webhook, dead-letter handler, reaper), each
+- Roles (image build, worker, circuit breaker, web, dead-letter handler, reaper), each
   limited to what it needs and capped by a permission boundary.
 - A launch template and Auto Scaling group `neurolens-workers` (0 machines until you start a
   session), created only once `worker_ami_id` is set.
@@ -52,13 +52,11 @@ and §6 to tear down. Code changes later: `infra/deploy_code.sh` (worker), `infr
    - Lambda concurrency: if the account's limit is well below 1,000, request 1,000 (Service Quotas, free).
    - A HuggingFace account that accepted the LLaMA 3.2-3B licence (root README, *Gated Model Access*) and a read token.
    - A Google OAuth client (Google Cloud console, type "Web application"); its redirect URI comes in §2f.
-   - A Stripe account in test mode.
 6. Secrets in Parameter Store, created by hand (`SecureString`, so they never pass through git or
    Terraform files): `/neurolens/hf_token` (the HuggingFace token, read only by the image build),
-   `/neurolens/terraform/google_client_secret`, `/neurolens/web/flask_secret_key` (at least 32 random
-   bytes, e.g. `python -c "import secrets; print(secrets.token_hex(32))"`, never regenerated),
-   `/neurolens/web/stripe_secret_key` (a **test** key, `sk_test_...`; a live key is refused) and
-   `/neurolens/web/topup_allowlist` (comma-separated emails allowed to top up). Two more come in §2f.
+   `/neurolens/terraform/google_client_secret` and `/neurolens/web/flask_secret_key` (at least 32
+   random bytes, e.g. `python -c "import secrets; print(secrets.token_hex(32))"`, never
+   regenerated). The Cognito client secret comes in §2f.
 7. Confirm the account-wide $40/month AWS Budget (alerts at 50%, 80%, 100%) still exists: AWS console,
    Billing, Budgets.
 
@@ -109,16 +107,14 @@ at the repo root as `NEUROLENS_AWS_REGION`, `NEUROLENS_S3_BUCKET` and `NEUROLENS
 (see `.env.example`). The committed
 `config.json` holds no account-specific values, and access keys never go in the project at all.
 
-## 2f. Sign-in and payments (M3b)
+## 2f. Sign-in (M3b)
 
 After the first apply (values from `terraform output`):
 
 1. Google OAuth client: add `google_redirect_uri` as an authorised redirect URI.
 2. Copy the Cognito app client's secret (Cognito console, the app client) into
    `/neurolens/web/cognito_client_secret`.
-3. Stripe dashboard (test mode): add a webhook endpoint at `stripe_webhook_url` for the event
-   `checkout.session.completed`; put its signing secret in `/neurolens/web/stripe_webhook_secret`.
-4. `infra/deploy_web.sh` publishes the site, then open `sign_in_test_url` and sign in once with Google
+3. `infra/deploy_web.sh` publishes the site, then open `sign_in_test_url` and sign in once with Google
    and once with email.
 
 ## 2b. The GPU worker group (M2a)
@@ -281,4 +277,4 @@ terraform destroy
 ```
 
 The state bucket stays (a few kilobytes). Remove it by hand at the very end of the project if you want,
-with the Parameter Store secrets (§0), the Stripe webhook and the Google OAuth client.
+with the Parameter Store secrets (§0) and the Google OAuth client.

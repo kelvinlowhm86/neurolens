@@ -118,7 +118,7 @@
   .btn-primary { background: var(--accent); color: #FFF; border: none; border-radius: var(--radius-sm); padding: 8px 16px; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; }
   .btn-primary:disabled { opacity: 0.5; cursor: default; }
 
-  /* Account, sign-in, history, top-up */
+  /* Account, sign-in, history */
   a.btn-primary { display: inline-block; text-decoration: none; text-align: center; }
   .header-link { font-size: 12px; color: #CBD5E1; background: none; border: 1px solid #334155; border-radius: var(--radius-sm); padding: 4px 10px; cursor: pointer; font-family: inherit; }
   .header-link:hover { color: #FFF; border-color: #94A3B8; }
@@ -138,6 +138,15 @@
   .history-actions a { text-decoration: none; }
   .page-note { font-size: 11px; color: var(--text-muted); margin-top: auto; }
   .page-note a { color: var(--text-muted); }
+  .consent-row { display: flex; align-items: flex-start; gap: 8px; font-size: 12px; line-height: 1.5; color: var(--text-secondary); padding: 0 2px; }
+  .consent-row.hidden { display: none; }
+  .consent-row input { margin-top: 3px; flex-shrink: 0; }
+  .consent-row a { color: var(--accent); }
+  .btn-danger { padding: 6px 14px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--bg-card); color: var(--red); font-size: 12px; cursor: pointer; font-family: 'Plus Jakarta Sans', sans-serif; font-weight: 500; }
+  .btn-danger:hover { border-color: var(--red); }
+  .btn-danger:disabled { opacity: 0.5; cursor: default; }
+  .field-row { display: flex; gap: 8px; }
+  .field-row input { flex: 1; min-width: 0; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 10px; font: inherit; font-size: 12px; }
 
   /* Charts */
   .charts-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 12px; color: var(--text-muted); font-size: 14px; }
@@ -203,17 +212,13 @@
       <div class="upload-subtitle" id="limitsText">MP4, MOV, or WebM</div>
       <input type="file" accept="video/mp4,video/quicktime,video/webm" id="fileInput">
     </div>
+    <div class="consent-row hidden" id="consentRow">
+      <input type="checkbox" id="consentBox">
+      <label for="consentBox">Keep this video and its analysis for up to 12 months to help build a future engagement model. I own the rights to this video. Optional: the analysis works either way. <a href="/static/privacy.html">Privacy policy</a></label>
+    </div>
     <div class="upload-note" id="uploadNote"></div>
     <div class="panel-box" id="noCreditPanel">
       <div class="panel-text">You have no credit yet. Ask the NeuroLens team for test credit.</div>
-    </div>
-    <div class="panel-box" id="topUpPanel">
-      <div class="panel-title">Add test credit — no real charge</div>
-      <div class="panel-text" id="topUpText">Pays with Stripe's test card; nothing is billed.</div>
-      <div class="panel-actions">
-        <button class="btn-new" data-pack="5">Add $5</button>
-        <button class="btn-new" data-pack="10">Add $10</button>
-      </div>
     </div>
 
     <!-- Upload: confirm, progress, result -->
@@ -229,6 +234,17 @@
       </div>
     </div>
 
+    <!-- Real audience retention for a finished, consented job -->
+    <div class="panel-box" id="retentionPanel">
+      <div class="panel-title">Real audience retention</div>
+      <div class="panel-text">Add the video's real audience-retention curve to keep with its analysis. <a href="/static/retention_guide.html">How to get the CSV</a></div>
+      <div class="panel-actions">
+        <button class="btn-new" id="retentionPick">Add real audience retention (CSV)</button>
+      </div>
+      <input type="file" accept=".csv,text/csv" id="retentionInput" hidden>
+      <div class="panel-text" id="retentionMsg"></div>
+    </div>
+
     <!-- Samples carousel -->
     <div class="samples-section" id="samplesSection">
       <div class="samples-label">Sample Videos</div>
@@ -241,6 +257,16 @@
       <div class="history-label">Your analyses</div>
       <div id="historyList"></div>
       <div class="panel-text" id="historyNote"></div>
+    </div>
+
+    <div class="panel-box" id="deleteAccountPanel">
+      <div class="panel-title">Delete my account</div>
+      <div class="panel-text">This deletes every video, analysis and login for this account. Type DELETE to confirm.</div>
+      <div class="field-row">
+        <input id="deleteAccountConfirm" placeholder="DELETE" autocomplete="off" aria-label="Type DELETE to confirm">
+        <button class="btn-danger" id="deleteAccountBtn">Delete my account</button>
+      </div>
+      <div class="panel-text" id="deleteAccountMsg"></div>
     </div>
 
     <div class="page-note"><a href="/static/privacy.html">Privacy policy</a></div>
@@ -355,16 +381,6 @@ async function loadBalance() {
 
 const refreshAccount = () => { loadBalance(); loadHistory(); };
 
-// After a Stripe top-up the credit arrives through the webhook a moment later.
-function watchForCredit(before, tries = 10) {
-  if (tries === 0) return;
-  setTimeout(async () => {
-    await loadBalance();
-    if (me.balance.available_cents > before) { $('topUpText').textContent = 'Credit added.'; return; }
-    watchForCredit(before, tries - 1);
-  }, 3000);
-}
-
 // Start-up: /api/me decides which screen to show. 503 means the database is still waking.
 const STARTUP_RETRIES = 3, STARTUP_RETRY_MS = 5000;
 function startupFailed() {
@@ -393,6 +409,8 @@ function showSignedOut() {
   signedIn = false;
   $('startupPanel').classList.remove('active');
   $('signInPanel').classList.add('active');
+  $('consentRow').classList.add('hidden');
+  $('deleteAccountPanel').classList.remove('active');
   $('headerMeta').textContent = IDLE_HEADER();
 }
 
@@ -402,42 +420,16 @@ function showApp(meJson) {
   $('account').textContent = me.email;
   $('signOut').hidden = false;
   $('uploadZone').classList.remove('hidden');
+  $('consentRow').classList.remove('hidden');
+  $('deleteAccountPanel').classList.add('active');
   $('headerMeta').textContent = IDLE_HEADER();
   showBalance();
   loadLimits();
   loadHistory();
-  if (me.can_top_up) {
-    $('topUpPanel').classList.add('active');
-    const topUp = params.get('top_up');
-    if (topUp) {
-      setParam('top_up', null);
-      $('topUpText').textContent = topUp === 'done'
-        ? 'Payment received. Your credit appears in a few seconds.'
-        : 'Top-up cancelled. Nothing was charged.';
-      if (topUp === 'done') watchForCredit(me.balance.available_cents);
-    }
-  }
   // A link with ?job=<id> resumes that job.
   const jobParam = params.get('job');
   if (jobParam && /^[0-9a-f-]{36}$/i.test(jobParam)) trackJob(jobParam, null);
 }
-
-$('topUpPanel').addEventListener('click', async ev => {
-  const pack = ev.target.dataset && ev.target.dataset.pack;  // packs mirror config.json stripe.packs
-  if (!pack) return;
-  const buttons = $('topUpPanel').querySelectorAll('button');
-  buttons.forEach(b => { b.disabled = true; });  // one checkout at a time
-  $('topUpText').textContent = 'Opening Stripe…';
-  try {
-    const res = await postJSON('/api/top-up/checkout', { pack });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.message || data.error);
-    window.location.assign(data.url);
-  } catch (e) {
-    buttons.forEach(b => { b.disabled = false; });
-    $('topUpText').textContent = `Couldn't start the top-up: ${e.message}`;
-  }
-});
 
 $('signOut').addEventListener('click', async () => {
   const button = $('signOut');
@@ -495,8 +487,31 @@ function historyRow(job) {
     csv.href = `/api/jobs/${job.job_id}/result.csv`;
     actions.append(csv);
   }
+  const del = document.createElement('button'); del.className = 'btn-danger'; del.textContent = 'Delete';
+  del.addEventListener('click', () => deleteJob(job));
+  actions.append(del);
   row.append(main, actions);
   return row;
+}
+
+async function deleteJob(job) {
+  const label = job.filename || `Job ${job.job_id.slice(0, 8)}`;
+  if (!window.confirm(`Delete ${label}? Its video, analysis and data will be removed.`)) return;
+  try {
+    const res = await fetch(`/api/jobs/${job.job_id}`, { method: 'DELETE' });
+    const data = await res.json().catch(() => ({}));
+    if (res.status === 401) return window.location.reload();  // the session ended
+    if (!res.ok) {
+      $('historyPanel').classList.add('active');
+      $('historyNote').textContent = data.message || `Couldn't delete this video (HTTP ${res.status}).`;
+      return;
+    }
+    if (trackedJob === job.job_id) resetUI();
+    refreshAccount();
+  } catch (e) {
+    $('historyPanel').classList.add('active');
+    $('historyNote').textContent = "Couldn't reach the server. Please try again.";
+  }
 }
 
 function historyDetail(job) {
@@ -669,6 +684,7 @@ async function handleFile(file) {
 function showConfirm(file, duration) {
   pendingFile = file; pendingDuration = duration;
   uploadZone.classList.add('hidden');
+  $('consentRow').classList.add('hidden');
   $('samplesSection').style.display = 'none';
   $('upFileName').textContent = file.name;
   $('upDetail').textContent = `${duration.toFixed(1)} s · ${(file.size / 1e6).toFixed(1)} MB`;
@@ -698,6 +714,7 @@ async function startUpload() {
     const res = await postJSON('/api/uploads/presign', {
       filename: file.name, content_type: file.type,
       client_duration_seconds: duration, client_declared_bytes: file.size,
+      research_consent: $('consentBox').checked,
     });
     presign = await res.json();
     if (res.status === 401) return window.location.reload();  // the session ended
@@ -743,7 +760,7 @@ function resetUpload() {
   $('uploadPanel').classList.remove('active');
   $('uploadNote').textContent = '';
   fileInput.value = '';
-  if (signedIn) uploadZone.classList.remove('hidden');
+  if (signedIn) { uploadZone.classList.remove('hidden'); $('consentRow').classList.remove('hidden'); }
   $('samplesSection').style.display = '';
   $('headerMeta').textContent = IDLE_HEADER();
 }
@@ -823,6 +840,7 @@ function trackJob(jobId, file) {
   setJobInUrl(jobId);
   if (!file) {  // opened from a link: show the panel without an upload
     uploadZone.classList.add('hidden');
+    $('consentRow').classList.add('hidden');
     $('samplesSection').style.display = 'none';
     $('upFileName').textContent = `Job ${jobId.slice(0, 8)}`;
     $('upDetail').textContent = ''; $('upCost').textContent = '';
@@ -865,7 +883,7 @@ async function pollJob(jobId, file) {
       const st = await res.json();
       if (trackedJob !== jobId) return;
       if (st.status === 'done') {
-        again = !(await showResult(jobId, file));
+        again = !(await showResult(jobId, file, st.research_consent));
         if (!again) refreshAccount();  // the held amount is now charged
       } else if (st.status === 'failed') {
         again = false;
@@ -891,7 +909,7 @@ async function pollJob(jobId, file) {
 }
 
 // True when the result is on screen; false means "try again on the next poll".
-async function showResult(jobId, file) {
+async function showResult(jobId, file, consented) {
   let result;
   try {
     const res = await fetch(`/api/jobs/${jobId}/result`);
@@ -910,6 +928,7 @@ async function showResult(jobId, file) {
   };
   $('upProgress').classList.remove('active');
   showJobMsg(`Done in ${Math.round(result.processing_time_seconds)}s of analysis time.`);
+  showRetention(consented ? jobId : null);
   $('chartsEmpty').style.display = 'none';
   $('chartsContainer').classList.add('active');
   if (file) {  // the video is only on this computer: a resumed link shows the charts alone
@@ -932,6 +951,37 @@ async function showResult(jobId, file) {
   }));
   return true;
 }
+
+let retentionJob = null;
+function showRetention(jobId) {
+  retentionJob = jobId;
+  $('retentionPanel').classList.toggle('active', !!jobId);
+  $('retentionMsg').textContent = '';
+  $('retentionMsg').classList.remove('error');
+}
+
+$('retentionPick').addEventListener('click', () => $('retentionInput').click());
+$('retentionInput').addEventListener('change', async ev => {
+  const file = ev.target.files[0];
+  ev.target.value = '';
+  if (!file || !retentionJob) return;
+  $('retentionMsg').classList.remove('error');
+  $('retentionMsg').textContent = 'Reading the CSV...';
+  try {
+    const res = await postJSON(`/api/jobs/${retentionJob}/retention`, { csv: await file.text() });
+    const data = await res.json().catch(() => ({}));
+    if (res.status === 401) return window.location.reload();  // the session ended
+    if (!res.ok) {
+      $('retentionMsg').textContent = data.message || `Couldn't save the CSV (HTTP ${res.status}).`;
+      $('retentionMsg').classList.add('error');
+      return;
+    }
+    $('retentionMsg').textContent = 'Real audience retention saved.';
+  } catch (e) {
+    $('retentionMsg').textContent = "Couldn't reach the server. Please try again.";
+    $('retentionMsg').classList.add('error');
+  }
+});
 
 function renderStats() {
   const ts = analysisData.timesteps;
@@ -1014,9 +1064,47 @@ function resetUI() {
   $('chartsEmpty').style.display = '';
   $('chartsContainer').classList.remove('active');
   $('headerMeta').textContent = IDLE_HEADER();
+  showRetention(null);
   resetUpload();
   document.querySelectorAll('.sample-card').forEach(c => c.classList.remove('active'));
 }
+
+// ─── Account deletion (Cognito mode: the server answers 404 in dev mode) ────
+$('deleteAccountBtn').addEventListener('click', async () => {
+  const button = $('deleteAccountBtn');
+  button.disabled = true;  // one request at a time
+  $('deleteAccountMsg').classList.remove('error');
+  $('deleteAccountMsg').textContent = 'Deleting...';
+  try {
+    const res = await postJSON('/api/account/delete', { confirm: $('deleteAccountConfirm').value });
+    const data = await res.json().catch(() => ({}));
+    if (res.status === 401) return window.location.reload();  // the session ended
+    if (!res.ok) {
+      button.disabled = false;
+      $('deleteAccountMsg').textContent = res.status === 404
+        ? 'Account deletion is only available when sign-in is on.'
+        : (data.message || `Couldn't delete the account (HTTP ${res.status}).`);
+      $('deleteAccountMsg').classList.add('error');
+      return;
+    }
+    signedIn = false;
+    resetUI();
+    $('account').textContent = '';
+    $('balance').textContent = '';
+    $('signOut').hidden = true;
+    $('uploadZone').classList.add('hidden');
+    $('consentRow').classList.add('hidden');
+    $('historyPanel').classList.remove('active');
+    $('deleteAccountPanel').classList.remove('active');
+    $('headerMeta').textContent = 'Select a video to view analysis';
+    $('deleteAccountMsg').textContent = 'Your account and data have been deleted.';
+    $('deleteAccountMsg').classList.remove('error');
+  } catch (e) {
+    button.disabled = false;
+    $('deleteAccountMsg').textContent = "Couldn't reach the server. Please try again.";
+    $('deleteAccountMsg').classList.add('error');
+  }
+});
 
 // ─── Start ──────────────────────────────────────────────────────────────────
 start();

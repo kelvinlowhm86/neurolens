@@ -178,7 +178,6 @@ def test_me_in_dev_mode(client):
         "user_id": WEB_USER_ID,
         "email": WEB_USER_EMAIL,
         "balance": {"available_cents": STARTER_CENTS, "reserved_cents": 0},
-        "can_top_up": False,
     }
 
 
@@ -196,11 +195,10 @@ def test_me_shows_a_reservation(client):
 def test_me_in_cognito_mode_after_sign_in(cognito_client, idp):
     sign_in(cognito_client, idp, email="ann@example.com")
     data = cognito_client.get("/api/me").get_json()
-    assert set(data) == {"user_id", "email", "balance", "can_top_up"}
+    assert set(data) == {"user_id", "email", "balance"}
     assert uuid.UUID(data["user_id"])
     assert data["email"] == "ann@example.com"
     assert data["balance"] == {"available_cents": STARTER_CENTS, "reserved_cents": 0}
-    assert data["can_top_up"] is False
 
 
 def test_samples_are_no_longer_an_api_route(client):

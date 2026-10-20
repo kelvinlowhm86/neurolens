@@ -160,9 +160,8 @@ def test_delete_account_removes_every_row_and_keeps_other_users_intact(db, pg):
         assert pg.refund_reason(job_id) is None
     assert pg.one("SELECT * FROM users WHERE user_id = %s", other) is not None
     assert pg.balance(other) is not None
-    assert {
-        job["job_id"] for job in pg.rows("SELECT job_id::text AS job_id FROM jobs WHERE user_id = %s", other)
-    } == {other_job}
+    other_jobs = pg.rows("SELECT job_id::text AS job_id FROM jobs WHERE user_id = %s", other)
+    assert {job["job_id"] for job in other_jobs} == {other_job}
     assert any(row["job_id"] == other_job for row in pg.ledger(other))
     check_invariants(pg.conn)
 
@@ -385,7 +384,7 @@ def test_account_delete_is_409_while_a_job_is_active(cognito_client, idp, db, pg
     assert pg.job(job_id) is not None
 
 
-# ---------------------------------------------------------------- Stripe removal
+# ---------------------------------------------------------------- payment removal
 
 
 def test_me_no_longer_contains_can_top_up(dev_client):

@@ -130,10 +130,7 @@ locals {
       "neurolens-breaker" = "Until it works, only the 3-hour email covers a broken worker. Run infra/stop_work.sh if in doubt."
     } : {},
     { for k, v in local.m3a_lambdas : v.name => "Jobs may be left unsettled." },
-    {
-      (local.web_lambdas.web.name)     = "The website may be failing for users."
-      (local.web_lambdas.webhook.name) = "A paid Stripe test top-up may not have been credited (Stripe retries for 3 days)."
-    },
+    { (local.web_lambdas.web.name) = "The website may be failing for users." },
   )
 }
 
@@ -156,6 +153,40 @@ resource "aws_cloudwatch_metric_alarm" "lambda_errors" {
 
   alarm_actions = [aws_sns_topic.alerts.arn]
   tags          = { Milestone = "M3b" }
+}
+
+# A Cognito account deletion whose login removal failed (M3c §5). The route logs
+# COGNITO_DELETE_FAILED and answers 500 login_delete_failed, so the function itself does not fail
+# and the Lambda error alarm above never fires. The operator deletes the login by hand.
+resource "aws_cloudwatch_log_metric_filter" "cognito_delete_failed" {
+  name           = "neurolens-cognito-delete-failed"
+  log_group_name = aws_cloudwatch_log_group.web["web"].name
+  pattern        = "COGNITO_DELETE_FAILED"
+
+  metric_transformation {
+    name      = "CognitoDeleteFailed"
+    namespace = "NeuroLens"
+    value     = "1"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "cognito_delete_failed" {
+  alarm_name        = "neurolens-cognito-delete-failed"
+  alarm_description = "Removing a deleted account's Cognito login failed. The user's data is gone; delete the login by hand. Its sub is in the COGNITO_DELETE_FAILED log line (/aws/lambda/${local.web_lambdas.web.name})."
+
+  namespace   = "NeuroLens"
+  metric_name = "CognitoDeleteFailed"
+  statistic   = "Sum"
+
+  period              = 300
+  evaluation_periods  = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  threshold           = 1
+  treat_missing_data  = "notBreaching"
+
+  alarm_actions = [aws_sns_topic.alerts.arn]
+  ok_actions    = [aws_sns_topic.alerts.arn]
+  tags          = { Milestone = "M3c" }
 }
 
 # The breaker's own heartbeat: the error alarm above catches a run that fails, not one that never

@@ -11,12 +11,10 @@ M3b (docs/M3b_spec.md §2, §7b, §8): Cognito-mode apps get their settings from
 their Parameter Store secrets from moto (`ssm`). Sign-in goes through §8's seam: `init_auth`
 receives fake `server_metadata`, and `responses` fakes only HTTP (the token endpoint returns an
 ID token signed with a test RSA key, the JWKS URL returns that key), so Authlib's real state,
-nonce and signature checks run and nothing contacts Cognito, Google or Stripe.
+nonce and signature checks run and nothing contacts Cognito or Google.
 """
 
 import base64
-import hashlib
-import hmac
 import importlib
 import json
 import os
@@ -584,24 +582,10 @@ SERVER_METADATA = {
     "token_endpoint": "https://idp.test/oauth2/token",
     "jwks_uri": "https://idp.test/oauth2/jwks.json",
 }
-ALLOWED_EMAIL = "team@example.com"  # on the top-up allowlist (§7b)
-STRIPE_SECRET_KEY = "sk_test_not_a_real_key"
-STRIPE_WEBHOOK_SECRET = "whsec_test_not_a_real_secret"
-PACKS = {"5": 500, "10": 1000}
 WEB_PARAMETERS = {
     "/neurolens/web/cognito_client_secret": "test-client-secret",
     "/neurolens/web/flask_secret_key": "k" * 64,
-    "/neurolens/web/stripe_secret_key": STRIPE_SECRET_KEY,
-    "/neurolens/web/stripe_webhook_secret": STRIPE_WEBHOOK_SECRET,
-    "/neurolens/web/topup_allowlist": f"{ALLOWED_EMAIL},other-team-member@example.com",
 }
-STRIPE_PARAMETERS = [
-    "/neurolens/web/stripe_secret_key",
-    "/neurolens/web/stripe_webhook_secret",
-    "/neurolens/web/topup_allowlist",
-]
-STRIPE_SESSIONS_URL = "https://api.stripe.com/v1/checkout/sessions"
-CHECKOUT_URL = "https://checkout.stripe.com/c/pay/cs_test_fake"
 MISSING = object()  # a claim left out of the ID token
 
 
@@ -619,7 +603,7 @@ def ssm(aws):
 @pytest.fixture
 def cognito_cfg(make_cfg):
     """A Cognito-mode config as the web Lambda has it after settings.apply_env (§2b): every
-    required setting present, Stripe test top-ups on."""
+    required setting present."""
 
     def make(**overrides):
         settings_ = {
@@ -632,7 +616,6 @@ def cognito_cfg(make_cfg):
             "public_base_url": PUBLIC_BASE_URL,
             "deployed": True,
             "db": {"backend": "data_api"},
-            "stripe": {"enabled": True, "packs": dict(PACKS)},
         }
         settings_.update(overrides)
         cfg = make_cfg(**settings_)
@@ -676,7 +659,7 @@ def rsa_keys():
 
 @pytest.fixture
 def fake_http(aws):
-    """Every HTTP request made with `requests` (Authlib, Stripe) must match a registered fake;
+    """Every HTTP request made with `requests` (Authlib) must match a registered fake;
     anything else fails with a connection error instead of reaching the internet."""
     import responses
 
@@ -900,7 +883,6 @@ def lambda_env(aws, ssm, make_cfg, tmp_path, monkeypatch):
             del cfg[name]  # never in the committed config.json
         cfg["paths"] = {"models": "./models", "data": "./data"}
         cfg["db"] = {"backend": "data_api"}
-        cfg["stripe"] = {"enabled": True, "packs": dict(PACKS)}
         cfg.update(overrides)
         (root / "config.json").write_text(json.dumps(cfg))
 
@@ -923,10 +905,3 @@ def lambda_env(aws, ssm, make_cfg, tmp_path, monkeypatch):
     for name, value in env.items():
         monkeypatch.setenv(name, value)
     return SimpleNamespace(root=root, write_config=write_config)
-
-
-def stripe_signature(payload, secret=STRIPE_WEBHOOK_SECRET, timestamp=None):
-    """Stripe's `Stripe-Signature` header: t=<unix time>,v1=<HMAC-SHA256 of "<t>.<raw body>">."""
-    t = int(time.time()) if timestamp is None else timestamp
-    mac = hmac.new(secret.encode(), f"{t}.".encode() + payload, hashlib.sha256).hexdigest()
-    return f"t={t},v1={mac}"

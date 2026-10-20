@@ -139,6 +139,13 @@ resource "aws_iam_role_policy" "worker" {
         Resource = "${aws_s3_bucket.main.arn}/results/*"
       },
       {
+        # Consented videos and their analysis for future research (M3c §3b). The copy is a put.
+        Sid      = "WriteDataset"
+        Effect   = "Allow"
+        Action   = "s3:PutObject"
+        Resource = "${aws_s3_bucket.main.arn}/dataset/*"
+      },
+      {
         # Boot records for the cold-start table (M2b §10). Write only.
         Sid      = "WriteBootRecords"
         Effect   = "Allow"

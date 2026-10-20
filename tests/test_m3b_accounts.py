@@ -2,8 +2,8 @@
 Written first from docs/M3b_spec.md §2c, §7a, §7b and §8: `sign_in`'s linking rule (one user per
 verified email, our own UUIDs, no ledger row for 0 starter credit), two simultaneous first
 sign-ins ending as one user, `ensure_user` without a starter row for 0, `grant_credit`,
-`credit_test_topup` crediting each Stripe event and session once, `list_jobs`, and the 002
-migration. The Data API backend is checked on Aurora by infra/check_aurora.py (§7c).
+`list_jobs`, and the 002 migration. The Data API backend is checked on Aurora by
+infra/check_aurora.py (§7c).
 
 The M3a ledger invariants are checked after every test by the shared fixture.
 """
@@ -36,14 +36,14 @@ def reserve_job(db, user_id, seconds=27.4):
 # ---------------------------------------------------------------- the 002 migration
 
 
-def test_migration_adds_identities_and_stripe_test_events(pg):
+def test_migration_adds_identities(pg):
     names = {
         r["table_name"]
         for r in pg.rows(
             "SELECT table_name FROM information_schema.tables WHERE table_schema = current_schema()"
         )
     }
-    assert {"identities", "stripe_test_events"} <= names
+    assert "identities" in names
 
 
 def test_emails_are_unique_whatever_their_letter_case(db):
@@ -244,73 +244,6 @@ def test_grant_credit_to_an_unknown_email_raises_lookup_error(db, pg):
     with pytest.raises(LookupError):
         billing.grant_credit(db, "nobody@example.com", 100)
     assert pg.snapshot() == before
-
-
-# ---------------------------------------------------------------- credit_test_topup (§7b)
-
-
-def stripe_events(pg):
-    return pg.rows("SELECT event_id, session_id, user_id, cents FROM stripe_test_events")
-
-
-def test_a_test_topup_credits_the_cents_with_a_test_topup_row(db, pg):
-    user_id = billing.sign_in(db, ISSUER, "sub-1", "team@example.com", 0)
-    assert billing.credit_test_topup(db, "evt_1", "cs_test_1", user_id, 500) is True
-    assert pg.balance(user_id) == (500, 0)
-    [row] = pg.ledger(user_id)
-    assert row["kind"] == "test_topup"
-    assert (row["available_delta_cents"], row["reserved_delta_cents"]) == (500, 0)
-    assert stripe_events(pg) == [
-        {"event_id": "evt_1", "session_id": "cs_test_1", "user_id": user_id, "cents": 500}
-    ]
-
-
-def test_the_same_event_twice_credits_once(db, pg):
-    user_id = billing.sign_in(db, ISSUER, "sub-1", "team@example.com", 0)
-    assert billing.credit_test_topup(db, "evt_1", "cs_test_1", user_id, 500) is True
-    assert billing.credit_test_topup(db, "evt_1", "cs_test_1", user_id, 500) is False
-    assert pg.balance(user_id) == (500, 0)
-    assert pg.kinds(user_id) == ["test_topup"]
-
-
-def test_the_same_session_under_another_event_credits_once(db, pg):
-    user_id = billing.sign_in(db, ISSUER, "sub-1", "team@example.com", 0)
-    assert billing.credit_test_topup(db, "evt_1", "cs_test_1", user_id, 500) is True
-    assert billing.credit_test_topup(db, "evt_2", "cs_test_1", user_id, 500) is False
-    assert pg.balance(user_id) == (500, 0)
-    assert len(stripe_events(pg)) == 1
-
-
-def test_two_different_sessions_both_credit(db, pg):
-    user_id = billing.sign_in(db, ISSUER, "sub-1", "team@example.com", 0)
-    assert billing.credit_test_topup(db, "evt_1", "cs_test_1", user_id, 500) is True
-    assert billing.credit_test_topup(db, "evt_2", "cs_test_2", user_id, 1000) is True
-    assert pg.balance(user_id) == (1500, 0)
-    assert pg.kinds(user_id) == ["test_topup", "test_topup"]
-
-
-def test_two_simultaneous_deliveries_of_one_event_credit_once(db, pg, row_lock):
-    user_id = billing.sign_in(db, ISSUER, "sub-1", "team@example.com", 0)
-    lock = row_lock()
-    lock.execute("LOCK TABLE stripe_test_events IN EXCLUSIVE MODE")
-    results, errors = [], []
-
-    def run():
-        try:
-            results.append(billing.credit_test_topup(db, "evt_1", "cs_test_1", user_id, 500))
-        except Exception as err:
-            errors.append(err)
-
-    threads = [threading.Thread(target=run) for _ in range(2)]
-    for t in threads:
-        t.start()
-    lock.wait_for_blocked(2)
-    lock.release()
-    for t in threads:
-        t.join(timeout=20)
-    assert not errors, errors
-    assert sorted(results) == [False, True]
-    assert pg.balance(user_id) == (500, 0)
 
 
 # ---------------------------------------------------------------- list_jobs (§4a)

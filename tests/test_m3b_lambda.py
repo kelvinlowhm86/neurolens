@@ -1,7 +1,7 @@
 """M3b web Lambda launcher and import hygiene. Written first from docs/M3b_spec.md §3a, §7b, §8
 and §11: `neurolens.web.lambda_handler.handler` answers a function-URL event (payload 2.0) for
 /healthz, returns several Set-Cookie values as separate cookies, and builds the app once per
-container; the web and webhook code never import neurolens.inference, torch or numpy.
+container; the web code never imports neurolens.inference, torch or numpy.
 """
 
 import base64
@@ -19,7 +19,6 @@ WEB_MODULES = [
     "neurolens.web.app",
     "neurolens.web.auth",
     "neurolens.web.lambda_handler",
-    "neurolens.web.stripe_webhook",
     "neurolens.results",
 ]
 
@@ -151,7 +150,7 @@ def loaded_after_import(code):
 
 
 @pytest.mark.parametrize("module", WEB_MODULES)
-def test_web_and_webhook_code_imports_without_inference_torch_or_numpy(module):
+def test_web_code_imports_without_inference_torch_or_numpy(module):
     code = (
         "import importlib, json, sys; "
         f"importlib.import_module({module!r}); "

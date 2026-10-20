@@ -165,14 +165,13 @@ def test_presign_failing_after_the_reservation_refunds_it(client, pg, patch_ever
 
 
 def test_me_returns_email_and_balance(client):
-    """M3b §4a's shape: the balance grouped under one key; no top-ups in dev mode."""
+    """M3b §4a's shape: the balance grouped under one key."""
     resp = client.get("/api/me")
     assert resp.status_code == 200
     assert resp.get_json() == {
         "user_id": WEB_USER_ID,
         "email": WEB_USER_EMAIL,
         "balance": {"available_cents": STARTER_CENTS, "reserved_cents": 0},
-        "can_top_up": False,
     }
 
 
@@ -189,7 +188,6 @@ def test_me_uses_create_apps_built_in_dev_user_without_a_cfg(aws, db, tmp_path):
         "user_id": "dev-user",
         "email": "dev@localhost",
         "balance": {"available_cents": 500, "reserved_cents": 0},
-        "can_top_up": False,
     }
 
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Ships the last commit as the website (M3b §3c): the code of both web functions, then the page
+# Ships the last commit as the website (M3b §3c): the web function's code, then the page
 # and its sample data into the bucket's site/ prefix, then clears CloudFront's cache so the new
 # page shows at once. Run after `terraform apply` has created the functions.
 set -euo pipefail
@@ -13,9 +13,9 @@ TF="terraform -chdir=infra/terraform"
 BUCKET=$($TF output -raw bucket_name)
 DISTRIBUTION=$($TF output -raw cloudfront_distribution_id)
 
-# 1. Code. Both functions run the same zip; wait until each update is live.
+# 1. Code. Wait until the update is live.
 infra/build_web_lambda.sh
-for fn in neurolens-web neurolens-stripe-webhook; do
+for fn in neurolens-web; do
   aws lambda update-function-code --function-name "$fn" --zip-file fileb://build/web_lambda.zip \
     --query LastUpdateStatus --output text >/dev/null
   aws lambda wait function-updated --function-name "$fn"

@@ -20,7 +20,7 @@
 <body>
 <main>
   <h1>NeuroLens privacy policy</h1>
-  <p class="updated">Last updated: 8 October 2026</p>
+  <p class="updated">Last updated: 20 October 2026</p>
 
   <p>NeuroLens is a university course project. It predicts how a video engages different brain
   regions and shows the result as charts. It is not a commercial service. This page says what
@@ -33,30 +33,44 @@
     <li><strong>Videos you upload</strong>, and the analysis results made from them.</li>
     <li><strong>A job record</strong> for each upload: the file name, when it ran, how long the
     video was and what it cost in credit.</li>
+    <li><strong>Your consent choice</strong> for each upload: whether you agreed to keep it for
+    future research. The box is unticked by default and the analysis works either way.</li>
+    <li><strong>A real audience-retention CSV</strong>, if you choose to add one to a video you
+    consented to keep.</li>
   </ul>
   <p>We do not receive your Google password or your contacts. If you sign in with Google, we
   receive only your email address and whether Google has verified it.</p>
 
   <h2>How long we keep it</h2>
   <ul>
-    <li>Uploaded videos are deleted automatically after 2 days.</li>
+    <li>Uploaded videos that are not kept for research are deleted automatically within 3 days
+    (the 2-day rule, rounded to midnight UTC). This includes an upload that arrives after its job
+    was refunded: it is removed only by that 2-day rule.</li>
     <li>Results are deleted automatically after 30 days.</li>
-    <li>Your email address and job records stay until the project is taken down, or until you ask
-    for them to be deleted.</li>
+    <li>A video you consented to keep, its analysis and any real audience-retention CSV you add
+    are kept for up to 12 months, then deleted automatically. They are used only to help build a
+    future engagement model.</li>
+    <li>Your email address and job records stay until you delete your account, or until the
+    project is taken down.</li>
   </ul>
+
+  <h2>Consent for research</h2>
+  <p>Each upload has a separate, optional consent box. If you tick it, you confirm that you own
+  the rights to the video and agree that NeuroLens may keep the video and its analysis for up to
+  12 months to help build a future engagement model. If you leave it unticked, your video is
+  analysed exactly the same way and is not kept beyond the normal retention periods above.</p>
 
   <h2>Who can see it</h2>
   <p>Only you, and the NeuroLens team, can see your videos and results. We do not sell or share
   them, and we do not use them for advertising. Everything is stored with Amazon Web Services in
   the United States (us-east-1). Sign-in is handled by Amazon Cognito.</p>
 
-  <h2>Payments</h2>
-  <p>NeuroLens takes no real payments. Where a team member can add test credit, it uses Stripe's
-  test mode: no real card is charged and we store no card details.</p>
-
-  <h2>Asking about or deleting your data</h2>
-  <p>To ask what we hold about you, or to have your account and uploads deleted, email the team
-  at the contact address shown on the Google sign-in screen.</p>
+  <h2>Deleting your data</h2>
+  <p>You can delete any analysis from your history on the main page: this removes its video,
+  result and dataset files. You can also delete your whole account there by typing DELETE to
+  confirm; this removes every video, analysis and row we hold, and your NeuroLens login. A
+  deletion is refused while one of your videos is still queued or processing. To ask what we
+  hold about you, email the team at the contact address shown on the Google sign-in screen.</p>
 
   <p><a href="/">Back to NeuroLens</a></p>
 </main>

@@ -27,6 +27,12 @@
       "Condition": {"StringEquals": {"kms:ViaService": "ssm.us-east-1.amazonaws.com"}}
     },
     {
+      "Sid": "DeleteCognitoLoginsInOurPool",
+      "Effect": "Allow",
+      "Action": ["cognito-idp:ListUsers", "cognito-idp:AdminDeleteUser"],
+      "Resource": "arn:aws:cognito-idp:us-east-1:*:userpool/*"
+    },
+    {
       "Sid": "ReadGroupsAndAlarms",
       "Effect": "Allow",
       "Action": ["autoscaling:DescribeAutoScalingGroups", "cloudwatch:DescribeAlarms"],

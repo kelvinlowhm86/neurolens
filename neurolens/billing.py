@@ -195,22 +195,6 @@ def grant_credit(db, email, cents):
     return user_id
 
 
-def credit_test_topup(db, event_id, session_id, user_id, cents):
-    """Credit one Stripe test-mode payment (M3b §7b), once per event and once per session: True
-    only when it credited."""
-    with db.transaction() as tx:
-        recorded = tx.execute(
-            "INSERT INTO stripe_test_events (event_id, session_id, user_id, cents) "
-            "VALUES (:event_id, :session_id, :user_id, :cents) "
-            "ON CONFLICT DO NOTHING RETURNING event_id",
-            {"event_id": event_id, "session_id": session_id, "user_id": user_id, "cents": cents},
-        )
-        if not recorded:
-            return False
-        _move(tx, user_id, None, "test_topup", cents, 0)
-    return True
-
-
 def list_jobs(db, user_id, limit):
     """The user's jobs, newest first, at most `limit` (M3b §4a). Deleted jobs are left out
     (M3c §4)."""
