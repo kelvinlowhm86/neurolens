@@ -51,3 +51,7 @@ Edits later: open the policy, Edit, paste the new file. AWS keeps up to five ver
 - A `neurolens-` machine's type can be changed while it is stopped. Same backstop.
 - Later milestones need more (M2b metrics, M3 database and secrets): widen the boundary and the deploy
   policies then, by the same steps.
+- The boundary names our Cognito user pool by its ID (`DeleteCognitoLoginsInOurPool`), so deleting an
+  account can never remove logins from another project's pool in this account. If the pool is ever
+  recreated (teardown, a new account), put the new ID there and re-apply; until then account deletion
+  fails to remove logins and the `COGNITO_DELETE_FAILED` alarm emails.

@@ -30,7 +30,7 @@
       "Sid": "DeleteCognitoLoginsInOurPool",
       "Effect": "Allow",
       "Action": ["cognito-idp:ListUsers", "cognito-idp:AdminDeleteUser"],
-      "Resource": "arn:aws:cognito-idp:us-east-1:*:userpool/*"
+      "Resource": "arn:aws:cognito-idp:us-east-1:*:userpool/us-east-1_aW04PyNvi"
     },
     {
       "Sid": "ReadGroupsAndAlarms",
