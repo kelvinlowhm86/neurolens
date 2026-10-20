@@ -133,7 +133,7 @@ if [ "$WORKER" = 1 ]; then
   aws autoscaling update-auto-scaling-group --auto-scaling-group-name "$ASG" \
     --min-size 1 --max-size "$MAX" --desired-capacity "$((DES > 1 ? DES : 1))"
   echo "Warm hold until $END UTC: one worker is starting or running (billed from now) and stays even with no jobs."
-  echo "After that, AWS ends it once the queue has been empty for 15 minutes. Run again to extend."
+  echo "After that, AWS ends it once the queue has been empty for 7 minutes. Run again to extend."
   [ "$DB_AWAKE" = 0 ] || echo "The hold's end does not release Aurora: only infra/stop_work.sh does (or the 6-hour database email)."
 else
   # Never touches the minimum or the hold's end, so it cannot end a running hold.

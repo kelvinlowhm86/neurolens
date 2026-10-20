@@ -43,6 +43,13 @@
       "Resource": "arn:aws:cloudwatch:us-east-1:*:alarm:neurolens-*"
     },
     {
+      "Sid": "AlarmEc2ActionsServiceRole",
+      "Effect": "Allow",
+      "Action": "iam:CreateServiceLinkedRole",
+      "Resource": "arn:aws:iam::*:role/aws-service-role/events.amazonaws.com/AWSServiceRoleForCloudWatchEvents",
+      "Condition": {"StringEquals": {"iam:AWSServiceName": "events.amazonaws.com"}}
+    },
+    {
       "Sid": "EmailTopicsOnlyNeurolens",
       "Effect": "Allow",
       "Action": "sns:*",

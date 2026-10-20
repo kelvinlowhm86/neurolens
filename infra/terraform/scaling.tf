@@ -2,7 +2,7 @@
 # From M2b only AWS decides how many workers run (the worker never ends its own machine):
 # - scale out: a job waiting in the queue adds a worker, up to the group's max (1, or 2 for
 #   Experiment 2). Outside a session the max is 0, so an upload waits for the next session.
-# - scale in: queue empty (waiting and in-progress jobs) for 15 minutes sets the group to 0.
+# - scale in: queue empty (waiting and in-progress jobs) for 7 minutes sets the group to 0.
 # - circuit breaker: every 5 minutes a Lambda checks the idle alarm (alarm.tf); while it is in
 #   ALARM and no warm hold is on, it sets the group to max 0, so a broken worker is not replaced in
 #   a loop. Nothing launches again until start_work.sh.
@@ -66,12 +66,12 @@ resource "aws_cloudwatch_metric_alarm" "scale_in" {
   count = local.workers_enabled ? 1 : 0
 
   alarm_name        = "neurolens-worker-scale-in"
-  alarm_description = "The NeuroLens job queue has been empty for 15 minutes: set the worker group to 0 (a warm hold keeps its minimum)."
+  alarm_description = "The NeuroLens job queue has been empty for 7 minutes: set the worker group to 0 (a warm hold keeps its minimum)."
 
   comparison_operator = "LessThanOrEqualToThreshold"
   threshold           = 0
-  evaluation_periods  = 15
-  datapoints_to_alarm = 15
+  evaluation_periods  = 7
+  datapoints_to_alarm = 7
   # After hours of quiet SQS stops publishing these metrics: no data counts as an empty queue.
   treat_missing_data = "breaching"
 

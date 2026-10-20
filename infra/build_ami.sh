@@ -12,9 +12,9 @@
 #
 # Base image: plain Ubuntu 22.04 plus the NVIDIA server driver (§2).
 # Needs: terraform applied (network, roles), and infra/deploy_code.sh run (code/latest.zip).
-# Money guards: the build instance is terminated when this script exits (errors and Ctrl-C too);
-# every remote step has a deadline; and the instance shuts itself down (= terminates) after 4 hours
-# even if this Mac sleeps or loses its connection.
+# Money guards: the build instance is terminated when this script exits (errors and Ctrl-C too); a
+# CloudWatch alarm terminates it if it hangs; every remote step has a deadline; and the instance
+# shuts itself down (= terminates) after 4 hours even if this Mac sleeps or loses its connection.
 # The HuggingFace token never touches this Mac: the instance reads it from Parameter Store.
 set -euo pipefail
 source "$(dirname "$0")/aws_env.sh"   # AWS_PROFILE, AWS_REGION (M2a §4i)
@@ -83,6 +83,11 @@ step_driver() {
   cat <<'EOF'
 export DEBIAN_FRONTEND=noninteractive
 cloud-init status --wait >/dev/null || true
+# The money guard, checked before any work on every path, once UserData (which arms it) has
+# finished: the 4-hour shutdown must be scheduled.
+test -f /run/systemd/shutdown/scheduled \
+  || { log "[driver] FAILED: the 4-hour shutdown is not scheduled"; exit 1; }
+log "[driver] 4-hour shutdown scheduled: $(sed -n 's/^USEC=//p' /run/systemd/shutdown/scheduled | cut -c1-10 | xargs -I{} date -u -d @{} +%H:%M) UTC"
 APT="apt-get -q -y -o DPkg::Lock::Timeout=600"
 BRANCH=570
 log "[driver] apt: NVIDIA $BRANCH-server driver (prebuilt modules for the AWS kernel), running kernel $(uname -r)"
@@ -144,7 +149,9 @@ fi
 
 mkdir -p /opt/neurolens/cache /opt/neurolens/bin
 # Keep in step with worker_userdata.sh.tftpl. The Deep Learning base image mounts the instance-store
-# disk itself at boot (so mkfs is refused): reuse that mount when there is one.
+# disk itself at boot (so mkfs is refused): reuse that mount when there is one. The fallback to a
+# folder on the root disk is for the CPU rehearsal only; a real build fails below, so weights can
+# never be baked into the image.
 lsblk -o NAME,MODEL,SIZE,TYPE,MOUNTPOINT
 DISK=$(lsblk -dno NAME,MODEL | awk '/Instance Storage/ {print "/dev/" $1; exit}')
 if mountpoint -q /opt/neurolens/cache; then
@@ -158,6 +165,10 @@ elif mkfs.ext4 -q -F "$DISK" && mount "$DISK" /opt/neurolens/cache; then
   log "[install] fast local disk $DISK formatted and mounted at /opt/neurolens/cache"
 else
   log "[install] could not use $DISK: /opt/neurolens/cache is a folder on the root disk (slower)"
+fi
+if [ "${REHEARSAL:-0}" = 0 ] && ! mountpoint -q /opt/neurolens/cache; then
+  log "[install] FAILED: /opt/neurolens/cache is not a separately mounted disk: weights would be baked into the image"
+  exit 1
 fi
 
 log "[install] Python 3.12 (uv) and the virtualenv"
@@ -175,15 +186,13 @@ rm /tmp/neurolens-code.zip
 log "[install] requirements/model.txt (torch with CUDA libraries)"
 uv pip install --python /opt/neurolens/venv/bin/python -r /opt/neurolens/app/requirements/model.txt
 
-log "[install] worker units and scripts (worker service left disabled)"
-install -m 755 /opt/neurolens/app/infra/pull_code.sh /opt/neurolens/app/infra/self_terminate.sh /opt/neurolens/bin/
-install -m 644 /opt/neurolens/app/infra/neurolens-worker.service \
-  /opt/neurolens/app/infra/neurolens-self-terminate.service /etc/systemd/system/
+log "[install] worker unit and script (worker service left disabled)"
+install -m 755 /opt/neurolens/app/infra/pull_code.sh /opt/neurolens/bin/
+install -m 644 /opt/neurolens/app/infra/neurolens-worker.service /etc/systemd/system/
 systemctl daemon-reload
 systemctl disable neurolens-worker || true
 
 log "[install] checks: $(systemd --version | head -1)"
-test "$(systemd --version | awk 'NR==1 {print $2}')" -ge 249   # OnSuccess= needs 249+
 test "$(systemctl is-enabled neurolens-worker || true)" = disabled
 command -v ffmpeg ffprobe aws >/dev/null
 # Imports as the worker does: `python worker.py` from the app folder puts it on the import path.
@@ -348,6 +357,18 @@ INSTANCE=""
 cleanup() {
   set +e
   trap '' INT
+  # The guard alarm can also catch an instance launched just before a Ctrl-C, whose ID this script
+  # never received: remove every guard alarm (a build runs one at a time).
+  GUARDS=$(aws cloudwatch describe-alarms --alarm-name-prefix neurolens-build-guard- \
+    --query 'MetricAlarms[].AlarmName' --output text 2>/dev/null)
+  if [ -n "$GUARDS" ] && [ "$GUARDS" != None ]; then
+    # shellcheck disable=SC2086  # GUARDS is a whitespace-separated list on purpose
+    if aws cloudwatch delete-alarms --alarm-names $GUARDS --output text >/dev/null; then
+      say "deleted build guard alarm(s): $GUARDS"
+    else
+      echo "!! could not delete build guard alarm(s) $GUARDS: delete them in the CloudWatch console" >&2
+    fi
+  fi
   # Terminate first, print after: a closed terminal must not stop the terminate call. Also catch
   # an instance launched just before a Ctrl-C, whose ID this script never received.
   IDS=$(aws ec2 describe-instances --filters Name=tag:Project,Values=neurolens Name=tag:Role,Values=build \
@@ -469,6 +490,21 @@ for TYPE in $TYPES; do
 done
 [ -n "$INSTANCE" ] || { say "FAILED: no zone has capacity for $TYPES right now; try again later"; exit 1; }
 say "instance $INSTANCE ($TYPE) launched in $ZONE (billed from now); waiting for Session Manager"
+# Money guard outside the instance: terminate it if it hangs (e.g. during the driver reboot) even if
+# this Mac sleeps. StatusCheckFailed comes from the hypervisor, so it still reports when the OS hangs
+# (a metric published by the instance itself, or an SSM-based check, would not); 10 consecutive
+# 1-minute periods let a normal reboot pass without tripping it. The alarm's action is EC2's own
+# terminate action, so CloudWatch runs it without any permission from this user.
+GUARD="neurolens-build-guard-$INSTANCE"
+aws cloudwatch put-metric-alarm --region "$AWS_REGION" --alarm-name "$GUARD" \
+  --alarm-description "Terminate build instance $INSTANCE if its status checks fail for 10 minutes: a hung build still bills." \
+  --namespace AWS/EC2 --metric-name StatusCheckFailed \
+  --dimensions "Name=InstanceId,Value=$INSTANCE" \
+  --statistic Maximum --period 60 --evaluation-periods 10 --datapoints-to-alarm 10 \
+  --threshold 1 --comparison-operator GreaterThanOrEqualToThreshold \
+  --treat-missing-data notBreaching \
+  --alarm-actions "arn:aws:automate:$AWS_REGION:ec2:terminate"
+say "guard alarm $GUARD terminates the instance after 10 minutes of failed status checks"
 aws ec2 wait instance-running --instance-ids "$INSTANCE"
 for i in $(seq 1 60); do
   [ "$(aws ssm describe-instance-information --filters "Key=InstanceIds,Values=$INSTANCE" \
@@ -477,7 +513,10 @@ for i in $(seq 1 60); do
   sleep 10
 done
 
-step_driver | ssm_run "NVIDIA driver" 1800
+# Deadlines are the second argument of each ssm_run, plus 600 s polling slack each. They add up to
+# 900 + 600 + 1800 + 5400 + 900 = 9,600 s (160 min); with the five 600 s slacks, 12,600 s (210 min),
+# under the 4-hour (240 min) self-shutdown. The weights step gets the most (90 min: two full runs).
+step_driver | ssm_run "NVIDIA driver" 900
 # The boot ID changes with every boot: a step that reports a new one ran after the reboot.
 BOOT_BEFORE=$(remote_boot_id)
 [ -n "$BOOT_BEFORE" ] || { say "FAILED: cannot read the instance's boot ID"; exit 1; }
@@ -492,8 +531,8 @@ done
 say "back after the reboot"
 step_driver_check | ssm_run "driver check" 600
 
-STEP_ENV="export BUCKET=$BUCKET"
-step_install | ssm_run "install software" 3600
+STEP_ENV="export BUCKET=$BUCKET REHEARSAL=$REHEARSAL"
+step_install | ssm_run "install software" 1800
 
 if [ "$REHEARSAL" = 1 ]; then
   say "REHEARSAL OK: the driver and software install work on $TYPE."
@@ -504,9 +543,9 @@ CONFIG_B64=$(python3 -c 'import json; c = json.load(open("config.json")); c["pat
   "models": "/opt/neurolens/cache/models", "data": "/opt/neurolens/cache/data"}
 print(json.dumps(c, indent=2))' | base64 | tr -d '\n')
 STEP_ENV="export BUCKET=$BUCKET REFRESH=$REFRESH CONFIG_B64=$CONFIG_B64"
-step_weights | ssm_run "weights and pipeline" 7200
+step_weights | ssm_run "weights and pipeline" 5400
 STEP_ENV=""
-step_scrub | ssm_run "scrub" 1800
+step_scrub | ssm_run "scrub" 900
 
 say "stopping the instance for a consistent image"
 aws ec2 stop-instances --instance-ids "$INSTANCE" --output text >/dev/null

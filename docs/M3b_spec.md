@@ -206,7 +206,7 @@ An independent track.
 Deleted once the system runs end to end on the GPU and is reviewed, before the experiments and user testing (one clean merge):
 - the NAT instance and its start/stop steps (§5, done in M3b);
 - the reaper's on/off steps in `start_work.sh`/`stop_work.sh` (§6, done in M3b);
-- `infra/self_terminate.sh` and `infra/neurolens-self-terminate.service` (already masked on workers; removed from the image at the next build), **and `self_terminate.sh` from `pull_code.sh`'s `install` line**: that script stops at the first error, so deleting the file alone would stop every worker from starting.
+- The worker's shutdown script and systemd unit, and that script from `pull_code.sh`'s `install` line (done: the files are deleted and every mention is gone from `pull_code.sh`, `build_ami.sh`, `deploy_code.sh` and UserData).
 
 Removed in M3b itself (not waiting for the merge): `infra/restart_workers.sh` (folded into `deploy_code.sh`, §5); `build_ami.sh --dlami` (a fallback never needed: both images built on plain Ubuntu).
 

@@ -31,8 +31,8 @@ it created. The region is one setting (`region` in `terraform.tfvars`, default `
 
 **Cost:** with everything stopped, the running cost is the stored image and disks and the S3 files,
 roughly $3 a month (plus about $3 for the reaper waking Aurora every 3 hours). Machines bill only while a session is open: the NAT Gateway about $1.20 a day while `nat_gateway` is true, a
-GPU worker $1.86 an hour (g6e.xlarge; $2.24 for the g6e.2xlarge fallback). A worker ends itself after
-30 idle minutes, but always end a session with `infra/stop_work.sh` (section 5).
+GPU worker $1.86 an hour (g6e.xlarge; $2.24 for the g6e.2xlarge fallback). AWS ends a worker 7
+minutes after the job queue empties, but always end a session with `infra/stop_work.sh` (section 5).
 
 ## 0. Before you start (once)
 
@@ -119,7 +119,7 @@ Only AWS decides; the worker never ends its own machine.
 - **Scale out:** a job waiting in the queue for a minute adds a worker (two when two or more wait),
   up to the group's max. A new worker counts as "starting" for 15 minutes
   (`scale_out_warmup_seconds`), so one waiting job never launches a second worker while the first boots.
-- **Scale in:** when the queue has had no waiting or running job for 15 minutes, the group goes to 0.
+- **Scale in:** when the queue has had no waiting or running job for 7 minutes, the group goes to 0.
   A worker holding a job protects its own machine from scale-in until the job ends, because the
   queue's numbers reach CloudWatch a few minutes late.
 - **Circuit breaker:** if a worker is in service but nothing has moved in the queue for 90 minutes
@@ -131,7 +131,7 @@ Only AWS decides; the worker never ends its own machine.
 - **Warm hold:** `start_work.sh --keep-worker --hours N` keeps one worker for N hours (1 to 4) even with no
   jobs: the group's minimum is 1, which scale-in, the idle alarm and the breaker all respect. An
   AWS-side timer (`neurolens-warm-hold-end`) sets the minimum back to 0 at the end, even if your
-  laptop is off; then the worker goes once the queue has been empty for 15 minutes.
+  laptop is off; then the worker goes once the queue has been empty for 7 minutes.
 
 To change the region: edit `region`, `zones` and `build_extra_zones` together, make sure GPU quota
 exists in the new region, then rebuild the image there. Every script in `infra/` reads the region
@@ -218,7 +218,7 @@ and that no NAT Gateway or Elastic IP is left: if one is, set `nat_gateway = fal
 Terraform cannot answer, it stops nothing and prints the `terraform init` command to fix it. An
 image-build machine is listed, not stopped, with the command to end it if no build is running.
 
-**Manual work on a worker.** Scale-in ends a worker 15 minutes after the queue empties, and none of
+**Manual work on a worker.** Scale-in ends a worker 7 minutes after the queue empties, and none of
 the rules can see work done by hand (Session Manager). Start a warm hold first
 (`start_work.sh --keep-worker --hours N`); run it again to extend. During a hold of more than 90 minutes
 without jobs, the idle alarm still emails, but changes nothing.

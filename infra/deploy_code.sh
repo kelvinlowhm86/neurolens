@@ -19,7 +19,7 @@ BUCKET=$(terraform -chdir=infra/terraform output -raw bucket_name)
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 git archive --format=zip -o "$TMP/code.zip" HEAD worker.py neurolens pyproject.toml requirements \
-  infra/pull_code.sh infra/self_terminate.sh infra/neurolens-worker.service infra/neurolens-self-terminate.service
+  infra/pull_code.sh infra/neurolens-worker.service
 git rev-parse --short HEAD > "$TMP/code.revision"
 aws s3 cp "$TMP/code.zip"      "s3://$BUCKET/code/latest.zip" --only-show-errors
 aws s3 cp "$TMP/code.revision" "s3://$BUCKET/code/latest.revision" --only-show-errors

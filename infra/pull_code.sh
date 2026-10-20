@@ -23,6 +23,6 @@ test -f "$TMP/code/worker.py"   # a broken bundle must not replace working code
 mkdir -p "$APP" "$BIN"
 rm -rf "$APP/neurolens"
 cp -a "$TMP/code/." "$APP/"
-install -m 755 "$TMP/code/infra/pull_code.sh" "$TMP/code/infra/self_terminate.sh" "$BIN/"
+install -m 755 "$TMP/code/infra/pull_code.sh" "$BIN/"
 cp "$TMP/revision" "$APP/REVISION"
 echo "pulled code $(cat "$APP/REVISION")"

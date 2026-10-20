@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Opens a shell on the running worker through Session Manager (no SSH). Needs the AWS Session
 # Manager plugin for the AWS CLI on this Mac.
-# Refuses unless a warm hold is on: otherwise AWS ends the worker 15 minutes after the job queue
+# Refuses unless a warm hold is on: otherwise AWS ends the worker 7 minutes after the job queue
 # empties, in the middle of the session (M2b §2).
 set -euo pipefail
 source "$(dirname "$0")/aws_env.sh"   # AWS_PROFILE, AWS_REGION (M2a §4i)

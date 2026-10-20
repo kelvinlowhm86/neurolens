@@ -47,12 +47,12 @@ resource "aws_cloudwatch_metric_alarm" "worker_running_long" {
 }
 
 # A worker always picks up or finishes a job within 90 minutes when healthy (longest job about
-# 55 minutes; scale-in ends an idle worker after 15). So no queue activity for 90 minutes with a
+# 55 minutes; scale-in ends an idle worker after 7). So no queue activity for 90 minutes with a
 # worker in service means a crash loop, broken code, a frozen job, no NAT Gateway or a warm hold
 # (M2b §2d; the hold keeps its worker and the breaker skips it).
 # Missing SQS data (queues stop publishing after ~6 idle hours) counts as no activity; missing
 # group data never fires it. Manual work needs a warm hold (start_work.sh --keep-worker), not a pause:
-# scale-in would end the worker 15 minutes after the queue empties anyway.
+# scale-in would end the worker 7 minutes after the queue empties anyway.
 # workers_to_zero is scale-in's action (scaling.tf); the idle alarm no longer uses it.
 resource "aws_autoscaling_policy" "workers_to_zero" {
   count = local.workers_enabled ? 1 : 0

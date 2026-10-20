@@ -601,6 +601,41 @@ The `modality dropout (p=0.3)` during training means any modality can be zeroed 
 
 ---
 
+## Deploying on AWS (custom GPU workers)
+
+This version runs the model on our own GPU machines (an Auto Scaling group of `g6e.xlarge` workers that starts on demand and scales to zero), with Cognito sign-in and Stripe **test-mode** top-ups. The detailed commands live in `infra/terraform/README.md` (referred to below by section); this is the order, from an empty AWS account.
+
+**Costs:** stopped, about $6 a month (stored image, disks, S3, the reaper waking the database). While working: a GPU worker $1.86 an hour, the NAT Gateway about $1.20 a day while it exists, the one-off image build about $2.
+
+1. **Accounts and quotas (console, can take days).**
+   - EC2 quota "Running On-Demand G and VT instances" of at least 4 vCPUs (one `g6e.xlarge`); 8 for two workers.
+   - Lambda concurrency: if the account's limit is well below 1,000, request 1,000 (Service Quotas, free).
+   - A HuggingFace account that has accepted the LLaMA 3.2-3B licence (see *Gated Model Access* above), and a read token.
+   - A Google OAuth client (Google Cloud console, type "Web application"); its redirect URI is filled in at step 5.
+   - A Stripe account in test mode.
+2. **Laptop tools and profile:** `infra/terraform/README.md` §0 (Terraform, AWS CLI, an AWS profile named `neurolens`, the Python environment).
+3. **Secrets in Parameter Store** (`SecureString`, created by hand so they never pass through git or Terraform files):
+   - `/neurolens/hf_token`: the HuggingFace token (read only by the image build).
+   - `/neurolens/terraform/google_client_secret`: the Google OAuth client secret.
+   - `/neurolens/web/flask_secret_key`: at least 32 random bytes (`python -c "import secrets; print(secrets.token_hex(32))"`), created once and never regenerated.
+   - `/neurolens/web/stripe_secret_key`: the Stripe **test** secret key (`sk_test_...`; a live key is refused).
+   - `/neurolens/web/topup_allowlist`: comma-separated emails allowed to top up.
+   - `/neurolens/web/stripe_webhook_secret` and `/neurolens/web/cognito_client_secret` come after step 5.
+4. **State bucket and first apply:** `infra/terraform/README.md` §1 and §2. In `terraform.tfvars` set `bucket_name`, `region`, `zones`, `alert_email`, `auth_domain_prefix` and `google_client_id`; leave `worker_ami_id` empty and `nat_gateway = false`. Run `infra/build_web_lambda.sh` before the first apply (Terraform needs its zip to create the web functions). Confirm the alarm email AWS sends. Then publish the site with `infra/deploy_web.sh`.
+5. **Wire up sign-in and payments** (values from `terraform output`):
+   - Google OAuth client: add `google_redirect_uri` as an authorised redirect URI.
+   - Copy the Cognito app client's secret (Cognito console, the app client) into `/neurolens/web/cognito_client_secret`.
+   - Stripe dashboard (test mode): add a webhook endpoint at `stripe_webhook_url` for the event `checkout.session.completed`, and put its signing secret in `/neurolens/web/stripe_webhook_secret`.
+   - Open `sign_in_test_url` and sign in once with Google and once with email.
+6. **Database:** `infra/terraform/README.md` §2e (`.env` values, `apply_schema.py`, `check_aurora.py`).
+7. **Worker image:** `infra/terraform/README.md` §2b: `infra/deploy_code.sh`, then `infra/build_ami.sh <clip.mp4>` (about an hour on a GPU; it uploads the model weights to S3 and prints the image ID), then set `worker_ami_id` and apply again.
+8. **A work session:** `docs/session_checklist.md` (NAT Gateway on, `infra/start_work.sh`, credit with `infra/grant_credit.py` or a Stripe test top-up, work, `infra/stop_work.sh`, NAT Gateway off).
+9. **Tear down:** `infra/terraform/README.md` §6, then delete the Parameter Store secrets, the Stripe webhook and the Google OAuth client.
+
+Code changes later: `infra/deploy_code.sh` for the worker, `infra/deploy_web.sh` for the site.
+
+---
+
 ## License
 
 This project is for **non-commercial research use only**, in compliance with TRIBE v2's CC BY-NC 4.0 license.

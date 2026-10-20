@@ -11,7 +11,7 @@
 ## 1. Scope
 ### In scope
 - Autoscaling on the SQS queue, standing at zero; up to two workers for Experiment 2
-- A circuit breaker that stops automatic launches after a failure; removal of the worker's self-termination
+- A circuit breaker that stops automatic launches after a failure; the worker can no longer end its own machine
 - A warm hold for demos and study sessions, ended by an AWS-side timer
 - Visibility timeout 120 s with a heartbeat, fast failure release, retry-aware job status, and shutdown handling
 - Job status stages and the Flask status/result endpoints (job state lives in Aurora: M3a §4a, §6)
@@ -64,15 +64,14 @@
 ### 2a. Scaling on the queue
 Scale on the whole queue, including messages being worked on. Scaling only on *visible* messages would be wrong: a running job's message is invisible, so the queue would look empty mid-job and the ASG could terminate the worker doing it.
 - **Scale out:** a CloudWatch alarm on `ApproximateNumberOfMessagesVisible` ≥ 1 for 1 minute triggers a step scaling policy that adds 1 instance when 1 job waits and 2 when 2 or more wait (capped by the group's max), with an estimated instance warm-up from the Terraform variable `scale_out_warmup_seconds` (default **900 s**: a GPU boot is about 6.5 minutes and the SQS metric lags 1–3 minutes, so one waiting job never launches a second worker while the first boots). During the warm-up, repeated alarm breaches in the same step give no further scaling (AWS step scaling), which is why a backlog gets its second worker from the second step, not by repetition. Scale-in policies are also held during a warm-up.
-- **Scale in:** a metric-math alarm on `FILL(visible, 0) + FILL(not_visible, 0)` = 0 for 15 consecutive minutes (`ApproximateNumberOfMessagesVisible` + `ApproximateNumberOfMessagesNotVisible`), `treat_missing_data = "breaching"`, uses the "set to 0" policy (`workers_to_zero`). A busy worker is never removed by it: it holds scale-in protection while it has a job (§1a). A queue that publishes no metrics (quiet for hours) counts as empty. Verify that behaviour once with `get-metric-data` on the quiet queue, as in M2a.
+- **Scale in:** a metric-math alarm on `FILL(visible, 0) + FILL(not_visible, 0)` = 0 for 7 consecutive minutes (`ApproximateNumberOfMessagesVisible` + `ApproximateNumberOfMessagesNotVisible`), `treat_missing_data = "breaching"`, uses the "set to 0" policy (`workers_to_zero`). A busy worker is never removed by it: it holds scale-in protection while it has a job (§1a). A queue that publishes no metrics (quiet for hours) counts as empty. Verify that behaviour once with `get-metric-data` on the quiet queue, as in M2a.
 - SQS publishes these metrics about once a minute, and after a long quiet period they can take up to about 15 minutes to resume. That delay is part of the measured cold start (§10).
 - Outside a session the group's max is 0 (`stop_work.sh`), so an upload waits in the queue and starts a worker in the next session. `start_work.sh` sets max 1, after which an upload starts a worker by itself.
 - Standing configuration stays **min 0 / max 1 / desired 0**. Max 2 only during Experiment 2 (`start_work.sh --max 2`), then back to 1.
 
-### 2b. Worker self-termination removed
-- UserData masks `neurolens-self-terminate.service` (`systemctl mask`), so the baked unit's `OnSuccess=`/`OnFailure=` hooks start nothing (a drop-in cannot empty those lists), and the existing drop-in gains `TimeoutStopSec=110` and `KillMode=mixed` under `[Service]` (SIGTERM reaches the worker alone, not its helper programs, so a helper killed first cannot make a stop look like a job failure; leftovers get SIGKILL when the worker exits). The baked crash limit (3 starts per hour, M2a §3) stays: after it, the service stays failed and the machine waits for the breaker.
+### 2b. The worker never ends its own machine
+- The baked unit has no `OnSuccess=`/`OnFailure=` hooks, and the unit and script that ended the machine are gone. UserData writes the drop-in with `TimeoutStopSec=110` and `KillMode=mixed` under `[Service]` (SIGTERM reaches the worker alone, not its helper programs, so a helper killed first cannot make a stop look like a job failure; leftovers get SIGKILL when the worker exits) and the crash limit (`StartLimitIntervalSec=3600`, `StartLimitBurst=3`; M2a §3). After the limit the service stays failed and the machine waits for the breaker.
 - UserData's `ERR` trap only logs; the machine waits for the breaker.
-- `infra/self_terminate.sh` becomes a stub that logs "self-termination removed (M2b)" and exits 0. It must stay in the code bundle: the `pull_code.sh` copy baked into `neurolens-worker-v2` installs it on every start and fails if it is missing. `neurolens-self-terminate.service`, the stub and its line in `pull_code.sh` and `build_ami.sh` are removed at the next image rebuild (added to M2a §12's list).
 - Removed from the worker's IAM role and the role boundary: `autoscaling:TerminateInstanceInAutoScalingGroup`. The worker's only Auto Scaling permission is `autoscaling:SetInstanceProtection` on its own group (§1a): it can say "not me, not now", never change how many machines run.
 - A manual `systemctl stop neurolens-worker` no longer ends the machine (useful for debugging).
 
@@ -231,16 +230,15 @@ Add to the suite, written first against §1a. `requirements/dev.txt` changes `mo
 ## 12. File layout additions
 ```
 infra/terraform/          MODIFIED: scale-out/in alarms and policies, breaker Lambda + 5-minute schedule + role + Errors alarm,
-                                    120 s visibility, IAM changes, UserData drop-in (OnSuccess=/OnFailure=,
-                                    TimeoutStopSec), ERR trap logs only, no weight sync in fake mode,
+                                    120 s visibility, IAM changes, UserData drop-in (StartLimit*, TimeoutStopSec,
+                                    KillMode), ERR trap logs only, no weight sync in fake mode,
                                     scale_out_warmup_seconds, worker_fake_job_seconds
 infra/lambda/breaker.py   NEW: circuit breaker (§2c)
 infra/iam/*.json          MODIFIED: deploy user (Lambda, EventBridge, logs, PassRole to Lambda,
                                     DescribeAlarmHistory); boundary (breaker's actions; no TerminateInstance)
 infra/start_work.sh       MODIFIED: --keep-worker --hours N warm hold with its scheduled end; --max 2; plain start sets max only
 infra/stop_work.sh        MODIFIED: deletes the hold's scheduled action; reports a tripped breaker
-infra/self_terminate.sh   MODIFIED: stub until the next image rebuild (§2b)
-infra/terraform/README.md MODIFIED: §2e demo routine, breaker, no self-termination
+infra/terraform/README.md MODIFIED: §2e demo routine, breaker, no worker-initiated shutdown
 neurolens/worker.py       MODIFIED: stage and hand-back calls, SKIPPED, Heartbeat, release, ShutdownSignal, ScaleInProtection, boot_record; idle exit removed
 neurolens/storage.py      MODIFIED: result_exists, get_result, utc_text, utc_parse
 neurolens/inference.py    MODIFIED: FAKE_INFERENCE_SECONDS (and §9 Step B, only if it goes ahead)
@@ -260,7 +258,7 @@ docs/M2b_build_log.md     NEW: §8 diagnosis, §9 results, measurements and choi
 
 ## 13. Acceptance criteria
 CPU = rehearsal worker in fake mode with a slow fake job; GPU = real worker.
-1. **Scaling (CPU):** with `start_work.sh` (no keep option), one upload scales the group 0 → 1 by the alarm, the job completes, and the group returns to 0 about 15 minutes after the queue empties, visible in CloudWatch; no worker is terminated mid-job. A scale-in forced by hand during a job (the scale-in policy run with `execute-policy`) leaves the busy worker running until its job is done, then removes it. With `--max 2`, one upload launches only one worker. (GPU, Experiment 2: 0 → 1 → 2 and back to 0.)
+1. **Scaling (CPU):** with `start_work.sh` (no keep option), one upload scales the group 0 → 1 by the alarm, the job completes, and the group returns to 0 about 7 minutes after the queue empties, visible in CloudWatch; no worker is terminated mid-job. A scale-in forced by hand during a job (the scale-in policy run with `execute-policy`) leaves the busy worker running until its job is done, then removes it. With `--max 2`, one upload launches only one worker. (GPU, Experiment 2: 0 → 1 → 2 and back to 0.)
 2. **Duplicates (CPU):** two identical SQS messages for one `job_id` (manual re-send) produce exactly one result object and one capture; the second delivery returns `SKIPPED` or `DUPLICATE`.
 3. **Crash (CPU):** `kill -9` of the worker process mid-job makes the job visible again within about 120 s, and a second attempt completes it.
 4. **Stop (CPU, then once on GPU):** `systemctl stop neurolens-worker` mid-job makes the job visible again within about 10 s, and the machine keeps running; on GPU during real video encoding (§6).
