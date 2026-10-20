@@ -13,7 +13,7 @@ import re
 import threading
 import uuid
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from flask import Flask, jsonify, redirect, request, send_from_directory, session
 from werkzeug.exceptions import HTTPException
@@ -31,6 +31,11 @@ OPEN = (billing.QUEUED, billing.PROCESSING)
 WEB_RESUME_WAIT_S = 45  # under the Lambda's and CloudFront's 60 s timeouts (M3b §2c)
 RESULT_DAYS = 30  # the results/ lifecycle rule (Terraform)
 HISTORY_LIMIT, HISTORY_MAX = 50, 100
+RETENTION_MAX_BYTES = 64 * 1024
+JOB_ACTIVE_MESSAGE = (
+    "This video is still being processed. If you closed the page before the upload finished, "
+    "it is released within about 4 hours; try again then."
+)
 STRIPE_PARAMETERS = {
     "secret_key": "/neurolens/web/stripe_secret_key",
     "webhook_secret": "/neurolens/web/stripe_webhook_secret",
@@ -54,6 +59,34 @@ def _not_configured():
 
 def _not_found():
     return _error("not_found", "No such job.", status=404)
+
+
+def _job_active():
+    return _error("job_active", JOB_ACTIVE_MESSAGE, status=409)
+
+
+def _job_keys(job):
+    """Every S3 key §4 step 2 names for one job, with the dataset video's real extension."""
+    job_id = str(job["job_id"])
+    ext = PurePosixPath(job["object_key"]).suffix
+    return [
+        job["object_key"],
+        f"results/{job_id}.json",
+        f"dataset/{job_id}/video{ext}",
+        f"dataset/{job_id}/result.json",
+        f"dataset/{job_id}/retention.csv",
+    ]
+
+
+def _delete_keys(s3, bucket, keys):
+    """Delete keys in batches of up to 1000. False if S3 reported an error for any key."""
+    for start in range(0, len(keys), 1000):
+        objects = [{"Key": key} for key in keys[start : start + 1000]]
+        reported = s3.delete_objects(Bucket=bucket, Delete={"Objects": objects}).get("Errors")
+        if reported:
+            logger.error(f"S3 reported {len(reported)} failed deletes in {bucket}")
+            return False
+    return True
 
 
 def allowlist_emails(text):
@@ -149,6 +182,13 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
         import boto3
 
         autoscaling = boto3.client("autoscaling", region_name=region)
+    cognito_idp = None
+    user_pool_id = None
+    if cognito:
+        import boto3
+
+        cognito_idp = boto3.client("cognito-idp", region_name=region)
+        user_pool_id = auth_cfg["cognito_issuer"].rstrip("/").rsplit("/", 1)[-1]
 
     # Users this process has already made sure of, so a page costs no database write each time.
     known_users = set()
@@ -178,8 +218,19 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
         it without a CORS check this app never grants)."""
         if not request.path.startswith("/api/"):
             return None
-        if auth.current_user() is None:
+        user = auth.current_user()
+        if user is None:
             return _error("not_signed_in", "Please sign in.", status=401)
+        if cognito and db is not None:
+            # A different browser can hold a session for a deleted account (M3c §5).
+            with db.transaction() as tx:
+                exists = tx.execute(
+                    "SELECT 1 AS present FROM users WHERE user_id = :user_id",
+                    {"user_id": user[0]},
+                )
+            if not exists:
+                session.clear()
+                return _error("not_signed_in", "Please sign in.", status=401)
         if request.method == "POST" and not request.is_json:
             return _error("json_required", "The request body must be JSON.", status=415)
         return None
@@ -271,6 +322,10 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
         if not isinstance(data, dict):
             return _error("invalid_request", "The request body must be a JSON object.")
 
+        research_consent = data.get("research_consent", False)
+        if not isinstance(research_consent, bool):
+            return _error("invalid_request", "research_consent must be true or false.")
+
         content_type = data.get("content_type")
         if content_type not in storage.CONTENT_TYPE_EXTENSIONS:
             return _error(
@@ -328,7 +383,15 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
         filename = data.get("filename")
         filename = filename[:MAX_FILENAME_CHARS] if isinstance(filename, str) else None
         try:
-            reserved = billing.reserve(db, user_id, job_id, key, filename, round(duration * 1000))
+            reserved = billing.reserve(
+                db,
+                user_id,
+                job_id,
+                key,
+                filename,
+                round(duration * 1000),
+                research_consent=research_consent,
+            )
         except billing.InsufficientCredit as err:
             return _error(
                 "insufficient_credit",
@@ -391,9 +454,10 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
         user_id, _ = signed_in_user()
         with db.transaction() as tx:
             rows = tx.execute(
-                "SELECT job_id, status, stage, stages, attempt, updated_at, error_code, "
-                "error_message FROM jobs WHERE job_id = CAST(:job_id AS uuid) "
-                "AND user_id = :user_id",
+                "SELECT job_id, object_key, status, stage, stages, attempt, updated_at, "
+                "error_code, error_message, research_consent FROM jobs "
+                "WHERE job_id = CAST(:job_id AS uuid) AND user_id = :user_id "
+                "AND deleted_at IS NULL",
                 {"job_id": job_id, "user_id": user_id},
             )
         if not rows:
@@ -434,7 +498,14 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
                 return _not_configured()
             if storage.result_exists(s3, bucket, job["job_id"]):
                 status = billing.DONE
-        return jsonify({**job, "status": status, "updated_at": storage.utc_text(job["updated_at"])})
+        public = {
+            key: value
+            for key, value in job.items()
+            if key not in ("object_key", "research_consent")
+        }
+        return jsonify(
+            {**public, "status": status, "updated_at": storage.utc_text(job["updated_at"])}
+        )
 
     @app.route("/api/jobs/<job_id>/result")
     def job_result(job_id):
@@ -455,6 +526,122 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
                 "Content-Disposition": f'attachment; filename="{name}"',
             },
         )
+
+    @app.route("/api/jobs/<job_id>/retention", methods=["POST"])
+    def job_retention(job_id):
+        """Store a consented, finished job's real audience-retention CSV (M3c §3c)."""
+        job, error = owned_job(job_id)
+        if error:
+            return error
+        if job["status"] != billing.DONE:
+            return _error("job_not_done", "The job is not done yet.", status=409)
+        if not job["research_consent"]:
+            return _error("no_consent", "This video was not kept for research.", status=409)
+
+        data = request.get_json(silent=True)
+        text = data.get("csv") if isinstance(data, dict) else None
+        if not isinstance(text, str):
+            return _error("invalid_request", "The request body must contain the CSV text.")
+        if len(text.encode()) > RETENTION_MAX_BYTES:
+            return _error(
+                "invalid_retention_csv",
+                f"The CSV must be at most {RETENTION_MAX_BYTES} bytes.",
+                status=413,
+            )
+        try:
+            results.parse_retention_csv(text)
+        except ValueError as err:
+            return _error("invalid_retention_csv", str(err))
+
+        if s3 is None or not bucket:
+            return _not_configured()
+        try:
+            s3.put_object(
+                Bucket=bucket,
+                Key=f"dataset/{job['job_id']}/retention.csv",
+                Body=text.encode(),
+                ContentType="text/csv",
+            )
+        except Exception:
+            logger.exception(f"Could not store the retention CSV for {job['job_id']}")
+            return _error(
+                "retention_store_failed",
+                "Could not store the CSV. Please try again.",
+                status=500,
+            )
+        return jsonify({"stored": True})
+
+    @app.route("/api/jobs/<job_id>", methods=["DELETE"])
+    def delete_job(job_id):
+        """Delete the caller's video and every file belonging to its job (M3c §4)."""
+        job, error = owned_job(job_id)
+        if error:
+            return error
+        if job["status"] in OPEN:
+            return _job_active()
+        if s3 is None or not bucket:
+            return _not_configured()
+        if not _delete_keys(s3, bucket, _job_keys(job)):
+            return _error(
+                "delete_failed", "Could not delete this video's files. Please try again.", 500
+            )
+        user_id, _ = signed_in_user()
+        billing.delete_job(db, user_id, job["job_id"])
+        return jsonify({"deleted": True})
+
+    @app.route("/api/account/delete", methods=["POST"])
+    def delete_account():
+        """Delete the caller's files, rows and Cognito logins (M3c §5)."""
+        if not cognito:
+            return _not_found()
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict) or data.get("confirm") != "DELETE":
+            return _error("confirmation_required", "Type DELETE to confirm.", status=400)
+        if db is None:
+            return _not_configured()
+        user_id, _ = signed_in_user()
+        with db.transaction() as tx:
+            jobs = tx.execute(
+                "SELECT job_id, object_key, status FROM jobs WHERE user_id = :user_id",
+                {"user_id": user_id},
+            )
+        if any(job["status"] in OPEN for job in jobs):
+            return _job_active()
+        if s3 is None or not bucket:
+            return _not_configured()
+        keys = [key for job in jobs for key in _job_keys(job)]
+        if not _delete_keys(s3, bucket, keys):
+            return _error(
+                "delete_failed", "Could not delete this account's files. Please try again.", 500
+            )
+        try:
+            identities = billing.delete_account(db, user_id)
+        except billing.JobActive:
+            return _job_active()
+        for issuer, subject in identities:
+            if issuer != auth_cfg["cognito_issuer"]:
+                continue
+            usernames = []
+            try:
+                response = cognito_idp.list_users(
+                    UserPoolId=user_pool_id, Filter=f'sub = "{subject}"'
+                )
+                usernames = [user["Username"] for user in response.get("Users", [])]
+                for username in usernames:
+                    cognito_idp.admin_delete_user(UserPoolId=user_pool_id, Username=username)
+            except Exception:
+                username = usernames[0] if usernames else None
+                logger.error(
+                    f"COGNITO_DELETE_FAILED sub={subject} username={username}", exc_info=True
+                )
+                return _error(
+                    "login_delete_failed",
+                    "Your data has been deleted. Removing your login failed; we have been "
+                    "notified.",
+                    status=500,
+                )
+        session.clear()
+        return jsonify({"deleted": True})
 
     @app.route("/api/top-up/checkout", methods=["POST"])
     def top_up_checkout():

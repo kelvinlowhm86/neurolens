@@ -304,7 +304,8 @@ def handle_record(bucket, key, *, s3, db, cfg, roi_masks, heartbeat):
     with release_for_retry and the exception re-raised; money stays reserved.
     """
     job_id = storage.job_id_from_key(key)
-    if job_id is None or billing.job_state(db, job_id) is None:
+    state = billing.job_state(db, job_id) if job_id is not None else None
+    if state is None:
         logger.warning(f"Skipped {key}: no job in the database (a manual or pre-M3 upload)")
         return Outcome.SKIPPED
     if storage.result_exists(s3, bucket, job_id):
@@ -328,7 +329,15 @@ def handle_record(bucket, key, *, s3, db, cfg, roi_masks, heartbeat):
             return Outcome.BUSY
         with heartbeat(lambda: billing.touch(db, job_id, attempt)):
             return _analyse(
-                bucket, key, job_id, attempt, s3=s3, db=db, cfg=cfg, roi_masks=roi_masks
+                bucket,
+                key,
+                job_id,
+                attempt,
+                s3=s3,
+                db=db,
+                cfg=cfg,
+                roi_masks=roi_masks,
+                research_consent=state["research_consent"],
             )
     except _ClaimLost:
         logger.warning(f"Lost the claim on {job_id} (attempt {attempt}): stopping, money untouched")
@@ -355,7 +364,7 @@ def _hand_back(db, job_id, attempt, err):
             return
 
 
-def _analyse(bucket, key, job_id, attempt, *, s3, db, cfg, roi_masks):
+def _analyse(bucket, key, job_id, attempt, *, s3, db, cfg, roi_masks, research_consent):
     global last_transcribing_seconds
 
     def stage(name):
@@ -426,6 +435,12 @@ def _analyse(bucket, key, job_id, attempt, *, s3, db, cfg, roi_masks):
     gpu = inference.gpu_info()
     if gpu is not None:
         result["gpu"] = gpu
+
+    if research_consent:
+        # Check the claim before the copy: a late worker must not leave dataset files behind for
+        # a job the reaper has already refunded and the user deleted (M3c §3b).
+        stage("saving_dataset")
+        storage.put_dataset(s3, bucket, job_id, key, result)
 
     # Publish to S3 without ever replacing an earlier result (a redelivered notice must not
     # overwrite the first answer). Either way the finished job is charged, once.

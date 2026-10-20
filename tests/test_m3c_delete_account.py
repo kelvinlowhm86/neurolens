@@ -161,7 +161,7 @@ def test_delete_account_removes_every_row_and_keeps_other_users_intact(db, pg):
     assert pg.one("SELECT * FROM users WHERE user_id = %s", other) is not None
     assert pg.balance(other) is not None
     assert {
-        job["job_id"] for job in pg.rows("SELECT job_id FROM jobs WHERE user_id = %s", other)
+        job["job_id"] for job in pg.rows("SELECT job_id::text AS job_id FROM jobs WHERE user_id = %s", other)
     } == {other_job}
     assert any(row["job_id"] == other_job for row in pg.ledger(other))
     check_invariants(pg.conn)

@@ -100,6 +100,28 @@ def put_result(s3, bucket, job_id, result):
     return True
 
 
+def put_dataset(s3, bucket, job_id, upload_key, result):
+    """Keep a consented job's video and result under dataset/<job_id>/ (M3c §3b).
+
+    The video is copied from the upload key, keeping its extension. The result is serialised first,
+    so a NaN or infinity raises ValueError before either write. Both writes replace earlier copies:
+    a redelivered job writes the same content. Any S3 error is raised to the worker's failure path.
+    """
+    body = json.dumps(result, allow_nan=False).encode()
+    ext = PurePosixPath(upload_key).suffix
+    s3.copy_object(
+        Bucket=bucket,
+        CopySource={"Bucket": bucket, "Key": upload_key},
+        Key=f"dataset/{job_id}/video{ext}",
+    )
+    s3.put_object(
+        Bucket=bucket,
+        Key=f"dataset/{job_id}/result.json",
+        Body=body,
+        ContentType="application/json",
+    )
+
+
 def is_not_found(err):
     """True for S3's "no such object" error (head_object says 404, get_object NoSuchKey)."""
     return isinstance(err, ClientError) and err.response.get("Error", {}).get("Code") in (

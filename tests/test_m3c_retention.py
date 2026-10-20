@@ -238,7 +238,7 @@ def test_retention_on_another_users_job_is_404_with_no_s3_call(app_for, db):
 
 def test_retention_on_a_deleted_job_is_404(client, aws, db, pg):
     job_id, _ = make_job(db, consent=True, done=True)
-    pg.conn.execute("UPDATE jobs SET deleted_at = now() WHERE job_id = %s::uuid", job_id)
+    pg.conn.execute("UPDATE jobs SET deleted_at = now() WHERE job_id = %s::uuid", (job_id,))
     resp = client.post(f"/api/jobs/{job_id}/retention", json={"csv": csv_text(valid_rows(3))})
     assert resp.status_code == 404
     assert resp.get_json()["error"] == "not_found"

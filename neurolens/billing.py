@@ -36,6 +36,10 @@ class InsufficientCredit(Exception):
         self.required_cents = required_cents
 
 
+class JobActive(Exception):
+    """A job is queued or processing, so deleting it (or its account) is refused."""
+
+
 # ---------------------------------------------------------------- helpers (inside a transaction)
 
 
@@ -208,13 +212,63 @@ def credit_test_topup(db, event_id, session_id, user_id, cents):
 
 
 def list_jobs(db, user_id, limit):
-    """The user's jobs, newest first, at most `limit` (M3b §4a)."""
+    """The user's jobs, newest first, at most `limit` (M3b §4a). Deleted jobs are left out
+    (M3c §4)."""
     with db.transaction() as tx:
         return tx.execute(
             "SELECT job_id, filename, status, created_at, verified_duration_ms, captured_cents, "
-            "error_code FROM jobs WHERE user_id = :user_id ORDER BY created_at DESC LIMIT :limit",
+            "error_code FROM jobs WHERE user_id = :user_id AND deleted_at IS NULL "
+            "ORDER BY created_at DESC LIMIT :limit",
             {"user_id": user_id, "limit": limit},
         )
+
+
+def delete_job(db, user_id, job_id):
+    """Hide the user's job from every route, keeping its row and ledger (M3c §4)."""
+    with db.transaction() as tx:
+        tx.execute(
+            "UPDATE jobs SET deleted_at = now(), filename = NULL "
+            "WHERE job_id = CAST(:job_id AS uuid) AND user_id = :user_id",
+            {"job_id": job_id, "user_id": user_id},
+        )
+
+
+def delete_account(db, user_id):
+    """Delete all of a user's rows and return the deleted `(issuer, subject)` identities
+    (M3c §5). Refuses with JobActive while any of their jobs is queued or processing.
+
+    Lock order: the rest of billing locks jobs before balances. This function locks only
+    `balances` and reads job statuses without locking them, so it cannot deadlock with those
+    callers; the balance lock is enough because every new job's `reserve` takes it first.
+    """
+    with db.transaction() as tx:
+        locked = tx.execute(
+            "SELECT user_id FROM balances WHERE user_id = :user_id FOR UPDATE",
+            {"user_id": user_id},
+        )
+        if not locked:
+            raise LookupError(f"no balance for user {user_id!r}: call ensure_user first")
+        active = tx.execute(
+            "SELECT 1 AS active FROM jobs WHERE user_id = :user_id AND status IN "
+            "(:queued, :processing) LIMIT 1",
+            {"user_id": user_id, "queued": QUEUED, "processing": PROCESSING},
+        )
+        if active:
+            raise JobActive(f"user {user_id!r} has an active job")
+        tx.execute(
+            "DELETE FROM refunds WHERE job_id IN "
+            "(SELECT job_id FROM jobs WHERE user_id = :user_id)",
+            {"user_id": user_id},
+        )
+        tx.execute("DELETE FROM ledger WHERE user_id = :user_id", {"user_id": user_id})
+        tx.execute("DELETE FROM jobs WHERE user_id = :user_id", {"user_id": user_id})
+        tx.execute("DELETE FROM balances WHERE user_id = :user_id", {"user_id": user_id})
+        identities = tx.execute(
+            "DELETE FROM identities WHERE user_id = :user_id RETURNING issuer, subject",
+            {"user_id": user_id},
+        )
+        tx.execute("DELETE FROM users WHERE user_id = :user_id", {"user_id": user_id})
+    return [(row["issuer"], row["subject"]) for row in identities]
 
 
 def get_balance(db, user_id):
@@ -231,9 +285,10 @@ def get_balance(db, user_id):
 # ---------------------------------------------------------------- Stage 1
 
 
-def reserve(db, user_id, job_id, object_key, filename, client_duration_ms):
+def reserve(db, user_id, job_id, object_key, filename, client_duration_ms, research_consent=False):
     """Move the estimated price from available to reserved and create the queued job.
-    Raises InsufficientCredit (changing nothing) if the available credit is lower."""
+    Raises InsufficientCredit (changing nothing) if the available credit is lower.
+    `research_consent` is stored on the job (M3c §3a)."""
     price = estimate_cost_cents(client_duration_ms / 1000)
     with db.transaction() as tx:
         rows = tx.execute(
@@ -247,8 +302,9 @@ def reserve(db, user_id, job_id, object_key, filename, client_duration_ms):
             raise InsufficientCredit(available, price)
         tx.execute(
             "INSERT INTO jobs (job_id, user_id, object_key, filename, status, "
-            "client_duration_ms, reserved_cents) VALUES (CAST(:job_id AS uuid), :user_id, "
-            ":object_key, :filename, :queued, :client_duration_ms, :price)",
+            "client_duration_ms, reserved_cents, research_consent) "
+            "VALUES (CAST(:job_id AS uuid), :user_id, :object_key, :filename, :queued, "
+            ":client_duration_ms, :price, :research_consent)",
             {
                 "job_id": job_id,
                 "user_id": user_id,
@@ -257,6 +313,7 @@ def reserve(db, user_id, job_id, object_key, filename, client_duration_ms):
                 "queued": QUEUED,
                 "client_duration_ms": client_duration_ms,
                 "price": price,
+                "research_consent": research_consent,
             },
         )
         _move(tx, user_id, job_id, "reserve", -price, price)
@@ -282,10 +339,12 @@ def claim(db, job_id, stale_after_s=90):
 
 
 def job_state(db, job_id):
-    """{"status", "updated_at", "attempt"}, or None for an unknown job."""
+    """{"status", "updated_at", "attempt", "research_consent"}, or None for an unknown job.
+    Deliberately sees deleted jobs too (M3c §4)."""
     with db.transaction() as tx:
         rows = tx.execute(
-            "SELECT status, updated_at, attempt FROM jobs WHERE job_id = CAST(:job_id AS uuid)",
+            "SELECT status, updated_at, attempt, research_consent FROM jobs "
+            "WHERE job_id = CAST(:job_id AS uuid)",
             {"job_id": job_id},
         )
     return rows[0] if rows else None
