@@ -142,6 +142,7 @@
   .consent-row.hidden { display: none; }
   .consent-row input { margin-top: 3px; flex-shrink: 0; }
   .consent-row a { color: var(--accent); }
+  .upload-panel .consent-row { margin: 10px 0 4px; padding: 0; }
   .btn-danger { padding: 6px 14px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--bg-card); color: var(--red); font-size: 12px; cursor: pointer; font-family: 'Plus Jakarta Sans', sans-serif; font-weight: 500; }
   .btn-danger:hover { border-color: var(--red); }
   .btn-danger:disabled { opacity: 0.5; cursor: default; }
@@ -212,10 +213,6 @@
       <div class="upload-subtitle" id="limitsText">MP4, MOV, or WebM</div>
       <input type="file" accept="video/mp4,video/quicktime,video/webm" id="fileInput">
     </div>
-    <div class="consent-row hidden" id="consentRow">
-      <input type="checkbox" id="consentBox">
-      <label for="consentBox">Keep this video and its analysis for up to 12 months to help build a future engagement model. I own the rights to this video. Optional: the analysis works either way. <a href="/static/privacy.html">Privacy policy</a></label>
-    </div>
     <div class="upload-note" id="uploadNote"></div>
     <div class="panel-box" id="noCreditPanel">
       <div class="panel-text">You have no credit yet. Ask the NeuroLens team for test credit.</div>
@@ -226,6 +223,10 @@
       <div class="upload-panel-title" id="upFileName"></div>
       <div class="upload-panel-line" id="upDetail"></div>
       <div class="upload-panel-line" id="upCost"></div>
+    <div class="consent-row" id="consentRow">
+      <input type="checkbox" id="consentBox">
+      <label for="consentBox">Keep this video and its analysis for up to 12 months to help build a future engagement model. I own the rights to this video. Optional: the analysis works either way. <a href="/static/privacy.html">Privacy policy</a></label>
+    </div>
       <div class="upload-progress" id="upProgress"><div class="upload-bar" id="upBar"></div></div>
       <div class="upload-panel-msg" id="upMsg"></div>
       <div class="upload-actions">
@@ -409,7 +410,6 @@ function showSignedOut() {
   signedIn = false;
   $('startupPanel').classList.remove('active');
   $('signInPanel').classList.add('active');
-  $('consentRow').classList.add('hidden');
   $('deleteAccountPanel').classList.remove('active');
   $('headerMeta').textContent = IDLE_HEADER();
 }
@@ -420,7 +420,6 @@ function showApp(meJson) {
   $('account').textContent = me.email;
   $('signOut').hidden = false;
   $('uploadZone').classList.remove('hidden');
-  $('consentRow').classList.remove('hidden');
   $('deleteAccountPanel').classList.add('active');
   $('headerMeta').textContent = IDLE_HEADER();
   showBalance();
@@ -684,7 +683,8 @@ async function handleFile(file) {
 function showConfirm(file, duration) {
   pendingFile = file; pendingDuration = duration;
   uploadZone.classList.add('hidden');
-  $('consentRow').classList.add('hidden');
+  $('consentBox').checked = false; $('consentBox').disabled = false;  // decided per video
+  $('consentRow').classList.remove('hidden');
   $('samplesSection').style.display = 'none';
   $('upFileName').textContent = file.name;
   $('upDetail').textContent = `${duration.toFixed(1)} s · ${(file.size / 1e6).toFixed(1)} MB`;
@@ -701,12 +701,13 @@ function uploadFailed(message) {
   $('upMsg').textContent = message; $('upMsg').classList.add('error');
   $('upProgress').classList.remove('active');
   $('upConfirm').disabled = false; $('upConfirm').style.display = '';
+  $('consentBox').disabled = false;
   $('upCancel').textContent = 'Cancel';
 }
 
 async function startUpload() {
   const file = pendingFile, duration = pendingDuration;
-  $('upConfirm').disabled = true;
+  $('upConfirm').disabled = true; $('consentBox').disabled = true;
   $('upMsg').classList.remove('error'); $('upMsg').textContent = 'Preparing upload...';
 
   let presign;
@@ -760,7 +761,7 @@ function resetUpload() {
   $('uploadPanel').classList.remove('active');
   $('uploadNote').textContent = '';
   fileInput.value = '';
-  if (signedIn) { uploadZone.classList.remove('hidden'); $('consentRow').classList.remove('hidden'); }
+  if (signedIn) uploadZone.classList.remove('hidden');
   $('samplesSection').style.display = '';
   $('headerMeta').textContent = IDLE_HEADER();
 }
@@ -1093,7 +1094,6 @@ $('deleteAccountBtn').addEventListener('click', async () => {
     $('balance').textContent = '';
     $('signOut').hidden = true;
     $('uploadZone').classList.add('hidden');
-    $('consentRow').classList.add('hidden');
     $('historyPanel').classList.remove('active');
     $('deleteAccountPanel').classList.remove('active');
     $('headerMeta').textContent = 'Select a video to view analysis';

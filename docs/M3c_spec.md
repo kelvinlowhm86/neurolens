@@ -33,7 +33,7 @@ Migration 003; consent at upload; the dataset copy in the worker; the retention-
 ## 3. Consent and the dataset copy
 ### 3a. Upload
 - `POST /api/uploads/presign` takes an optional `research_consent`, which must be JSON `true` or `false`. Missing means `false`; any other value → 400 `invalid_request`. It is stored on the job by `billing.reserve(..., research_consent)`.
-- The page shows the unticked box under the upload area: "Keep this video and its analysis for up to 12 months to help build a future engagement model. I own the rights to this video. Optional: the analysis works either way." The box links to the privacy page.
+- The page shows the box on the "ready to upload" step, beside the Upload button, unticked for every new video (locked once the upload starts): "Keep this video and its analysis for up to 12 months to help build a future engagement model. I own the rights to this video. Optional: the analysis works either way." The box links to the privacy page.
 
 ### 3b. Worker
 - **When:** after the analysis and before `put_result`, if the job has `research_consent`.
