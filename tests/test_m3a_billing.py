@@ -201,7 +201,7 @@ def test_job_state_reports_status_updated_at_and_attempt(db):
     assert billing.job_state(db, str(uuid.uuid4())) is None
     job_id = claimed(db)
     state = billing.job_state(db, job_id)
-    assert set(state) == {"status", "updated_at", "attempt"}
+    assert set(state) == {"status", "updated_at", "attempt", "research_consent"}
     assert state["status"] == "processing" and state["attempt"] == 1
     assert state["updated_at"].utcoffset() == timedelta(0)
     assert abs(datetime.now(UTC) - state["updated_at"]) < timedelta(minutes=1)

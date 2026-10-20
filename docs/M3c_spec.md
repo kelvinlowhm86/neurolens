@@ -9,7 +9,7 @@
 
 ## Decisions (20 Oct)
 - **Free allowance, granted only.** New accounts start at 0. `infra/grant_credit.py` adds credit for course members (M3b §7a, unchanged). This means a stranger who signs in with Google cannot spend GPU money.
-- **Stripe removed from the service.** Before the removal, the last commit with Stripe is tagged `stripe-test-mode`. The report cites the tag as the working prototype of the future paid phase. No code is kept behind a switch.
+- **Stripe removed from the service.** Before the removal, the last commit with Stripe (the custom GPU workers, after one real GPU job) is tagged `custom-gpu-stripe`. The report cites the tag as the working prototype of the future paid phase. No code is kept behind a switch.
 - **Consent is opt-in, per upload.** The box is unticked by default, and analysis works the same either way. Only consented videos are kept beyond the normal 2 days.
 - **Retention: 12 months**, enforced by an S3 lifecycle rule on `dataset/`, so nobody has to remember to delete anything. Teardown after the course deletes everything earlier.
 - **Deletion:** per video, and the whole account. Both are refused while one of the user's jobs is queued or processing. That is the only state in which the worker or reaper may still write to the job.
@@ -46,7 +46,7 @@ Migration 003; consent at upload; the dataset copy in the worker; the retention-
 - **Data:** `billing.job_state` returns `research_consent`.
 
 ### 3c. Retention curve
-- Route: `POST /api/jobs/<job_id>/retention`. The body is JSON, `{"csv": "<the file's text>"}`, with the text at most 64 KB. Sending JSON keeps the app's one rule, that every `/api/*` POST is JSON, which is its cross-site form protection (`api_rules`). The page reads the chosen file and sends its text.
+- Route: `POST /api/jobs/<job_id>/retention`. The body is JSON, `{"csv": "<the file's text>"}`, with the text at most 64 KiB (65,536 bytes); a longer text → 400 or 413. Sending JSON keeps the app's one rule, that every `/api/*` POST is JSON, which is its cross-site form protection (`api_rules`). The page reads the chosen file and sends its text.
 - Conditions:
   - The job must be owned by the user and not deleted (otherwise 404, like `owned_job`).
   - The job must be `done` (otherwise 409 `job_not_done`).
@@ -95,7 +95,7 @@ S3 is deleted first, so a failure part-way leaves a job that still shows but who
 - **Other browsers** still hold a valid session cookie for up to 12 hours. Any route that finds no `users` row for the signed-in user answers 401 `not_signed_in` and clears the session, instead of a server error.
 
 ## 6. Stripe removal
-- Tag first: `git tag stripe-test-mode <last commit with Stripe>`, then push the tag.
+- Tag first: `git tag custom-gpu-stripe <last commit with Stripe>`, then push the tag.
 - Delete:
   - `neurolens/web/stripe_webhook.py`, `billing.credit_test_topup`, `/api/top-up/checkout`, `STRIPE_PARAMETERS`, `allowlist_emails`, `can_top_up` (it leaves `/api/me`), and the top-up panel and its script in `static/index.html`;
   - the `stripe` block in `config.json`, `stripe` in `requirements/web.txt`, and `tests/test_m3b_stripe.py`;
@@ -137,7 +137,7 @@ S3 is deleted first, so a failure part-way leaves a job that still shows but who
     - `ListUsers` finding nothing counts as done;
     - a Cognito failure answers 500 `login_delete_failed` and logs the `COGNITO_DELETE_FAILED` line with the sub;
     - a stale session afterwards gets 401, not 500.
-- **Existing tests this spec retires or changes:** `tests/test_m3b_stripe.py` (deleted); tests that expect `can_top_up` in `/api/me` (the key is removed, which also changes `me()`); and the Stripe settings in the Cognito-mode fixtures in `tests/conftest.py`. Any other existing test that fails is reported to Josh, not edited.
+- **Existing tests this spec retires or changes:** `tests/test_m3b_stripe.py` (deleted); `tests/test_m3a_billing.py::test_job_state_reports_status_updated_at_and_attempt` (its key set gains `research_consent`, Josh approved 20 Oct); tests that expect `can_top_up` in `/api/me` (the key is removed, which also changes `me()`); and the Stripe settings in the Cognito-mode fixtures in `tests/conftest.py`. Any other existing test that fails is reported to Josh, not edited.
 
 ## 9. Acceptance criteria
 1. Full suite passes with PostgreSQL. `ruff` is clean. `git grep -i stripe` finds only specs, git history notes and the ledger kind `test_topup`.
