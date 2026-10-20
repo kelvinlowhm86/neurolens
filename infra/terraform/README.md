@@ -34,6 +34,9 @@ roughly $3 a month (plus about $3 for the reaper waking Aurora every 3 hours). M
 GPU worker $1.86 an hour (g6e.xlarge; $2.24 for the g6e.2xlarge fallback). AWS ends a worker 7
 minutes after the job queue empties, but always end a session with `infra/stop_work.sh` (section 5).
 
+**From an empty account, in this order:** §0, §1, §2, §2f, §2e, §2b; then §5 for each work session
+and §6 to tear down. Code changes later: `infra/deploy_code.sh` (worker), `infra/deploy_web.sh` (site).
+
 ## 0. Before you start (once)
 
 1. Terraform 1.10 or newer. Homebrew's plain `terraform` formula is gone, so use HashiCorp's tap:
@@ -44,7 +47,19 @@ minutes after the job queue empties, but always end a session with `infra/stop_w
    keys into chat, git or a Docker image.**
 4. Python 3.12 environment for the repo (see the root `AGENTS.md`) and `git` (the scripts in `infra/`
    find the repo from it).
-5. Confirm the account-wide $40/month AWS Budget (alerts at 50%, 80%, 100%) still exists: AWS console,
+5. Accounts and quotas (console; quota requests can take days):
+   - EC2 quota "Running On-Demand G and VT instances": at least 4 vCPUs (one `g6e.xlarge`), 8 for two.
+   - Lambda concurrency: if the account's limit is well below 1,000, request 1,000 (Service Quotas, free).
+   - A HuggingFace account that accepted the LLaMA 3.2-3B licence (root README, *Gated Model Access*) and a read token.
+   - A Google OAuth client (Google Cloud console, type "Web application"); its redirect URI comes in §2f.
+   - A Stripe account in test mode.
+6. Secrets in Parameter Store, created by hand (`SecureString`, so they never pass through git or
+   Terraform files): `/neurolens/hf_token` (the HuggingFace token, read only by the image build),
+   `/neurolens/terraform/google_client_secret`, `/neurolens/web/flask_secret_key` (at least 32 random
+   bytes, e.g. `python -c "import secrets; print(secrets.token_hex(32))"`, never regenerated),
+   `/neurolens/web/stripe_secret_key` (a **test** key, `sk_test_...`; a live key is refused) and
+   `/neurolens/web/topup_allowlist` (comma-separated emails allowed to top up). Two more come in §2f.
+7. Confirm the account-wide $40/month AWS Budget (alerts at 50%, 80%, 100%) still exists: AWS console,
    Billing, Budgets.
 
 Every command below runs with the project's profile, never another project's:
@@ -77,7 +92,8 @@ Then copy `backend.hcl.example` to `backend.hcl` and put that bucket name in it.
 
 ```bash
 cd infra/terraform
-cp terraform.tfvars.example terraform.tfvars    # bucket_name, region and zones, alert_email
+cp terraform.tfvars.example terraform.tfvars    # bucket_name, region and zones, alert_email, auth_domain_prefix, google_client_id
+../build_web_lambda.sh                          # the web functions' zip: the first apply needs it
 terraform init -backend-config=backend.hcl
 terraform plan                                  # read it: only creates, nothing destroyed
 terraform apply
@@ -92,6 +108,18 @@ sends a confirmation email: click its link or the alarm cannot reach you.
 at the repo root as `NEUROLENS_AWS_REGION`, `NEUROLENS_S3_BUCKET` and `NEUROLENS_SQS_QUEUE_URL`
 (see `.env.example`). The committed
 `config.json` holds no account-specific values, and access keys never go in the project at all.
+
+## 2f. Sign-in and payments (M3b)
+
+After the first apply (values from `terraform output`):
+
+1. Google OAuth client: add `google_redirect_uri` as an authorised redirect URI.
+2. Copy the Cognito app client's secret (Cognito console, the app client) into
+   `/neurolens/web/cognito_client_secret`.
+3. Stripe dashboard (test mode): add a webhook endpoint at `stripe_webhook_url` for the event
+   `checkout.session.completed`; put its signing secret in `/neurolens/web/stripe_webhook_secret`.
+4. `infra/deploy_web.sh` publishes the site, then open `sign_in_test_url` and sign in once with Google
+   and once with email.
 
 ## 2b. The GPU worker group (M2a)
 
@@ -252,4 +280,5 @@ aws s3 rm s3://<bucket_name> --recursive
 terraform destroy
 ```
 
-The state bucket stays (a few kilobytes). Remove it by hand at the very end of the project if you want.
+The state bucket stays (a few kilobytes). Remove it by hand at the very end of the project if you want,
+with the Parameter Store secrets (§0), the Stripe webhook and the Google OAuth client.
