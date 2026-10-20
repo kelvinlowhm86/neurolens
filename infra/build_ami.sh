@@ -6,8 +6,8 @@
 #       software only (§2 steps 3-4), prints success or the failing step, and always terminates.
 #       No token, no weights, no image.
 #   infra/build_ami.sh <clip.mp4> [--refresh-weights]
-#       g6e.xlarge on-demand ($1.86 an hour, about an hour; g6e.2xlarge at $2.24 if the smaller
-#       size is sold out in every zone): full build, weights to S3 models/,
+#       g6e.xlarge on-demand ($1.86 an hour, about an hour; g6e.2xlarge at $2.24, then g6.2xlarge
+#       at about $0.98, if the ones before are sold out in every zone): full build, weights to S3 models/,
 #       then the software-only image. Prints the AMI ID, snapshot size, peak RAM and VRAM.
 #
 # Base image: plain Ubuntu 22.04 plus the NVIDIA server driver (§2).
@@ -48,9 +48,10 @@ BASE_AMI=$(aws ssm get-parameter --name "$AMI_PARAM" --query Parameter.Value --o
 ROOT_DEV=$(aws ec2 describe-images --image-ids "$BASE_AMI" --query 'Images[0].RootDeviceName' --output text)
 ROOT_GB=50
 # Tried in order. g6e.2xlarge has the same GPU (more RAM and CPU, $2.24 an hour): only a fallback
-# when the smaller size is sold out everywhere. The image works on either; workers use the Terraform
-# worker_instance_types, whatever built the image.
-if [ "$REHEARSAL" = 1 ]; then TYPES=t3.large; else TYPES="g6e.xlarge g6e.2xlarge"; fi
+# when the smaller size is sold out everywhere. g6.2xlarge (L4, 24 GB GPU, same 32 GB RAM, slower)
+# is the last fallback: the model peaks at about 20 GB of GPU memory, so it fits. The image works on
+# any of them; workers use the Terraform worker_instance_types, whatever built the image.
+if [ "$REHEARSAL" = 1 ]; then TYPES=t3.large; else TYPES="g6e.xlarge g6e.2xlarge g6.2xlarge"; fi
 
 # ─── Remote steps (run on the instance as root through SSM Run Command) ────────────────────────
 
