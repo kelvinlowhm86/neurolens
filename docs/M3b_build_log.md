@@ -66,13 +66,24 @@ Cost: about an hour of NAT Gateway and 10 minutes of `t3.large`, about $0.10.
 - **NAT Gateway off:** Terraform unlinks the Elastic IP after the gateway is gone, and AWS checks
   `ec2:DisassociateAddress` against no resource (`*/*`, no tags; decoded with
   `sts:DecodeAuthorizationMessage`, 5f2218a), so the tag-scoped permission refused it. Unlinking is now
-  allowed on any us-east-1 address while releasing stays tag-scoped (f47ae38). **Not yet proven:** the
-  next NAT-off apply should finish in one run.
+  allowed on any us-east-1 address while releasing stays tag-scoped (f47ae38). The next NAT-off
+  (21 Oct) passed that step but then failed to release the address: AWS still listed it as linked to
+  the deleted gateway's network interface (`InvalidNetworkInterfaceID.NotFound`) and cleared the link
+  about a minute later. A 120 s `time_sleep` now sits between the gateway and its Elastic IP on destroy.
 - **Independent review (sign-in and money):** no HIGH finding. Fixed test-first: a returning sign-in
   now keeps `users.email` current, so an address the user gave up can't link a stranger to the account;
   the worker measures a video's length from its packets, not its header (ea5ccfe; break-its caught).
 - **Sign-out:** repeated clicks and stale tabs; buttons now disable while busy, `index.html` is served
   `no-cache`, and every request logs one line without the query string (d633c27, 9ed3a2b).
+
+## Real GPU job on the custom workers (2026-10-21, image v3)
+- g6e sold out in all four zones; the g6.2xlarge fallback launched about 10 minutes after the upload
+  (first try that found capacity). Boot to worker started 1.5 min (weight sync 79 s); the 52.2 s Sintel
+  trailer's result was saved 14 minutes after launch. Charge 180 cents (2 x 30 s blocks), verified duration
+  equal to the browser's; ledger reserve then capture.
+- Circuit breaker, live: worker protected by hand, idle alarm set to ALARM and the breaker invoked at
+  once (a set alarm returns to OK within about a minute, before the 5-minute schedule): "protection
+  removed from 1 workers, set to 0/0/0", worker terminated. Passes with the tightened role boundary.
 
 ## Known limitations (accepted)
 

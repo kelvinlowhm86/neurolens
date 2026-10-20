@@ -176,11 +176,19 @@ resource "aws_eip" "nat" {
   tags   = { Name = "neurolens-nat", Milestone = "M3b" }
 }
 
+# At NAT-off, AWS keeps the Elastic IP linked to the deleted gateway for about a minute, and releasing
+# it fails until then (seen 21 Oct). Destroy order is gateway, this pause, then the Elastic IP.
+resource "time_sleep" "nat_eip_release" {
+  count            = var.nat_gateway ? 1 : 0
+  destroy_duration = "120s"
+  depends_on       = [aws_eip.nat]
+}
+
 resource "aws_nat_gateway" "main" {
   count         = var.nat_gateway ? 1 : 0
   allocation_id = aws_eip.nat[0].id
   subnet_id     = aws_subnet.public.id
   tags          = { Name = "neurolens-nat", Milestone = "M3b" }
 
-  depends_on = [aws_internet_gateway.main]
+  depends_on = [aws_internet_gateway.main, time_sleep.nat_eip_release]
 }

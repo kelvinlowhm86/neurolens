@@ -12,6 +12,11 @@ terraform {
       source  = "hashicorp/archive"
       version = "~> 2.0"
     }
+    # The pause between deleting the NAT Gateway and releasing its Elastic IP (network.tf).
+    time = {
+      source  = "hashicorp/time"
+      version = "~> 0.13"
+    }
   }
 
   # Terraform's record of what exists (its "state") lives in a small separate S3 bucket, not on
