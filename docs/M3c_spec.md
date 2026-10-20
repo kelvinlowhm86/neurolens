@@ -53,7 +53,7 @@ Migration 003; consent at upload; the dataset copy in the worker; the retention-
   - The job must have consent (otherwise 409 `no_consent`).
 - CSV rules: the header is exactly `elapsed_ratio,watch_ratio`. There are 2 to 1000 rows. `elapsed_ratio` is in 0–1 and strictly increasing. `watch_ratio` is ≥ 0 and finite (YouTube's ratio can exceed 1 when viewers rewatch). Any rule broken → 400 `invalid_retention_csv` with the line number.
 - Stored at `dataset/<job_id>/retention.csv`. A new upload replaces the old one.
-- The page shows "Add real audience retention (CSV)" on a finished consented job, with a link to the guide.
+- The page shows "Add real audience retention (CSV)" on a finished consented job, with a link to the guide. To know this, the job status response includes `research_consent` once the job is `done` (it stays hidden before).
 - The parser is a pure function, `neurolens.results.parse_retention_csv(text) -> list[tuple[float, float]]`, which raises `ValueError` with the line number.
 - **Guide** (`docs/retention_curve_guide.md`, also served at `/static/retention_guide.html`): how the video's owner gets the curve from the YouTube Analytics API. Use the API page's in-browser "Try this API" panel: dimension `elapsedVideoTimeRatio`, metric `audienceWatchRatio`, filter `video==<id>`, then save the two columns. Claude tries the steps on a real channel before the guide is written. If the in-browser route does not work, Josh decides between a small helper script and dropping the guide.
 
