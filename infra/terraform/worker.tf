@@ -86,7 +86,8 @@ resource "aws_autoscaling_group" "workers" {
   max_size            = 0
   desired_capacity    = 0
 
-  # Tries the types in order: g6e.xlarge, then g6e.2xlarge when no xlarge is free in any zone.
+  # Tries the types in order: g6e.xlarge, then g6e.2xlarge, then g6.2xlarge (L4, slower) when the
+  # ones before are sold out in every zone.
   mixed_instances_policy {
     instances_distribution {
       on_demand_allocation_strategy            = "prioritized"

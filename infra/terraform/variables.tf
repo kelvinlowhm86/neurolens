@@ -64,7 +64,7 @@ variable "worker_ami_id" {
 variable "worker_instance_types" {
   description = "On-demand worker types in order of preference: the next is tried when the one before is sold out in every zone. [\"t3.large\"] for the wiring rehearsal."
   type        = list(string)
-  default     = ["g6e.xlarge", "g6e.2xlarge"]
+  default     = ["g6e.xlarge", "g6e.2xlarge", "g6.2xlarge"]
 }
 
 variable "scale_out_warmup_seconds" {
