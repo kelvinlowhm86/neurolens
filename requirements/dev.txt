@@ -10,3 +10,5 @@ psycopg[binary]>=3.1
 # M3b: the sign-in tests fake only HTTP (responses) and sign ID tokens with a test RSA key (joserfc)
 responses>=0.25
 joserfc>=1.0
+# M3d: infra/make_brain_mesh.py extracts the head surface from the MNI152 template (laptop only)
+scikit-image>=0.24
