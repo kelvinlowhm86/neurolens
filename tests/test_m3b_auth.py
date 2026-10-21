@@ -286,15 +286,16 @@ def test_a_session_survives_a_new_app_with_the_same_secret_key(cognito_app, idp)
 
 # ---------------------------------------------------------------- every /api/* route needs sign-in
 
+PUBLIC_API = {("/api/limits", "GET")}
+
 
 def test_every_api_route_is_401_json_when_signed_out(cognito_app):
     app = cognito_app()
     client = app.test_client()
-    rules = api_rules(app)
+    rules = [rule for rule in api_rules(app) if rule not in PUBLIC_API]
     paths = {re.sub(r"[0-9a-f-]{36}", "<id>", url) for url, _ in rules}
     assert {
         "/api/me",
-        "/api/limits",
         "/api/jobs",
         "/api/uploads/presign",
         "/api/jobs/<id>/status",
@@ -328,16 +329,18 @@ def test_the_public_routes_stay_public(cognito_app, tmp_path):
     assert client.get("/healthz").status_code == 200
 
 
-def test_limits_needs_sign_in_and_then_answers(cognito_client, idp):
-    assert cognito_client.get("/api/limits").status_code == 401
-    sign_in(cognito_client, idp)
-    resp = cognito_client.get("/api/limits")
-    assert resp.status_code == 200
-    assert resp.get_json() == {
+def test_limits_answer_signed_out_and_signed_in(cognito_client, idp):
+    """M3d §6: the page needs colour_range to colour a sample's brain before sign-in."""
+    expected = {
         "max_video_duration_seconds": 120,
         "max_upload_bytes": 300000000,
         "colour_range": 0.5,
     }
+    resp = cognito_client.get("/api/limits")
+    assert resp.status_code == 200
+    assert resp.get_json() == expected
+    sign_in(cognito_client, idp)
+    assert cognito_client.get("/api/limits").get_json() == expected
 
 
 def test_dev_mode_is_always_signed_in(aws, db, make_cfg, tmp_path):

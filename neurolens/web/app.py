@@ -213,9 +213,12 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
 
     @app.before_request
     def api_rules():
-        """Every /api/* route: a signed-in user, and JSON for POSTs (cross-site forms cannot send
-        it without a CORS check this app never grants)."""
+        """Every /api/* route except GET /api/limits: a signed-in user, and JSON for POSTs
+        (cross-site forms cannot send it without a CORS check this app never grants). The limits
+        are public so signed-out visitors' sample brains can be coloured (M3d §6)."""
         if not request.path.startswith("/api/"):
+            return None
+        if request.path == "/api/limits" and request.method == "GET":
             return None
         user = auth.current_user()
         if user is None:
