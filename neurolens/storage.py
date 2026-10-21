@@ -100,11 +100,36 @@ def put_result(s3, bucket, job_id, result):
     return True
 
 
-def put_dataset(s3, bucket, job_id, upload_key, result):
-    """Keep a consented job's video and result under dataset/<job_id>/ (M3c §3b).
+def brain_bytes(preds):
+    """The raw with-audio predictions as float16 little-endian, row-major, no header (M3d §5).
+
+    Raises ValueError if any value is not finite after the cast: float16 overflows above 65,504,
+    and a NaN or infinity must never reach a stored brain file.
+    """
+    import numpy as np
+
+    with np.errstate(over="ignore"):
+        data = np.asarray(preds, dtype="<f2")
+    if not np.isfinite(data).all():
+        raise ValueError("Brain predictions contain a value that float16 cannot represent")
+    return data.tobytes(order="C")
+
+
+def put_brain(s3, bucket, job_id, preds):
+    """Write results/<job_id>.brain, replacing an earlier copy (M3d §5)."""
+    s3.put_object(
+        Bucket=bucket,
+        Key=f"results/{job_id}.brain",
+        Body=brain_bytes(preds),
+        ContentType="application/octet-stream",
+    )
+
+
+def put_dataset(s3, bucket, job_id, upload_key, result, brain):
+    """Keep a consented job's video, result and brain under dataset/<job_id>/ (M3c §3b, M3d §5).
 
     The video is copied from the upload key, keeping its extension. The result is serialised first,
-    so a NaN or infinity raises ValueError before either write. Both writes replace earlier copies:
+    so a NaN or infinity raises ValueError before either write. All writes replace earlier copies:
     a redelivered job writes the same content. Any S3 error is raised to the worker's failure path.
     """
     body = json.dumps(result, allow_nan=False).encode()
@@ -119,6 +144,12 @@ def put_dataset(s3, bucket, job_id, upload_key, result):
         Key=f"dataset/{job_id}/result.json",
         Body=body,
         ContentType="application/json",
+    )
+    s3.put_object(
+        Bucket=bucket,
+        Key=f"dataset/{job_id}/brain",
+        Body=brain,
+        ContentType="application/octet-stream",
     )
 
 

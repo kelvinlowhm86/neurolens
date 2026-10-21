@@ -228,7 +228,7 @@ cat > /tmp/neurolens-pipeline.py <<'PY'
 """The worker's pipeline once on the smoke clip (its calls, §7a): both passes, so every encoder loads."""
 import json, logging, sys
 from pathlib import Path
-from neurolens import engagement, inference, settings
+from neurolens import inference, response, settings
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
 cfg = settings.load_settings()
 inference.load_model(cfg)
@@ -239,7 +239,7 @@ print("MARK full-pass start", flush=True)
 full = inference.predict(events, duration)
 print("MARK full-pass end", flush=True)
 silent = inference.predict(inference.without_audio(events), duration)
-engagement.extract_engagement(full, silent, inference.roi_masks())
+response.extract_response(full, silent, inference.roi_masks())
 print("PIPELINE OK", full.shape, silent.shape, "gpu:", json.dumps(inference.gpu_info()), flush=True)
 PY
 

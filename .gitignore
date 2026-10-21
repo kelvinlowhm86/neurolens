@@ -38,6 +38,7 @@ hub/
 /data/output/**/*.json
 /data/output/**/*.npy
 /data/output/**/*.png
+/data/output/**/brain
 # ...but keep the thumbnails the dashboard renders:
 !/data/output/**/thumb.jpg
 

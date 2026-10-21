@@ -60,6 +60,14 @@ def _job_active():
     return _error("job_active", JOB_ACTIVE_MESSAGE, status=409)
 
 
+def _old_result():
+    return _error(
+        "old_result",
+        "This result was made by an older version of NeuroLens. Upload the video again.",
+        status=410,
+    )
+
+
 def _job_keys(job):
     """Every S3 key §4 step 2 names for one job, with the dataset video's real extension."""
     job_id = str(job["job_id"])
@@ -67,8 +75,10 @@ def _job_keys(job):
     return [
         job["object_key"],
         f"results/{job_id}.json",
+        f"results/{job_id}.brain",
         f"dataset/{job_id}/video{ext}",
         f"dataset/{job_id}/result.json",
+        f"dataset/{job_id}/brain",
         f"dataset/{job_id}/retention.csv",
     ]
 
@@ -90,6 +100,22 @@ def _worker_group_paused(autoscaling, group_name):
     groups = autoscaling.describe_auto_scaling_groups(AutoScalingGroupNames=[group_name])
     found = groups["AutoScalingGroups"]
     return not found or found[0]["MaxSize"] == 0
+
+
+def _presigned_get(s3, bucket, key, expires_in=300):
+    """A presigned GET URL for key, always SigV4.
+
+    boto3 still presigns S3 URLs with the old SigV2 by default; choosing the signer for this one
+    operation keeps the client's endpoint, region and credentials.
+    """
+    s3.meta.events.register_first("choose-signer.s3.GetObject", _sigv4, unique_id="neurolens-sigv4")
+    return s3.generate_presigned_url(
+        "get_object", Params={"Bucket": bucket, "Key": key}, ExpiresIn=expires_in
+    )
+
+
+def _sigv4(**_):
+    return "s3v4"
 
 
 def _s3_client(cfg):
@@ -125,6 +151,9 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
     """
     auth_cfg = auth.auth_settings(cfg)  # first: refuses the dev identity on a public address
     cfg = cfg or {}
+    response_cfg = cfg.get("response")
+    if cfg:  # a launcher's settings must carry a usable block: fail at start-up, not per request
+        results.validate_response_config(response_cfg)
     cognito = auth_cfg["mode"] == "cognito"
     worker_group = (cfg.get("aws") or {}).get("worker_group")
     if cognito and not worker_group:
@@ -265,7 +294,13 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
     @app.route("/api/limits")
     def get_limits():
         """The upload limits, so the page holds no copy of them (config.json is the one place)."""
-        return jsonify({"max_video_duration_seconds": max_seconds, "max_upload_bytes": max_bytes})
+        return jsonify(
+            {
+                "max_video_duration_seconds": max_seconds,
+                "max_upload_bytes": max_bytes,
+                "colour_range": (response_cfg or {}).get("colour_range"),
+            }
+        )
 
     @app.route("/api/me")
     def me():
@@ -444,6 +479,8 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
             return None, _not_configured()
         result = storage.get_result(s3, bucket, job["job_id"])
         if result is not None:
+            if result.get("format") != 2:
+                return None, _old_result()
             return result, None
         if job["status"] == billing.DONE:
             return None, _error(
@@ -477,7 +514,9 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
     @app.route("/api/jobs/<job_id>/result")
     def job_result(job_id):
         result, error = owned_result(job_id)
-        return error or jsonify(result)
+        if error:
+            return error
+        return jsonify({**result, "summary": results.summarise(result, response_cfg)})
 
     @app.route("/api/jobs/<job_id>/result.csv")
     def job_result_csv(job_id):
@@ -493,6 +532,17 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
                 "Content-Disposition": f'attachment; filename="{name}"',
             },
         )
+
+    @app.route("/api/jobs/<job_id>/brain")
+    def job_brain(job_id):
+        """Redirect to a five-minute presigned GET of the raw brain file (M3d §7)."""
+        _, error = owned_result(job_id)
+        if error:
+            return error
+        key = f"results/{uuid.UUID(job_id)}.brain"
+        if not storage.object_exists(s3, bucket, key):
+            return _error("brain_missing", "The brain file for this result is missing.", status=404)
+        return redirect(_presigned_get(s3, bucket, key, expires_in=300))
 
     @app.route("/api/jobs/<job_id>/retention", methods=["POST"])
     def job_retention(job_id):

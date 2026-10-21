@@ -1,17 +1,151 @@
-"""A stored result as CSV (M3b §4a). Pure Python: the web tier imports it."""
+"""A stored result's summary and CSV, and the response config check (M3d §6-§7). Pure Python:
+the web tier imports it."""
 
 import csv
 import io
 import json
 import math
 
-REGIONS = ["ffa_faces", "eba_bodies", "ppa_scenes", "sts_social", "auditory"]
-COLUMNS = ["t", "engagement_overall", *REGIONS, "auditory_with_audio", "auditory_without_audio"]
+SERIES = [
+    "faces",
+    "bodies",
+    "scenes",
+    "visual",
+    "sound",
+    "speech",
+    "social",
+    "see",
+    "hear",
+    "understand",
+    "overall",
+]
+GROUPS = ["see", "hear", "understand"]
+COLUMNS = ["t", *SERIES, *(f"muted_{name}" for name in SERIES)]
+RESPONSE_KEYS = (
+    "well_above",
+    "above",
+    "below",
+    "dead_threshold",
+    "dead_min_seconds",
+    "colour_range",
+)
 
 
 def _cell(value):
     """Exactly the number as stored in the result JSON; an empty cell for None."""
     return "" if value is None else json.dumps(value)
+
+
+def _number(value):
+    """A finite number; bool is an int in Python but not a number here."""
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        return False
+    try:
+        return math.isfinite(value)
+    except OverflowError:
+        return False
+
+
+def validate_response_config(cfg):
+    """Raise ValueError unless cfg is a complete, usable `response` block (M3d §6)."""
+    if not isinstance(cfg, dict):
+        raise ValueError("The response config must be an object.")
+    for key in RESPONSE_KEYS:
+        if key not in cfg:
+            raise ValueError(f"Missing response setting: {key}")
+        if not _number(cfg[key]):
+            raise ValueError(f"response.{key} must be a finite number.")
+    if not cfg["well_above"] > cfg["above"] > cfg["below"]:
+        raise ValueError("response thresholds must satisfy well_above > above > below.")
+    if cfg["dead_threshold"] <= 0:
+        raise ValueError("response.dead_threshold must be positive.")
+    if (
+        isinstance(cfg["dead_min_seconds"], bool)
+        or not isinstance(cfg["dead_min_seconds"], int)
+        or cfg["dead_min_seconds"] < 1
+    ):
+        raise ValueError("response.dead_min_seconds must be an integer of at least 1.")
+    if cfg["colour_range"] <= 0:
+        raise ValueError("response.colour_range must be positive.")
+
+
+def _level(value, cfg):
+    if value >= cfg["well_above"]:
+        return "well above typical"
+    if value >= cfg["above"]:
+        return "above typical"
+    if value <= cfg["below"]:
+        return "below typical"
+    return "typical"
+
+
+def _mean(values):
+    return sum(values) / len(values) if values else 0.0
+
+
+def _dead_stretches(overall, threshold, minimum):
+    stretches = []
+    start = None
+    for t, value in enumerate(overall):
+        if value < -threshold:
+            if start is None:
+                start = t
+        elif start is not None:
+            if t - start >= minimum:
+                stretches.append({"start": start, "end": t})
+            start = None
+    if start is not None and len(overall) - start >= minimum:
+        stretches.append({"start": start, "end": len(overall)})
+    return stretches
+
+
+def _audio_dependence(overall, muted):
+    length = min(len(overall), len(muted))
+    denominator = sum(max(value, 0.0) for value in overall[:length])
+    if denominator < 1e-6:
+        return None
+    numerator = sum(max(value, 0.0) for value in muted[:length])
+    return round(min(max(1 - numerator / denominator, 0.0), 1.0), 2)
+
+
+def summarise(result, response_cfg):
+    """The cards served with a result, computed each time so a threshold change needs no rerun."""
+    signals = result["signals"]
+    muted = result["muted"]
+    overall = signals["overall"]
+    length = len(overall)
+
+    hook_length = min(3, length)
+    hook_group = max(
+        GROUPS,
+        key=lambda group: _mean(signals[group][:hook_length]),
+    )
+    hook_value = round(_mean(signals[hook_group][:hook_length]), 3)
+
+    if length == 1:
+        peak_t = 0
+    elif length > 1:
+        peak_t = max(range(1, length), key=lambda t: overall[t])
+    else:
+        peak_t = None
+    peak = (
+        None
+        if peak_t is None
+        else {"t": peak_t, "value": overall[peak_t], "level": _level(overall[peak_t], response_cfg)}
+    )
+
+    return {
+        "hook": {
+            "group": hook_group,
+            "value": hook_value,
+            "level": _level(hook_value, response_cfg),
+        },
+        "peak": peak,
+        "dead": _dead_stretches(
+            overall, response_cfg["dead_threshold"], response_cfg["dead_min_seconds"]
+        ),
+        "audio_dependence": _audio_dependence(overall, muted["overall"]),
+    }
 
 
 RETENTION_COLUMNS = ("elapsedVideoTimeRatio", "audienceWatchRatio")
@@ -95,13 +229,15 @@ def retention_csv(pairs):
 
 
 def to_csv(result):
-    """One row per timestep, columns in COLUMNS order."""
+    """One row per second, columns in COLUMNS order; muted cells beyond the shared length empty."""
+    signals = result["signals"]
+    muted = result["muted"]
     out = io.StringIO()
     writer = csv.writer(out, lineterminator="\n")
     writer.writerow(COLUMNS)
-    for step in result["timesteps"]:
-        values = [step["t"], step["engagement_overall"]]
-        values += [step["regions"][name] for name in REGIONS]
-        values += [step["auditory_with_audio"], step["auditory_without_audio"]]
+    for t in range(result["duration_seconds"]):
+        values = [t]
+        values += [signals[name][t] for name in SERIES]
+        values += [muted[name][t] if t < len(muted[name]) else None for name in SERIES]
         writer.writerow([_cell(v) for v in values])
     return out.getvalue()

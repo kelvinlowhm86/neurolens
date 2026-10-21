@@ -10,7 +10,7 @@ import time
 import numpy as np
 
 from neurolens import settings
-from neurolens.engagement import build_roi_masks, require_nonempty_masks
+from neurolens.response import build_masks, require_nonempty_masks
 
 logger = logging.getLogger("neurolens")
 
@@ -68,7 +68,7 @@ def load_model(cfg=None):
     label_names = destrieux["labels"]
     labels_full = np.concatenate([labels_lh, labels_rh])
 
-    _roi_masks = build_roi_masks(labels_full, label_names)
+    _roi_masks = build_masks(labels_full, label_names)
     require_nonempty_masks(_roi_masks)
     logger.info("Atlas and ROI masks ready.")
 

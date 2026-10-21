@@ -39,7 +39,7 @@ listed = set(re.findall(r"\|\s*`([^`]+)`", (data / "videos/SOURCES.md").read_tex
 samples = json.loads((data / "samples.json").read_text())["samples"]
 public = [s for s in samples if s["video_file"].removeprefix("videos/") in listed]
 for s in public:
-    for name in (s["video_file"], s.get("thumbnail")):
+    for name in (s["video_file"], s.get("thumbnail"), s.get("brain_file")):
         if name:
             target = stage / "data" / name
             target.parent.mkdir(parents=True, exist_ok=True)

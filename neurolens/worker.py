@@ -26,8 +26,9 @@ from pathlib import Path
 
 from botocore.exceptions import ClientError
 
-from neurolens import billing, engagement, inference, settings, storage
+from neurolens import billing, inference, settings, storage
 from neurolens import db as dbmod
+from neurolens.response import extract_response
 
 logger = logging.getLogger("neurolens")
 
@@ -426,7 +427,10 @@ def _analyse(bucket, key, job_id, attempt, *, s3, db, cfg, roi_masks, research_c
         stage("inference_noaudio")
         preds_noaudio = inference.predict(inference.without_audio(events), duration)
         stage("extracting_roi")
-        result = engagement.extract_engagement(preds_full, preds_noaudio, roi_masks)
+        result = extract_response(preds_full, preds_noaudio, roi_masks)
+        # Cast and check before any write: an overflowing or non-finite value must fail the job
+        # before the dataset copy or the result exists (M3d §5).
+        brain = storage.brain_bytes(preds_full)
 
     result["job_id"] = job_id
     result["processing_time_seconds"] = round(time.time() - t0, 1)
@@ -440,11 +444,15 @@ def _analyse(bucket, key, job_id, attempt, *, s3, db, cfg, roi_masks, research_c
         # Check the claim before the copy: a late worker must not leave dataset files behind for
         # a job the reaper has already refunded and the user deleted (M3c §3b).
         stage("saving_dataset")
-        storage.put_dataset(s3, bucket, job_id, key, result)
+        storage.put_dataset(s3, bucket, job_id, key, result, brain=brain)
 
     # Check the claim again before writing the result, for a job with or without consent: a
     # late worker must not leave a result behind for a job the reaper has refunded (M3c §3b).
     stage("saving_result")
+
+    # The brain file first: a result always has its brain (M3d §5). A failed brain write raises,
+    # so the normal failure path retries and no result is published.
+    storage.put_brain(s3, bucket, job_id, preds_full)
 
     # Publish to S3 without ever replacing an earlier result (a redelivered notice must not
     # overwrite the first answer). Either way the finished job is charged, once.
