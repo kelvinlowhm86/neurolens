@@ -54,7 +54,7 @@
   .box p { font-size: 12.5px; color: var(--stage-muted); line-height: 1.5; }
   .box p.error { color: #FCA5A5; }
   .box .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 2px; align-items: center; }
-  .box a { color: var(--stage-text); }
+  .box a:not(.btn-white) { color: var(--stage-text); }
   .upload-zone { border: 2px dashed var(--stage-rule); border-radius: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; cursor: pointer; position: relative; padding: 26px 16px; text-align: center; background: var(--stage-2); }
   .upload-zone:hover { border-color: var(--heat); }
   .upload-zone.hidden { display: none; }
