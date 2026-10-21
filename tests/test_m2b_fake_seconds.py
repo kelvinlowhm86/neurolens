@@ -20,6 +20,12 @@ os.environ["FAKE_INFERENCE"] = "1"  # fake events are built in fake mode
 events = inference.build_events(sys.argv[1])
 if sys.argv[2] == "off":
     del os.environ["FAKE_INFERENCE"]
+# Untimed warm-up: the first fake call loads nilearn and the fsaverage5 sphere (about 1 s), which
+# is not the FAKE_INFERENCE_SECONDS delay these tests measure.
+seconds = os.environ.pop("FAKE_INFERENCE_SECONDS", None)
+inference.predict(events, 3.0)
+if seconds is not None:
+    os.environ["FAKE_INFERENCE_SECONDS"] = seconds
 times = []
 for ev in (events, inference.without_audio(events)):
     t0 = time.monotonic()
