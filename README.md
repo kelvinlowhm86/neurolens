@@ -1,14 +1,51 @@
-# NeuroLens — Video Engagement Analysis via Predicted Brain Activity
+# NeuroLens — Predicted Brain Response to Video
 
 ## Overview
 
-NeuroLens uses Meta's **TRIBE v2** (TRImodal Brain Encoder) to predict how the human brain responds to video content, second by second. By analysing predicted fMRI activation across key cortical regions, it produces a temporal engagement profile for any uploaded video — surfacing which moments are most neurally stimulating, which sensory channels drive attention, and how different content types (faces, scenes, speech) compete for brain resources.
+NeuroLens uses Meta's **TRIBE v2** (TRImodal Brain Encoder) to predict how an average viewer's brain would respond to a video, second by second. It shows that **predicted brain response** relative to typical film and TV viewing: which brain systems respond (seeing, hearing, understanding), its strongest and weakest moments, how much depends on the soundtrack, and a 3D brain map synced to the video.
 
-This is not emotion classification. It is a **neural engagement analyser** — a computational proxy for what a neuromarketing lab produces with a real fMRI scanner at thousands of dollars per hour.
+It is a virtual pre-test, not a prediction of views, retention or sales, and not emotion classification. The model gives no evidence for those, so NeuroLens makes no such claim.
 
 ---
 
-## Core Objectives
+## What it shows (current design, `docs/M3d_spec.md`)
+
+The model outputs one row per second of video over 20,484 points of the cortex (the fsaverage5 surface: indices 0-10,241 left hemisphere, 10,242-20,483 right). TRIBE v2 was trained on fMRI responses standardised per point, so 0 means typical film/TV viewing: values are shown **signed and unscaled**, and two videos can be compared directly.
+
+`neurolens/response.py` reads 7 signals from the areas the TRIBE v2 paper tested, in 3 groups:
+
+| Signal | Brain areas (Glasser HCP-MMP1) | Group |
+|---|---|---|
+| faces | FFC | see |
+| bodies | V4t | see |
+| scenes | PHA1-3 | see |
+| visual | V1-3 | see |
+| sound | A1, LBelt, MBelt, PBelt | hear |
+| speech | A5, STSva, STSvp, 45 (left only) | understand |
+| social | PGi, TE1a | understand |
+
+Each signal is the mean over its area's points; each group is the mean of its signals, and **overall** is the mean of the three groups. The worker also runs the video with its sound removed and computes the same 11 series from that pass (**muted**), cut to the shared length of the two passes.
+
+**Brain-area map.** The areas come from the Glasser HCP-MMP1 parcellation (360 areas; Glasser et al. 2016, *Nature*). The worker downloads its two map files once on first start into `data/hcp_mmp/` (git-ignored; the worker image build does this, so the files are baked into the image) and checks their SHA-256, so it never runs on a changed map. The map is Human Connectome Project data under the WU-Minn HCP Open Access Data Use Terms (see License).
+
+**Result format 2** (`results/<job_id>.json`):
+
+```
+{"format": 2, "duration_seconds": T,
+ "signals": {"faces": [T numbers], ..., "overall": [T numbers]},
+ "muted":   {"faces": [M numbers], ..., "overall": [M numbers]},
+ "job_id": ..., "processing_time_seconds": ..., "gpu"?: ..., "fake_inference"?: true}
+```
+
+Series order: faces, bodies, scenes, visual, sound, speech, social, see, hear, understand, overall. Values are rounded to 3 decimals. The web app adds a `summary` (opening, strongest and weakest moments, audio dependence) when it serves a result; it is never stored. Results without `"format": 2` are answered with 410 ("upload the video again").
+
+**Raw brain file** (`results/<job_id>.brain`): the with-audio predictions as float16, shape (T, 20484), no header. The 3D map reads it, and later changes to the signals need no GPU rerun.
+
+---
+
+> **Note:** the sections from here to "Hardware Requirements" are the original plan (an "engagement score" over five regions rescaled to 0-1, `POST /api/analyse`, a 2× RTX 4090 machine), kept for the ideas. None of it describes the current design: see above, `AGENTS.md` and the specs in `docs/`. The two notebooks still use the original maths.
+
+## Original objectives
 
 ### 1. Temporal Engagement Scoring
 
@@ -39,8 +76,6 @@ By plotting these five region traces side by side against the video timeline, we
 ---
 
 ## Architecture
-
-> **Note:** this section and the two parts after it are the original plan, kept for the ideas. `POST /api/analyse` and the 2× RTX 4090 machine no longer exist: the web app lets the browser upload straight to S3, a queue feeds a separate GPU worker, and the model runs on one AWS GPU. For the current design see `AGENTS.md` and the specs in `docs/`.
 
 The project has two main parts: a **Python backend** that runs inference and serves results via API, and a **web frontend** that handles upload, playback, and visualisation.
 
@@ -216,6 +251,8 @@ All charts share a synchronised hover/crosshair. Clicking any point on a chart s
 ---
 
 ## Hardware Requirements
+
+> The list below is for the original 2× RTX 4090 machine. The model peaks at about 20 GB of GPU memory; the AWS worker runs on one L40S (g6e), see `docs/evidence/README.md`.
 
 - **GPU:** 2× NVIDIA RTX 4090 (24 GB VRAM each, 48 GB total)
 - **VRAM usage:** ~28–32 GB across both cards
@@ -610,3 +647,5 @@ See `infra/terraform/README.md`: setup from an empty account, work sessions and 
 ## License
 
 This project is for **non-commercial research use only**, in compliance with TRIBE v2's CC BY-NC 4.0 license.
+
+Brain-area map: data were provided [in part] by the Human Connectome Project, WU-Minn Consortium (Principal Investigators: David Van Essen and Kamil Ugurbil; 1U54MH091657) funded by the 16 NIH Institutes and Centers that support the NIH Blueprint for Neuroscience Research; and by the McDonnell Center for Systems Neuroscience at Washington University. Parcellation: Glasser, M. F. et al. (2016), A multi-modal parcellation of human cerebral cortex, *Nature* 536, 171-178.

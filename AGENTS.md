@@ -1,9 +1,9 @@
 # NeuroLens: rules for people and AI tools
 
-NeuroLens predicts brain activity for a video (TRIBE v2) and turns it into per-region "engagement" curves, served by a Flask web app. Course project: not for commercial use (the model is CC BY-NC).
+NeuroLens predicts brain activity for a video (TRIBE v2) and turns it into a signed, second-by-second brain response (7 signals in 3 groups, a 3D map), served by a Flask web app. Course project: not for commercial use (the model is CC BY-NC).
 
 ## Layout
-- `neurolens/` the package: `settings.py` (config + paths), `engagement.py` (pure maths, numpy only), `inference.py` (model + atlas loading, `build_events`, `without_audio`, `predict`, `probe_duration`, fake mode), `pricing.py`, `storage.py` (S3 helpers), `db.py` (Aurora/Postgres access), `billing.py` (credits, ledger, sign-in users), `results.py`, `experiment_runs.py`, `worker.py` (SQS poll loop), `lambdas/` (reaper, dead-letter handler), `web/` (`app.py` `create_app()` and Flask routes, `auth.py`, `lambda_handler.py`).
+- `neurolens/` the package: `settings.py` (config + paths), `response.py` (signals from the brain-area map, pure maths, numpy only), `inference.py` (model + atlas loading, `build_events`, `without_audio`, `predict`, `probe_duration`, fake mode), `pricing.py`, `storage.py` (S3 helpers), `db.py` (Aurora/Postgres access), `billing.py` (credits, ledger, sign-in users), `results.py`, `experiment_runs.py`, `worker.py` (SQS poll loop), `lambdas/` (reaper, dead-letter handler), `web/` (`app.py` `create_app()` and Flask routes, `auth.py`, `lambda_handler.py`).
 - `app.py` and `worker.py` at the root are thin launchers (`python app.py`, port 5003). `static/` the page. `data/` samples, videos, thumbnails.
 - `notebooks/` the two `.ipynb` files (need a GPU). `requirements/` per-machine dependency lists. `infra/` Terraform, IAM policies, deploy and start/stop scripts, the circuit-breaker Lambda, DB migrations. `experiments/` operator scripts for the study runs. `tests/` pytest. `docs/` specs.
 
@@ -17,6 +17,6 @@ NeuroLens predicts brain activity for a video (TRIBE v2) and turns it into per-r
 - Read config only through `neurolens.settings`. Nothing runs at import time.
 - Settings: `config.json` is committed and shared (behaviour settings only, no secrets). Secrets and deployment-specific values (`HF_TOKEN`, `NEUROLENS_S3_BUCKET`, `NEUROLENS_SQS_QUEUE_URL`) go in `.env` (git-ignored; copy `.env.example`) and are read through `settings.load_settings`. Never commit `.env`, tokens or AWS keys, and never put them in Docker images.
 - Never edit a test to make it pass: stop and ask.
-- Do not change `extract_engagement` without updating `tests/fixtures/extract_engagement_golden.json` and saying so.
-- Normalisation rule, do not "fix": `extract_engagement` cuts the with-audio and no-audio auditory passes to their shared length first, then rescales each to 0-1. So `auditory` and `auditory_with_audio` can differ in the same row.
+- Do not change `extract_response` without regenerating `tests/fixtures/extract_response_golden.json` and saying so.
+- Values rule, do not "fix": `extract_response` gives signed means with no absolute value and no rescaling (0 = typical film/TV viewing, the model's built-in scale), so videos can be compared. The muted (no-audio) series are cut to the shared length of the two passes.
 - Work on branch `aws-josh`, not `main`. Specs in `docs/` describe the current design only; history lives in git.

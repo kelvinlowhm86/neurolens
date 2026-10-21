@@ -165,7 +165,7 @@ From M2a on, the worker writes each result to `results/{job_id}.json` instead of
 ## 7. Real-model check (deferred from M1)
 On the first GPU boot, upload one video with speech that we have the rights to (the open-licensed Sintel trailer, about 52 s; record its title, URL and licence in `data/videos/SOURCES.md`) through the web app's presign flow and let the worker process it. There are no stored reference numbers to compare against, so the check is that the real pipeline ran and its output is sane and repeatable:
 - The job finishes: `results/{job_id}.json` exists, `fake_inference` is absent and `gpu` is present.
-- `duration_seconds` and the number of `timesteps` give one row per second started (the 52.2 s trailer gives 53 rows, the 119.01 s loop 120); every value is between 0 and 1; `engagement_overall` and the five region columns are not constant (maximum above minimum).
+- `duration_seconds` and the number of `timesteps` give one row per second started (the 52.2 s trailer gives 53 rows, the 119.01 s loop 120); every value is between 0 and 1; `engagement_overall` and the five region columns are not constant (maximum above minimum). **Superseded by M3d:** results now use format 2 (signed signals, no 0-1 rescaling) from `extract_response`, see `docs/M3d_spec.md` §2-§3 and §7.
 - The same clip run a second time agrees with the first run to within 0.001 on every value. A larger gap is not automatically a bug but must be explained in the build log before M2b starts.
 - The worker log shows all three encoders loaded (video, audio, and text including the gated Llama 3.2 model), as in §2 step 5.
 - Record the job's wall-clock time and the peak GPU memory from the `gpu` field, for the cost figures in M2b and M4.
