@@ -348,10 +348,12 @@ def without_audio(events):
 
 
 def _fake_predictions(events, rows):
-    """Smooth stand-in output, so local previews look like real predictions: a few blobs on the
-    fsaverage5 sphere (bundled with nilearn, no download) whose strength drifts slowly, plus a
-    little noise. Seeded from the file's size, so the same video gives the same output; the
-    no-audio pass is the same blobs at 60% strength with its own noise (seed size + 1).
+    """Smooth stand-in output, so local previews look like real predictions: 24 overlapping blobs
+    on the fsaverage5 sphere (bundled with nilearn, no download) of mixed size and strength, whose
+    strength drifts slowly, plus a little noise. Peaks reach about twice the default colour_range,
+    like a calibrated map: most of a hot area shows red to yellow, with small bright cores. Seeded
+    from the file's size, so the same video gives the same output; the no-audio pass is the same
+    blobs at 60% strength with its own noise (seed size + 1).
     """
     from nilearn import datasets
 
@@ -359,13 +361,16 @@ def _fake_predictions(events, rows):
     xyz = np.vstack([sphere["left"].coordinates, sphere["right"].coordinates])
     xyz /= np.linalg.norm(xyz, axis=1, keepdims=True)
     rng = np.random.default_rng(events.size)
-    picks = rng.integers(0, N_VERTICES, 8)
-    spread = np.exp(-(((1 - xyz @ xyz[picks].T) / 0.08) ** 2))  # (20484, 8), about 25 degrees wide
+    blobs = 24
+    picks = rng.integers(0, N_VERTICES, blobs)
+    width = rng.uniform(0.02, 0.07, blobs)  # 1 - cos(angle): about 11 to 21 degrees across
+    spread = np.exp(-(((1 - xyz @ xyz[picks].T) / width) ** 2))  # (20484, blobs)
     left = np.arange(N_VERTICES) < N_VERTICES // 2
     spread[left[:, None] != left[picks][None, :]] = 0  # each blob stays on its own hemisphere
     t = np.arange(rows)[:, None]
-    period, phase = rng.uniform(12, 30, 8), rng.uniform(0, 2 * np.pi, 8)
-    strength = np.sin(2 * np.pi * t / period + phase)  # (rows, 8), between -1 and 1
+    period, phase = rng.uniform(12, 30, blobs), rng.uniform(0, 2 * np.pi, blobs)
+    amplitude = rng.uniform(0.15, 0.5, blobs)
+    strength = amplitude * np.sin(2 * np.pi * t / period + phase)  # (rows, blobs)
     field = strength @ spread.T
     if not events.audio:
         field *= 0.6

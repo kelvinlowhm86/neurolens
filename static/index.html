@@ -109,7 +109,7 @@
   .brain-box canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
   .brain-message { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 20px; text-align: center; font-size: 13px; color: var(--stage-muted); }
   .brain-legend { position: absolute; left: 14px; bottom: 12px; display: flex; gap: 8px; align-items: center; font-size: 11px; color: var(--stage-muted); pointer-events: none; }
-  .brain-legend i { width: 86px; height: 6px; border-radius: 3px; background: linear-gradient(90deg, #D9DCE1, #730505, #D91A0D, #FF730D, #FFD133, #FFF7C7); }
+  .brain-legend i { width: 86px; height: 6px; border-radius: 3px; background: linear-gradient(90deg, #D9DCE1, #800000 10%, #E61A0A 40%, #FF800A 66%, #FFD926 88%, #FFFFD9); }
   .brain-time { position: absolute; right: 14px; top: 12px; font: 600 13px var(--display); color: var(--stage-muted); font-variant-numeric: tabular-nums; }
   .sample-meta { font-size: 11.5px; color: var(--stage-muted); line-height: 1.45; }
   .sample-meta:empty { display: none; }
@@ -1903,7 +1903,7 @@ const VERTICES = 20484;
 const MESH_URL = '/static/brain/fsaverage6_pial.bin';
 const HEAD_URL = '/static/brain/head.bin';
 const UNAVAILABLE = 'The 3D view is not available for this video.';
-const HEAT = [[0, [0.45, 0.02, 0.02]], [0.3, [0.85, 0.10, 0.05]], [0.6, [1, 0.45, 0.05]], [0.85, [1, 0.82, 0.20]], [1, [1, 0.97, 0.78]]];
+const HEAT = [[0, [0.50, 0.0, 0.0]], [0.35, [0.90, 0.10, 0.04]], [0.65, [1, 0.50, 0.04]], [0.88, [1, 0.85, 0.15]], [1, [1, 1, 0.85]]];
 
 function heat(t, out) {
   for (let i = 1; i < HEAT.length; i++) {
@@ -2001,7 +2001,7 @@ function makeBrain() {
       let r = baseColour[3 * i], g = baseColour[3 * i + 1], bl = baseColour[3 * i + 2];
       if (!cortexMask[i]) {
         const shade = Math.max(0, Math.min(1, value / heatRange));
-        const w = Math.min(1, Math.max(0, (shade - 0.08) / 0.3));
+        const w = Math.min(1, Math.max(0, (shade - 0.04) / 0.12));  // a short fade, so a hot area has a clear dark-red edge
         if (w > 0) {
           heat(shade, tmp);
           r += (tmp[0] - r) * w; g += (tmp[1] - g) * w; bl += (tmp[2] - bl) * w;
