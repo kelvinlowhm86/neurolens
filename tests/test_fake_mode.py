@@ -141,31 +141,41 @@ def test_fake_output_feeds_extract_response(fake_on, clip_path, roi_masks_small)
 # ---------------------------------------------------------------- load_model() in fake mode
 
 LOAD_MODEL_SCRIPT = r"""
-import json, logging, os, sys
+import hashlib, io, json, logging, os, sys, tempfile, urllib.request
+from pathlib import Path
 logging.basicConfig(level=logging.INFO)
 import numpy as np
-import nilearn.datasets as nd
+import nibabel.freesurfer as freesurfer
+
+areas = ["FFC", "V4t", "PHA1", "PHA2", "PHA3", "V1", "V2", "V3", "A1", "LBelt", "MBelt",
+         "PBelt", "A5", "STSva", "STSvp", "45", "PGi", "TE1a"]
+stubs = {}
+for side, prefix in (("lh", "L"), ("rh", "R")):
+    path = Path(tempfile.mkdtemp()) / f"{side}.annot"
+    names = [f"{prefix}_{area}_ROI".encode() for area in areas]
+    ctab = np.array([[10 * (i + 1), 0, 0, 0] for i in range(len(names))], dtype=np.int32)
+    freesurfer.write_annot(str(path), np.arange(10242) % len(names), ctab=ctab, names=names)
+    data = path.read_bytes()
+    stubs[f"https://stub/{side}"] = data
+    digest = hashlib.sha256(data).hexdigest()
+    stubs[side] = (f"{side}.HCPMMP1.annot", f"https://stub/{side}", digest)
 
 calls = []
-labels = ["Unknown", "G_oc-temp_lat-fusifor", "S_oc-temp_lat", "G_temporal_inf",
-          "G_oc-temp_med-Parahip", "S_calcarine", "G_cuneus", "Pole_occipital",
-          "G_oc-temp_med-Lingual", "G_temp_sup-G_T_transv", "G_temp_sup-Plan_tempo",
-          "G_front_inf-Opercular", "G_front_inf-Triangul", "G_temporal_middle",
-          "G_temp_sup-Lateral", "S_temporal_sup"]
+def fake_urlopen(url, timeout=None):
+    calls.append(url)
+    return io.BytesIO(stubs[url])
+urllib.request.urlopen = fake_urlopen
 
-def fake_fetch(*args, **kwargs):
-    calls.append(1)
-    return {"map_left": np.arange(10242) % len(labels),
-            "map_right": np.arange(10242) % len(labels), "labels": labels}
-
-nd.fetch_atlas_surf_destrieux = fake_fetch
 from neurolens import inference
+inference.HCP_MMP_FILES = {"lh": stubs["lh"], "rh": stubs["rh"]}
 cfg = json.loads(os.environ["TEST_CFG"])
 inference.load_model(cfg)
+first_calls = len(calls)
+inference.load_model(cfg)  # the second start reuses the saved files
 masks = inference.roi_masks()
 print(json.dumps({
     "heavy": [m for m in ("torch", "tribev2") if m in sys.modules],
-    "atlas_calls": len(calls),
+    "download_calls": [first_calls, len(calls)],
     "roi_names": sorted(masks),
     "mask_lengths": sorted({len(m) for m in masks.values()}),
     "mask_nonempty": all(bool(m.any()) for m in masks.values()),
@@ -178,8 +188,8 @@ print(json.dumps({
 def test_load_model_in_fake_mode_skips_torch_but_loads_atlas(tmp_path):
     """Runs in a subprocess so sys.modules and the environment start clean.
 
-    The atlas download is replaced by a stub, so this needs no network; the ROI masks are
-    built by the real code from the stub's labels.
+    The map download is replaced by a stub serving small synthetic annot files (pinned by their
+    own SHA-256), so this needs no network; the masks are built by the real code.
     """
     cfg = {
         "hf_token": "hf_not_a_real_token",
@@ -206,7 +216,7 @@ def test_load_model_in_fake_mode_skips_torch_but_loads_atlas(tmp_path):
     assert proc.returncode == 0, proc.stderr
     out = json.loads(proc.stdout.strip().splitlines()[-1])
     assert out["heavy"] == []  # neither torch nor tribev2 was imported
-    assert out["atlas_calls"] == 1
+    assert out["download_calls"] == [2, 2]  # downloaded once, then reused
     assert out["roi_names"] == [
         "bodies",
         "faces",
