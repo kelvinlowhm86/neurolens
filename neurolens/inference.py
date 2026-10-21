@@ -347,19 +347,43 @@ def without_audio(events):
     return events.loc[events.type == "Video"].copy()
 
 
+def _fake_predictions(events, rows):
+    """Smooth stand-in output, so local previews look like real predictions: a few blobs on the
+    fsaverage5 sphere (bundled with nilearn, no download) whose strength drifts slowly, plus a
+    little noise. Seeded from the file's size, so the same video gives the same output; the
+    no-audio pass is the same blobs at 60% strength with its own noise (seed size + 1).
+    """
+    from nilearn import datasets
+
+    sphere = datasets.load_fsaverage("fsaverage5")["sphere"].parts
+    xyz = np.vstack([sphere["left"].coordinates, sphere["right"].coordinates])
+    xyz /= np.linalg.norm(xyz, axis=1, keepdims=True)
+    rng = np.random.default_rng(events.size)
+    picks = rng.integers(0, N_VERTICES, 8)
+    spread = np.exp(-(((1 - xyz @ xyz[picks].T) / 0.08) ** 2))  # (20484, 8), about 25 degrees wide
+    left = np.arange(N_VERTICES) < N_VERTICES // 2
+    spread[left[:, None] != left[picks][None, :]] = 0  # each blob stays on its own hemisphere
+    t = np.arange(rows)[:, None]
+    period, phase = rng.uniform(5, 20, 8), rng.uniform(0, 2 * np.pi, 8)
+    strength = np.sin(2 * np.pi * t / period + phase)  # (rows, 8), between -1 and 1
+    field = strength @ spread.T
+    if not events.audio:
+        field *= 0.6
+    noise = np.random.default_rng(events.size + (0 if events.audio else 1))
+    return field + 0.1 * noise.standard_normal((rows, N_VERTICES))
+
+
 def predict(events, duration):
     """TRIBE v2 predictions, one row per second of video in time order: array (n, 20484).
 
-    In fake mode: seeded random numbers of shape (ceil(duration), 20484), seeded from the file's
-    size (plus 1 for the no-audio pass), so the same video gives the same output. Each fake call
-    sleeps FAKE_INFERENCE_SECONDS (default 0; only with FAKE_INFERENCE on), so a CPU rehearsal
-    has a job long enough to interrupt.
+    In fake mode: shape (ceil(duration), 20484), see _fake_predictions. Each fake call sleeps
+    FAKE_INFERENCE_SECONDS (default 0; only with FAKE_INFERENCE on), so a CPU rehearsal has a job
+    long enough to interrupt.
     """
     if isinstance(events, _FakeEvents):
         if fake_mode():
             time.sleep(float(os.environ.get("FAKE_INFERENCE_SECONDS") or 0))
-        rng = np.random.default_rng(events.size + (0 if events.audio else 1))
-        return rng.standard_normal((math.ceil(duration), N_VERTICES))
+        return _fake_predictions(events, math.ceil(duration))
 
     logger.info("Running predict()...")
     preds, segments = model.predict(events=events)
