@@ -9,7 +9,7 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 HEAVY = ["torch", "huggingface_hub", "nilearn"]
-MODULES = ["neurolens", "neurolens.engagement", "neurolens.settings", "neurolens.web.app"]
+MODULES = ["neurolens", "neurolens.response", "neurolens.settings", "neurolens.web.app"]
 
 
 @pytest.mark.parametrize("module", MODULES)
@@ -32,7 +32,7 @@ def test_import_pulls_in_no_heavy_modules(module):
 def test_all_four_together_pull_in_no_heavy_modules():
     code = (
         "import json, sys; "
-        "import neurolens, neurolens.engagement, neurolens.settings, neurolens.web.app; "
+        "import neurolens, neurolens.response, neurolens.settings, neurolens.web.app; "
         f"print(json.dumps([m for m in {HEAVY!r} if m in sys.modules]))"
     )
     proc = subprocess.run(
@@ -98,6 +98,14 @@ CFG_WITHOUT_AWS = {
     "paths": {"models": "m", "data": "d"},
     "max_video_duration_seconds": 120,
     "max_upload_bytes": 300000000,
+    "response": {
+        "well_above": 0.5,
+        "above": 0.2,
+        "below": -0.2,
+        "dead_threshold": 0.2,
+        "dead_min_seconds": 3,
+        "colour_range": 0.5,
+    },
     # M3a §9: config.json's development identity and local-only address
     "auth": {"mode": "dev", "dev_user_id": "dev-user", "dev_email": "dev@localhost"},
     "billing": {"starter_cents": 500},

@@ -128,13 +128,14 @@ def test_fake_passes_need_no_load_model(fake_on, clip_path, monkeypatch):
     assert full.shape[1] == noaudio.shape[1] == 20484
 
 
-def test_fake_output_feeds_extract_engagement(fake_on, clip_path, roi_masks_small):
-    from neurolens.engagement import extract_engagement
+def test_fake_output_feeds_extract_response(fake_on, clip_path, roi_masks_small):
+    from neurolens.response import extract_response
 
     full, noaudio = fake_passes(clip_path)
-    result = extract_engagement(full, noaudio, roi_masks_small)
+    result = extract_response(full, noaudio, roi_masks_small)
+    assert result["format"] == 2
     assert result["duration_seconds"] == full.shape[0]
-    assert len(result["timesteps"]) == full.shape[0]
+    assert len(result["signals"]["overall"]) == full.shape[0]
 
 
 # ---------------------------------------------------------------- load_model() in fake mode
@@ -147,13 +148,15 @@ import nilearn.datasets as nd
 
 calls = []
 labels = ["Unknown", "G_oc-temp_lat-fusifor", "S_oc-temp_lat", "G_temporal_inf",
-          "G_oc-temp_med-Parahip", "S_temporal_sup", "G_temp_sup-G_T_transv",
-          "G_temp_sup-Plan_tempo"]
+          "G_oc-temp_med-Parahip", "S_calcarine", "G_cuneus", "Pole_occipital",
+          "G_oc-temp_med-Lingual", "G_temp_sup-G_T_transv", "G_temp_sup-Plan_tempo",
+          "G_front_inf-Opercular", "G_front_inf-Triangul", "G_temporal_middle",
+          "G_temp_sup-Lateral", "S_temporal_sup"]
 
 def fake_fetch(*args, **kwargs):
     calls.append(1)
-    return {"map_left": np.arange(10242) % 8, "map_right": np.arange(10242) % 8,
-            "labels": labels}
+    return {"map_left": np.arange(10242) % len(labels),
+            "map_right": np.arange(10242) % len(labels), "labels": labels}
 
 nd.fetch_atlas_surf_destrieux = fake_fetch
 from neurolens import inference
@@ -204,7 +207,15 @@ def test_load_model_in_fake_mode_skips_torch_but_loads_atlas(tmp_path):
     out = json.loads(proc.stdout.strip().splitlines()[-1])
     assert out["heavy"] == []  # neither torch nor tribev2 was imported
     assert out["atlas_calls"] == 1
-    assert out["roi_names"] == ["auditory", "eba_bodies", "ffa_faces", "ppa_scenes", "sts_social"]
+    assert out["roi_names"] == [
+        "bodies",
+        "faces",
+        "scenes",
+        "social",
+        "sound",
+        "speech",
+        "visual",
+    ]
     assert out["mask_lengths"] == [20484]
     assert out["mask_nonempty"] is True
     assert out["hf_home"] == str(tmp_path / "models")

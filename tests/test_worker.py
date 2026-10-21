@@ -16,9 +16,24 @@ from botocore.exceptions import ClientError
 from neurolens import inference, worker
 from neurolens.worker import Outcome, handle_record, process_message
 
+SERIES = [
+    "faces",
+    "bodies",
+    "scenes",
+    "visual",
+    "sound",
+    "speech",
+    "social",
+    "see",
+    "hear",
+    "understand",
+    "overall",
+]
 SECTION_1_KEYS = {
+    "format",
     "duration_seconds",
-    "timesteps",
+    "signals",
+    "muted",
     "job_id",
     "processing_time_seconds",
     "fake_inference",
@@ -86,9 +101,9 @@ def calls(patch_everywhere):
     real_without = inference.without_audio
     real_predict = inference.predict
     real_probe = inference.probe_duration
-    from neurolens import engagement
+    from neurolens import response
 
-    real_extract = engagement.extract_engagement
+    real_extract = response.extract_response
 
     def build(path, *a, **kw):
         log["order"].append("build_events")
@@ -113,7 +128,7 @@ def calls(patch_everywhere):
         return real_probe(path, *a, **kw)
 
     def extract(*a, **kw):
-        log["order"].append("extract_engagement")
+        log["order"].append("extract_response")
         bound = inspect.signature(real_extract).bind(*a, **kw)
         log["extract_args"].append(list(bound.arguments.values()))
         if log["build_events"]:
@@ -127,7 +142,7 @@ def calls(patch_everywhere):
     patch_everywhere("without_audio", without, *MODULES)
     patch_everywhere("predict", predict, *MODULES)
     patch_everywhere("probe_duration", probe, *MODULES)
-    patch_everywhere("extract_engagement", extract, "neurolens.engagement", "neurolens.worker")
+    patch_everywhere("extract_response", extract, "neurolens.response", "neurolens.worker")
     return log
 
 
@@ -217,26 +232,14 @@ def test_valid_video_is_done_and_writes_result_json(
     assert isinstance(result["processing_time_seconds"], int | float)
     assert result["processing_time_seconds"] >= 0
     expected_seconds = math.ceil(inference.probe_duration(clip_path))
+    assert result["format"] == 2
     assert result["duration_seconds"] == expected_seconds
-    assert len(result["timesteps"]) == expected_seconds
-    step = result["timesteps"][0]
-    assert set(step) == {
-        "t",
-        "engagement_overall",
-        "regions",
-        "auditory_with_audio",
-        "auditory_without_audio",
-    }
-    assert set(step["regions"]) == {
-        "ffa_faces",
-        "eba_bodies",
-        "ppa_scenes",
-        "sts_social",
-        "auditory",
-    }
+    assert list(result["signals"]) == SERIES
+    assert list(result["muted"]) == SERIES
+    assert len(result["signals"]["overall"]) == expected_seconds
 
 
-def test_duration_and_timesteps_are_exactly_what_extract_engagement_returned(
+def test_duration_and_signals_are_exactly_what_extract_response_returned(
     aws, make_cfg, roi_masks_small, db, new_job, clip_path, calls
 ):
     cfg = make_cfg()
@@ -255,7 +258,8 @@ def test_duration_and_timesteps_are_exactly_what_extract_engagement_returned(
     assert len(calls["extract"]) == 1
     expected = json.loads(json.dumps(calls["extract"][0]))
     assert result["duration_seconds"] == expected["duration_seconds"]
-    assert result["timesteps"] == expected["timesteps"]
+    assert result["signals"] == expected["signals"]
+    assert result["muted"] == expected["muted"]
 
 
 def test_result_goes_to_s3_as_results_job_id_json(
@@ -296,7 +300,7 @@ def test_pipeline_runs_build_events_predict_without_audio_predict_extract_in_ord
         "predict",
         "without_audio",
         "predict",
-        "extract_engagement",
+        "extract_response",
     ]
 
 
@@ -305,7 +309,7 @@ def test_pipeline_passes_events_and_predictions_along(
 ):
     """build_events gets the downloaded video (with its audio); the first predict gets those
     events, without_audio gets them too, the second predict gets what without_audio returned,
-    both get the measured duration, and extract_engagement gets (with-audio, no-audio, masks)."""
+    both get the measured duration, and extract_response gets (with-audio, no-audio, masks)."""
     cfg = make_cfg()
     _, key = new_job()
     upload_clip(aws, key, clip_path)
@@ -357,7 +361,7 @@ def test_pipeline_writes_no_noaudio_file_and_runs_no_ffmpeg(
 
     assert outcome is Outcome.DONE
     seen_files = calls["files_at_extract"]
-    assert seen_files, "extract_engagement was not reached"
+    assert seen_files, "extract_response was not reached"
     assert not [name for name in seen_files if "noaudio" in name]
     assert ffmpeg_runs == []
 

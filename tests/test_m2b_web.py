@@ -45,6 +45,32 @@ def put_json(aws, key, obj):
     aws.s3.put_object(Bucket=aws.bucket, Key=key, Body=json.dumps(obj).encode())
 
 
+SERIES = [
+    "faces",
+    "bodies",
+    "scenes",
+    "visual",
+    "sound",
+    "speech",
+    "social",
+    "see",
+    "hear",
+    "understand",
+    "overall",
+]
+
+
+def format2_result(job_id, **extra):
+    return {
+        "format": 2,
+        "duration_seconds": 1,
+        "signals": {name: [0.0] for name in SERIES},
+        "muted": {name: [0.0] for name in SERIES},
+        "job_id": job_id,
+        **extra,
+    }
+
+
 # ---------------------------------------------------------------- status
 
 
@@ -54,7 +80,7 @@ def test_status_is_done_when_a_result_exists_even_if_the_job_says_processing(
     job_id = owned()
     attempt = billing.claim(db, job_id)
     billing.set_stage(db, job_id, attempt, "transcribing")
-    put_json(aws, f"results/{job_id}.json", {"job_id": job_id, "timesteps": []})
+    put_json(aws, f"results/{job_id}.json", format2_result(job_id))
     resp = client.get(f"/api/jobs/{job_id}/status")
     assert resp.status_code == 200
     data = resp.get_json()
@@ -65,7 +91,7 @@ def test_status_is_done_when_a_result_exists_even_if_the_job_says_processing(
 def test_status_is_done_when_a_result_exists_for_a_job_still_queued(client, aws, owned):
     """A crash after the result write but before settlement still reports done."""
     job_id = owned()
-    put_json(aws, f"results/{job_id}.json", {"job_id": job_id})
+    put_json(aws, f"results/{job_id}.json", format2_result(job_id))
     resp = client.get(f"/api/jobs/{job_id}/status")
     assert resp.status_code == 200
     assert resp.get_json()["status"] == "done"
@@ -126,17 +152,14 @@ def test_status_rejects_a_job_id_that_is_not_a_uuid(client, bad):
 
 def test_result_returns_the_stored_json(client, aws, db, owned):
     job_id = owned()
-    result = {
-        "job_id": job_id,
-        "duration_seconds": 3,
-        "timesteps": [{"t": 0, "engagement_overall": 0.5}],
-        "processing_time_seconds": 12.3,
-    }
+    result = format2_result(job_id, processing_time_seconds=12.3)
     put_json(aws, f"results/{job_id}.json", result)
     billing.settle_success(db, job_id)
     resp = client.get(f"/api/jobs/{job_id}/result")
     assert resp.status_code == 200
-    assert resp.get_json() == result
+    data = resp.get_json()
+    assert data.pop("summary")["peak"]
+    assert data == result
 
 
 def test_result_is_404_result_not_ready_when_missing_for_a_job_in_progress(client, db, owned):
@@ -183,6 +206,8 @@ with mock_aws():
                 "sqs_queue_url": "https://sqs.us-east-1.amazonaws.com/123456789012/q"},
         "max_video_duration_seconds": 120,
         "max_upload_bytes": 300000000,
+        "response": {"well_above": 0.5, "above": 0.2, "below": -0.2,
+                     "dead_threshold": 0.2, "dead_min_seconds": 3, "colour_range": 0.5},
         "auth": {"mode": "dev", "dev_user_id": "dev-user", "dev_email": "dev@localhost"},
         "billing": {"starter_cents": 500},
         "server": {"host": "127.0.0.1", "port": 5003},

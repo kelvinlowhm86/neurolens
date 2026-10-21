@@ -79,8 +79,34 @@ def owned_job(db, user_id=WEB_USER_ID, seconds=27.4):
     return job_id
 
 
+SERIES = [
+    "faces",
+    "bodies",
+    "scenes",
+    "visual",
+    "sound",
+    "speech",
+    "social",
+    "see",
+    "hear",
+    "understand",
+    "overall",
+]
+
+
+def format2_result(job_id, **extra):
+    return {
+        "format": 2,
+        "duration_seconds": 1,
+        "signals": {name: [0.0] for name in SERIES},
+        "muted": {name: [0.0] for name in SERIES},
+        "job_id": job_id,
+        **extra,
+    }
+
+
 def put_result(aws, job_id, result=None):
-    result = result or {"job_id": job_id, "duration_seconds": 3, "timesteps": [{"t": 0}]}
+    result = result or format2_result(job_id)
     assert storage.put_result(aws.s3, aws.bucket, job_id, result) is True
     return result
 
@@ -343,11 +369,13 @@ def test_an_unknown_job_is_404_with_no_s3_call(app_for, route):
 def test_result_of_a_done_job(aws, client, db):
     job_id = owned_job(db)
     billing.claim(db, job_id)
-    stored = put_result(aws, job_id, {"job_id": job_id, "timesteps": [{"t": 0, "x": 0.5}]})
+    stored = put_result(aws, job_id, format2_result(job_id, processing_time_seconds=12.3))
     billing.settle_success(db, job_id)
     resp = client.get(f"/api/jobs/{job_id}/result")
     assert resp.status_code == 200
-    assert resp.get_json() == stored
+    data = resp.get_json()
+    assert data.pop("summary")["peak"]
+    assert data == stored
 
 
 def test_result_in_the_crash_window_is_served(aws, client, db):
@@ -356,7 +384,9 @@ def test_result_in_the_crash_window_is_served(aws, client, db):
     stored = put_result(aws, job_id)
     resp = client.get(f"/api/jobs/{job_id}/result")
     assert resp.status_code == 200
-    assert resp.get_json() == stored
+    data = resp.get_json()
+    assert data.pop("summary")["peak"]
+    assert data == stored
 
 
 @pytest.mark.parametrize("claimed", [False, True], ids=["queued", "processing"])

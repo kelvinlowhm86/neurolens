@@ -30,7 +30,8 @@ import numpy as np
 import pytest
 
 BUCKET = "neurolens-test-bucket"
-ROI_NAMES = ["ffa_faces", "eba_bodies", "ppa_scenes", "sts_social", "auditory"]
+# The 7 signals of M3d §2; these stand in for response.SIGNALS so light tests need no atlas.
+ROI_NAMES = ["faces", "bodies", "scenes", "visual", "sound", "speech", "social"]
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 MIGRATIONS = REPO_ROOT / "infra" / "migrations"
@@ -144,6 +145,15 @@ def make_cfg(aws, tmp_path):
             "hf_download_timeout": 300,
             "max_video_duration_seconds": 120,
             "max_upload_bytes": 300000000,
+            # M3d §6: the response thresholds (placeholders until the calibration run).
+            "response": {
+                "well_above": 0.5,
+                "above": 0.2,
+                "below": -0.2,
+                "dead_threshold": 0.2,
+                "dead_min_seconds": 3,
+                "colour_range": 0.5,
+            },
             # M2b §1a: the heartbeat settings config.json gains (same values).
             "worker": {"heartbeat_seconds": 50, "max_job_minutes": 75},
             # M3a §9: the development identity, starter credit and the address the app binds to.
@@ -190,7 +200,7 @@ def clip2_path(tmp_path_factory):
 
 @pytest.fixture
 def roi_masks_small():
-    """Tiny hand-made ROI masks (100 vertices each) so nothing downloads the atlas."""
+    """Tiny hand-made signal masks (100 vertices each) so nothing downloads the atlas."""
     masks = {}
     for i, name in enumerate(ROI_NAMES):
         mask = np.zeros(20484, dtype=bool)

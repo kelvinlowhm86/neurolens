@@ -8,7 +8,7 @@ import subprocess
 
 import numpy as np
 import pytest
-from neurolens import engagement, inference, storage
+from neurolens import inference, storage
 
 
 def masks(**sizes):
@@ -19,22 +19,26 @@ def masks(**sizes):
 
 
 def test_require_nonempty_masks_accepts_masks_that_all_have_vertices():
-    engagement.require_nonempty_masks(masks(ffa_faces=3, auditory=1))
+    from neurolens.response import require_nonempty_masks
+
+    require_nonempty_masks(masks(faces=3, sound=1))
 
 
-def test_require_nonempty_masks_names_every_empty_roi():
+def test_require_nonempty_masks_names_every_empty_signal():
+    from neurolens.response import require_nonempty_masks
+
     with pytest.raises(ValueError) as err:
-        engagement.require_nonempty_masks(masks(ffa_faces=0, eba_bodies=2, auditory=0))
-    assert "ffa_faces" in str(err.value)
-    assert "auditory" in str(err.value)
-    assert "eba_bodies" not in str(err.value)
+        require_nonempty_masks(masks(faces=0, bodies=2, sound=0))
+    assert "faces" in str(err.value)
+    assert "sound" in str(err.value)
+    assert "bodies" not in str(err.value)
 
 
 # ---------------------------------------------------------------- NaN is never published
 
 
 def test_put_result_refuses_nan_and_writes_nothing(aws):
-    result = {"job_id": "j1", "timesteps": [{"t": 0, "engagement_overall": float("nan")}]}
+    result = {"format": 2, "signals": {"overall": [float("nan")]}}
     with pytest.raises(ValueError):
         storage.put_result(aws.s3, aws.bucket, "j1", result)
     assert not storage.result_exists(aws.s3, aws.bucket, "j1")

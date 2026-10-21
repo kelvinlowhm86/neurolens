@@ -81,7 +81,13 @@ def s3_event(*pairs):
 
 
 def test_put_result_writes_results_job_id_json_and_returns_true(aws):
-    result = {"job_id": "j1", "duration_seconds": 3, "timesteps": [{"t": 0}]}
+    result = {
+        "format": 2,
+        "job_id": "j1",
+        "duration_seconds": 0,
+        "signals": {},
+        "muted": {},
+    }
     assert storage.put_result(aws.s3, aws.bucket, "j1", result) is True
     assert stored(aws, "j1") == result
 

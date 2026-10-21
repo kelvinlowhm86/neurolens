@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 from botocore.exceptions import ClientError
 from conftest import MIGRATIONS, STARTER_CENTS, USER_ID
-from neurolens import billing, engagement, storage, worker
+from neurolens import billing, storage, worker
 from neurolens.web.app import create_app
 
 MODULES = ("neurolens.inference", "neurolens.worker")
@@ -265,7 +265,9 @@ def test_a_worker_that_lost_its_claim_before_saving_writes_nothing_to_the_datase
 ):
     job_id, key = make_job(db, consent=True)
     aws.s3.upload_file(str(clip_path), aws.bucket, key)
-    real_extract = engagement.extract_engagement
+    from neurolens import response
+
+    real_extract = response.extract_response
 
     def extract_then_lose(*args, **kwargs):
         result = real_extract(*args, **kwargs)
@@ -274,7 +276,7 @@ def test_a_worker_that_lost_its_claim_before_saving_writes_nothing_to_the_datase
         return result
 
     patch_everywhere(
-        "extract_engagement", extract_then_lose, "neurolens.engagement", "neurolens.worker"
+        "extract_response", extract_then_lose, "neurolens.response", "neurolens.worker"
     )
     assert run_record(aws, db, key, make_cfg(), roi_masks_small) is worker.Outcome.LOST_CLAIM
     assert dataset_keys(aws, job_id) == []
@@ -288,7 +290,9 @@ def test_an_unconsented_worker_that_lost_its_claim_writes_nothing(
 ):
     job_id, key = make_job(db, consent=False)
     aws.s3.upload_file(str(clip_path), aws.bucket, key)
-    real_extract = engagement.extract_engagement
+    from neurolens import response
+
+    real_extract = response.extract_response
 
     def extract_then_lose(*args, **kwargs):
         result = real_extract(*args, **kwargs)
@@ -297,7 +301,7 @@ def test_an_unconsented_worker_that_lost_its_claim_writes_nothing(
         return result
 
     patch_everywhere(
-        "extract_engagement", extract_then_lose, "neurolens.engagement", "neurolens.worker"
+        "extract_response", extract_then_lose, "neurolens.response", "neurolens.worker"
     )
     assert run_record(aws, db, key, make_cfg(), roi_masks_small) is worker.Outcome.LOST_CLAIM
     assert dataset_keys(aws, job_id) == []
@@ -313,28 +317,30 @@ def test_an_unconsented_worker_that_lost_its_claim_writes_nothing(
 def test_put_dataset_copies_the_video_with_its_extension_and_stores_the_result(aws, new_key):
     job_id, key = new_key(".mov")
     aws.s3.put_object(Bucket=aws.bucket, Key=key, Body=b"the video")
-    result = {"job_id": job_id, "duration_seconds": 3, "timesteps": []}
-    storage.put_dataset(aws.s3, aws.bucket, job_id, key, result)
+    result = {"format": 2, "job_id": job_id, "duration_seconds": 0, "signals": {}, "muted": {}}
+    storage.put_dataset(aws.s3, aws.bucket, job_id, key, result, brain=b"brain bytes")
     video = aws.s3.get_object(Bucket=aws.bucket, Key=f"dataset/{job_id}/video.mov")["Body"]
     assert video.read() == b"the video"
     stored = aws.s3.get_object(Bucket=aws.bucket, Key=f"dataset/{job_id}/result.json")["Body"]
     assert json.loads(stored.read()) == result
+    brain = aws.s3.get_object(Bucket=aws.bucket, Key=f"dataset/{job_id}/brain")["Body"]
+    assert brain.read() == b"brain bytes"
 
 
 def test_put_dataset_refuses_a_nan_result(aws, new_key):
     job_id, key = new_key()
     aws.s3.put_object(Bucket=aws.bucket, Key=key, Body=b"the video")
     with pytest.raises(ValueError):
-        storage.put_dataset(aws.s3, aws.bucket, job_id, key, {"bad": float("nan")})
+        storage.put_dataset(aws.s3, aws.bucket, job_id, key, {"bad": float("nan")}, brain=b"x")
     assert not object_exists(aws, f"dataset/{job_id}/result.json")
 
 
 def test_put_dataset_replaces_an_earlier_copy(aws, new_key):
     job_id, key = new_key()
     aws.s3.put_object(Bucket=aws.bucket, Key=key, Body=b"first video")
-    storage.put_dataset(aws.s3, aws.bucket, job_id, key, {"job_id": job_id, "n": 1})
+    storage.put_dataset(aws.s3, aws.bucket, job_id, key, {"job_id": job_id, "n": 1}, brain=b"1")
     aws.s3.put_object(Bucket=aws.bucket, Key=key, Body=b"second video")
-    storage.put_dataset(aws.s3, aws.bucket, job_id, key, {"job_id": job_id, "n": 2})
+    storage.put_dataset(aws.s3, aws.bucket, job_id, key, {"job_id": job_id, "n": 2}, brain=b"2")
     video = aws.s3.get_object(Bucket=aws.bucket, Key=f"dataset/{job_id}/video.mp4")["Body"]
     assert video.read() == b"second video"
     stored = aws.s3.get_object(Bucket=aws.bucket, Key=f"dataset/{job_id}/result.json")["Body"]

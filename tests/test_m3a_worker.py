@@ -359,9 +359,9 @@ def test_each_pipeline_step_runs_under_its_own_stage(
         return job["status"], job["stage"]
 
     real_build, real_predict = inference.build_events, inference.predict
-    from neurolens import engagement
+    from neurolens import response
 
-    real_extract = engagement.extract_engagement
+    real_extract = response.extract_response
 
     def build(path, *a, **kw):
         seen["build_events"] = current()
@@ -377,7 +377,7 @@ def test_each_pipeline_step_runs_under_its_own_stage(
 
     patch_everywhere("build_events", build, *MODULES)
     patch_everywhere("predict", predict, *MODULES)
-    patch_everywhere("extract_engagement", extract, "neurolens.engagement", "neurolens.worker")
+    patch_everywhere("extract_response", extract, "neurolens.response", "neurolens.worker")
 
     class StageAtDownload:
         def __init__(self, inner):

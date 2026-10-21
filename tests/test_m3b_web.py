@@ -18,18 +18,20 @@ from conftest import STARTER_CENTS, WEB_USER_EMAIL, WEB_USER_ID, WORKER_GROUP, s
 from neurolens import billing, storage
 from neurolens.web.app import create_app
 
-CSV_COLUMNS = [
-    "t",
-    "engagement_overall",
-    "ffa_faces",
-    "eba_bodies",
-    "ppa_scenes",
-    "sts_social",
-    "auditory",
-    "auditory_with_audio",
-    "auditory_without_audio",
+SERIES = [
+    "faces",
+    "bodies",
+    "scenes",
+    "visual",
+    "sound",
+    "speech",
+    "social",
+    "see",
+    "hear",
+    "understand",
+    "overall",
 ]
-REGIONS = ["ffa_faces", "eba_bodies", "ppa_scenes", "sts_social", "auditory"]
+CSV_COLUMNS = ["t", *SERIES, *(f"muted_{name}" for name in SERIES)]
 JOB_KEYS = {
     "job_id",
     "filename",
@@ -42,62 +44,49 @@ JOB_KEYS = {
 }
 DAY = 24 * 3600
 
-# Shaped like the worker's result (engagement.extract_engagement): the last step has no
-# with/without-audio values (the no-audio pass was shorter), and the numbers are awkward on
+# M3d format 2: three with-audio seconds, two no-audio seconds. The numbers are awkward on
 # purpose (a float that is whole, an int, tiny and long decimals).
+SIGNALS = {
+    "faces": [0.4306, 1e-05, -0.5],
+    "bodies": [0.0, 0.148, 0.25],
+    "scenes": [1.0, 0.6743, 0.125],
+    "visual": [0.4543, 0.4287, 0.0625],
+    "sound": [0.1023, 0.0, 0.9999],
+    "speech": [-0.2, 0.2, 0.0],
+    "social": [0.1, 0.2, 0.3],
+    "see": [0.4706, 0.3128, -0.0156],
+    "hear": [0.1023, 0.0, 0.9999],
+    "understand": [-0.05, 0.2, 0.15],
+    "overall": [0.1743, 0.1709, 0.3781],
+}
+MUTED = {
+    "faces": [0.241, 0.2],
+    "bodies": [0.1, 0.1],
+    "scenes": [0.2, 0.2],
+    "visual": [0.3, 0.3],
+    "sound": [0.4, 0.4],
+    "speech": [0.5, 0.5],
+    "social": [0.6, 0.6],
+    "see": [0.24, 0.23],
+    "hear": [0.4, 0.4],
+    "understand": [0.55, 0.55],
+    "overall": [0.3, 0.29],
+}
 RESULT = {
+    "format": 2,
     "duration_seconds": 3,
-    "timesteps": [
-        {
-            "t": 0,
-            "engagement_overall": 0.1786,
-            "regions": {
-                "ffa_faces": 0.4306,
-                "eba_bodies": 0.0,
-                "ppa_scenes": 1.0,
-                "sts_social": 0.4543,
-                "auditory": 0.1023,
-            },
-            "auditory_with_audio": 0.1023,
-            "auditory_without_audio": 0.241,
-        },
-        {
-            "t": 1,
-            "engagement_overall": 0.3423,
-            "regions": {
-                "ffa_faces": 1e-05,
-                "eba_bodies": 0.148,
-                "ppa_scenes": 0.6743,
-                "sts_social": 0.4287,
-                "auditory": 0,
-            },
-            "auditory_with_audio": 0.123456789012,
-            "auditory_without_audio": 0.4022,
-        },
-        {
-            "t": 2,
-            "engagement_overall": 1.0,
-            "regions": {
-                "ffa_faces": 0.5,
-                "eba_bodies": 0.25,
-                "ppa_scenes": 0.125,
-                "sts_social": 0.0625,
-                "auditory": 0.9999,
-            },
-            "auditory_with_audio": None,
-            "auditory_without_audio": None,
-        },
-    ],
+    "signals": SIGNALS,
+    "muted": MUTED,
     "job_id": "filled in per test",
     "processing_time_seconds": 12.3,
 }
 
 
-def expected_cells(step):
-    values = [step["t"], step["engagement_overall"]]
-    values += [step["regions"][name] for name in REGIONS]
-    values += [step["auditory_with_audio"], step["auditory_without_audio"]]
-    return ["" if v is None else json.dumps(v) for v in values]
+def expected_cells(t):
+    values = [t]
+    values += [SIGNALS[name][t] for name in SERIES]
+    values += [MUTED[name][t] if t < len(MUTED[name]) else None for name in SERIES]
+    return ["" if value is None else json.dumps(value) for value in values]
 
 
 def parse_csv(text):
@@ -280,16 +269,16 @@ def test_to_csv_columns_rows_and_exact_values():
 
     rows = parse_csv(to_csv(RESULT))
     assert rows[0] == CSV_COLUMNS
-    assert len(rows) == 1 + len(RESULT["timesteps"])
-    for row, step in zip(rows[1:], RESULT["timesteps"], strict=True):
-        assert row == expected_cells(step)
+    assert len(rows) == 1 + RESULT["duration_seconds"]
+    for t, row in enumerate(rows[1:]):
+        assert row == expected_cells(t)
 
 
-def test_to_csv_writes_none_as_an_empty_cell():
+def test_to_csv_writes_the_unshared_muted_tail_as_empty_cells():
     from neurolens.results import to_csv
 
     last = parse_csv(to_csv(RESULT))[-1]
-    assert last[-2:] == ["", ""]
+    assert last[1 + len(SERIES) :] == [""] * len(SERIES)
 
 
 def test_csv_route_serves_the_jobs_result_as_an_attachment(aws, client, db):
@@ -299,14 +288,14 @@ def test_csv_route_serves_the_jobs_result_as_an_attachment(aws, client, db):
     assert resp.headers["Content-Disposition"] == (f'attachment; filename="neurolens-{job_id}.csv"')
     rows = parse_csv(resp.get_data(as_text=True))
     assert rows[0] == CSV_COLUMNS
-    assert rows[1:] == [expected_cells(step) for step in result["timesteps"]]
+    assert rows[1:] == [expected_cells(t) for t in range(result["duration_seconds"])]
 
 
 def test_csv_matches_the_json_result_exactly(aws, client, db):
     job_id, _ = done_job(aws, db)
     stored = client.get(f"/api/jobs/{job_id}/result").get_json()
     rows = parse_csv(client.get(f"/api/jobs/{job_id}/result.csv").get_data(as_text=True))
-    assert rows[1:] == [expected_cells(step) for step in stored["timesteps"]]
+    assert rows[1:] == [expected_cells(t) for t in range(stored["duration_seconds"])]
 
 
 # ---------------------------------------------------------------- result and CSV: when available
@@ -323,10 +312,12 @@ def test_a_processing_job_whose_result_exists_serves_it(aws, client, db, route):
     resp = client.get(f"/api/jobs/{job_id}/{route}")
     assert resp.status_code == 200
     if route == "result":
-        assert resp.get_json() == result
+        data = resp.get_json()
+        assert data.pop("summary")["peak"]
+        assert data == result
     else:
         rows = parse_csv(resp.get_data(as_text=True))
-        assert rows[1:] == [expected_cells(step) for step in result["timesteps"]]
+        assert rows[1:] == [expected_cells(t) for t in range(result["duration_seconds"])]
 
 
 @pytest.mark.parametrize("route", ROUTES)

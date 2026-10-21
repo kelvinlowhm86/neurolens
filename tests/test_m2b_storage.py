@@ -21,7 +21,13 @@ def test_result_exists_is_true_after_put_result(aws):
 
 def test_get_result_returns_the_stored_json_or_none(aws):
     assert storage.get_result(aws.s3, aws.bucket, "job-1") is None
-    result = {"job_id": "job-1", "duration_seconds": 3, "timesteps": [{"t": 0}]}
+    result = {
+        "format": 2,
+        "job_id": "job-1",
+        "duration_seconds": 0,
+        "signals": {},
+        "muted": {},
+    }
     storage.put_result(aws.s3, aws.bucket, "job-1", result)
     assert storage.get_result(aws.s3, aws.bucket, "job-1") == result
 

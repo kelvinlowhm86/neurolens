@@ -333,7 +333,11 @@ def test_limits_needs_sign_in_and_then_answers(cognito_client, idp):
     sign_in(cognito_client, idp)
     resp = cognito_client.get("/api/limits")
     assert resp.status_code == 200
-    assert resp.get_json() == {"max_video_duration_seconds": 120, "max_upload_bytes": 300000000}
+    assert resp.get_json() == {
+        "max_video_duration_seconds": 120,
+        "max_upload_bytes": 300000000,
+        "colour_range": 0.5,
+    }
 
 
 def test_dev_mode_is_always_signed_in(aws, db, make_cfg, tmp_path):
