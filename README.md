@@ -43,7 +43,7 @@ Series order: faces, bodies, scenes, visual, sound, speech, social, see, hear, u
 
 ---
 
-> **Note:** the sections from here to "Hardware Requirements" are the original plan (an "engagement score" over five regions rescaled to 0-1, `POST /api/analyse`, a 2× RTX 4090 machine), kept for the ideas. None of it describes the current design: see above, `AGENTS.md` and the specs in `docs/`. The two notebooks still use the original maths.
+> **Note:** the sections from here to "Hardware Requirements" are the original plan (an "engagement score" over five regions rescaled to 0-1, `POST /api/analyse` on one machine), kept for the ideas. None of it describes the current design: see above, `AGENTS.md` and the specs in `docs/`. The two notebooks still use the original maths.
 
 ## Original objectives
 
@@ -251,8 +251,6 @@ All charts share a synchronised hover/crosshair. Clicking any point on a chart s
 ---
 
 ## Hardware Requirements
-
-> The list below is for the original 2× RTX 4090 machine. The model peaks at about 20 GB of GPU memory; the AWS worker runs on one L40S (g6e), see `docs/evidence/README.md`.
 
 - **GPU:** 2× NVIDIA RTX 4090 (24 GB VRAM each, 48 GB total)
 - **VRAM usage:** ~28–32 GB across both cards
