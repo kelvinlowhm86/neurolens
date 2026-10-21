@@ -16,7 +16,7 @@
 
 ## 1. Scope
 ### In scope
-The new maths (`neurolens/response.py`, replacing `neurolens/engagement.py`); result format 2; the raw brain file; the summary; the brain route; the 410 for old results; S3 CORS; the CSV; config `response`; the page (one-screen layout, player, moments, charts, muted overlay, 3D map with head, compare, wording); `infra/make_brain_mesh.py`; `infra/make_sample.py`; `deploy_web.sh`; new samples; docs.
+The new maths (`neurolens/response.py`, replacing `neurolens/engagement.py`); result format 2; the raw brain file; the summary; the brain route; the 410 for old results; S3 CORS; the CSV; config `response`; the page (one-screen layout, player, moments, charts, muted overlay, 3D map with head, compare, wording); the landing page and the app's move to `/app` (§8b); `infra/make_brain_mesh.py`; `infra/make_sample.py`; `deploy_web.sh`; new samples; docs.
 
 ### Out of scope
 - Linking the response to real audience behaviour (future work in the report, using the consented retention curves M3c collects).
@@ -99,7 +99,7 @@ There is no reference set of videos to say how big a "normal" rise or dip is, so
 - **`GET /api/jobs/<id>/brain`:** `owned_result` first (ownership, refunded, expired, 410). Then, if `results/<id>.brain` does not exist, 404 `brain_missing`. Otherwise a 302 to a presigned GET for it, valid for 5 minutes.
 - **S3 CORS:** `cors_rule` in `infra/terraform/main.tf` adds `GET`, so the browser can follow the redirect to the bucket.
 
-## 8. Page (`static/index.html`)
+## 8. App page (`static/app.html`, served at `/app`)
 - **Wording:** "engagement" becomes "brain response" everywhere, on the privacy page and the retention guide too. The zero line and every comparison say just "typical" (not "typical TV"). Near the chart: "Predicted response of an average viewer. The dashed line is typical." The consent text drops "engagement model" for "a future model linking brain response to real audience behaviour".
 - **Design goal:** a marketer understands the result at a glance, and the page looks good enough that people walking past a demo stand come over. Meta's TRIBE v2 demo is the inspiration (video and brain side by side, the brain changing as the video plays), not a template. No chart carries more than 2 lines. The prototype that settled this layout is on branch `prototype-m3d-page` (layout D).
 - **One screen:** on a laptop (from about 1280 × 720 of browser space; checked at 1470 × 830, a MacBook Air) the whole result fits without scrolling. The page is locked to the window height: the left column holds the player, the right column holds the report, and the brain and the main chart take whatever height is left. Below 860 px wide or 620 px tall it falls back to one scrolling column.
@@ -122,6 +122,21 @@ There is no reference set of videos to say how big a "normal" rise or dip is, so
 - **Compare:** "Compare with…" picks another done job from History. Its overall and groups become the dashed second line in the main chart and each strip. Both videos are named by their file names everywhere (legend and table header; never "This video"/"Other video" alone). The time axis spans the longer video; where the shorter one ends, its dashed line stops at a dot, joined by a dotted line to a label at the bottom of the plot ("<name> ends"), so the label never covers a line. Only this video's moments are shaded, and the legend says so ("shaded: moments of <name>"). The moments list and its neighbours are replaced, in the same space, by a two-column table (this video | other video: opening, strongest moments, weakest moments, audio dependence). Choosing it turns off "Show without sound". Signed-out visitors see no Compare.
 - **Samples** render like a job result, and show their attribution line (CC BY requires it).
 
+## 8b. Landing page (`static/index.html`) and the app at `/app` (`static/app.html`)
+- **Why:** visitors who are not signed in (interviewers, people at the demo stand) need to see what NeuroLens does before signing in. The prototype that settled this is on branch `prototype-landing` (layout A).
+- **Routes:** the landing page is the front page: `static/index.html`, served at `/` (Flask locally; on AWS it is CloudFront's `index.html` as today). The app page moves unchanged from `static/index.html` to `static/app.html`, served at `/app` (Flask route; on AWS `deploy_web.sh` uploads it to the key `site/app` with `Content-Type: text/html; charset=utf-8` and `Cache-Control: no-cache`, like the front page). `/app` is public, like `/`. After sign-in, `/auth/callback` redirects to `/app`. Sign-out still returns to `/`, which is now the landing page. The app's logo links to `/`.
+- **Signed-in visitors at `/`:** the landing page is a static file, so the server cannot check who is signed in before sending it. The page shows at once for everyone. In the background it asks `GET /api/me`; on a 200 the top bar's Sign in button becomes "Open NeuroLens" (to `/app`) and the hero's sign-in button becomes "Upload a video" (to `/app`). No automatic redirect: a page that jumps away after a second looks broken. Signed-out visitors never touch the database (`/api/me` answers 401 before any query).
+- **Layout (A, one column of sections):**
+  - **Top bar:** the plain-text logo; "Explore samples" (outline, to `/app`) and "Sign in" (white, to `/login`).
+  - **Hero:** the dark stage at least the window's height minus the top bar. Left: the headline "Watch a brain watch your video.", the line "NeuroLens predicts how an average viewer's brain responds to a video, second by second: which areas light up for faces, places, speech and sound.", the buttons "Explore samples" (white, to `/app`) and "Sign in to upload" (outline, to `/login`), and the sample's attribution line. Right: the sample's video above its 3D brain (brain taller than the video, about 45/55), the brain with the app's legend ("typical" to "higher"), the second counter and "drag to turn".
+  - **How it works** (light background, heading left, three numbered steps right): "Upload a clip" (any video up to the upload limit, from `GET /api/limits`, in minutes; sample videos are free to explore without an account); "A brain model predicts the response" (TRIBE v2, a research model from Meta trained on brain scans of people watching films, estimates activity at 20,484 points across the brain for every second); "Read the report" (curves for seven brain areas, the strongest and weakest moments, and a 3D brain that replays with your video).
+  - **Closing band:** a dark rounded block, "See it on your own video." with "Sign in to upload" and "Explore samples".
+  - **Footer:** Privacy policy link; "Brain model: TRIBE v2 by Meta, CC BY-NC 4.0" (the licence's credit); the sample's attribution.
+  - No limits or warnings section: the hero line already says it predicts an average viewer, and the app's report explains the scale.
+  - Same theme, fonts and colours as the app (§8 Look). Below 860 px wide everything stacks in one column (copy, video, brain at about 300 px tall, steps one under another).
+- **Hero sample:** the first entry of `data/samples.json`, with its video, its brain file and `colour_range` from `GET /api/limits` (public). The video plays muted, on loop, on its own; clicking it pauses or resumes. The brain follows the video's time, blending between seconds as in the app, and turns slowly (not with reduced motion). If there is no sample (the list is empty until the AWS day) or `samples.json` fails to load, the player column shows one quiet panel: "A sample video is coming soon." If only the brain fails (file, mesh or limits), the brain panel says the 3D view is not available and the video still plays.
+- **One brain viewer:** the 3D brain code (mesh and head loading, the hot scale, painting, the camera and orbit) moves from the app page into one shared ES module, `static/brain_view.js`, used by both pages, so a look change is made once. Behaviour in the app is unchanged.
+
 ## 9. Samples, deploy and calibration
 - **Remove:** the 14 current entries in `data/samples.json` and their thumbnails under `data/output/`. The git-ignored third-party videos stay on Josh's laptop, unused.
 - **New samples:** the Sintel trailer, and Big Buck Bunny re-encoded to about 720p (a SOURCES.md row). Tears of Steel is optional (CC BY 3.0, live action with faces and speech); if used, it gets a SOURCES.md row too.
@@ -129,7 +144,7 @@ There is no reference set of videos to say how big a "normal" rise or dip is, so
   - Downloads that job's result and brain file into `data/output/<id>/` (`<id>` = the video's file stem), grabs a thumbnail at 1 s with ffmpeg, and adds or replaces the entry in `data/samples.json`.
   - The entry is `{id, title, description, attribution, video_file, thumbnail, brain_file, result, summary}`, with the summary computed from the current `config.json`. Re-run it after a threshold change.
   - `.gitignore` adds `/data/output/**/brain`.
-- **`deploy_web.sh`:** publishes only samples whose clip is listed in SOURCES.md (unchanged) and also copies each one's brain file.
+- **`deploy_web.sh`:** publishes only samples whose clip is listed in SOURCES.md (unchanged) and also copies each one's brain file. It uploads `static/app.html` as `site/app` (§8b).
 - **AWS day** (cost estimate first: about $3-5, GPU about 1.5 h at $1.861/h plus NAT and Aurora; Josh confirms remaining credits):
   - One batch of Josh's manual steps: Terraform apply (M3c plus CORS, `nat_gateway=true`), migration 003, `deploy_code.sh`, `deploy_web.sh`.
   - Real GPU jobs on each sample clip, one of them with consent.
@@ -150,6 +165,7 @@ Existing tests that pin the old format (`timesteps`, `regions`, `engagement_over
 - **Worker (full):** the brain is written before the result; a failed brain write publishes no result and goes down the failure path; a non-finite value (or a float16 overflow) is refused before any write; a consented job writes `dataset/<job_id>/brain` with the same bytes.
 - **Samples:** `test_samples_schema` checks the new entry shape and that every sample's brain file length divides by 20484 × 2.
 - **Mesh:** the committed mesh file parses: header counts match the length, face indices in range, both parent indices of every vertex are < 20484, and exactly 20484 vertices are their own parent (the fsaverage5 points).
+- **Landing (light):** `/app` serves `static/app.html` and is public (signed out, Cognito mode); `/` still serves `static/index.html`; `/auth/callback` redirects to `/app`. The public-routes test adds `/app` to its list (Josh approved, 22 Oct). The page itself is checked by a walk, not unit tests.
 - **Break-its** (on committed code): drop a brain key from `_job_keys`, and remove the ownership check from the brain route. A test must fail each time.
 
 ## 11. Docs (current-state only)
