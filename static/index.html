@@ -4,422 +4,407 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>NeuroLens — Video Brain Response Analysis</title>
-<script src="/static/chart.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,600;12..96,700&family=Public+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700&family=JetBrains+Mono:wght@400;500&display=swap');
-
   :root {
-    --bg-primary: #FAFBFC;
-    --bg-card: #FFFFFF;
-    --bg-hover: #F1F5F9;
-    --bg-panel: #F1F5F9;
-    --navy: #0F1629;
-    --navy-light: #1E293B;
-    --border: #E2E8F0;
-    --border-strong: #CBD5E1;
-    --text-primary: #0F1629;
-    --text-secondary: #475569;
-    --text-muted: #94A3B8;
-    --accent: #0D7C8F;
-    --accent-light: #E0F7FA;
-    --accent-glow: rgba(13, 124, 143, 0.08);
-    --red: #DC2626; --blue: #2563EB; --green: #16A34A;
-    --gold: #D97706; --purple: #9333EA; --orange: #EA580C;
-    --radius: 12px; --radius-sm: 8px;
-    --shadow-sm: 0 1px 2px rgba(15,22,41,0.05);
-    --shadow-md: 0 4px 12px rgba(15,22,41,0.08);
+    --stage: #0D1320; --stage-2: #151D2E; --stage-text: #E7EAF0; --stage-muted: #8C96A8; --stage-rule: #253049;
+    --paper: #F4F5F7; --surface: #FFFFFF; --ink: #161B26; --ink-2: #5A6272; --ink-3: #8A91A0; --rule: #DADDE3;
+    --heat: #F2711C; --heat-deep: #B4231A; --heat-light: #FBD24B; --cool: #6B7A99;
+    --display: 'Bricolage Grotesque', system-ui, sans-serif; --text: 'Public Sans', system-ui, sans-serif;
   }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--paper); color: var(--ink); font: 15px/1.5 var(--text); }
+  button, input, select { font: inherit; }
+  button { cursor: pointer; }
+  :focus-visible { outline: 2px solid var(--heat); outline-offset: 2px; }
+  [hidden] { display: none !important; }
 
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { background: var(--bg-primary); color: var(--text-primary); font-family: 'Plus Jakarta Sans', -apple-system, sans-serif; min-height: 100vh; }
-
-  header {
-    position: sticky; top: 0; z-index: 100; background: var(--navy);
-    padding: 0 32px; height: 56px; display: flex; align-items: center; justify-content: space-between;
-  }
-  .logo { display: flex; align-items: center; gap: 10px; }
-  .logo-icon { width: 28px; height: 28px; border-radius: 6px; background: linear-gradient(135deg, var(--accent), #06B6D4); display: flex; align-items: center; justify-content: center; }
-  .logo-icon svg { width: 16px; height: 16px; }
-  .logo-text { font-size: 18px; font-weight: 700; color: #FFF; letter-spacing: -0.3px; }
-  .logo-text span { color: #06B6D4; }
-  .header-right { display: flex; align-items: center; gap: 20px; }
-  .header-meta { font-size: 12px; color: #94A3B8; font-family: 'JetBrains Mono', monospace; }
-
-  .layout { display: grid; grid-template-columns: 1fr 1fr; min-height: calc(100vh - 56px); }
-  .panel-left { padding: 24px; border-right: 1px solid var(--border); position: sticky; top: 56px; height: calc(100vh - 56px); display: flex; flex-direction: column; gap: 16px; overflow-y: auto; }
-  .panel-right { padding: 24px; overflow-y: auto; height: calc(100vh - 56px); background: var(--bg-panel); }
-
-  /* Upload */
-  .upload-zone {
-    border: 2px dashed var(--border-strong); border-radius: var(--radius);
-    display: flex; flex-direction: column; align-items: center; justify-content: center;
-    gap: 14px; cursor: pointer; transition: all 0.3s; position: relative;
-    background: var(--bg-card); padding: 40px 20px;
-  }
-  .upload-zone:hover { border-color: var(--accent); background: var(--accent-glow); }
-  .upload-zone.hidden { display: none; }
-  .upload-icon { width: 56px; height: 56px; border-radius: 50%; background: var(--accent-light); display: flex; align-items: center; justify-content: center; }
-  .upload-icon svg { width: 24px; height: 24px; color: var(--accent); }
-  .upload-title { font-size: 15px; font-weight: 600; }
-  .upload-subtitle { font-size: 12px; color: var(--text-muted); }
-  .upload-zone input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
-
-  /* Samples carousel */
-  .samples-section { flex-shrink: 0; }
-  .samples-label { font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px; }
-  .samples-grid { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 6px; }
-  .samples-grid::-webkit-scrollbar { height: 4px; }
-  .samples-grid::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 2px; }
-  .sample-card {
-    flex: 0 0 140px; border-radius: var(--radius-sm); overflow: hidden; cursor: pointer;
-    border: 2px solid var(--border); transition: all 0.2s; background: var(--bg-card);
-  }
-  .sample-card:hover { border-color: var(--accent); transform: translateY(-2px); box-shadow: var(--shadow-md); }
-  .sample-card.active { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-glow); }
-  .sample-thumb { width: 100%; height: 80px; object-fit: cover; background: var(--bg-hover); display: flex; align-items: center; justify-content: center; }
-  .sample-thumb img { width: 100%; height: 100%; object-fit: cover; }
-  .sample-thumb-placeholder { color: var(--text-muted); font-size: 20px; }
-  .sample-info { padding: 8px 10px; }
-  .sample-title { font-size: 11px; font-weight: 600; color: var(--text-primary); line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-  .sample-dur { font-size: 10px; color: var(--text-muted); font-family: 'JetBrains Mono', monospace; margin-top: 3px; }
-
-  /* Video */
-  .video-container { display: none; flex-direction: column; flex: 1; gap: 12px; min-height: 0; }
-  .video-container.active { display: flex; }
-  .video-wrapper { flex: 1; background: var(--navy); border-radius: var(--radius); overflow: hidden; display: flex; align-items: center; justify-content: center; min-height: 260px; }
-  .video-wrapper video { width: 100%; max-height: 100%; object-fit: contain; }
-  .video-info { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: var(--bg-card); border-radius: var(--radius-sm); border: 1px solid var(--border); }
-  .video-filename { font-size: 12px; font-family: 'JetBrains Mono', monospace; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 180px; }
-  .video-stats { display: flex; gap: 14px; font-size: 11px; font-family: 'JetBrains Mono', monospace; color: var(--text-muted); }
-  .btn-new { padding: 6px 14px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--bg-card); color: var(--text-secondary); font-size: 12px; cursor: pointer; font-family: 'Plus Jakarta Sans', sans-serif; font-weight: 500; }
-  .btn-new:hover { border-color: var(--accent); color: var(--accent); }
-
-  /* Processing */
-  .processing { display: none; flex-direction: column; align-items: center; justify-content: center; gap: 16px; flex: 1; background: var(--bg-card); border-radius: var(--radius); border: 1px solid var(--border); }
-  .processing.active { display: flex; }
-  .spinner { width: 40px; height: 40px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.9s linear infinite; }
-  @keyframes spin { to { transform: rotate(360deg); } }
-  .processing-text { font-size: 14px; font-weight: 600; }
-  .processing-detail { font-size: 12px; color: var(--text-muted); font-family: 'JetBrains Mono', monospace; }
-
-  /* Upload confirm / progress */
-  .upload-note { font-size: 12px; color: var(--red); min-height: 0; }
-  .upload-note:empty { display: none; }
-  .upload-panel { display: none; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 20px; box-shadow: var(--shadow-sm); }
-  .upload-panel.active { display: flex; flex-direction: column; gap: 8px; }
-  .upload-panel-title { font-size: 14px; font-weight: 600; word-break: break-all; }
-  .upload-panel-line { font-size: 12px; color: var(--text-secondary); }
-  .upload-panel-msg { font-size: 12px; color: var(--text-secondary); }
-  .upload-panel-msg.error { color: var(--red); }
-  .upload-progress { display: none; height: 6px; background: var(--bg-hover); border-radius: 3px; overflow: hidden; }
-  .upload-progress.active { display: block; }
-  .upload-bar { height: 100%; width: 0; background: var(--accent); transition: width 0.15s; }
-  .upload-actions { display: flex; gap: 8px; margin-top: 4px; }
-  .btn-primary { background: var(--accent); color: #FFF; border: none; border-radius: var(--radius-sm); padding: 8px 16px; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; }
-  .btn-primary:disabled { opacity: 0.5; cursor: default; }
-
-  /* Account, sign-in, history */
-  a.btn-primary { display: inline-block; text-decoration: none; text-align: center; }
-  .header-link { font-size: 12px; color: #CBD5E1; background: none; border: 1px solid #334155; border-radius: var(--radius-sm); padding: 4px 10px; cursor: pointer; font-family: inherit; }
+  .bar { background: var(--stage); color: var(--stage-text); display: flex; align-items: center; gap: 18px; padding: 0 24px; height: 60px; border-bottom: 1px solid var(--stage-rule); }
+  .brand { font: 700 21px/1 var(--display); letter-spacing: -0.01em; }
+  .bar nav { display: flex; gap: 4px; margin-left: 8px; }
+  .bar nav button { background: none; border: 0; color: var(--stage-muted); padding: 8px 12px; border-radius: 8px; }
+  .bar nav button:hover { color: var(--stage-text); background: var(--stage-2); }
+  .bar .spacer { flex: 1; }
+  .header-meta { color: var(--stage-muted); font-size: 12px; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .credit { color: var(--stage-muted); font-size: 13px; white-space: nowrap; }
+  .account { color: var(--stage-muted); font-size: 12px; max-width: 170px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .btn-white { background: #fff; color: var(--ink); border: 0; border-radius: 10px; padding: 9px 16px; font-weight: 600; }
+  .btn-white:hover { background: #E7EAF0; }
+  .btn-white:disabled { opacity: .5; cursor: default; }
+  .btn-ghost { background: none; border: 1px solid var(--rule); color: var(--ink); border-radius: 10px; padding: 7px 12px; text-decoration: none; display: inline-block; }
+  .stage .btn-ghost, .side .btn-ghost { border-color: var(--stage-rule); color: var(--stage-text); }
+  .btn-ghost:hover { border-color: var(--heat); }
+  .btn-danger { background: none; border: 1px solid var(--stage-rule); color: #FCA5A5; border-radius: 10px; padding: 6px 12px; }
+  .btn-danger:hover { border-color: #FCA5A5; }
+  .btn-danger:disabled { opacity: .5; cursor: default; }
+  .header-link { font-size: 12px; color: #CBD5E1; background: none; border: 1px solid #334155; border-radius: 8px; padding: 5px 10px; }
   .header-link:hover { color: #FFF; border-color: #94A3B8; }
-  .panel-box { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 20px; box-shadow: var(--shadow-sm); display: none; flex-direction: column; gap: 10px; }
-  .panel-box.active { display: flex; }
-  .panel-title { font-size: 15px; font-weight: 600; }
-  .panel-text { font-size: 12px; color: var(--text-secondary); line-height: 1.5; }
-  .panel-text.error { color: var(--red); }
-  .panel-actions { display: flex; gap: 8px; flex-wrap: wrap; }
-  .history-label { font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
-  .history-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0; border-top: 1px solid var(--border); font-size: 12px; }
-  .history-row:first-of-type { border-top: none; }
+
+  .D { display: grid; grid-template-columns: minmax(360px, 40%) 1fr; height: calc(100vh - 60px); overflow: hidden; }
+  body:has(.D) { overflow: hidden; }
+  .D .side { background: var(--stage); color: var(--stage-text); padding: 16px 18px; display: flex; flex-direction: column; gap: 12px; min-height: 0; }
+  .D .report { padding: 18px 26px 16px; display: flex; flex-direction: column; gap: 12px; min-height: 0; overflow: hidden; }
+
+  .chooser { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; scrollbar-width: thin; }
+  .box { background: var(--stage-2); border: 1px solid var(--stage-rule); border-radius: 12px; padding: 14px 16px; display: none; flex-direction: column; gap: 8px; }
+  .box.active { display: flex; }
+  .box h2 { font: 600 16px/1.25 var(--display); }
+  .box p { font-size: 12.5px; color: var(--stage-muted); line-height: 1.5; }
+  .box p.error { color: #FCA5A5; }
+  .box .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 2px; align-items: center; }
+  .box a { color: var(--stage-text); }
+  .upload-zone { border: 2px dashed var(--stage-rule); border-radius: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; cursor: pointer; position: relative; padding: 26px 16px; text-align: center; background: var(--stage-2); }
+  .upload-zone:hover { border-color: var(--heat); }
+  .upload-zone.hidden { display: none; }
+  .upload-zone .up-title { font-weight: 600; font-size: 14px; }
+  .upload-zone .up-sub { font-size: 12px; color: var(--stage-muted); }
+  .upload-zone input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+  .upload-note { font-size: 12px; color: #FCA5A5; }
+  .upload-note:empty { display: none; }
+  .upload-panel .file-name { font-weight: 600; font-size: 13px; word-break: break-all; }
+  .upload-panel .line { font-size: 12px; color: var(--stage-muted); }
+  .upload-panel .msg { font-size: 12px; color: var(--stage-muted); }
+  .upload-panel .msg.error { color: #FCA5A5; }
+  .consent-row { display: flex; align-items: flex-start; gap: 8px; font-size: 12px; line-height: 1.45; color: var(--stage-muted); }
+  .consent-row input { margin-top: 3px; flex-shrink: 0; }
+  .consent-row a { color: var(--stage-text); }
+  .upload-progress { display: none; height: 5px; background: #0A0F1A; border-radius: 3px; overflow: hidden; }
+  .upload-progress.active { display: block; }
+  .upload-bar { height: 100%; width: 0; background: var(--heat); transition: width .15s; }
+  .samples-section .label { font-size: 11px; font-weight: 600; color: var(--stage-muted); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 8px; }
+  .samples-grid { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 6px; }
+  .sample-card { flex: 0 0 132px; border-radius: 9px; overflow: hidden; cursor: pointer; border: 2px solid var(--stage-rule); background: #0A0F1A; text-align: left; color: var(--stage-text); padding: 0; }
+  .sample-card:hover { border-color: var(--heat); }
+  .sample-card.active { border-color: var(--heat); }
+  .sample-thumb { width: 100%; height: 74px; background: #070A12; display: flex; align-items: center; justify-content: center; color: var(--stage-muted); }
+  .sample-thumb img { width: 100%; height: 100%; object-fit: cover; }
+  .sample-info { padding: 7px 9px; }
+  .sample-title { font-size: 11px; font-weight: 600; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .sample-dur { font-size: 10px; color: var(--stage-muted); margin-top: 2px; }
+  .history-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0; border-top: 1px solid var(--stage-rule); font-size: 12px; }
+  .history-row:first-child { border-top: 0; }
   .history-main { min-width: 0; }
   .history-name { font-weight: 600; word-break: break-all; }
-  .history-sub { color: var(--text-muted); font-size: 11px; margin-top: 2px; }
+  .history-sub { color: var(--stage-muted); font-size: 11px; margin-top: 2px; }
   .history-actions { display: flex; gap: 6px; flex-shrink: 0; }
-  .history-actions a { text-decoration: none; }
-  .page-note { font-size: 11px; color: var(--text-muted); margin-top: auto; }
-  .page-note a { color: var(--text-muted); }
-  .consent-row { display: flex; align-items: flex-start; gap: 8px; font-size: 12px; line-height: 1.5; color: var(--text-secondary); padding: 0 2px; }
-  .consent-row.hidden { display: none; }
-  .consent-row input { margin-top: 3px; flex-shrink: 0; }
-  .consent-row a { color: var(--accent); }
-  .upload-panel .consent-row { margin: 10px 0 4px; padding: 0; }
-  .btn-danger { padding: 6px 14px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--bg-card); color: var(--red); font-size: 12px; cursor: pointer; font-family: 'Plus Jakarta Sans', sans-serif; font-weight: 500; }
-  .btn-danger:hover { border-color: var(--red); }
-  .btn-danger:disabled { opacity: 0.5; cursor: default; }
   .field-row { display: flex; gap: 8px; }
-  .field-row input { flex: 1; min-width: 0; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 10px; font: inherit; font-size: 12px; }
+  .field-row input { flex: 1; min-width: 0; border: 1px solid var(--stage-rule); border-radius: 8px; padding: 7px 9px; font-size: 12px; background: #0A0F1A; color: var(--stage-text); }
+  .privacy-note { font-size: 11px; color: var(--stage-muted); margin-top: auto; padding: 4px 2px; }
+  .privacy-note a { color: var(--stage-muted); }
+  .spinner { width: 28px; height: 28px; border: 3px solid var(--stage-rule); border-top-color: var(--heat); border-radius: 50%; animation: spin .9s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
 
-  /* Results */
-  .charts-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 12px; color: var(--text-muted); font-size: 14px; }
-  .charts-empty svg { width: 48px; height: 48px; opacity: 0.3; }
-  .charts-container { display: none; }
-  .charts-container.active { display: block; }
-  .result-message { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; font-size: 13px; line-height: 1.6; color: var(--text-secondary); margin-bottom: 14px; }
-  .result-message[hidden] { display: none; }
+  .player { flex: 1; min-height: 0; display: none; flex-direction: column; gap: 10px; }
+  .player.active { display: flex; }
+  .side-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; min-height: 20px; }
+  .clip-title { font: 600 18px/1.2 var(--display); }
+  .clip-credit { font-size: 12px; color: var(--stage-muted); }
+  .side-head .btn-ghost { padding: 3px 9px; font-size: 12px; margin-left: auto; }
+  .video-box { position: relative; background: #000; border-radius: 14px; overflow: hidden; aspect-ratio: 16 / 9; flex: none; }
+  .video-box video { width: 100%; height: 100%; display: block; object-fit: contain; }
+  .video-missing { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 22px; text-align: center; font-size: 13px; color: var(--stage-muted); background: radial-gradient(ellipse at 50% 45%, #1A2336 0%, #0A0F1A 75%); }
+  .brain-box { position: relative; background: radial-gradient(ellipse at 50% 45%, #1A2336 0%, #0A0F1A 70%); border-radius: 14px; overflow: hidden; flex: 1; min-height: 150px; }
+  .brain-box canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  .brain-message { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 20px; text-align: center; font-size: 13px; color: var(--stage-muted); }
+  .brain-legend { position: absolute; left: 14px; bottom: 12px; display: flex; gap: 8px; align-items: center; font-size: 11px; color: var(--stage-muted); pointer-events: none; }
+  .brain-legend i { width: 86px; height: 6px; border-radius: 3px; background: linear-gradient(90deg, #5A5F68, var(--heat-deep), var(--heat), var(--heat-light)); }
+  .brain-time { position: absolute; right: 14px; top: 12px; font: 600 13px var(--display); color: var(--stage-muted); font-variant-numeric: tabular-nums; }
+  .sample-meta { font-size: 11.5px; color: var(--stage-muted); line-height: 1.45; }
+  .sample-meta:empty { display: none; }
+  .retention { display: none; flex-direction: column; gap: 6px; border-top: 1px solid var(--stage-rule); padding-top: 8px; }
+  .retention.active { display: flex; }
+  .retention .rt-title { font-size: 12px; font-weight: 600; }
+  .retention .rt-text { font-size: 11.5px; color: var(--stage-muted); }
+  .retention .rt-text.error { color: #FCA5A5; }
+  .retention .actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 
-  .result-stats { display: grid; grid-template-columns: 1fr; gap: 10px; margin-bottom: 16px; }
-  .result-stats.compare { grid-template-columns: 1fr 1fr; }
-  .cards-group { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-  .cards-label { font-size: 10px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .cards-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
-  .result-stats.compare .cards-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .stat-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px; text-align: center; min-width: 0; }
-  .stat-value { font-size: 20px; font-weight: 700; font-family: 'JetBrains Mono', monospace; color: var(--accent); overflow-wrap: anywhere; }
-  .stat-value.small { font-size: 12px; line-height: 1.35; }
-  .stat-detail { font-size: 11px; color: var(--text-secondary); margin-top: 2px; overflow-wrap: anywhere; }
-  .stat-label { font-size: 10px; color: var(--text-muted); margin-top: 4px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; }
+  .timeline { display: grid; grid-template-columns: auto auto 1fr auto auto; gap: 10px; align-items: center; flex: none; }
+  .tl-btn { width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--stage-rule); background: var(--stage-2); color: var(--stage-text); display: grid; place-items: center; padding: 0; }
+  .tl-btn.play { width: 42px; height: 42px; background: var(--heat); color: #1A0D04; border: 0; }
+  .tl-btn svg { width: 15px; height: 15px; }
+  .tl-right { display: flex; gap: 8px; align-items: center; }
+  .tl-time { font: 600 13px var(--display); font-variant-numeric: tabular-nums; color: var(--stage-muted); min-width: 84px; text-align: right; }
+  .tl-track { position: relative; height: 50px; cursor: pointer; touch-action: none; }
+  .tl-track svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
 
-  .compare-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; font-size: 12px; color: var(--text-secondary); }
-  .compare-row[hidden] { display: none; }
-  .compare-row select { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 6px 8px; background: var(--bg-card); color: var(--text-primary); font: inherit; font-size: 12px; max-width: 240px; }
-  .compare-msg { font-size: 12px; color: var(--text-secondary); }
-  .compare-msg.error { color: var(--red); }
+  .charts-empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: var(--ink-3); font-size: 14px; text-align: center; }
+  .charts-empty svg { width: 46px; height: 46px; opacity: .35; }
+  .report-body { flex: 1; min-height: 0; display: none; flex-direction: column; gap: 12px; }
+  .report-body.active { display: flex; }
+  .result-message { background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 18px 20px; font-size: 13px; line-height: 1.55; color: var(--ink-2); }
+  .result-message:empty { display: none; }
 
-  .chart-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 20px; margin-bottom: 14px; box-shadow: var(--shadow-sm); }
-  .chart-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
-  .chart-title { font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
-  .chart-dot { width: 8px; height: 8px; border-radius: 50%; }
-  .chart-note { font-size: 12px; color: var(--text-muted); margin: 0 0 10px; }
-  .chart-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
-  .group-btn { border: 1px solid var(--border); background: var(--bg-card); color: var(--text-secondary); border-radius: 999px; padding: 3px 10px; font: inherit; font-size: 11px; cursor: pointer; }
-  .group-btn:hover { border-color: var(--accent); color: var(--accent); }
-  .group-btn.active { background: var(--accent-light); border-color: var(--accent); color: var(--accent); }
-  .muted-toggle { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-secondary); white-space: nowrap; }
-  .muted-toggle input { accent-color: var(--accent); }
-  .chart-wrapper { height: 280px; }
+  .top { display: grid; grid-template-columns: 1fr 1fr 220px; gap: 24px; align-items: start; flex: none; }
+  .top.compare { grid-template-columns: 1fr; }
+  .mgroup { border-top: 2px solid var(--cool); padding-top: 8px; display: flex; flex-direction: column; }
+  .mgroup.hot { border-top-color: var(--heat); }
+  .mgroup h3 { font: 600 16px var(--display); }
+  .mgroup > p { font-size: 12.5px; color: var(--ink-2); margin-bottom: 4px; }
+  .mgroup .empty { font-size: 13px; color: var(--ink-2); padding: 6px 0; }
+  .mrow { display: grid; grid-template-columns: 96px 1fr; gap: 12px; align-items: center; padding: 6px 0; background: none; border: 0; text-align: left; color: inherit; }
+  .mrow.no-thumb { grid-template-columns: 1fr; }
+  .mrow .thumb { width: 100%; aspect-ratio: 16 / 9; border-radius: 6px; background: #DDE1E7 center / cover; }
+  .mrow .when { font: 600 15px var(--display); font-variant-numeric: tabular-nums; }
+  .mrow.hot .when { color: #C2410C; }
+  .mrow:hover .when { text-decoration: underline; }
+  .sidefacts { display: flex; flex-direction: column; border-top: 2px solid var(--rule); }
+  .sidefacts h3 { font: 500 12.5px var(--text); color: var(--ink-2); }
+  .opening { padding: 8px 0 10px; border-bottom: 1px solid var(--rule); }
+  .opening strong { display: block; font: 600 18px/1.2 var(--display); }
+  .opening small { display: block; font-size: 12.5px; color: var(--ink-2); }
+  .audio { padding-top: 8px; }
+  .audio strong { display: block; font: 600 21px/1.15 var(--display); }
+  .audio small { display: block; font-size: 12.5px; color: var(--ink-2); margin-top: 2px; }
+  .split { height: 6px; border-radius: 3px; background: #E2E5EA; margin: 5px 0 4px; overflow: hidden; }
+  .split b { display: block; height: 100%; background: var(--heat); }
 
-  .brain-panel { position: relative; height: 320px; background: linear-gradient(180deg, #F8FAFC, #EEF2F7); border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; }
-  .brain-canvas { width: 100%; height: 100%; }
-  .brain-canvas canvas { display: block; width: 100%; height: 100%; }
-  .brain-message { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 20px; text-align: center; font-size: 13px; color: var(--text-muted); }
-  .brain-message[hidden] { display: none; }
-  .brain-caption { font-size: 11px; color: var(--text-muted); font-family: 'JetBrains Mono', monospace; }
-  .brain-legend { display: flex; flex-direction: column; gap: 4px; margin-top: 10px; }
-  .brain-legend[hidden] { display: none; }
-  .brain-legend-bar { height: 8px; border-radius: 4px; border: 1px solid var(--border); background: linear-gradient(90deg, #2563EB, #FFFFFF, #DC2626); }
-  .brain-legend-labels { display: flex; justify-content: space-between; font-size: 10px; color: var(--text-muted); }
-  .brain-legend-range { text-align: center; font-size: 10px; color: var(--text-muted); font-family: 'JetBrains Mono', monospace; }
+  .chart-head { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+  .chart-head h2 { font: 600 19px var(--display); }
+  .chart-head .grow { flex: 1; }
+  .keys { display: inline-flex; gap: 16px; }
+  .legend-key { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--ink-2); }
+  .legend-key i { width: 18px; height: 0; border-top: 2px solid var(--heat); }
+  .legend-key i.dash { border-top: 2px dashed var(--cool); }
+  .toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--ink-2); white-space: nowrap; }
+  .toggle input { accent-color: var(--heat); }
+  .compare-pick { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--ink-2); }
+  .compare-pick select { border: 1px solid var(--rule); border-radius: 8px; padding: 4px 8px; background: var(--surface); color: var(--ink); font-size: 12px; max-width: 190px; }
+  .compare-msg { font-size: 12px; color: var(--ink-2); min-height: 0; }
+  .compare-msg:empty { display: none; }
+  .compare-msg.error { color: #B4231A; }
+  .main-chart { flex: 1; min-height: 150px; display: flex; flex-direction: column; }
+  .main-chart .note { font-size: 12.5px; color: var(--ink-2); }
+  .main-chart .chart { flex: 1; min-height: 0; margin-top: 22px; position: relative; }
+  .chart { position: relative; width: 100%; }
+  .chart svg { display: block; width: 100%; overflow: visible; cursor: pointer; }
+  .xaxis { display: flex; justify-content: space-between; font-size: 11px; color: var(--ink-3); height: 16px; }
+  .pins { position: absolute; left: 0; right: 0; top: -22px; height: 20px; }
+  .pin { position: absolute; transform: translateX(-50%); bottom: 0; background: none; border: 0; padding: 0 2px; height: 20px; display: flex; align-items: flex-end; }
+  .pin::after { content: ''; position: absolute; left: 50%; bottom: -4px; width: 1.5px; height: 8px; background: var(--cool); }
+  .pin span { font: 600 11px var(--display); color: var(--ink-2); margin-bottom: 3px; font-variant-numeric: tabular-nums; }
+  .pin.hot span { color: #C2410C; }
+  .pin.hot::after { background: var(--heat); }
+  .pin:hover span { color: var(--ink); }
 
-  .sample-meta { padding: 10px 14px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 12px; line-height: 1.5; color: var(--text-secondary); }
-  .sample-meta[hidden] { display: none; }
-  .sample-attribution { color: var(--text-muted); margin-top: 4px; }
+  .strips-wrap { flex: none; }
+  .strips { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; }
+  .strip { min-width: 0; }
+  .strip h3, .parts h3 { display: flex; justify-content: space-between; align-items: baseline; font: 600 15px var(--display); gap: 8px; margin-bottom: 4px; }
+  .strip h3 button, .parts h3 button { background: none; border: 0; font: 500 12.5px var(--text); color: var(--ink-2); padding: 0; }
+  .strip h3 button:hover, .parts h3 button:hover { color: var(--ink); }
+  .strip .chart { height: 78px; }
+  .parts .parts-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 18px; }
+  .parts h4, .sub h4 { font: 500 12px var(--text); color: var(--ink-2); margin-bottom: 2px; }
+  .parts .chart { height: 56px; }
 
-  @media (max-width: 1024px) {
-    .layout { grid-template-columns: 1fr; }
-    .panel-left { position: relative; top: 0; height: auto; min-height: 400px; border-right: none; border-bottom: 1px solid var(--border); }
-    .panel-right { height: auto; }
+  .compare-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .compare-table th, .compare-table td { text-align: left; padding: 8px 12px 8px 0; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  .compare-table th { font: 500 12.5px var(--text); color: var(--ink-2); }
+  .compare-table td.v { font: 600 15px var(--display); }
+
+  @media (max-width: 860px), (max-height: 620px) {
+    .D { display: block; height: auto; overflow: visible; }
+    body:has(.D) { overflow: auto; }
+    .chooser { overflow: visible; }
+    .player .brain-box { aspect-ratio: 16 / 10; flex: none; }
+    .main-chart { flex: none; }
+    .main-chart .chart { height: 200px; flex: none; }
+    .top { grid-template-columns: 1fr; }
+    .D .report { padding: 20px 16px 60px; overflow: visible; }
+    .strips { grid-template-columns: 1fr; }
   }
-
-  @media (max-width: 700px) {
-    .cards-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .result-stats.compare { grid-template-columns: 1fr; }
-    .chart-header { align-items: flex-start; }
-    .chart-controls { justify-content: flex-start; }
-    .chart-wrapper { height: 240px; }
-    .brain-panel { height: 240px; }
+  @media (max-width: 860px) {
+    .bar { padding: 0 14px; gap: 10px; }
+    .bar nav, .header-meta { display: none; }
   }
+  @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto; } }
 </style>
 </head>
 <body>
-<header>
-  <div class="logo">
-    <div class="logo-icon"><svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div>
-    <div class="logo-text">Neuro<span>Lens</span></div>
-  </div>
-  <div class="header-right">
-    <div class="header-meta" id="headerMeta">Select a video to view its brain response</div>
-    <div class="header-meta" id="balance"></div>
-    <div class="header-meta" id="account"></div>
-    <button class="header-link" id="signOut" hidden>Sign out</button>
-  </div>
+<header class="bar">
+  <div class="brand">NeuroLens</div>
+  <nav aria-label="Main">
+    <button id="navSamples">Samples</button>
+    <button id="navHistory">Your analyses</button>
+  </nav>
+  <div class="spacer"></div>
+  <span class="header-meta" id="headerMeta">Select a video to see its brain response</span>
+  <span class="credit" id="balance"></span>
+  <span class="account" id="account"></span>
+  <button class="header-link" id="signOut" hidden>Sign out</button>
+  <button class="btn-white" id="topUpload">Upload a video</button>
 </header>
 
-<div class="layout">
-  <div class="panel-left">
-    <!-- Start-up: waiting for the database to wake, or an error with a retry -->
-    <div class="panel-box active" id="startupPanel">
-      <div class="panel-title" id="startupTitle">Starting up…</div>
-      <div class="panel-text" id="startupText"></div>
-      <div class="panel-actions"><button class="btn-new" id="startupRetry" hidden>Try again</button></div>
+<div class="D">
+  <aside class="side">
+    <div class="chooser" id="chooser">
+      <div class="box active" id="startupPanel">
+        <h2 id="startupTitle">Starting up…</h2>
+        <p id="startupText"></p>
+        <div class="actions"><button class="btn-ghost" id="startupRetry" hidden>Try again</button></div>
+      </div>
+
+      <div class="box" id="signInPanel">
+        <p id="signedOutNote"></p>
+        <h2>Sign in to analyse your own videos</h2>
+        <p>Use Google, or an email address and password. Samples can be browsed without signing in.</p>
+        <div class="actions"><a class="btn-white" href="/login" style="display:inline-block;text-decoration:none;text-align:center">Sign in</a></div>
+      </div>
+
+      <div class="upload-zone hidden" id="uploadZone">
+        <div class="up-title">Upload a video for analysis</div>
+        <div class="up-sub" id="limitsText">MP4, MOV, or WebM</div>
+        <input type="file" accept="video/mp4,video/quicktime,video/webm" id="fileInput">
+      </div>
+      <div class="upload-note" id="uploadNote"></div>
+      <div class="box" id="noCreditPanel"><p>You have no credit yet. Ask the NeuroLens team for test credit.</p></div>
+
+      <div class="box upload-panel" id="uploadPanel">
+        <div class="file-name" id="upFileName"></div>
+        <div class="line" id="upDetail"></div>
+        <div class="line" id="upCost"></div>
+        <div class="consent-row" id="consentRow">
+          <input type="checkbox" id="consentBox">
+          <label for="consentBox">Keep this video and its analysis for up to 12 months to help build a future model linking brain response to real audience behaviour. I own the rights to this video. Optional: the analysis works either way. <a href="/static/privacy.html">Privacy policy</a></label>
+        </div>
+        <div class="upload-progress" id="upProgress"><div class="upload-bar" id="upBar"></div></div>
+        <div class="msg" id="upMsg"></div>
+        <div class="actions">
+          <button class="btn-white" id="upConfirm">Upload</button>
+          <button class="btn-ghost" id="upCancel">Cancel</button>
+        </div>
+      </div>
+
+      <div class="samples-section" id="samplesSection">
+        <div class="label">Sample videos</div>
+        <div class="samples-grid" id="samplesGrid"></div>
+        <p class="up-sub" id="samplesEmpty" hidden>Sample videos coming soon.</p>
+      </div>
+
+      <div class="box" id="historyPanel">
+        <h2>Your analyses</h2>
+        <div id="historyList"></div>
+        <p id="historyNote"></p>
+      </div>
+
+      <div class="box" id="deleteAccountPanel">
+        <h2>Delete my account</h2>
+        <p>This deletes every video, analysis and login for this account. Type DELETE to confirm.</p>
+        <div class="field-row">
+          <input id="deleteAccountConfirm" placeholder="DELETE" autocomplete="off" aria-label="Type DELETE to confirm">
+          <button class="btn-danger" id="deleteAccountBtn">Delete</button>
+        </div>
+        <p id="deleteAccountMsg"></p>
+      </div>
+
+      <div class="privacy-note"><a href="/static/privacy.html">Privacy policy</a></div>
     </div>
 
-    <!-- Signed out -->
-    <div class="panel-box" id="signInPanel">
-      <div class="panel-text" id="signedOutNote"></div>
-      <div class="panel-title">Sign in to analyse your own videos</div>
-      <div class="panel-text">Use Google, or an email address and password. Samples can be browsed without signing in.</div>
-      <div class="panel-actions"><a class="btn-primary" href="/login">Sign in</a></div>
-    </div>
-
-    <!-- Signed in -->
-    <div class="upload-zone hidden" id="uploadZone">
-      <div class="upload-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>
-      <div class="upload-title">Upload a video for analysis</div>
-      <div class="upload-subtitle" id="limitsText">MP4, MOV, or WebM</div>
-      <input type="file" accept="video/mp4,video/quicktime,video/webm" id="fileInput">
-    </div>
-    <div class="upload-note" id="uploadNote"></div>
-    <div class="panel-box" id="noCreditPanel">
-      <div class="panel-text">You have no credit yet. Ask the NeuroLens team for test credit.</div>
-    </div>
-
-    <!-- Upload: confirm, progress, result -->
-    <div class="upload-panel" id="uploadPanel">
-      <div class="upload-panel-title" id="upFileName"></div>
-      <div class="upload-panel-line" id="upDetail"></div>
-      <div class="upload-panel-line" id="upCost"></div>
-    <div class="consent-row" id="consentRow">
-      <input type="checkbox" id="consentBox">
-      <label for="consentBox">Keep this video and its analysis for up to 12 months to help build a future model linking brain response to real audience behaviour. I own the rights to this video. Optional: the analysis works either way. <a href="/static/privacy.html">Privacy policy</a></label>
-    </div>
-      <div class="upload-progress" id="upProgress"><div class="upload-bar" id="upBar"></div></div>
-      <div class="upload-panel-msg" id="upMsg"></div>
-      <div class="upload-actions">
-        <button class="btn-primary" id="upConfirm">Upload</button>
-        <button class="btn-new" id="upCancel">Cancel</button>
+    <div class="player" id="player" hidden>
+      <div class="side-head">
+        <span class="clip-title" id="clipTitle"></span>
+        <span class="clip-credit" id="clipCredit"></span>
+        <button class="btn-ghost" id="btnNew">Back</button>
+      </div>
+      <div class="video-box" id="videoBox">
+        <video id="videoPlayer" playsinline muted></video>
+        <div class="video-missing" id="videoMissing" hidden>The video is not on this device. Play moves the 3D brain through the seconds.</div>
+      </div>
+      <div class="brain-box" id="brainHost">
+        <div class="brain-message" id="brainMessage">The 3D view is not available for this video.</div>
+        <div class="brain-legend"><span>typical</span><i></i><span>higher</span></div>
+        <span class="brain-time" id="brainSecond"></span>
+      </div>
+      <div class="timeline" id="timeline"></div>
+      <div class="sample-meta" id="sampleMeta"></div>
+      <div class="retention" id="retentionPanel">
+        <div class="rt-title">Real audience retention</div>
+        <div class="rt-text">Add the video's real audience-retention curve to keep with its analysis. <a href="/static/retention_guide.html">How to get the report</a></div>
+        <div class="actions">
+          <button class="btn-ghost" id="retentionPick">Add real audience retention</button>
+          <span class="rt-text" id="retentionMsg"></span>
+        </div>
+        <input type="file" accept=".json,application/json" id="retentionInput" hidden>
       </div>
     </div>
+  </aside>
 
-    <!-- Real audience retention for a finished, consented job -->
-    <div class="panel-box" id="retentionPanel">
-      <div class="panel-title">Real audience retention</div>
-      <div class="panel-text">Add the video's real audience-retention curve to keep with its analysis. <a href="/static/retention_guide.html">How to get the report</a></div>
-      <div class="panel-actions">
-        <button class="btn-new" id="retentionPick">Add real audience retention</button>
-      </div>
-      <input type="file" accept=".json,application/json" id="retentionInput" hidden>
-      <div class="panel-text" id="retentionMsg"></div>
-    </div>
-
-    <!-- Samples carousel -->
-    <div class="samples-section" id="samplesSection">
-      <div class="samples-label">Sample Videos</div>
-      <div class="samples-grid" id="samplesGrid"></div>
-      <div class="panel-text" id="samplesEmpty" hidden>Sample videos coming soon.</div>
-    </div>
-
-    <!-- Your earlier analyses -->
-    <div class="panel-box" id="historyPanel">
-      <div class="history-label">Your analyses</div>
-      <div id="historyList"></div>
-      <div class="panel-text" id="historyNote"></div>
-    </div>
-
-    <div class="panel-box" id="deleteAccountPanel">
-      <div class="panel-title">Delete my account</div>
-      <div class="panel-text">This deletes every video, analysis and login for this account. Type DELETE to confirm.</div>
-      <div class="field-row">
-        <input id="deleteAccountConfirm" placeholder="DELETE" autocomplete="off" aria-label="Type DELETE to confirm">
-        <button class="btn-danger" id="deleteAccountBtn">Delete my account</button>
-      </div>
-      <div class="panel-text" id="deleteAccountMsg"></div>
-    </div>
-
-    <div class="page-note"><a href="/static/privacy.html">Privacy policy</a></div>
-
-    <!-- Processing -->
-    <div class="processing" id="processing">
-      <div class="spinner"></div>
-      <div class="processing-text">Analysing brain response...</div>
-      <div class="processing-detail" id="processingDetail">Running TRIBE v2 inference</div>
-    </div>
-
-    <!-- Video player -->
-    <div class="video-container" id="videoContainer">
-      <div class="video-wrapper"><video id="videoPlayer" controls></video></div>
-      <div class="video-info">
-        <span class="video-filename" id="videoFilename"></span>
-        <div class="video-stats"><span id="videoDuration"></span><span id="videoProcessTime"></span></div>
-        <button class="btn-new" id="btnNew">Back</button>
-      </div>
-      <div class="sample-meta" id="sampleMeta" hidden>
-        <div id="sampleDescription"></div>
-        <div class="sample-attribution" id="sampleAttribution"></div>
-      </div>
-    </div>
-  </div>
-
-  <div class="panel-right">
+  <div class="report">
     <div class="charts-empty" id="chartsEmpty">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 3v18h18"/><path d="M7 16l4-8 4 4 5-9"/></svg>
-      <div>Select a video to view its brain response</div>
+      <div>Select a sample or upload a video to see its brain response.</div>
     </div>
-    <div class="charts-container" id="chartsContainer">
+    <div class="report-body" id="reportBody">
       <div class="result-message" id="resultMessage" hidden></div>
-      <div class="result-stats" id="resultStats"></div>
-
-      <div class="compare-row" id="compareRow" hidden>
-        <label for="compareSelect">Compare with…</label>
-        <select id="compareSelect"></select>
-        <span class="compare-msg" id="compareMsg"></span>
-      </div>
-
-      <div class="chart-card" id="chartCard">
-        <div class="chart-header">
-          <div class="chart-title"><span class="chart-dot" style="background:var(--orange)"></span> Brain response</div>
-          <div class="chart-controls">
-            <button class="group-btn" data-group="see">See</button>
-            <button class="group-btn" data-group="hear">Hear</button>
-            <button class="group-btn" data-group="understand">Understand</button>
-            <label class="muted-toggle"><input type="checkbox" id="mutedToggle"> Show without sound</label>
-          </div>
+      <div class="top" id="topArea"></div>
+      <section class="main-chart" id="chartCard">
+        <div class="chart-head">
+          <h2>Brain response over time</h2>
+          <span class="keys" id="chartKeys"></span>
+          <span class="grow"></span>
+          <label class="compare-pick" id="compareRow" hidden><span>Compare with…</span><select id="compareSelect"></select></label>
+          <label class="toggle" id="mutedLabel"><input type="checkbox" id="mutedToggle"> Show without sound</label>
         </div>
-        <div class="chart-note">Predicted response of an average viewer, relative to typical film and TV viewing.</div>
-        <div class="chart-wrapper"><canvas id="mainChart"></canvas></div>
-      </div>
-
-      <div class="chart-card" id="brainCard">
-        <div class="chart-header">
-          <div class="chart-title"><span class="chart-dot" style="background:var(--accent)"></span> 3D brain map</div>
-          <div class="brain-caption" id="brainSecond"></div>
-        </div>
-        <div class="brain-panel" id="brainPanel">
-          <div class="brain-message" id="brainMessage">The 3D view is not available for this video.</div>
-          <div class="brain-canvas" id="brainCanvas" hidden></div>
-        </div>
-        <div class="brain-legend" id="brainLegend" hidden>
-          <div class="brain-legend-bar"></div>
-          <div class="brain-legend-labels"><span>below typical</span><span>typical</span><span>above typical</span></div>
-          <div class="brain-legend-range" id="brainLegendRange"></div>
-        </div>
-      </div>
+        <p class="note">Predicted response of an average viewer. The dashed line is typical. Click anywhere to jump there.</p>
+        <p class="compare-msg" id="compareMsg"></p>
+        <div class="chart" id="mainChartBox"></div>
+      </section>
+      <section class="strips-wrap" id="stripsCard">
+        <div class="chart-head"><h2>What the brain is doing</h2></div>
+        <p class="note" style="font-size:12.5px;color:var(--ink-2);margin-bottom:8px">Same scale on all three. Click any chart to jump there.</p>
+        <div class="strips" id="stripsHost"></div>
+      </section>
     </div>
   </div>
 </div>
 
 <script>
-let charts = [], samplesData = null, jobsCache = [];
-let currentResult = null, currentSummary = null, currentContext = null;
-let comparison = null, expandedGroups = new Set(), mutedOn = false, selectedSecond = 0, resultSeq = 0, compareRequest = 0, brainShown = false;
-let videoObjectUrl = null;
 const $ = id => document.getElementById(id);
 const video = $('videoPlayer');
 const BRAIN_VERTICES = 20484;
 const BRAIN_UNAVAILABLE = 'The 3D view is not available for this video.';
 const GROUPS = {
-  see: { label: 'Seeing', colour: '#DC2626', signals: ['faces', 'bodies', 'scenes', 'visual'] },
-  hear: { label: 'Hearing', colour: '#2563EB', signals: ['sound'] },
-  understand: { label: 'Understanding', colour: '#D97706', signals: ['speech', 'social'] },
+  see: { label: 'Seeing', signals: ['faces', 'bodies', 'scenes', 'visual'] },
+  hear: { label: 'Hearing', signals: ['sound'] },
+  understand: { label: 'Understanding', signals: ['speech', 'social'] },
 };
 const SIGNAL_LABELS = { faces: 'Faces', bodies: 'Bodies', scenes: 'Scenes', visual: 'Visual', sound: 'Sound', speech: 'Speech', social: 'Social' };
-const OVERALL_COLOUR = '#EA580C';
-const MUTED_COLOUR = '#0F1629';
-const hasVideo = () => !!video.getAttribute('src');
+const NS = 'http://www.w3.org/2000/svg';
 
-// The 3D module may load after this script: queue its state until it installs itself.
+let samplesData = null, jobsCache = [];
+let currentResult = null, currentSummary = null, currentContext = null;
+let comparison = null, mutedOn = false, resultSeq = 0, compareRequest = 0;
+let signedIn = false, me = null, limits = null;
+let videoObjectUrl = null, virtualTime = 0, virtualPlaying = false, virtualAnchor = 0, virtualRaf = 0, videoRaf = 0;
+let playheads = [];
+
+function fmt(s) {
+  const n = Math.max(0, Math.floor(Number.isFinite(s) ? s : 0));
+  return `${Math.floor(n / 60)}:${String(n % 60).padStart(2, '0')}`;
+}
+function fmtRange(m) { return `${fmt(m.start)}–${fmt(m.end)}`; }
+function cap(word) { return word ? word[0].toUpperCase() + word.slice(1) : word; }
+function hasLocalVideo() { return !!video.getAttribute('src'); }
+function currentTime() { return hasLocalVideo() ? (Number.isFinite(video.currentTime) ? video.currentTime : 0) : virtualTime; }
+function totalSeconds() { return currentResult && currentResult.signals && Array.isArray(currentResult.signals.overall) ? currentResult.signals.overall.length : 0; }
+
 let brainImpl = null;
 const brainPending = { rows: null, count: 0, second: 0, message: BRAIN_UNAVAILABLE, range: null };
 window.brainMap = {
   show(rows, count) {
     brainPending.rows = rows; brainPending.count = count; brainPending.message = null;
+    $('brainMessage').hidden = true;
     if (brainImpl) brainImpl.show(rows, count);
   },
-  setSecond(i) {
-    brainPending.second = i;
-    if (brainImpl) brainImpl.setSecond(i);
+  setSecond(t) {
+    brainPending.second = t;
+    if (brainImpl) brainImpl.setSecond(t);
   },
   clear(message) {
     brainPending.rows = null; brainPending.message = message || BRAIN_UNAVAILABLE;
+    $('brainMessage').textContent = brainPending.message;
+    $('brainMessage').hidden = false;
     if (brainImpl) brainImpl.clear(brainPending.message);
   },
   setColourRange(range) {
@@ -429,20 +414,15 @@ window.brainMap = {
   _install(impl) {
     brainImpl = impl;
     if (brainPending.range != null) impl.setColourRange(brainPending.range);
-    if (brainPending.rows) { impl.show(brainPending.rows, brainPending.count); impl.setSecond(brainPending.second); }
+    if (brainPending.rows) { impl.show(brainPending.rows, brainPending.count); impl.setSecond(brainPending.second); $('brainMessage').hidden = true; }
     else impl.clear(brainPending.message || BRAIN_UNAVAILABLE);
   },
 };
 
-// ─── Account: who is signed in, and what they can do ───────────────────────
 const params = new URLSearchParams(window.location.search);
-let signedIn = false, me = null;
 const dollars = cents => `$${(cents / 100).toFixed(2)}`;
-const IDLE_HEADER = () => (signedIn ? 'Upload a video or select a sample' : 'Select a video to view its brain response');
+const IDLE_HEADER = () => (signedIn ? 'Upload a video or select a sample' : 'Select a video to see its brain response');
 
-// Every POST goes through here. Behind CloudFront's Lambda origin access control, Lambda accepts
-// a POST only when x-amz-content-sha256 holds the hex SHA-256 of the body (docs/M3b_spec.md §3b);
-// on the laptop Flask ignores the header.
 async function postJSON(url, body) {
   const text = JSON.stringify(body);
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
@@ -452,6 +432,13 @@ async function postJSON(url, body) {
     headers: { 'Content-Type': 'application/json', 'x-amz-content-sha256': hash },
     body: text,
   });
+}
+
+function setViewName(name) {
+  const player = name === 'player';
+  $('chooser').hidden = player;
+  $('player').hidden = !player;
+  $('player').classList.toggle('active', player);
 }
 
 function showBalance() {
@@ -465,16 +452,15 @@ async function loadBalance() {
   if (!signedIn) return;
   try {
     const res = await fetch('/api/me');
-    if (res.status === 401) return window.location.reload();  // the session ended: show sign-in
+    if (res.status === 401) return window.location.reload();
     if (!res.ok) return;
     me = await res.json();
     showBalance();
-  } catch (e) { /* the balance is shown for information only */ }
+  } catch (e) { /* the balance is information only */ }
 }
 
 const refreshAccount = () => { loadBalance(); loadHistory(); };
 
-// Start-up: /api/me decides which screen to show. 503 means the database is still waking.
 const STARTUP_RETRIES = 3, STARTUP_RETRY_MS = 5000;
 function startupFailed() {
   $('startupTitle').textContent = 'Something went wrong';
@@ -503,13 +489,19 @@ function showSignedOut() {
   $('startupPanel').classList.remove('active');
   $('signInPanel').classList.add('active');
   $('deleteAccountPanel').classList.remove('active');
+  $('uploadZone').classList.add('hidden');
+  $('account').textContent = '';
+  $('balance').textContent = '';
+  $('signOut').hidden = true;
   $('headerMeta').textContent = IDLE_HEADER();
   loadLimits();
+  loadSamples();
 }
 
 function showApp(meJson) {
   me = meJson; signedIn = true;
   $('startupPanel').classList.remove('active');
+  $('signInPanel').classList.remove('active');
   $('account').textContent = me.email;
   $('signOut').hidden = false;
   $('uploadZone').classList.remove('hidden');
@@ -518,19 +510,18 @@ function showApp(meJson) {
   showBalance();
   loadLimits();
   loadHistory();
-  // A link with ?job=<id> resumes that job.
   const jobParam = params.get('job');
   if (jobParam && /^[0-9a-f-]{36}$/i.test(jobParam)) trackJob(jobParam, null);
 }
 
 $('signOut').addEventListener('click', async () => {
   const button = $('signOut');
-  button.disabled = true;  // one sign-out at a time; it can take a few seconds
+  button.disabled = true;
   button.textContent = 'Signing out…';
   try {
     const res = await postJSON('/logout', {});
     if (!res.ok) throw new Error(`error ${res.status}`);
-    window.location.assign((await res.json()).logout_url);  // Cognito's own logout, then back here
+    window.location.assign((await res.json()).logout_url);
   } catch (e) {
     button.disabled = false;
     button.textContent = 'Sign out';
@@ -538,8 +529,7 @@ $('signOut').addEventListener('click', async () => {
   }
 });
 
-// ─── Earlier analyses (GET /api/jobs) ───────────────────────────────────────
-const RESULT_DAYS = 30;  // the server deletes results after this (S3 lifecycle rule)
+const RESULT_DAYS = 30;
 async function loadHistory() {
   if (!signedIn) return;
   try {
@@ -561,7 +551,6 @@ function renderHistory(jobs) {
   if (currentResult) showCompareRow();
 }
 
-// Filenames and error messages come from users: only textContent, never innerHTML.
 function historyRow(job) {
   const row = document.createElement('div'); row.className = 'history-row';
   const main = document.createElement('div'); main.className = 'history-main';
@@ -572,12 +561,12 @@ function historyRow(job) {
   main.append(name, sub);
   const actions = document.createElement('div'); actions.className = 'history-actions';
   if (job.result_available || job.status === 'queued' || job.status === 'processing') {
-    const open = document.createElement('button'); open.className = 'btn-new'; open.textContent = 'Open';
+    const open = document.createElement('button'); open.className = 'btn-ghost'; open.textContent = 'Open';
     open.addEventListener('click', () => { resetUI(); trackJob(job.job_id, null); });
     actions.append(open);
   }
   if (job.result_available) {
-    const csv = document.createElement('a'); csv.className = 'btn-new'; csv.textContent = 'CSV';
+    const csv = document.createElement('a'); csv.className = 'btn-ghost'; csv.textContent = 'CSV';
     csv.href = `/api/jobs/${job.job_id}/result.csv`;
     actions.append(csv);
   }
@@ -594,7 +583,7 @@ async function deleteJob(job) {
   try {
     const res = await fetch(`/api/jobs/${job.job_id}`, { method: 'DELETE' });
     const data = await res.json().catch(() => ({}));
-    if (res.status === 401) return window.location.reload();  // the session ended
+    if (res.status === 401) return window.location.reload();
     if (!res.ok) {
       $('historyPanel').classList.add('active');
       $('historyNote').textContent = data.message || `Couldn't delete this video (HTTP ${res.status}).`;
@@ -621,73 +610,6 @@ function historyDetail(job) {
   return `${day} · ${job.status}`;
 }
 
-// ─── Chart.js setup ─────────────────────────────────────────────────────────
-Chart.defaults.color = '#94A3B8';
-Chart.defaults.borderColor = 'rgba(15,22,41,0.06)';
-Chart.defaults.font.family = "'Plus Jakarta Sans', sans-serif";
-Chart.defaults.font.size = 11;
-Chart.defaults.animation.duration = 600;
-
-const resultBandsPlugin = {
-  id: 'resultBands',
-  beforeDatasetsDraw(chart) {
-    if (!currentResult || !currentSummary) return;
-    const area = chart.chartArea, x = chart.scales.x;
-    const band = (start, end, colour) => {
-      if (!Number.isFinite(start) || !Number.isFinite(end)) return;
-      const left = Math.max(area.left, x.getPixelForValue(start));
-      const right = Math.min(area.right, x.getPixelForValue(end));
-      if (right <= left) return;
-      chart.ctx.save();
-      chart.ctx.fillStyle = colour;
-      chart.ctx.fillRect(left, area.top, right - left, area.bottom - area.top);
-      chart.ctx.restore();
-    };
-    if (currentSummary.peak) band(currentSummary.peak.t, currentSummary.peak.t + 1, 'rgba(234,88,12,0.10)');
-    (currentSummary.dead || []).forEach(d => band(d.start, d.end, 'rgba(37,99,235,0.08)'));
-  }
-};
-
-const zeroLinePlugin = {
-  id: 'zeroLine',
-  afterDatasetsDraw(chart) {
-    if (!currentResult) return;
-    const area = chart.chartArea, y = chart.scales.y.getPixelForValue(0);
-    if (y < area.top || y > area.bottom) return;
-    const ctx = chart.ctx;
-    ctx.save();
-    ctx.beginPath(); ctx.setLineDash([5, 4]); ctx.strokeStyle = 'rgba(15,22,41,0.3)'; ctx.lineWidth = 1;
-    ctx.moveTo(area.left, y); ctx.lineTo(area.right, y); ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.fillStyle = '#64748B'; ctx.font = "500 10px 'JetBrains Mono', monospace";
-    ctx.textAlign = 'right'; ctx.textBaseline = 'bottom';
-    ctx.fillText('typical viewing', area.right - 4, y - 3);
-    ctx.restore();
-  }
-};
-
-const playheadPlugin = {
-  id: 'playhead',
-  afterDraw(chart) {
-    if (!currentResult) return;
-    let t = null;
-    if (hasVideo() && Number.isFinite(video.currentTime)) t = video.currentTime;
-    else if (!hasVideo()) t = selectedSecond;
-    if (t == null) return;
-    const x = chart.scales.x.getPixelForValue(t);
-    if (x < chart.scales.x.left || x > chart.scales.x.right) return;
-    const ctx = chart.ctx;
-    ctx.save();
-    ctx.beginPath(); ctx.moveTo(x, chart.chartArea.top); ctx.lineTo(x, chart.chartArea.bottom);
-    ctx.strokeStyle = 'rgba(15,22,41,0.3)'; ctx.lineWidth = 1.5; ctx.setLineDash([4,3]); ctx.stroke();
-    ctx.fillStyle = '#0F1629'; ctx.font = "500 10px 'JetBrains Mono', monospace"; ctx.textAlign = 'center';
-    ctx.fillText(`${hasVideo() ? Math.floor(t) : t}s`, x, chart.chartArea.top - 4);
-    ctx.restore();
-  }
-};
-Chart.register(resultBandsPlugin, zeroLinePlugin, playheadPlugin);
-
-// ─── Load samples ───────────────────────────────────────────────────────────
 async function loadSamples() {
   try {
     const res = await fetch('/data/samples.json');
@@ -695,7 +617,6 @@ async function loadSamples() {
     samplesData = await res.json();
     renderSamples();
   } catch (e) {
-    console.warn('Could not load samples:', e);
     $('samplesEmpty').textContent = "Sample videos couldn't be loaded.";
     $('samplesEmpty').hidden = false;
   }
@@ -705,13 +626,13 @@ function renderSamples() {
   const grid = $('samplesGrid');
   if (!samplesData || !samplesData.samples || samplesData.samples.length === 0) {
     grid.replaceChildren();
-    $('samplesEmpty').hidden = false;  // "Sample videos coming soon."
+    $('samplesEmpty').hidden = false;
     return;
   }
   $('samplesEmpty').hidden = true;
   grid.replaceChildren();
   samplesData.samples.forEach((s, idx) => {
-    const card = document.createElement('div');
+    const card = document.createElement('button');
     card.className = 'sample-card';
     card.dataset.idx = idx;
     const thumb = document.createElement('div');
@@ -720,10 +641,10 @@ function renderSamples() {
       const img = document.createElement('img');
       img.src = `/data/${s.thumbnail}`;
       img.alt = '';
-      img.addEventListener('error', () => thumb.replaceChildren(samplePlaceholder()));
+      img.addEventListener('error', () => thumb.textContent = '▶');
       thumb.append(img);
     } else {
-      thumb.append(samplePlaceholder());
+      thumb.textContent = '▶';
     }
     const info = document.createElement('div');
     info.className = 'sample-info';
@@ -741,55 +662,31 @@ function renderSamples() {
   });
 }
 
-function samplePlaceholder() {
-  const placeholder = document.createElement('div');
-  placeholder.className = 'sample-thumb-placeholder';
-  placeholder.textContent = '▶';
-  return placeholder;
-}
-
 function loadSample(idx) {
   const s = samplesData.samples[idx];
   if (!s || !s.result) return;
-
-  // Highlight active card
-  document.querySelectorAll('.sample-card').forEach(c => c.classList.remove('active'));
-  const active = document.querySelector(`.sample-card[data-idx="${idx}"]`);
-  if (active) active.classList.add('active');
-
+  document.querySelectorAll('.sample-card').forEach(c => c.classList.toggle('active', +c.dataset.idx === idx));
   stopTracking();
   showRetention(null);
   $('uploadPanel').classList.remove('active');
-  $('uploadZone').classList.add('hidden');
-  $('processing').classList.remove('active');
   $('samplesSection').style.display = '';
-
-  const result = s.result;
-  const summary = s.summary || result.summary || {};
   clearVideoSource();
   video.src = `/data/${s.video_file}`;
-  $('videoFilename').textContent = s.video_file;
-  $('videoDuration').textContent = `${result.duration_seconds}s`;
-  $('videoProcessTime').textContent = '';
-  $('videoContainer').classList.add('active');
-  $('headerMeta').textContent = `${s.title} — ${result.duration_seconds}s`;
-
-  renderResult(result, summary, {
+  showVideo(true);
+  renderResult(s.result, s.summary || s.result.summary || {}, {
     jobId: null,
     brainUrl: s.brain_file ? `/data/${s.brain_file}` : null,
     description: s.description,
     attribution: s.attribution,
+    title: s.title,
   });
+  $('clipTitle').textContent = s.title || 'Sample';
+  $('clipCredit').textContent = s.attribution || '';
+  video.muted = true;
+  updateTransport();
+  video.play().catch(() => {});
 }
 
-loadSamples();
-
-// ─── Upload handling ────────────────────────────────────────────────────────
-// The length and size limits come from the server (GET /api/limits), so config.json is the
-// one place to change them. The price formula mirrors neurolens/pricing.py
-// estimate_cost_cents: change them together.
-// These are UX checks only; the server (S3's size cap, the worker's ffprobe) enforces them.
-let limits = null;
 async function loadLimits() {
   try {
     const res = await fetch('/api/limits');
@@ -797,7 +694,7 @@ async function loadLimits() {
     limits = await res.json();
     $('limitsText').textContent = `MP4, MOV, or WebM — max ${limits.max_video_duration_seconds} seconds`;
     return limits;
-  } catch (e) { return null; /* handled in handleFile */ }
+  } catch (e) { return null; }
 }
 const ACCEPTED_TYPES = ['video/mp4', 'video/quicktime', 'video/webm'];
 function estimateCostCents(d) { return 90 * Math.max(1, Math.ceil((d - 0.5) / 30)); }
@@ -808,14 +705,15 @@ let pendingFile = null, pendingDuration = 0;
 ['dragleave','drop'].forEach(e => uploadZone.addEventListener(e, ev => { ev.preventDefault(); uploadZone.classList.remove('dragover'); }));
 uploadZone.addEventListener('drop', ev => { const f = ev.dataTransfer.files; if (f.length) handleFile(f[0]); });
 fileInput.addEventListener('change', ev => { if (ev.target.files.length) handleFile(ev.target.files[0]); });
-
+$('topUpload').addEventListener('click', () => { if (signedIn) fileInput.click(); else { showSignedOut(); $('signInPanel').scrollIntoView({ block: 'center' }); } });
 $('btnNew').addEventListener('click', resetUI);
+$('navSamples').addEventListener('click', resetUI);
+$('navHistory').addEventListener('click', () => { resetUI(); $('historyPanel').scrollIntoView({ block: 'nearest' }); });
 $('upConfirm').addEventListener('click', startUpload);
 $('upCancel').addEventListener('click', () => (trackedJob ? resetUI() : resetUpload()));
 
 function rejectFile(message) { $('uploadNote').textContent = message; fileInput.value = ''; }
 
-// Read the length in the browser (not authoritative: the worker measures it again).
 function readDuration(file) {
   return new Promise((resolve, reject) => {
     const v = document.createElement('video'), url = URL.createObjectURL(file);
@@ -842,8 +740,9 @@ async function handleFile(file) {
 
 function showConfirm(file, duration) {
   pendingFile = file; pendingDuration = duration;
+  setViewName('chooser');
   uploadZone.classList.add('hidden');
-  $('consentBox').checked = false; $('consentBox').disabled = false;  // decided per video
+  $('consentBox').checked = false; $('consentBox').disabled = false;
   $('consentRow').classList.remove('hidden');
   $('samplesSection').style.display = 'none';
   $('upFileName').textContent = file.name;
@@ -878,7 +777,7 @@ async function startUpload() {
       research_consent: $('consentBox').checked,
     });
     presign = await res.json();
-    if (res.status === 401) return window.location.reload();  // the session ended
+    if (res.status === 401) return window.location.reload();
     if (res.status === 402) {
       return uploadFailed(`${knownFailure('insufficient_credit')} It needs ${dollars(presign.required_cents)}; ` +
         `you have ${dollars(presign.available_cents)}.${NOT_CHARGED}`);
@@ -888,9 +787,8 @@ async function startUpload() {
       return uploadFailed(known ? known + NOT_CHARGED : (presign.message || `HTTP ${res.status}`) + NOT_CHARGED);
     }
   } catch (err) { return uploadFailed(`Couldn't start the upload: ${err.message}`); }
-  refreshAccount();  // the estimate is now held
+  refreshAccount();
 
-  // Every signed field first; the file goes last, under the key "file".
   const fd = new FormData();
   Object.entries(presign.fields).forEach(([k, v]) => fd.append(k, v));
   fd.append('file', file);
@@ -902,7 +800,7 @@ async function startUpload() {
     $('upBar').style.width = `${Math.round(100 * ev.loaded / ev.total)}%`;
   };
   xhr.onload = () => {
-    if (xhr.status === 204) {  // S3 answers 204 with an empty body on success
+    if (xhr.status === 204) {
       $('upBar').style.width = '100%';
       $('upConfirm').style.display = 'none';
       $('headerMeta').textContent = `Uploaded: ${file.name}`;
@@ -926,17 +824,11 @@ function resetUpload() {
   $('headerMeta').textContent = IDLE_HEADER();
 }
 
-// ─── Job tracking (poll the status, show the result) ───────────────────────
-// The job id lives in the page address (?job=...), so the user can close the tab and come back
-// with the link: results are kept for 30 days.
 const POLL_MS = 5000;
-const SLOW_AFTER_MS = 30 * 60 * 1000;  // after this, add "taking longer than expected"
-// A job that has to start a worker takes about 17-20 minutes. The limit only stops a forgotten
-// open tab from keeping the database awake after a session.
+const SLOW_AFTER_MS = 30 * 60 * 1000;
 const STOP_AFTER_MS = 60 * 60 * 1000;
 const STOPPED_TEXT = 'Still not finished. Reload this page (the link keeps your job) to check again.';
 const NOT_CHARGED = ' You have not been charged.';
-// The wording for each error_code (docs/M3b_spec.md §4b). Null for a code this page does not know.
 function knownFailure(code, message) {
   const maxSeconds = limits ? limits.max_video_duration_seconds : 120;
   switch (code) {
@@ -969,10 +861,9 @@ const STEP_TEXT = {
   saving_dataset: ['Saving the results...', 98],
   saving_result: ['Saving the results...', 98],
 };
-window.neurolensTimings = {};  // render_ms: result received -> charts drawn (Experiment 1)
+window.neurolensTimings = {};
 let trackedJob = null, pollTimer = null, trackStart = 0, pausedPoll = null;
 
-// No polling while the tab is hidden; it resumes at once when the tab is shown again.
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible' && pausedPoll) {
     const resume = pausedPoll;
@@ -1001,7 +892,8 @@ function trackJob(jobId, file) {
   clearTimeout(pollTimer);
   trackedJob = jobId; trackStart = Date.now();
   setJobInUrl(jobId);
-  if (!file) {  // opened from a link: show the panel without an upload
+  setViewName('chooser');
+  if (!file) {
     uploadZone.classList.add('hidden');
     $('consentRow').classList.add('hidden');
     $('samplesSection').style.display = 'none';
@@ -1023,7 +915,7 @@ function showJobMsg(text, isError) {
 }
 
 async function pollJob(jobId, file) {
-  if (trackedJob !== jobId) return;  // the user left this job
+  if (trackedJob !== jobId) return;
   if (Date.now() - trackStart > STOP_AFTER_MS) {
     $('upProgress').classList.remove('active');
     return showJobMsg(STOPPED_TEXT);
@@ -1047,7 +939,7 @@ async function pollJob(jobId, file) {
       if (trackedJob !== jobId) return;
       if (st.status === 'done') {
         again = !(await showResult(jobId, file, st.research_consent));
-        if (!again) refreshAccount();  // the held amount is now charged
+        if (!again) refreshAccount();
       } else if (st.status === 'failed') {
         again = false;
         $('upProgress').classList.remove('active');
@@ -1055,8 +947,6 @@ async function pollJob(jobId, file) {
         refreshAccount();
       } else if (st.status === 'queued') {
         $('upProgress').classList.remove('active');
-        // attempt > 0: handed back after an error or a stopped worker (its message is meant for
-        // a final failure, e.g. "upload it again", so it is not shown here).
         showJobMsg(st.attempt > 0 ? 'Waiting to retry after a problem with the last attempt...' : QUEUED_TEXT);
       } else {
         const step = STEP_TEXT[st.stage];
@@ -1072,46 +962,56 @@ async function pollJob(jobId, file) {
 }
 
 function clearVideoSource() {
+  stopVirtual();
   if (videoObjectUrl) { URL.revokeObjectURL(videoObjectUrl); videoObjectUrl = null; }
   video.pause();
   video.removeAttribute('src');
   video.load();
+  showVideo(false);
+}
+
+function showVideo(has) {
+  video.hidden = !has;
+  $('videoMissing').hidden = has;
 }
 
 function setVideoFile(file, seconds) {
   clearVideoSource();
   videoObjectUrl = URL.createObjectURL(file);
   video.src = videoObjectUrl;
-  $('videoFilename').textContent = file.name;
-  $('videoDuration').textContent = `${seconds}s`;
-  $('videoProcessTime').textContent = '';
-  $('videoContainer').classList.add('active');
+  video.muted = false;
+  showVideo(true);
+  $('clipTitle').textContent = file.name;
+  $('clipCredit').textContent = Number.isFinite(seconds) ? `${seconds}s` : '';
 }
 
-function showResultUnavailable(message) {
+function showResultUnavailable(message, file) {
   resultSeq += 1;
+  stopVirtual();
   currentResult = null; currentSummary = null; currentContext = null; comparison = null;
-  expandedGroups.clear(); mutedOn = false; selectedSecond = 0; brainShown = false;
-  $('mutedToggle').checked = false;
-  charts.forEach(c => c.destroy()); charts = [];
-  $('resultStats').replaceChildren();
-  $('resultStats').classList.remove('compare');
+  mutedOn = false; virtualTime = 0;
+  clearAllCharts();
   $('resultMessage').textContent = message;
   $('resultMessage').hidden = false;
+  $('topArea').replaceChildren();
   $('chartCard').hidden = true;
-  $('brainCard').hidden = true;
+  $('stripsCard').hidden = true;
   $('compareRow').hidden = true;
   $('compareSelect').replaceChildren();
   $('compareMsg').textContent = '';
-  $('brainSecond').textContent = '';
-  clearSampleMeta();
-  window.brainMap.clear(BRAIN_UNAVAILABLE);
-  updateBrainLegend(null);
   $('chartsEmpty').style.display = 'none';
-  $('chartsContainer').classList.add('active');
+  $('reportBody').classList.add('active');
+  $('mutedToggle').checked = false;
+  $('brainSecond').textContent = '';
+  window.brainMap.clear(BRAIN_UNAVAILABLE);
+  $('sampleMeta').textContent = '';
+  $('timeline').replaceChildren();
+  showRetention(null);
+  setViewName('player');
+  if (file) setVideoFile(file, null);
+  else { $('clipTitle').textContent = ''; $('clipCredit').textContent = ''; }
 }
 
-// True when the result is on screen; false means "try again on the next poll".
 async function showResult(jobId, file, consented) {
   const seq = resultSeq;
   let res;
@@ -1121,13 +1021,13 @@ async function showResult(jobId, file, consented) {
     showJobMsg('The analysis is done; loading the result...');
     return false;
   }
-  if (seq !== resultSeq) return true;  // another result was opened while this loaded
-  if (res.status === 410) {  // an old result: final, and the server's sentence is the message
+  if (seq !== resultSeq) return true;
+  if (res.status === 410) {
     const data = await res.json().catch(() => ({}));
     if (seq !== resultSeq) return true;
     $('upProgress').classList.remove('active');
     showJobMsg('The analysis is done.');
-    showResultUnavailable(data.message || 'This result was made by an older version of NeuroLens. Upload the video again.');
+    showResultUnavailable(data.message || 'This result was made by an older version of NeuroLens. Upload the video again.', file);
     return true;
   }
   if (!res.ok) {
@@ -1144,18 +1044,15 @@ async function showResult(jobId, file, consented) {
   $('upProgress').classList.remove('active');
   showJobMsg(`Done in ${Math.round(result.processing_time_seconds)}s of analysis time.`);
   showRetention(consented ? jobId : null);
-  if (file) {  // the video is only on this computer: a resumed link shows the result alone
-    setVideoFile(file, result.duration_seconds);
-  } else {
-    clearVideoSource();
-    $('videoContainer').classList.remove('active');
-  }
+  const cached = jobsCache.find(j => j.job_id === jobId);
+  const title = file ? file.name : (cached && cached.filename ? cached.filename : `Job ${jobId.slice(0, 8)}`);
+  if (file) setVideoFile(file, result.duration_seconds);
+  else { clearVideoSource(); setViewName('player'); $('clipTitle').textContent = title; $('clipCredit').textContent = `${result.duration_seconds}s`; }
   try {
-    renderResult(result, result.summary || {}, { jobId, brainUrl: `/api/jobs/${jobId}/brain` });
+    renderResult(result, result.summary || {}, { jobId, brainUrl: `/api/jobs/${jobId}/brain`, title });
   } catch (e) {
-    console.error('Could not draw the result:', e);
     showResultUnavailable('The result could not be drawn.');
-    return true;  // not a reason to ask the server again
+    return true;
   }
   requestAnimationFrame(() => requestAnimationFrame(() => {
     window.neurolensTimings.render_ms = Math.round(performance.now() - t0);
@@ -1181,7 +1078,7 @@ $('retentionInput').addEventListener('change', async ev => {
   try {
     const res = await postJSON(`/api/jobs/${retentionJob}/retention`, { report: await file.text() });
     const data = await res.json().catch(() => ({}));
-    if (res.status === 401) return window.location.reload();  // the session ended
+    if (res.status === 401) return window.location.reload();
     if (!res.ok) {
       $('retentionMsg').textContent = data.message || `Couldn't save the report (HTTP ${res.status}).`;
       $('retentionMsg').classList.add('error');
@@ -1194,251 +1091,449 @@ $('retentionInput').addEventListener('change', async ev => {
   }
 });
 
-// ─── Result: cards, chart, 3D map ──────────────────────────────────────────
+function openingText(s) {
+  return s && s.opening && s.opening.word ? cap(s.opening.word) : 'Too short to compare';
+}
+function audioPercent(s) {
+  return s && s.audio_dependence != null ? Math.round(s.audio_dependence * 100) : null;
+}
+function momentRanges(list) {
+  return (list || []).map(fmtRange).join(', ') || 'None';
+}
+
+function momentRows(list, hot) {
+  const withThumbs = hasLocalVideo();
+  return list.map(m => `<button class="mrow${hot ? ' hot' : ''}${withThumbs ? '' : ' no-thumb'}" data-seek="${m.start}">
+    ${withThumbs ? `<span class="thumb" data-thumb="${m.start}"></span>` : ''}
+    <span class="when">${fmtRange(m)}</span></button>`).join('');
+}
+
+function momentGroup(title, hint, list, hot) {
+  return `<div class="mgroup${hot ? ' hot' : ''}"><h3>${title}</h3><p>${hint}</p>
+    ${list.length ? momentRows(list, hot) : '<p class="empty">Too short to pick one</p>'}</div>`;
+}
+
+function sideFacts(s) {
+  const pct = audioPercent(s);
+  return `<div class="sidefacts">
+    <div class="opening"><h3>Opening</h3><strong>${openingText(s)}</strong><small>the first 3 seconds against the rest</small></div>
+    <div class="audio"><h3>Audio dependence</h3>
+      ${pct === null ? '<strong>—</strong><small>No strong response to measure</small>' :
+        `<strong>${pct}%</strong><div class="split" aria-hidden="true"><b style="width:${pct}%"></b></div><small>of the response comes from the sound</small>`}
+    </div></div>`;
+}
+
+function escapeHtml(text) {
+  return String(text).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function compareTable() {
+  const other = comparison ? comparison.summary || {} : {};
+  const row = (name, a, b) => `<tr><th scope="row">${name}</th><td class="v">${a}</td><td class="v">${b}</td></tr>`;
+  const audio = s => { const pct = audioPercent(s); return pct === null ? '—' : `${pct}%`; };
+  return `<table class="compare-table"><thead><tr><th></th><th>This video</th><th>${comparison ? escapeHtml(comparison.label) : 'Other video'}</th></tr></thead><tbody>
+    ${row('Opening', openingText(currentSummary), openingText(other))}
+    ${row('Strongest moments', momentRanges(currentSummary.strong_moments), momentRanges(other.strong_moments))}
+    ${row('Weakest moments', momentRanges(currentSummary.weak_moments), momentRanges(other.weak_moments))}
+    ${row('Audio dependence', audio(currentSummary), audio(other))}
+  </tbody></table>`;
+}
+
+function buildTop() {
+  const top = $('topArea');
+  if (!currentResult) { top.replaceChildren(); return; }
+  if (comparison) {
+    top.classList.add('compare');
+    top.innerHTML = compareTable();
+  } else {
+    top.classList.remove('compare');
+    const s = currentSummary || {};
+    top.innerHTML = momentGroup('Strongest parts', 'Good spots for the key message', s.strong_moments || [], true) +
+      momentGroup('Weakest parts', 'Worth a look in the edit', s.weak_moments || [], false) +
+      sideFacts(s);
+    fillThumbs(resultSeq);
+  }
+}
+
+let thumbSeq = 0;
+async function fillThumbs(seq) {
+  const src = video.getAttribute('src');
+  if (!src) return;
+  const els = [...document.querySelectorAll('[data-thumb]')];
+  if (!els.length) return;
+  const run = ++thumbSeq;
+  const v = document.createElement('video');
+  v.src = src; v.muted = true; v.preload = 'auto';
+  try {
+    await new Promise((resolve, reject) => {
+      v.addEventListener('loadeddata', resolve, { once: true });
+      v.addEventListener('error', reject, { once: true });
+    });
+    const canvas = document.createElement('canvas');
+    canvas.width = 320; canvas.height = 180;
+    const g = canvas.getContext('2d');
+    for (const el of els) {
+      if (run !== thumbSeq || seq !== resultSeq) return;
+      const t = Math.min(+el.dataset.thumb, Math.max(0, (v.duration || 0) - 0.05));
+      v.currentTime = t;
+      await new Promise(resolve => v.addEventListener('seeked', resolve, { once: true }));
+      if (run !== thumbSeq || seq !== resultSeq) return;
+      g.drawImage(v, 0, 0, canvas.width, canvas.height);
+      el.style.backgroundImage = `url(${canvas.toDataURL('image/jpeg', 0.75)})`;
+    }
+  } catch (e) { /* thumbnails are a nicety */ }
+}
+
 function renderResult(result, summary, ctx) {
   resultSeq += 1;
   currentResult = result;
   currentSummary = summary || {};
   currentContext = ctx || {};
   comparison = null;
-  brainShown = false;
-  expandedGroups.clear();
   mutedOn = false;
+  virtualTime = 0;
+  stopVirtual();
   $('mutedToggle').checked = false;
-  const T = (result.signals && result.signals.overall) ? result.signals.overall.length : 0;
-  const peakT = currentSummary.peak ? currentSummary.peak.t : 0;
-  selectedSecond = T ? Math.max(0, Math.min(T - 1, Math.floor(Number.isFinite(peakT) ? peakT : 0))) : 0;
-
+  $('mutedToggle').disabled = false;
   $('resultMessage').hidden = true;
   $('resultMessage').textContent = '';
   $('chartCard').hidden = false;
-  $('brainCard').hidden = false;
+  $('stripsCard').hidden = false;
   $('chartsEmpty').style.display = 'none';
-  $('chartsContainer').classList.add('active');
+  $('reportBody').classList.add('active');
   $('compareMsg').textContent = '';
   $('compareMsg').classList.remove('error');
-  clearSampleMeta();
-  showSampleMeta(currentContext);
-
-  renderCards();
-  updateGroupButtons();
-  buildMainChart();
+  $('sampleMeta').textContent = '';
+  if (ctx.description || ctx.attribution) {
+    $('sampleMeta').textContent = [ctx.description, ctx.attribution ? `Attribution: ${ctx.attribution}` : ''].filter(Boolean).join(' · ');
+  }
+  setViewName('player');
+  $('clipTitle').textContent = ctx.title || '';
+  if (hasLocalVideo()) {
+    $('clipCredit').textContent = `${result.duration_seconds}s` + (result.processing_time_seconds ? ` · analysed in ${Math.round(result.processing_time_seconds)}s` : '');
+  } else {
+    $('clipCredit').textContent = `${result.duration_seconds}s · no local video`;
+  }
+  buildTop();
+  buildAllCharts();
   showCompareRow();
-  updateBrainCaption();
   loadBrain();
 }
 
-function clearSampleMeta() {
-  $('sampleDescription').textContent = '';
-  $('sampleAttribution').textContent = '';
-  $('sampleMeta').hidden = true;
+function niceRange(values) {
+  let max = 0;
+  values.forEach(v => { if (Number.isFinite(v)) max = Math.max(max, Math.abs(v)); });
+  return Math.max(0.05, Math.ceil((max || 0.01) * 1.08 * 20) / 20);
 }
 
-function showSampleMeta(ctx) {
-  if (!ctx || (!ctx.description && !ctx.attribution)) return;
-  $('sampleDescription').textContent = ctx.description || '';
-  $('sampleAttribution').textContent = ctx.attribution ? `Attribution: ${ctx.attribution}` : '';
-  $('sampleMeta').hidden = false;
+function svgEl(tag, attrs, parent) {
+  const e = document.createElementNS(NS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(e);
+  return e;
 }
 
-function groupWord(group) {
-  return (GROUPS[group] && GROUPS[group].label) || '—';
+function clearScope(scope) { playheads = playheads.filter(p => p.scope !== scope); }
+
+function clearAllCharts() {
+  playheads = [];
+  $('mainChartBox').replaceChildren();
+  $('stripsHost').replaceChildren();
+  $('timeline').replaceChildren();
 }
 
-function statCard(label, value, detail, small) {
-  const card = document.createElement('div'); card.className = 'stat-card';
-  const valueEl = document.createElement('div');
-  valueEl.className = small ? 'stat-value small' : 'stat-value';
-  valueEl.textContent = value;
-  card.append(valueEl);
-  if (detail) {
-    const detailEl = document.createElement('div'); detailEl.className = 'stat-detail';
-    detailEl.textContent = detail;
-    card.append(detailEl);
+function drawChart(host, { lines, range, height = 200, shade = false, zeroLabel = false, axisLabels = false, dark = false, fill = false, scope }) {
+  host.replaceChildren();
+  const T = totalSeconds();
+  if (!T) return;
+  const W = 1000, H = height, padT = 8, padB = axisLabels ? 18 : 4;
+  const x = i => (T === 1 ? 0 : (i / (T - 1)) * W);
+  const y = v => padT + (1 - (v + range) / (2 * range)) * (H - padT - padB);
+  const svg = svgEl('svg', { viewBox: `0 0 ${W} ${H}`, preserveAspectRatio: 'none', role: 'img' });
+  svg.style.height = fill ? `calc(100% - ${axisLabels ? 16 : 0}px)` : `${H}px`;
+  host.appendChild(svg);
+
+  if (shade && currentSummary) {
+    const band = (m, colour) => {
+      const left = x(Math.max(0, m.start));
+      const right = x(Math.min(T - 1, m.end));
+      if (right <= left) return;
+      svgEl('rect', { x: left, width: right - left, y: padT, height: H - padT - padB, fill: colour }, svg);
+    };
+    (currentSummary.strong_moments || []).forEach(m => band(m, 'rgba(242,113,28,.15)'));
+    (currentSummary.weak_moments || []).forEach(m => band(m, dark ? 'rgba(140,150,168,.16)' : 'rgba(107,122,153,.13)'));
   }
-  const labelEl = document.createElement('div'); labelEl.className = 'stat-label';
-  labelEl.textContent = label;
-  card.append(labelEl);
-  return card;
-}
 
-function summaryCards(s) {
-  const hook = s.hook || {};
-  const peak = s.peak || {};
-  const dead = (s.dead || []).map(d => `${d.start}-${d.end}s`).join(', ') || 'None';
-  const hookWord = groupWord(hook.group);
-  const audio = s.audio_dependence == null ? '—' : `${Math.round(s.audio_dependence * 100)}%`;
-  return [
-    statCard('Hook', hookWord, hook.level || '', hookWord.length > 8),
-    statCard('Peak', Number.isFinite(peak.t) ? `${peak.t}s` : '—', peak.level || '', false),
-    statCard('Dead stretches', dead, '', dead.length > 12),
-    statCard('Audio dependence', audio, s.audio_dependence == null ? 'no strong response to measure' : '', false),
-  ];
-}
+  svgEl('line', { x1: 0, x2: W, y1: y(0), y2: y(0), stroke: dark ? '#3A4560' : '#B9BEC8', 'stroke-dasharray': '6 6', 'vector-effect': 'non-scaling-stroke' }, svg);
 
-function cardsColumn(summary, label) {
-  const group = document.createElement('div'); group.className = 'cards-group';
-  if (label) {
-    const labelEl = document.createElement('div'); labelEl.className = 'cards-label';
-    labelEl.textContent = label;
-    group.append(labelEl);
-  }
-  const grid = document.createElement('div'); grid.className = 'cards-grid';
-  summaryCards(summary || {}).forEach(card => grid.append(card));
-  group.append(grid);
-  return group;
-}
-
-function renderCards() {
-  if (!currentResult) { $('resultStats').replaceChildren(); return; }
-  const container = $('resultStats');
-  container.classList.toggle('compare', !!comparison);
-  container.replaceChildren(cardsColumn(currentSummary || {}, comparison ? 'This video' : ''));
-  if (comparison) container.append(cardsColumn(comparison.summary || {}, comparison.label));
-}
-
-function updateGroupButtons() {
-  document.querySelectorAll('.group-btn').forEach(btn => {
-    btn.classList.toggle('active', expandedGroups.has(btn.dataset.group));
+  lines.forEach(line => {
+    const points = line.values.slice(0, T).map((v, i) => `${x(i)},${y(Math.max(-range, Math.min(range, Number.isFinite(v) ? v : 0)))}`).join(' ');
+    svgEl('polyline', {
+      points, fill: 'none', stroke: line.colour,
+      'stroke-width': line.width || 2,
+      'stroke-dasharray': line.dash ? '7 5' : 'none',
+      'stroke-linejoin': 'round', 'stroke-linecap': 'round',
+      'vector-effect': 'non-scaling-stroke',
+    }, svg);
   });
+
+  const ph = svgEl('line', { y1: padT, y2: H - padB, stroke: dark ? '#E7EAF0' : '#161B26', 'stroke-width': 1.5, 'vector-effect': 'non-scaling-stroke' }, svg);
+  playheads.push({ scope, fn: t => {
+    const px = x(Math.min(Math.max(0, t), Math.max(0, T - 1)));
+    ph.setAttribute('x1', px); ph.setAttribute('x2', px);
+  } });
+
+  svg.addEventListener('pointerdown', e => {
+    const rect = svg.getBoundingClientRect();
+    if (!rect.width) return;
+    seek(((e.clientX - rect.left) / rect.width) * (T - 1));
+  });
+
+  if (zeroLabel) {
+    const label = document.createElement('div');
+    label.textContent = 'typical';
+    Object.assign(label.style, {
+      position: 'absolute', right: '0',
+      top: fill ? `calc(${(y(0) / H) * 100}% - 18px)` : `${y(0) - 18}px`,
+      fontSize: '11px', color: dark ? '#8C96A8' : '#8A91A0', pointerEvents: 'none',
+    });
+    host.appendChild(label);
+  }
+  if (axisLabels) {
+    const axis = document.createElement('div');
+    axis.className = 'xaxis';
+    const step = T > 40 ? 10 : Math.max(1, Math.ceil(T / 6));
+    for (let s = 0; s <= T; s += step) {
+      const span = document.createElement('span');
+      span.textContent = fmt(s);
+      axis.appendChild(span);
+    }
+    host.appendChild(axis);
+  }
 }
 
-function toggleGroup(group) {
-  if (!currentResult || !GROUPS[group]) return;
-  if (expandedGroups.has(group)) expandedGroups.delete(group);
-  else expandedGroups.add(group);
-  updateGroupButtons();
-  buildMainChart();
+function addPins(box) {
+  if (!currentSummary) return;
+  const T = totalSeconds();
+  if (!T) return;
+  const row = document.createElement('div');
+  row.className = 'pins';
+  const items = [
+    ...(currentSummary.strong_moments || []).map(m => ({ t: m.start, mid: (m.start + m.end - 1) / 2, hot: true })),
+    ...(currentSummary.weak_moments || []).map(m => ({ t: m.start, mid: (m.start + m.end - 1) / 2, hot: false })),
+  ].sort((a, b) => a.mid - b.mid);
+  let lastPct = -100;
+  items.forEach(it => {
+    const pct = T === 1 ? 0 : (it.mid / (T - 1)) * 100;
+    const button = document.createElement('button');
+    button.className = 'pin' + (it.hot ? ' hot' : '');
+    button.style.left = `${pct}%`;
+    button.dataset.seek = it.t;
+    button.setAttribute('aria-label', `Jump to ${fmt(it.t)}`);
+    if (pct - lastPct > 5) {
+      const span = document.createElement('span');
+      span.textContent = fmt(it.t);
+      button.appendChild(span);
+      lastPct = pct;
+    }
+    row.appendChild(button);
+  });
+  box.prepend(row);
 }
 
 function buildMainChart() {
-  charts.forEach(c => c.destroy()); charts = [];
-  if (!currentResult || !currentResult.signals) return;
-  const sig = currentResult.signals;
-  const T = Array.isArray(sig.overall) ? sig.overall.length : 0;
-  const labels = Array.from({ length: T }, (_, i) => i);
-  const datasets = [];
-  const add = (label, data, colour, opts = {}) => {
-    datasets.push({
-      label,
-      data: (Array.isArray(data) ? data : []).slice(0, T),
-      borderColor: colour,
-      backgroundColor: 'transparent',
-      borderWidth: opts.width || 1.6,
-      borderDash: opts.dash || [],
-      pointRadius: 0,
-      pointHoverRadius: 4,
-      pointHoverBackgroundColor: colour,
-      pointHoverBorderColor: '#FFF',
-      pointHoverBorderWidth: 2,
-      tension: 0.3,
-      fill: false,
-      groupKey: opts.groupKey,
-      compare: !!opts.compare,
-    });
-  };
-
-  add('Overall', sig.overall, OVERALL_COLOUR, { width: 3 });
-  Object.keys(GROUPS).forEach(g => add(GROUPS[g].label, sig[g], GROUPS[g].colour, { width: 1.6, groupKey: g }));
-  expandedGroups.forEach(g => GROUPS[g].signals.forEach(s => {
-    add(SIGNAL_LABELS[s], sig[s], GROUPS[g].colour, { width: 1.1, dash: [2, 3] });
-  }));
-  if (mutedOn && currentResult.muted) {
-    add('Overall without sound', currentResult.muted.overall, MUTED_COLOUR, { width: 1.5, dash: [6, 4] });
-  }
+  if (!currentResult) return;
+  clearScope('main');
+  const box = $('mainChartBox');
+  const lines = [{ values: currentResult.signals.overall, colour: 'var(--heat)', width: 2.5 }];
+  let secondLabel = '';
   if (comparison && comparison.result.signals) {
-    const cs = comparison.result.signals;
-    add(`Overall · ${comparison.label}`, cs.overall, OVERALL_COLOUR, { width: 1.6, dash: [5, 4], compare: true });
-    Object.keys(GROUPS).forEach(g => {
-      add(`${GROUPS[g].label} · ${comparison.label}`, cs[g], GROUPS[g].colour, { width: 1.2, dash: [5, 4], compare: true });
-    });
+    lines.push({ values: comparison.result.signals.overall, colour: 'var(--cool)', dash: true, width: 1.8 });
+    secondLabel = 'Other video';
+  } else if (mutedOn && currentResult.muted && currentResult.muted.overall) {
+    lines.push({ values: currentResult.muted.overall, colour: 'var(--cool)', dash: true, width: 1.8 });
+    secondLabel = 'Without sound';
   }
-
-  let maxAbs = 0;
-  datasets.forEach(ds => ds.data.forEach(v => {
-    if (Number.isFinite(v)) maxAbs = Math.max(maxAbs, Math.abs(v));
-  }));
-  const yMax = Math.max(0.05, Math.ceil((maxAbs || 0.01) * 1.08 * 20) / 20);
-
-  const c = new Chart($('mainChart').getContext('2d'), {
-    type: 'line',
-    data: { labels, datasets },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      interaction: { mode: 'index', intersect: false },
-      onClick: (e) => {
-        if (!T) return;
-        const x = c.scales.x.getValueForPixel(e.x);
-        if (!Number.isFinite(x)) return;
-        if (hasVideo()) {
-          video.currentTime = Math.max(0, Math.min(T, x));
-        } else {
-          selectedSecond = Math.max(0, Math.min(T - 1, Math.floor(x)));
-          charts.forEach(ch => ch.update('none'));
-          updateBrain();
-        }
-      },
-      plugins: {
-        legend: {
-          display: true, position: 'top', align: 'end',
-          labels: {
-            boxWidth: 14, boxHeight: 2, padding: 10, color: '#475569',
-            font: { size: 11, family: "'Plus Jakarta Sans', sans-serif" },
-            filter: item => !datasets[item.datasetIndex].compare,
-          },
-          onClick: (e, item) => {
-            const ds = c.data.datasets[item.datasetIndex];
-            if (ds.groupKey) { toggleGroup(ds.groupKey); return; }
-            const meta = c.getDatasetMeta(item.datasetIndex);
-            meta.hidden = !meta.hidden;
-            c.update();
-          },
-        },
-        tooltip: {
-          backgroundColor: '#0F1629', titleColor: '#E2E8F0', bodyColor: '#FFF',
-          borderColor: '#1E293B', borderWidth: 1, cornerRadius: 8, padding: 10,
-          titleFont: { family: "'JetBrains Mono', monospace", size: 11 },
-          bodyFont: { family: "'JetBrains Mono', monospace", size: 12, weight: '500' },
-          callbacks: {
-            title: i => `t = ${i[0].label}s`,
-            label: i => ` ${i.dataset.label}: ${Number(i.parsed.y).toFixed(3)}`,
-          },
-        },
-      },
-      scales: {
-        x: {
-          grid: { display: false },
-          ticks: { maxTicksLimit: 15, font: { family: "'JetBrains Mono', monospace", size: 10 }, color: '#94A3B8', callback: v => `${v}s` },
-        },
-        y: {
-          min: -yMax, max: yMax,
-          grid: { color: 'rgba(15,22,41,0.06)' },
-          ticks: { display: true, maxTicksLimit: 7, font: { family: "'JetBrains Mono', monospace", size: 10 }, color: '#94A3B8', callback: v => Number(v).toFixed(1) },
-        },
-      },
-    },
-  });
-  charts.push(c);
+  let range = 0;
+  lines.forEach(line => { range = Math.max(range, niceRange(line.values)); });
+  drawChart(box, { lines, range, height: 220, shade: true, zeroLabel: true, axisLabels: true, fill: true, scope: 'main' });
+  addPins(box);
+  $('chartKeys').innerHTML = `<span class="legend-key"><i></i>This video</span>` +
+    (secondLabel ? `<span class="legend-key"><i class="dash"></i>${escapeHtml(secondLabel)}</span>` : '');
 }
 
-document.querySelectorAll('.group-btn').forEach(btn => {
-  btn.addEventListener('click', () => toggleGroup(btn.dataset.group));
-});
-$('mutedToggle').addEventListener('change', () => {
-  mutedOn = $('mutedToggle').checked;
-  buildMainChart();
-});
+function stripRange() {
+  const values = [];
+  Object.keys(GROUPS).forEach(g => { if (currentResult.signals[g]) values.push(...currentResult.signals[g]); });
+  if (comparison && comparison.result.signals) {
+    Object.keys(GROUPS).forEach(g => { if (comparison.result.signals[g]) values.push(...comparison.result.signals[g]); });
+  }
+  return niceRange(values);
+}
 
-// ─── Comparison ────────────────────────────────────────────────────────────
+function buildStrips() {
+  if (!currentResult) return;
+  clearScope('strips');
+  clearScope('strips-parts');
+  const host = $('stripsHost');
+  host.replaceChildren();
+  host.classList.remove('swapped');
+  const range = stripRange();
+  Object.entries(GROUPS).forEach(([group, def]) => {
+    const strip = document.createElement('div');
+    strip.className = 'strip';
+    const head = document.createElement('h3');
+    head.append(document.createTextNode(def.label));
+    if (def.signals.length > 1) {
+      const button = document.createElement('button');
+      button.textContent = `Show ${def.signals.length} parts`;
+      button.setAttribute('aria-expanded', 'false');
+      button.addEventListener('click', () => swapParts(group, range));
+      head.append(button);
+    }
+    const chart = document.createElement('div');
+    chart.className = 'chart';
+    strip.append(head, chart);
+    host.append(strip);
+
+    const lines = [{ values: currentResult.signals[group] || [], colour: 'var(--ink)', width: 1.75 }];
+    if (comparison && comparison.result.signals) {
+      lines.push({ values: comparison.result.signals[group] || [], colour: 'var(--cool)', dash: true, width: 1.5 });
+    }
+    drawChart(chart, { lines, range, height: 78, scope: 'strips' });
+  });
+}
+
+function swapParts(group, range) {
+  const host = $('stripsHost');
+  const keep = [...host.children];
+  keep.forEach(child => child.hidden = true);
+  clearScope('strips-parts');
+  const wrap = document.createElement('div');
+  wrap.className = 'parts';
+  const head = document.createElement('h3');
+  const back = document.createElement('button');
+  back.textContent = '← All three';
+  back.addEventListener('click', () => {
+    wrap.remove();
+    keep.forEach(child => child.hidden = false);
+    host.classList.remove('swapped');
+    clearScope('strips-parts');
+    tick();
+  });
+  const title = document.createElement('span');
+  title.textContent = `${GROUPS[group].label}: its ${GROUPS[group].signals.length} parts`;
+  head.append(back, title);
+  const row = document.createElement('div');
+  row.className = 'parts-row';
+  GROUPS[group].signals.forEach(signal => {
+    const cell = document.createElement('div');
+    const h4 = document.createElement('h4');
+    h4.textContent = SIGNAL_LABELS[signal] || cap(signal);
+    const chart = document.createElement('div');
+    chart.className = 'chart';
+    cell.append(h4, chart);
+    row.append(cell);
+    const lines = [{ values: currentResult.signals[signal] || [], colour: 'var(--ink-2)', width: 1.5 }];
+    if (comparison && comparison.result.signals) {
+      lines.push({ values: comparison.result.signals[signal] || [], colour: 'var(--cool)', dash: true, width: 1.4 });
+    }
+    drawChart(chart, { lines, range: range * 1.3, height: 56, scope: 'strips-parts' });
+  });
+  wrap.append(head, row);
+  host.append(wrap);
+  host.classList.add('swapped');
+  tick();
+}
+
+function buildTimeline() {
+  clearScope('timeline');
+  const host = $('timeline');
+  host.replaceChildren();
+  if (!currentResult) return;
+  host.innerHTML = `
+    <button class="tl-btn play" id="tlPlay" aria-label="Play"></button>
+    <button class="tl-btn" id="tlBack" aria-label="One second back"></button>
+    <div class="tl-track" id="tlTrack" aria-label="Timeline"></div>
+    <button class="tl-btn" id="tlFwd" aria-label="One second forward"></button>
+    <div class="tl-right"><span class="tl-time" id="tlTime"></span><button class="tl-btn" id="tlSound" aria-label="Sound on"></button></div>`;
+  const track = $('tlTrack');
+  drawChart(track, { lines: [{ values: currentResult.signals.overall, colour: 'var(--heat)', width: 2 }], range: niceRange(currentResult.signals.overall), height: 50, shade: true, dark: true, scope: 'timeline' });
+  $('tlPlay').addEventListener('click', togglePlay);
+  $('tlBack').addEventListener('click', () => seek(Math.floor(currentTime()) - 1));
+  $('tlFwd').addEventListener('click', () => seek(Math.floor(currentTime()) + 1));
+  const snd = $('tlSound');
+  snd.hidden = !hasLocalVideo();
+  snd.addEventListener('click', () => {
+    video.muted = !video.muted;
+    updateTransport();
+  });
+  const drag = e => {
+    const rect = track.getBoundingClientRect();
+    if (rect.width) seek(((e.clientX - rect.left) / rect.width) * (totalSeconds() - 1));
+  };
+  track.addEventListener('pointerdown', e => {
+    track.setPointerCapture(e.pointerId);
+    track.onpointermove = drag;
+  });
+  track.addEventListener('pointerup', () => { track.onpointermove = null; });
+  updateTransport();
+}
+
+const ICON = {
+  play: '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5v11l9-5.5z"/></svg>',
+  pause: '<svg viewBox="0 0 16 16" fill="currentColor"><rect x="3.5" y="2.5" width="3" height="11" rx="1"/><rect x="9.5" y="2.5" width="3" height="11" rx="1"/></svg>',
+  back: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10 3 5 8l5 5"/></svg>',
+  fwd: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m6 3 5 5-5 5"/></svg>',
+  sound: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2.5 6h2.5l3.5-3v10L5 10H2.5z"/><path d="M11 5.5a3.5 3.5 0 0 1 0 5M12.8 3.8a6 6 0 0 1 0 8.4"/></svg>',
+  mute: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2.5 6h2.5l3.5-3v10L5 10H2.5z"/><path d="m11 6 4 4m0-4-4 4"/></svg>',
+};
+
+function updateTransport() {
+  const T = totalSeconds();
+  const t = currentTime();
+  const play = $('tlPlay');
+  if (play) {
+    const playing = hasLocalVideo() ? !video.paused : virtualPlaying;
+    play.innerHTML = playing ? ICON.pause : ICON.play;
+    play.setAttribute('aria-label', playing ? 'Pause' : 'Play');
+  }
+  const back = $('tlBack'), fwd = $('tlFwd');
+  if (back) back.innerHTML = ICON.back;
+  if (fwd) fwd.innerHTML = ICON.fwd;
+  const time = $('tlTime');
+  if (time) time.textContent = `${fmt(t)} / ${fmt(T)}`;
+  const snd = $('tlSound');
+  if (snd && hasLocalVideo()) {
+    snd.innerHTML = video.muted ? ICON.mute : ICON.sound;
+    snd.setAttribute('aria-label', video.muted ? 'Sound on' : 'Sound off');
+  }
+  const second = $('brainSecond');
+  if (second) second.textContent = currentResult ? fmt(t) : '';
+}
+
+function tick() {
+  const t = currentTime();
+  playheads.forEach(p => p.fn(t));
+  updateTransport();
+  if (currentResult) window.brainMap.setSecond(t);
+}
+
+function buildAllCharts() {
+  buildMainChart();
+  buildStrips();
+  buildTimeline();
+  tick();
+}
+
 function showCompareRow() {
   const row = $('compareRow'), select = $('compareSelect');
   const currentId = currentContext && currentContext.jobId;
-  const candidates = (jobsCache || []).filter(j =>
-    j.result_available && j.status === 'done' && j.job_id !== currentId);
+  const candidates = (jobsCache || []).filter(j => j.result_available && j.status === 'done' && j.job_id !== currentId);
   if (!signedIn || !currentResult || candidates.length === 0) {
     row.hidden = true;
     select.replaceChildren();
-    if (comparison) { comparison = null; renderCards(); buildMainChart(); }
+    if (comparison) { comparison = null; buildTop(); buildMainChart(); buildStrips(); }
     return;
   }
   row.hidden = false;
@@ -1457,7 +1552,7 @@ function showCompareRow() {
     select.value = keep;
   } else {
     select.value = '';
-    if (comparison) { comparison = null; renderCards(); buildMainChart(); }
+    if (comparison) { comparison = null; buildTop(); buildMainChart(); buildStrips(); }
   }
 }
 
@@ -1467,7 +1562,8 @@ async function loadComparison() {
   msg.classList.remove('error');
   if (!id) {
     comparison = null; msg.textContent = '';
-    renderCards(); buildMainChart();
+    $('mutedToggle').disabled = false;
+    buildTop(); buildMainChart(); buildStrips(); tick();
     return;
   }
   const job = (jobsCache || []).find(j => j.job_id === id);
@@ -1484,22 +1580,108 @@ async function loadComparison() {
         ? 'This result was made by an older version of NeuroLens. Upload the video again.'
         : `Couldn't load that result (HTTP ${res.status}).`);
       msg.classList.add('error');
-      comparison = null; renderCards(); buildMainChart();
+      comparison = null; buildTop(); buildMainChart(); buildStrips();
       return;
     }
     comparison = { result: data, summary: data.summary || {}, label, jobId: id };
+    mutedOn = false;
+    $('mutedToggle').checked = false;
+    $('mutedToggle').disabled = true;
     msg.textContent = '';
-    renderCards(); buildMainChart();
+    buildTop(); buildMainChart(); buildStrips(); tick();
   } catch (e) {
     if (request !== compareRequest || seq !== resultSeq) return;
     msg.textContent = "Couldn't reach the server. Please try again.";
     msg.classList.add('error');
-    comparison = null; renderCards(); buildMainChart();
+    comparison = null; buildTop(); buildMainChart(); buildStrips();
   }
 }
 $('compareSelect').addEventListener('change', loadComparison);
 
-// ─── 3D brain map ──────────────────────────────────────────────────────────
+$('mutedToggle').addEventListener('change', () => {
+  mutedOn = $('mutedToggle').checked;
+  if (mutedOn && comparison) {
+    comparison = null;
+    $('compareSelect').value = '';
+    $('mutedToggle').disabled = false;
+    buildTop();
+  }
+  buildMainChart(); buildStrips(); tick();
+});
+
+$('reportBody').addEventListener('click', e => {
+  const target = e.target.closest('[data-seek]');
+  if (target) seek(+target.dataset.seek);
+});
+
+function seek(t) {
+  const T = totalSeconds();
+  if (!T) return;
+  const value = Math.max(0, Math.min(T - 0.01, Number.isFinite(t) ? t : 0));
+  if (hasLocalVideo()) {
+    virtualTime = value;
+    video.currentTime = value;
+  } else {
+    virtualTime = value;
+    if (virtualPlaying) virtualAnchor = performance.now() - value * 1000;
+    tick();
+  }
+}
+
+function startVirtual() {
+  cancelAnimationFrame(virtualRaf);
+  virtualPlaying = true;
+  virtualAnchor = performance.now() - virtualTime * 1000;
+  const loop = now => {
+    if (!virtualPlaying) return;
+    const T = totalSeconds();
+    if (!T) return;
+    virtualTime = Math.min(T - 0.01, (now - virtualAnchor) / 1000);
+    if (virtualTime >= T - 0.01) {
+      virtualTime = 0;
+      virtualAnchor = now;
+    }
+    tick();
+    virtualRaf = requestAnimationFrame(loop);
+  };
+  virtualRaf = requestAnimationFrame(loop);
+}
+
+function stopVirtual() {
+  virtualPlaying = false;
+  cancelAnimationFrame(virtualRaf);
+}
+
+function togglePlay() {
+  if (!currentResult) return;
+  if (hasLocalVideo()) {
+    if (video.paused) video.play().catch(() => {});
+    else video.pause();
+  } else if (virtualPlaying) {
+    stopVirtual();
+    updateTransport();
+  } else {
+    startVirtual();
+    updateTransport();
+  }
+}
+
+function videoLoop() {
+  tick();
+  if (!video.paused) videoRaf = requestAnimationFrame(videoLoop);
+}
+video.addEventListener('play', () => {
+  cancelAnimationFrame(videoRaf);
+  videoRaf = requestAnimationFrame(videoLoop);
+});
+video.addEventListener('pause', () => {
+  cancelAnimationFrame(videoRaf);
+  tick();
+});
+video.addEventListener('seeked', tick);
+video.addEventListener('timeupdate', () => { if (video.paused) tick(); });
+video.addEventListener('loadedmetadata', tick);
+
 let float16Lookup = null;
 function float16Table() {
   if (float16Lookup) return float16Lookup;
@@ -1527,30 +1709,6 @@ function decodeBrain(buffer) {
   return { rows, count };
 }
 
-function updateBrainLegend(range) {
-  const legend = $('brainLegend');
-  if (!Number.isFinite(range) || range <= 0) {
-    legend.hidden = true;
-    $('brainLegendRange').textContent = '';
-    return;
-  }
-  legend.hidden = false;
-  $('brainLegendRange').textContent = `−${range.toFixed(2)} to +${range.toFixed(2)}`;
-}
-
-function updateBrainCaption() {
-  if (!currentResult || !brainShown) { $('brainSecond').textContent = ''; return; }
-  const second = hasVideo() ? Math.max(0, Math.floor(video.currentTime || 0)) : selectedSecond;
-  $('brainSecond').textContent = hasVideo() ? `Second ${second}` : `Selected second ${second}`;
-}
-
-function updateBrain() {
-  if (!currentResult) return;
-  const second = hasVideo() ? Math.max(0, Math.floor(video.currentTime || 0)) : selectedSecond;
-  window.brainMap.setSecond(second);
-  updateBrainCaption();
-}
-
 async function ensureColourRange() {
   if (!limits) await loadLimits();
   const range = limits && limits.colour_range;
@@ -1562,16 +1720,18 @@ async function loadBrain() {
   const seq = resultSeq;
   const range = await ensureColourRange();
   if (seq !== resultSeq) return;
-  window.brainMap.setColourRange(range);
-  updateBrainLegend(range);
   const url = currentContext && currentContext.brainUrl;
-  if (!range || !url) {
-    brainShown = false;
+  if (range === null) {
     window.brainMap.clear(BRAIN_UNAVAILABLE);
     $('brainSecond').textContent = '';
     return;
   }
-  brainShown = false;
+  window.brainMap.setColourRange(range);
+  if (!url) {
+    window.brainMap.clear(BRAIN_UNAVAILABLE);
+    $('brainSecond').textContent = '';
+    return;
+  }
   window.brainMap.clear('Loading the 3D view…');
   $('brainSecond').textContent = '';
   try {
@@ -1581,83 +1741,66 @@ async function loadBrain() {
     if (seq !== resultSeq) return;
     const decoded = decodeBrain(buffer);
     if (!decoded) throw new Error('malformed brain file');
-    brainShown = true;
     window.brainMap.show(decoded.rows, decoded.count);
-    updateBrain();
+    tick();
     setTimeout(() => {
       if (seq === resultSeq && !brainImpl) {
-        brainShown = false;
         window.brainMap.clear(BRAIN_UNAVAILABLE);
         $('brainSecond').textContent = '';
       }
-    }, 20000);  // the module never loaded: do not leave the panel saying "Loading" for ever
+    }, 20000);
   } catch (e) {
     if (seq !== resultSeq) return;
-    brainShown = false;
     window.brainMap.clear(BRAIN_UNAVAILABLE);
     $('brainSecond').textContent = '';
   }
 }
 
-// ─── Video sync ─────────────────────────────────────────────────────────────
-let rafId = null;
-function syncPlayhead() {
-  charts.forEach(c => c.update('none'));
-  updateBrain();
-  if (!video.paused) rafId = requestAnimationFrame(syncPlayhead);
-}
-video.addEventListener('play', () => { cancelAnimationFrame(rafId); rafId = requestAnimationFrame(syncPlayhead); });
-video.addEventListener('pause', () => { cancelAnimationFrame(rafId); charts.forEach(c => c.update('none')); updateBrain(); });
-video.addEventListener('seeked', () => { charts.forEach(c => c.update('none')); updateBrain(); });
-
-// ─── Reset ──────────────────────────────────────────────────────────────────
 function resetUI() {
   resultSeq += 1;
+  stopVirtual();
   currentResult = null; currentSummary = null; currentContext = null; comparison = null;
-  expandedGroups.clear(); mutedOn = false; selectedSecond = 0; brainShown = false;
-  $('mutedToggle').checked = false;
-  charts.forEach(c => c.destroy()); charts = [];
+  mutedOn = false; virtualTime = 0;
+  clearAllCharts();
   clearVideoSource();
+  $('mutedToggle').checked = false;
+  $('mutedToggle').disabled = false;
   $('resultMessage').hidden = true;
   $('resultMessage').textContent = '';
-  $('resultStats').replaceChildren();
-  $('resultStats').classList.remove('compare');
+  $('topArea').replaceChildren();
+  $('topArea').classList.remove('compare');
+  $('chartKeys').replaceChildren();
   $('compareRow').hidden = true;
   $('compareSelect').replaceChildren();
   $('compareMsg').textContent = '';
   $('compareMsg').classList.remove('error');
   $('chartCard').hidden = false;
-  $('brainCard').hidden = false;
+  $('stripsCard').hidden = false;
   $('brainSecond').textContent = '';
-  clearSampleMeta();
+  $('sampleMeta').textContent = '';
+  $('clipTitle').textContent = '';
+  $('clipCredit').textContent = '';
   window.brainMap.clear(BRAIN_UNAVAILABLE);
-  updateBrainLegend(null);
-  updateGroupButtons();
+  $('reportBody').classList.remove('active');
+  $('chartsEmpty').style.display = '';
+  setViewName('chooser');
   if (signedIn) $('uploadZone').classList.remove('hidden');
   $('samplesSection').style.display = '';
-  $('processing').classList.remove('active');
-  $('videoContainer').classList.remove('active');
-  $('videoFilename').textContent = '';
-  $('videoDuration').textContent = '';
-  $('videoProcessTime').textContent = '';
-  $('chartsEmpty').style.display = '';
-  $('chartsContainer').classList.remove('active');
   $('headerMeta').textContent = IDLE_HEADER();
   showRetention(null);
   resetUpload();
   document.querySelectorAll('.sample-card').forEach(c => c.classList.remove('active'));
 }
 
-// ─── Account deletion (Cognito mode: the server answers 404 in dev mode) ────
 $('deleteAccountBtn').addEventListener('click', async () => {
   const button = $('deleteAccountBtn');
-  button.disabled = true;  // one request at a time
+  button.disabled = true;
   $('deleteAccountMsg').classList.remove('error');
   $('deleteAccountMsg').textContent = 'Deleting...';
   try {
     const res = await postJSON('/api/account/delete', { confirm: $('deleteAccountConfirm').value });
     const data = await res.json().catch(() => ({}));
-    if (res.status === 401) return window.location.reload();  // the session ended
+    if (res.status === 401) return window.location.reload();
     if (!res.ok) {
       button.disabled = false;
       $('deleteAccountMsg').textContent = res.status === 404
@@ -1666,7 +1809,6 @@ $('deleteAccountBtn').addEventListener('click', async () => {
       $('deleteAccountMsg').classList.add('error');
       return;
     }
-    // The server has cleared the session: show the signed-out screen with the confirmation.
     signedIn = false;
     resetUI();
     $('account').textContent = '';
@@ -1684,89 +1826,124 @@ $('deleteAccountBtn').addEventListener('click', async () => {
   }
 });
 
-// ─── Start ──────────────────────────────────────────────────────────────────
 start();
+loadSamples();
 </script>
-
 <script type="module">
 import * as THREE from '/static/three/three.module.min.js';
 import { OrbitControls } from '/static/three/OrbitControls.js';
 
 const VERTICES = 20484;
-const MESH_URL = '/static/brain/fsaverage5_inflated.bin';
+const MESH_URL = '/static/brain/fsaverage6_pial.bin';
+const HEAD_URL = '/static/brain/head.bin';
 const UNAVAILABLE = 'The 3D view is not available for this video.';
+const HEAT = [[0, [0.55, 0.05, 0.05]], [0.35, [0.85, 0.12, 0.10]], [0.7, [0.98, 0.50, 0.10]], [1, [1, 0.92, 0.40]]];
 
-function srgb(hex) {
-  const colour = new THREE.Color(hex);
-  if (colour.convertSRGBToLinear) colour.convertSRGBToLinear();
-  return colour;
+function heat(t, out) {
+  for (let i = 1; i < HEAT.length; i++) {
+    if (t <= HEAT[i][0]) {
+      const [a, ca] = HEAT[i - 1], [b, cb] = HEAT[i], u = (t - a) / (b - a);
+      for (let k = 0; k < 3; k++) out[k] = ca[k] + (cb[k] - ca[k]) * u;
+      return;
+    }
+  }
+  out[0] = HEAT[HEAT.length - 1][1][0];
+  out[1] = HEAT[HEAT.length - 1][1][1];
+  out[2] = HEAT[HEAT.length - 1][1][2];
+}
+
+function parseMesh(buffer) {
+  const dv = new DataView(buffer);
+  const V = dv.getUint32(0, true), F = dv.getUint32(4, true);
+  const expected = 8 + V * 12 + F * 12 + V + V * 4 + V * 8;
+  if (buffer.byteLength !== expected) throw new Error('wrong mesh length');
+  let o = 8;
+  const xyz = new Float32Array(dv.buffer.slice(o, o + V * 12)); o += V * 12;
+  const faces = new Uint32Array(dv.buffer.slice(o, o + F * 12)); o += F * 12;
+  const noCortex = new Uint8Array(dv.buffer.slice(o, o + V)); o += V;
+  const sulc = new Float32Array(dv.buffer.slice(o, o + V * 4)); o += V * 4;
+  const parents = new Uint32Array(dv.buffer.slice(o, o + V * 8));
+  for (let i = 0; i < faces.length; i++) if (faces[i] >= V) throw new Error('face index out of range');
+  for (let i = 0; i < parents.length; i++) if (parents[i] >= VERTICES) throw new Error('parent index out of range');
+  return { V, F, xyz, faces, noCortex, sulc, parents };
+}
+
+function parseHead(buffer) {
+  const dv = new DataView(buffer);
+  const V = dv.getUint32(0, true), F = dv.getUint32(4, true);
+  const expected = 8 + V * 12 + F * 12;
+  if (buffer.byteLength !== expected) throw new Error('wrong head length');
+  const xyz = new Float32Array(dv.buffer.slice(8, 8 + V * 12));
+  const faces = new Uint32Array(dv.buffer.slice(8 + V * 12, expected));
+  for (let i = 0; i < faces.length; i++) if (faces[i] >= V) throw new Error('head face out of range');
+  return { V, F, xyz, faces };
 }
 
 function makeBrain() {
-  const host = document.getElementById('brainCanvas');
+  const host = document.getElementById('brainHost');
   const message = document.getElementById('brainMessage');
   if (!host || !message) return { show() {}, setSecond() {}, clear() {}, setColourRange() {} };
 
-  const RED = srgb('#DC2626'), BLUE = srgb('#2563EB'), GREY = srgb('#94A3B8');
   let rows = null, rowCount = 0, second = 0, range = null;
   let ready = false, meshFailed = false, meshPromise = null;
-  let renderer, scene, camera, controls, geometry, colourAttr, cortexMask;
-  let renderPending = false;
+  let renderer, scene, camera, controls, geometry, colourAttr, baseColour, parents, cortexMask;
+  let lastPaint = -1;
 
   function setMessage(text) {
     message.textContent = text;
     message.hidden = !text;
-    host.hidden = !!text;
+    renderer?.domElement?.toggleAttribute('hidden', !!text);
     if (!text) resize();
   }
 
-  function requestRender() {
-    if (!ready || renderPending) return;
-    renderPending = true;
-    requestAnimationFrame(() => {
-      renderPending = false;
-      if (ready) renderer.render(scene, camera);
-    });
-  }
-
   function resize() {
-    if (!ready || host.hidden) return;
+    if (!ready) return;
     const width = host.clientWidth, height = host.clientHeight;
     if (!width || !height) return;
     renderer.setSize(width, height, false);
     camera.aspect = width / height;
     camera.updateProjectionMatrix();
-    requestRender();
+    fitCamera();
   }
 
-  function paint() {
+  function fitCamera() {
+    if (!ready) return;
+    const sphere = geometry.boundingSphere;
+    if (!sphere) return;
+    const vf = THREE.MathUtils.degToRad(camera.fov);
+    const hf = 2 * Math.atan(Math.tan(vf / 2) * camera.aspect);
+    const distance = (sphere.radius * 1.08) / Math.sin(Math.min(vf, hf) / 2);
+    const dir = new THREE.Vector3(-1, 1, 0.42).normalize();
+    camera.position.copy(sphere.center).addScaledVector(dir, distance);
+    controls.target.copy(sphere.center);
+    controls.update();
+  }
+
+  function paint(time) {
     if (!ready || !rows || !range) return;
-    const t = Math.max(0, Math.min(rowCount - 1, second));
-    const offset = t * VERTICES;
-    const values = colourAttr.array;
-    for (let v = 0; v < VERTICES; v++) {
-      let r, g, b;
-      if (cortexMask[v]) {
-        r = GREY.r; g = GREY.g; b = GREY.b;
-      } else {
-        let value = rows[offset + v];
-        if (!Number.isFinite(value)) value = 0;
-        const clamped = Math.max(-1, Math.min(1, value / range));
-        if (clamped >= 0) {
-          r = 1 + (RED.r - 1) * clamped;
-          g = 1 + (RED.g - 1) * clamped;
-          b = 1 + (RED.b - 1) * clamped;
-        } else {
-          const u = -clamped;
-          r = 1 + (BLUE.r - 1) * u;
-          g = 1 + (BLUE.g - 1) * u;
-          b = 1 + (BLUE.b - 1) * u;
+    if (Math.abs(time - lastPaint) < 0.02) return;
+    lastPaint = time;
+    const t = Math.max(0, Math.min(rowCount - 1, time));
+    const a0 = Math.floor(t), b = Math.min(a0 + 1, rowCount - 1), u = t - a0;
+    const values = colourAttr.array, tmp = [0, 0, 0];
+    const heatRange = range;
+    for (let i = 0; i < geometry.attributes.position.count; i++) {
+      const parentA = parents[2 * i], parentB = parents[2 * i + 1];
+      const va = rows[a0 * VERTICES + parentA] + (rows[b * VERTICES + parentA] - rows[a0 * VERTICES + parentA]) * u;
+      const vb = rows[a0 * VERTICES + parentB] + (rows[b * VERTICES + parentB] - rows[a0 * VERTICES + parentB]) * u;
+      const value = (va + vb) / 2;
+      let r = baseColour[3 * i], g = baseColour[3 * i + 1], bl = baseColour[3 * i + 2];
+      if (!cortexMask[i]) {
+        const shade = Math.max(0, Math.min(1, value / heatRange));
+        const w = Math.min(1, Math.max(0, (shade - 0.08) / 0.3));
+        if (w > 0) {
+          heat(shade, tmp);
+          r += (tmp[0] - r) * w; g += (tmp[1] - g) * w; bl += (tmp[2] - bl) * w;
         }
       }
-      values[3 * v] = r; values[3 * v + 1] = g; values[3 * v + 2] = b;
+      values[3 * i] = r; values[3 * i + 1] = g; values[3 * i + 2] = bl;
     }
     colourAttr.needsUpdate = true;
-    requestRender();
   }
 
   function applyState() {
@@ -1778,87 +1955,95 @@ function makeBrain() {
     }
     if (!range || !rows) { setMessage(UNAVAILABLE); return; }
     setMessage('');
-    paint();
+    paint(second);
   }
 
-  async function buildMesh() {
-    const res = await fetch(MESH_URL);
-    if (!res.ok) throw new Error(`mesh HTTP ${res.status}`);
-    const buffer = await res.arrayBuffer();
-    if (buffer.byteLength < 8) throw new Error('mesh is too short');
-    const view = new DataView(buffer);
-    const vertexCount = view.getUint32(0, true), faceCount = view.getUint32(4, true);
-    if (vertexCount !== VERTICES) throw new Error('wrong vertex count');
-    const expected = 8 + vertexCount * 12 + faceCount * 12 + vertexCount;
-    if (buffer.byteLength !== expected) throw new Error('wrong mesh length');
+  async function build() {
+    const [meshBuffer, headBuffer] = await Promise.all([
+      fetch(MESH_URL).then(res => {
+        if (!res.ok) throw new Error(`mesh HTTP ${res.status}`);
+        return res.arrayBuffer();
+      }),
+      fetch(HEAD_URL).then(res => res.ok ? res.arrayBuffer() : null).catch(() => null),
+    ]);
+    const mesh = parseMesh(meshBuffer);
+    cortexMask = mesh.noCortex;
+    parents = mesh.parents;
 
-    const positions = new Float32Array(vertexCount * 3);
-    for (let i = 0; i < vertexCount; i++) {
-      const o = 8 + i * 12;
-      positions[3 * i] = view.getFloat32(o, true);
-      positions[3 * i + 1] = view.getFloat32(o + 4, true);
-      positions[3 * i + 2] = view.getFloat32(o + 8, true);
-    }
-    const faceOffset = 8 + vertexCount * 12;
-    const indices = new Uint32Array(faceCount * 3);
-    for (let i = 0; i < faceCount; i++) {
-      const o = faceOffset + i * 12;
-      for (let k = 0; k < 3; k++) {
-        const index = view.getUint32(o + k * 4, true);
-        if (index >= vertexCount) throw new Error('face index out of range');
-        indices[3 * i + k] = index;
-      }
-    }
-    cortexMask = new Uint8Array(buffer, faceOffset + faceCount * 12, vertexCount);
-
-    host.replaceChildren();
     renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     renderer.setClearColor(0x000000, 0);
     if ('outputColorSpace' in renderer) renderer.outputColorSpace = THREE.SRGBColorSpace;
-    host.appendChild(renderer.domElement);
+    host.prepend(renderer.domElement);
 
     scene = new THREE.Scene();
     geometry = new THREE.BufferGeometry();
-    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    geometry.setIndex(new THREE.BufferAttribute(indices, 1));
-    colourAttr = new THREE.BufferAttribute(new Float32Array(vertexCount * 3), 3);
-    colourAttr.setUsage(THREE.DynamicDrawUsage);
-    geometry.setAttribute('color', colourAttr);
+    geometry.setAttribute('position', new THREE.BufferAttribute(mesh.xyz, 3));
+    geometry.setIndex(new THREE.BufferAttribute(mesh.faces, 1));
     geometry.computeVertexNormals();
     geometry.computeBoundingSphere();
 
-    const material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, metalness: 0.0 });
+    baseColour = new Float32Array(mesh.V * 3);
+    for (let i = 0; i < mesh.V; i++) {
+      const shade = 0.5 - 0.5 * mesh.sulc[i];
+      const base = (0.24 + 0.24 * shade) * (mesh.noCortex[i] ? 0.7 : 1);
+      baseColour[3 * i] = base; baseColour[3 * i + 1] = base; baseColour[3 * i + 2] = base;
+    }
+    colourAttr = new THREE.BufferAttribute(new Float32Array(mesh.V * 3), 3);
+    colourAttr.setUsage(THREE.DynamicDrawUsage);
+    colourAttr.array.set(baseColour);
+    geometry.setAttribute('color', colourAttr);
+
+    const material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.75, metalness: 0 });
     scene.add(new THREE.Mesh(geometry, material));
-    scene.add(new THREE.HemisphereLight(0xffffff, 0x334155, 1.6));
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x445066, 1.2));
     const light = new THREE.DirectionalLight(0xffffff, 1.4);
-    light.position.set(1, 1, 1);
+    light.position.set(1, 1, 2);
     scene.add(light);
 
-    const sphere = geometry.boundingSphere || new THREE.Sphere(new THREE.Vector3(), 1);
-    const radius = Math.max(sphere.radius, 1);
-    camera = new THREE.PerspectiveCamera(35, 1, radius / 100, radius * 30);
-    camera.up.set(0, 0, 1);  // front view: anterior is +y, superior is +z
-    camera.position.set(sphere.center.x, sphere.center.y + radius * 3.6, sphere.center.z);
-    camera.lookAt(sphere.center);
-
+    const sphere = geometry.boundingSphere;
+    camera = new THREE.PerspectiveCamera(28, 1, 0.1, 3000);
+    camera.up.set(0, 0, 1);
     controls = new OrbitControls(camera, renderer.domElement);
-    controls.target.copy(sphere.center);
-    controls.enableDamping = false;
+    controls.enableDamping = true;
+    controls.enableZoom = false;
     controls.enablePan = false;
-    controls.minDistance = radius * 1.4;
-    controls.maxDistance = radius * 9;
-    controls.addEventListener('change', requestRender);
-    controls.update();
+    controls.autoRotate = !matchMedia('(prefers-reduced-motion: reduce)').matches;
+    controls.autoRotateSpeed = 0.5;
 
-    new ResizeObserver(resize).observe(host);
+    if (headBuffer) {
+      try {
+        const head = parseHead(headBuffer);
+        const hg = new THREE.BufferGeometry();
+        hg.setAttribute('position', new THREE.BufferAttribute(head.xyz, 3));
+        hg.setIndex(new THREE.BufferAttribute(head.faces, 1));
+        hg.computeVertexNormals();
+        const hm = new THREE.Mesh(hg, new THREE.ShaderMaterial({
+          transparent: true, depthWrite: false, side: THREE.DoubleSide,
+          vertexShader: 'varying vec3 n; varying vec3 v; void main(){ vec4 mv = modelViewMatrix*vec4(position,1.); n = normalize(normalMatrix*normal); v = normalize(-mv.xyz); gl_Position = projectionMatrix*mv; }',
+          fragmentShader: 'varying vec3 n; varying vec3 v; void main(){ float f = pow(1.0-abs(dot(normalize(n),normalize(v))), 3.0); gl_FragColor = vec4(0.42,0.55,0.78, f*0.35); }',
+        }));
+        hm.renderOrder = 2;
+        scene.add(hm);
+      } catch (e) { /* the head is a nicety */ }
+    }
+
     ready = true;
+    camera.aspect = Math.max(1, host.clientWidth) / Math.max(1, host.clientHeight);
+    camera.updateProjectionMatrix();
+    fitCamera();
+    new ResizeObserver(resize).observe(host);
+    resize();
     applyState();
+    renderer.setAnimationLoop(() => {
+      controls.update();
+      renderer.render(scene, camera);
+    });
   }
 
   function ensureMesh() {
     if (!meshPromise) {
-      meshPromise = buildMesh().catch(error => {
+      meshPromise = build().catch(error => {
         meshFailed = true;
         ready = false;
         setMessage(UNAVAILABLE);
@@ -1872,13 +2057,12 @@ function makeBrain() {
     show(nextRows, count) {
       rows = nextRows; rowCount = count;
       second = Math.max(0, Math.min(count - 1, second));
+      lastPaint = -1;
       applyState();
     },
-    setSecond(nextSecond) {
-      const value = Number.isFinite(nextSecond) ? Math.floor(nextSecond) : 0;
-      if (value === second) return;
-      second = value;
-      if (ready && rows) paint();
+    setSecond(value) {
+      second = Number.isFinite(value) ? value : 0;
+      if (ready && rows) paint(second);
     },
     clear(text) {
       rows = null; rowCount = 0;
@@ -1887,6 +2071,7 @@ function makeBrain() {
     setColourRange(value) {
       range = Number.isFinite(value) && value > 0 ? value : null;
       if (!range) rows = null;
+      lastPaint = -1;
       applyState();
     },
   };
