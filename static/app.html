@@ -23,13 +23,16 @@
 
   .bar { background: var(--stage); color: var(--stage-text); display: flex; align-items: center; gap: 18px; padding: 0 24px; height: 60px; border-bottom: 1px solid var(--stage-rule); }
   .brand { font: 700 21px/1 var(--display); letter-spacing: -0.01em; color: inherit; text-decoration: none; }
-  .bar nav { display: flex; gap: 4px; margin-left: 8px; }
-  .bar nav button { background: none; border: 0; color: var(--stage-muted); padding: 8px 12px; border-radius: 8px; }
-  .bar nav button:hover { color: var(--stage-text); background: var(--stage-2); }
   .bar .spacer { flex: 1; }
   .header-meta { color: var(--stage-muted); font-size: 12px; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .credit { color: var(--stage-muted); font-size: 13px; white-space: nowrap; }
-  .account { color: var(--stage-muted); font-size: 12px; max-width: 170px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .account-wrap { position: relative; }
+  .account { background: none; border: 0; color: var(--stage-muted); font-size: 12px; max-width: 190px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 6px 8px; border-radius: 8px; }
+  .account:hover, .account[aria-expanded="true"] { color: var(--stage-text); background: var(--stage-2); }
+  .account::after { content: "▾"; font-size: 9px; margin-left: 4px; }
+  .account-menu { position: absolute; right: 0; top: calc(100% + 6px); min-width: 160px; background: var(--stage-2); border: 1px solid var(--stage-rule); border-radius: 10px; padding: 5px; display: flex; flex-direction: column; gap: 2px; z-index: 30; box-shadow: 0 10px 24px rgba(0,0,0,.35); }
+  .account-menu button { background: none; border: 0; color: var(--stage-text); text-align: left; padding: 8px 10px; border-radius: 7px; font-size: 13px; }
+  .account-menu button:hover, .account-menu button:focus-visible { background: #1D273B; }
   .btn-white { background: #fff; color: var(--ink); border: 0; border-radius: 10px; padding: 9px 16px; font-weight: 600; }
   .btn-white:hover { background: #E7EAF0; }
   .btn-white:disabled { opacity: .5; cursor: default; }
@@ -39,8 +42,6 @@
   .btn-danger { background: none; border: 1px solid var(--stage-rule); color: #FCA5A5; border-radius: 10px; padding: 6px 12px; }
   .btn-danger:hover { border-color: #FCA5A5; }
   .btn-danger:disabled { opacity: .5; cursor: default; }
-  .header-link { font-size: 12px; color: #CBD5E1; background: none; border: 1px solid #334155; border-radius: 8px; padding: 5px 10px; }
-  .header-link:hover { color: #FFF; border-color: #94A3B8; }
 
   .D { display: grid; grid-template-columns: minmax(360px, 40%) 1fr; height: calc(100vh - 60px); overflow: hidden; }
   body:has(.D) { overflow: hidden; }
@@ -48,6 +49,11 @@
   .D .report { padding: 18px 26px 16px; display: flex; flex-direction: column; gap: 12px; min-height: 0; overflow: hidden; }
 
   .chooser { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; scrollbar-width: thin; }
+  .chooser-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--stage-rule); flex: none; }
+  .chooser-tab { background: none; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; color: var(--stage-muted); padding: 8px 12px; font-size: 13px; font-weight: 500; }
+  .chooser-tab:hover { color: var(--stage-text); }
+  .chooser-tab[aria-selected="true"] { color: var(--stage-text); border-bottom-color: var(--heat); }
+  .tab-panel { display: flex; flex-direction: column; gap: 12px; }
   .box { background: var(--stage-2); border: 1px solid var(--stage-rule); border-radius: 12px; padding: 14px 16px; display: none; flex-direction: column; gap: 8px; }
   .box.active { display: flex; }
   .box h2 { font: 600 16px/1.25 var(--display); }
@@ -89,8 +95,16 @@
   .history-name { font-weight: 600; word-break: break-all; }
   .history-sub { color: var(--stage-muted); font-size: 11px; margin-top: 2px; }
   .history-actions { display: flex; gap: 6px; flex-shrink: 0; }
+  .history-empty { font-size: 12.5px; color: var(--stage-muted); }
   .field-row { display: flex; gap: 8px; }
   .field-row input { flex: 1; min-width: 0; border: 1px solid var(--stage-rule); border-radius: 8px; padding: 7px 9px; font-size: 12px; background: #0A0F1A; color: var(--stage-text); }
+  .delete-dialog { background: var(--stage-2); color: var(--stage-text); border: 1px solid var(--stage-rule); border-radius: 14px; padding: 20px 22px; width: min(430px, calc(100vw - 32px)); }
+  .delete-dialog::backdrop { background: rgba(7, 10, 18, .68); }
+  .delete-dialog h2 { font: 600 17px/1.25 var(--display); margin-bottom: 8px; }
+  .delete-dialog p { font-size: 13px; color: var(--stage-muted); line-height: 1.5; }
+  .delete-dialog p.error { color: #FCA5A5; }
+  .delete-dialog .field-row { margin-top: 12px; }
+  .delete-dialog .actions { display: flex; gap: 8px; align-items: center; margin-top: 12px; }
   .privacy-note { font-size: 11px; color: var(--stage-muted); margin-top: auto; padding: 4px 2px; }
   .privacy-note a { color: var(--stage-muted); }
   .spinner { width: 28px; height: 28px; border: 3px solid var(--stage-rule); border-top-color: var(--heat); border-radius: 50%; animation: spin .9s linear infinite; }
@@ -232,7 +246,7 @@
   }
   @media (max-width: 860px) {
     .bar { padding: 0 14px; gap: 10px; }
-    .bar nav, .header-meta { display: none; }
+    .header-meta { display: none; }
   }
   @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto; } }
 </style>
@@ -240,21 +254,27 @@
 <body>
 <header class="bar">
   <a class="brand" href="/">NeuroLens</a>
-  <nav aria-label="Main">
-    <button id="navSamples">Samples</button>
-    <button id="navHistory" hidden>Your analyses</button>
-  </nav>
   <div class="spacer"></div>
   <span class="header-meta" id="headerMeta">Select a video to see its brain response</span>
   <span class="credit" id="balance"></span>
-  <span class="account" id="account"></span>
-  <button class="header-link" id="signOut" hidden>Sign out</button>
+  <div class="account-wrap" id="accountWrap" hidden>
+    <button class="account" id="account" aria-haspopup="menu" aria-expanded="false" aria-controls="accountMenu"></button>
+    <div class="account-menu" id="accountMenu" role="menu" hidden>
+      <button role="menuitem" id="signOut">Sign out</button>
+      <button role="menuitem" id="deleteAccountMenuItem">Delete account</button>
+    </div>
+  </div>
   <button class="btn-white" id="topUpload" hidden>Upload a video</button>
 </header>
 
 <div class="D">
   <aside class="side">
     <div class="chooser" id="chooser">
+      <div class="chooser-tabs" id="chooserTabs" role="tablist" aria-label="Chooser" hidden>
+        <button class="chooser-tab" id="tabAnalyses" role="tab" aria-selected="true" aria-controls="analysesTab">Your analyses</button>
+        <button class="chooser-tab" id="tabSamples" role="tab" aria-selected="false" aria-controls="samplesTab">Samples</button>
+      </div>
+
       <div class="box active" id="startupPanel">
         <h2 id="startupTitle">Starting up…</h2>
         <p id="startupText"></p>
@@ -268,50 +288,44 @@
         <div class="actions"><a class="btn-white" href="/login" style="display:inline-block;text-decoration:none;text-align:center">Sign in</a></div>
       </div>
 
-      <div class="upload-zone hidden" id="uploadZone">
-        <div class="up-title">Upload a video for analysis</div>
-        <div class="up-sub" id="limitsText">MP4, MOV, or WebM</div>
-        <input type="file" accept="video/mp4,video/quicktime,video/webm" id="fileInput">
-      </div>
-      <div class="upload-note" id="uploadNote"></div>
-      <div class="box" id="noCreditPanel"><p>You have no credit yet. Ask the NeuroLens team for test credit.</p></div>
-
-      <div class="box upload-panel" id="uploadPanel">
-        <div class="file-name" id="upFileName"></div>
-        <div class="line" id="upDetail"></div>
-        <div class="line" id="upCost"></div>
-        <div class="consent-row" id="consentRow">
-          <input type="checkbox" id="consentBox">
-          <label for="consentBox">Keep this video and its analysis for up to 12 months to help build a future model linking brain response to real audience behaviour. I own the rights to this video. Optional: the analysis works either way. <a href="/static/privacy.html">Privacy policy</a></label>
+      <div class="tab-panel" id="analysesTab" hidden>
+        <div class="upload-zone hidden" id="uploadZone">
+          <div class="up-title">Upload a video for analysis</div>
+          <div class="up-sub" id="limitsText">MP4, MOV, or WebM</div>
+          <input type="file" accept="video/mp4,video/quicktime,video/webm" id="fileInput">
         </div>
-        <div class="upload-progress" id="upProgress"><div class="upload-bar" id="upBar"></div></div>
-        <div class="msg" id="upMsg"></div>
-        <div class="actions">
-          <button class="btn-white" id="upConfirm">Upload</button>
-          <button class="btn-ghost" id="upCancel">Cancel</button>
+        <div class="upload-note" id="uploadNote"></div>
+        <div class="box" id="noCreditPanel"><p>You have no credit yet. Ask the NeuroLens team for test credit.</p></div>
+
+        <div class="box upload-panel" id="uploadPanel">
+          <div class="file-name" id="upFileName"></div>
+          <div class="line" id="upDetail"></div>
+          <div class="line" id="upCost"></div>
+          <div class="consent-row" id="consentRow">
+            <input type="checkbox" id="consentBox">
+            <label for="consentBox">Keep this video and its analysis for up to 12 months to help build a future model linking brain response to real audience behaviour. I own the rights to this video. Optional: the analysis works either way. <a href="/static/privacy.html">Privacy policy</a></label>
+          </div>
+          <div class="upload-progress" id="upProgress"><div class="upload-bar" id="upBar"></div></div>
+          <div class="msg" id="upMsg"></div>
+          <div class="actions">
+            <button class="btn-white" id="upConfirm">Upload</button>
+            <button class="btn-ghost" id="upCancel">Cancel</button>
+          </div>
+        </div>
+
+        <div class="box" id="historyPanel">
+          <div id="historyList"></div>
+          <p class="history-empty" id="historyEmpty" hidden>No analyses yet.</p>
+          <p id="historyNote"></p>
         </div>
       </div>
 
-      <div class="samples-section" id="samplesSection">
-        <div class="label">Sample videos</div>
-        <div class="samples-grid" id="samplesGrid"></div>
-        <p class="up-sub" id="samplesEmpty" hidden>Sample videos coming soon.</p>
-      </div>
-
-      <div class="box" id="historyPanel">
-        <h2>Your analyses</h2>
-        <div id="historyList"></div>
-        <p id="historyNote"></p>
-      </div>
-
-      <div class="box" id="deleteAccountPanel">
-        <h2>Delete my account</h2>
-        <p>This deletes every video, analysis and login for this account. Type DELETE to confirm.</p>
-        <div class="field-row">
-          <input id="deleteAccountConfirm" placeholder="DELETE" autocomplete="off" aria-label="Type DELETE to confirm">
-          <button class="btn-danger" id="deleteAccountBtn">Delete</button>
+      <div class="tab-panel" id="samplesTab">
+        <div class="samples-section" id="samplesSection">
+          <div class="label">Sample videos</div>
+          <div class="samples-grid" id="samplesGrid"></div>
+          <p class="up-sub" id="samplesEmpty" hidden>Sample videos coming soon.</p>
         </div>
-        <p id="deleteAccountMsg"></p>
       </div>
 
       <div class="privacy-note"><a href="/static/privacy.html">Privacy policy</a></div>
@@ -375,6 +389,17 @@
   </div>
 </div>
 
+<dialog class="delete-dialog" id="deleteDialog" aria-labelledby="deleteDialogTitle">
+  <h2 id="deleteDialogTitle">Delete my account</h2>
+  <p>This deletes every video, analysis and login for this account. Type DELETE to confirm.</p>
+  <div class="field-row">
+    <input id="deleteAccountConfirm" placeholder="DELETE" autocomplete="off" aria-label="Type DELETE to confirm">
+    <button class="btn-danger" id="deleteAccountBtn">Delete</button>
+  </div>
+  <p id="deleteAccountMsg"></p>
+  <div class="actions"><button class="btn-ghost" id="deleteAccountCancel">Cancel</button></div>
+</dialog>
+
 <script>
 const $ = id => document.getElementById(id);
 const video = $('videoPlayer');
@@ -391,6 +416,7 @@ let samplesData = null, jobsCache = [];
 let currentResult = null, currentSummary = null, currentContext = null;
 let comparison = null, mutedOn = false, resultSeq = 0, compareRequest = 0;
 let signedIn = false, me = null, limits = null;
+let activeTab = 'analyses', playerOriginTab = 'analyses';
 let videoObjectUrl = null, virtualTime = 0, virtualPlaying = false, virtualAnchor = 0, virtualRaf = 0, videoRaf = 0;
 let playheads = [];
 
@@ -444,6 +470,90 @@ window.brainMap = {
 const params = new URLSearchParams(window.location.search);
 const dollars = cents => `$${(cents / 100).toFixed(2)}`;
 const IDLE_HEADER = () => (signedIn ? 'Upload a video or select a sample' : 'Select a video to see its brain response');
+
+function applyChooser() {
+  $('chooserTabs').hidden = !signedIn;
+  $('tabAnalyses').setAttribute('aria-selected', String(activeTab === 'analyses'));
+  $('tabSamples').setAttribute('aria-selected', String(activeTab === 'samples'));
+  $('tabAnalyses').tabIndex = activeTab === 'analyses' ? 0 : -1;
+  $('tabSamples').tabIndex = activeTab === 'samples' ? 0 : -1;
+  if (signedIn) {
+    $('analysesTab').hidden = activeTab !== 'analyses';
+    $('samplesTab').hidden = activeTab !== 'samples';
+  } else {
+    $('analysesTab').hidden = true;
+    $('samplesTab').hidden = false;
+  }
+}
+
+function setChooserTab(tab) {
+  activeTab = tab === 'samples' ? 'samples' : 'analyses';
+  applyChooser();
+}
+
+$('tabAnalyses').addEventListener('click', () => setChooserTab('analyses'));
+$('tabSamples').addEventListener('click', () => setChooserTab('samples'));
+$('chooserTabs').addEventListener('keydown', e => {
+  if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+  e.preventDefault();
+  const tab = activeTab === 'analyses' ? 'samples' : 'analyses';
+  setChooserTab(tab);
+  $(tab === 'analyses' ? 'tabAnalyses' : 'tabSamples').focus();
+});
+
+const accountWrap = $('accountWrap'), accountBtn = $('account'), accountMenu = $('accountMenu');
+function closeAccountMenu(returnFocus) {
+  if (accountMenu.hidden) return;
+  accountMenu.hidden = true;
+  accountBtn.setAttribute('aria-expanded', 'false');
+  if (returnFocus) accountBtn.focus();
+}
+function openAccountMenu() {
+  accountMenu.hidden = false;
+  accountBtn.setAttribute('aria-expanded', 'true');
+  const first = accountMenu.querySelector('[role="menuitem"]');
+  if (first) first.focus();
+}
+accountBtn.addEventListener('click', e => {
+  e.stopPropagation();
+  if (accountMenu.hidden) openAccountMenu(); else closeAccountMenu(true);
+});
+accountMenu.addEventListener('keydown', e => {
+  const items = [...accountMenu.querySelectorAll('[role="menuitem"]:not([disabled])')];
+  const index = items.indexOf(document.activeElement);
+  if (e.key === 'Escape') { e.preventDefault(); closeAccountMenu(true); }
+  else if (e.key === 'ArrowDown') { e.preventDefault(); items[(index + 1) % items.length].focus(); }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); items[(index - 1 + items.length) % items.length].focus(); }
+  else if (e.key === 'Home') { e.preventDefault(); items[0].focus(); }
+  else if (e.key === 'End') { e.preventDefault(); items[items.length - 1].focus(); }
+});
+document.addEventListener('click', e => {
+  if (!accountMenu.hidden && !accountWrap.contains(e.target)) closeAccountMenu();
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && !accountMenu.hidden) closeAccountMenu(true);
+});
+
+const deleteDialog = $('deleteDialog');
+function openDeleteDialog() {
+  $('deleteAccountConfirm').value = '';
+  $('deleteAccountMsg').textContent = '';
+  $('deleteAccountMsg').classList.remove('error');
+  $('deleteAccountBtn').disabled = false;
+  $('deleteAccountBtn').textContent = 'Delete';
+  if (!deleteDialog.open) deleteDialog.showModal();
+  $('deleteAccountConfirm').focus();
+}
+$('deleteAccountMenuItem').addEventListener('click', () => {
+  closeAccountMenu();
+  openDeleteDialog();
+});
+$('deleteAccountCancel').addEventListener('click', () => deleteDialog.close());
+deleteDialog.addEventListener('click', e => {
+  if (e.target !== deleteDialog) return;
+  const rect = deleteDialog.getBoundingClientRect();
+  if (e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom) deleteDialog.close();
+});
 
 async function postJSON(url, body) {
   const text = JSON.stringify(body);
@@ -508,17 +618,21 @@ $('startupRetry').addEventListener('click', () => start());
 
 function showSignedOut() {
   signedIn = false;
+  closeAccountMenu();
   $('startupPanel').classList.remove('active');
   $('signInPanel').classList.add('active');
-  $('deleteAccountPanel').classList.remove('active');
   $('uploadZone').classList.add('hidden');
+  $('uploadPanel').classList.remove('active');
+  $('historyPanel').classList.remove('active');
+  $('historyEmpty').hidden = true;
+  $('noCreditPanel').classList.remove('active');
   $('account').textContent = '';
+  $('accountWrap').hidden = true;
   $('balance').textContent = '';
-  $('signOut').hidden = true;
-  $('navHistory').hidden = true;
   $('topUpload').textContent = 'Sign in';
   $('topUpload').hidden = false;
   $('headerMeta').textContent = IDLE_HEADER();
+  applyChooser();
   loadLimits();
   loadSamples();
 }
@@ -528,13 +642,14 @@ function showApp(meJson) {
   $('startupPanel').classList.remove('active');
   $('signInPanel').classList.remove('active');
   $('account').textContent = me.email;
-  $('signOut').hidden = false;
-  $('navHistory').hidden = false;
+  $('accountWrap').hidden = false;
   $('topUpload').textContent = 'Upload a video';
   $('topUpload').hidden = false;
   $('uploadZone').classList.remove('hidden');
-  $('deleteAccountPanel').classList.add('active');
+  $('historyPanel').classList.add('active');
   $('headerMeta').textContent = IDLE_HEADER();
+  activeTab = 'analyses';
+  applyChooser();
   showBalance();
   loadLimits();
   loadHistory();
@@ -553,6 +668,7 @@ $('signOut').addEventListener('click', async () => {
   } catch (e) {
     button.disabled = false;
     button.textContent = 'Sign out';
+    closeAccountMenu(true);
     $('headerMeta').textContent = `Couldn't sign out (${e.message}). Please try again.`;
   }
 });
@@ -566,6 +682,7 @@ async function loadHistory() {
     renderHistory(await res.json());
   } catch (e) {
     $('historyPanel').classList.add('active');
+    $('historyEmpty').hidden = true;
     $('historyNote').textContent = "Couldn't load your earlier analyses.";
   }
 }
@@ -574,7 +691,8 @@ function renderHistory(jobs) {
   jobsCache = jobs;
   const list = $('historyList');
   list.replaceChildren(...jobs.map(historyRow));
-  $('historyPanel').classList.toggle('active', jobs.length > 0);
+  $('historyPanel').classList.add('active');
+  $('historyEmpty').hidden = jobs.length > 0;
   $('historyNote').textContent = jobs.length ? `Results are kept for ${RESULT_DAYS} days.` : '';
   if (currentResult) showCompareRow();
 }
@@ -695,9 +813,10 @@ function loadSample(idx) {
   if (!s || !s.result) return;
   document.querySelectorAll('.sample-card').forEach(c => c.classList.toggle('active', +c.dataset.idx === idx));
   stopTracking();
+  playerOriginTab = 'samples';
+  setChooserTab('samples');
   showRetention(null);
   $('uploadPanel').classList.remove('active');
-  $('samplesSection').style.display = '';
   clearVideoSource();
   video.src = `/data/${s.video_file}`;
   showVideo(true);
@@ -734,10 +853,11 @@ let pendingFile = null, pendingDuration = 0;
 ['dragleave','drop'].forEach(e => uploadZone.addEventListener(e, ev => { ev.preventDefault(); uploadZone.classList.remove('dragover'); }));
 uploadZone.addEventListener('drop', ev => { const f = ev.dataTransfer.files; if (f.length) handleFile(f[0]); });
 fileInput.addEventListener('change', ev => { if (ev.target.files.length) handleFile(ev.target.files[0]); });
-$('topUpload').addEventListener('click', () => { if (signedIn) fileInput.click(); else window.location.href = '/login'; });
+$('topUpload').addEventListener('click', () => {
+  if (signedIn) { setChooserTab('analyses'); fileInput.click(); }
+  else window.location.href = '/login';
+});
 $('btnNew').addEventListener('click', resetUI);
-$('navSamples').addEventListener('click', resetUI);
-$('navHistory').addEventListener('click', () => { resetUI(); $('historyPanel').scrollIntoView({ block: 'nearest' }); });
 $('upConfirm').addEventListener('click', startUpload);
 $('upCancel').addEventListener('click', () => (trackedJob ? resetUI() : resetUpload()));
 
@@ -770,10 +890,10 @@ async function handleFile(file) {
 function showConfirm(file, duration) {
   pendingFile = file; pendingDuration = duration;
   setViewName('chooser');
+  setChooserTab('analyses');
   uploadZone.classList.add('hidden');
   $('consentBox').checked = false; $('consentBox').disabled = false;
   $('consentRow').classList.remove('hidden');
-  $('samplesSection').style.display = 'none';
   $('upFileName').textContent = file.name;
   $('upDetail').textContent = `${duration.toFixed(1)} s · ${(file.size / 1e6).toFixed(1)} MB`;
   $('upCost').textContent = `Estimated cost: ${dollars(estimateCostCents(duration))}, held from your credit when you upload (adjusted to the measured length, refunded if the analysis fails)`;
@@ -849,7 +969,6 @@ function resetUpload() {
   $('uploadNote').textContent = '';
   fileInput.value = '';
   if (signedIn) uploadZone.classList.remove('hidden');
-  $('samplesSection').style.display = '';
   $('headerMeta').textContent = IDLE_HEADER();
 }
 
@@ -922,10 +1041,11 @@ function trackJob(jobId, file) {
   trackedJob = jobId; trackStart = Date.now();
   setJobInUrl(jobId);
   setViewName('chooser');
+  playerOriginTab = 'analyses';
+  setChooserTab('analyses');
   if (!file) {
     uploadZone.classList.add('hidden');
     $('consentRow').classList.add('hidden');
-    $('samplesSection').style.display = 'none';
     $('upFileName').textContent = `Job ${jobId.slice(0, 8)}`;
     $('upDetail').textContent = ''; $('upCost').textContent = '';
     $('upConfirm').style.display = 'none';
@@ -1830,10 +1950,11 @@ function resetUI() {
   $('chartsEmpty').style.display = '';
   setViewName('chooser');
   if (signedIn) $('uploadZone').classList.remove('hidden');
-  $('samplesSection').style.display = '';
   $('headerMeta').textContent = IDLE_HEADER();
   showRetention(null);
   resetUpload();
+  activeTab = playerOriginTab;
+  applyChooser();
   document.querySelectorAll('.sample-card').forEach(c => c.classList.remove('active'));
 }
 
@@ -1854,11 +1975,12 @@ $('deleteAccountBtn').addEventListener('click', async () => {
       $('deleteAccountMsg').classList.add('error');
       return;
     }
+    deleteDialog.close();
     signedIn = false;
     resetUI();
     $('account').textContent = '';
+    $('accountWrap').hidden = true;
     $('balance').textContent = '';
-    $('signOut').hidden = true;
     $('uploadZone').classList.add('hidden');
     $('historyPanel').classList.remove('active');
     $('noCreditPanel').classList.remove('active');
