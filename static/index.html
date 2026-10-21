@@ -76,7 +76,7 @@
 <body>
 <header class="bar">
   <a class="brand" href="/">NeuroLens</a>
-  <a class="btn-line" href="/app">Explore samples</a>
+  <a class="btn-line explore" href="/app">Explore samples</a>
   <a class="btn-white" id="topSignIn" href="/login">Sign in</a>
 </header>
 
@@ -86,7 +86,7 @@
       <h1>Watch a brain watch your video.</h1>
       <p class="lede">NeuroLens predicts how an average viewer's brain responds to a video, second by second: which areas light up for faces, places, speech and sound.</p>
       <div class="actions">
-        <a class="btn-white" href="/app">Explore samples</a>
+        <a class="btn-white explore" href="/app">Explore samples</a>
         <a class="btn-line" id="heroSignIn" href="/login">Sign in to upload</a>
       </div>
       <p class="credit" id="heroCredit" hidden></p>
@@ -125,8 +125,8 @@
 
   <section class="closing">
     <h2>See it on your own video.</h2>
-    <a class="btn-white" href="/login">Sign in to upload</a>
-    <a class="btn-line" href="/app">Explore samples</a>
+    <a class="btn-white" id="closingSignIn" href="/login">Sign in to upload</a>
+    <a class="btn-line explore" href="/app">Explore samples</a>
   </section>
 </main>
 
@@ -177,6 +177,11 @@ async function loadSignedIn() {
     $('topSignIn').href = '/app';
     $('heroSignIn').textContent = 'Upload a video';
     $('heroSignIn').href = '/app';
+    $('heroSignIn').className = 'btn-white';
+    $('closingSignIn').textContent = 'Upload a video';
+    $('closingSignIn').href = '/app';
+    // Signed in, every button opens /app, so the extra 'Explore samples' would be a duplicate.
+    document.querySelectorAll('.explore').forEach(el => { el.hidden = true; });
   } catch (error) { /* the landing page works signed out */ }
 }
 
