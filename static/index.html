@@ -201,6 +201,7 @@
 
     <!-- Signed out -->
     <div class="panel-box" id="signInPanel">
+      <div class="panel-text" id="signedOutNote"></div>
       <div class="panel-title">Sign in to analyse your own videos</div>
       <div class="panel-text">Use Google, or an email address and password. Samples can be browsed without signing in.</div>
       <div class="panel-actions"><a class="btn-primary" href="/login">Sign in</a></div>
@@ -1090,6 +1091,7 @@ $('deleteAccountBtn').addEventListener('click', async () => {
       $('deleteAccountMsg').classList.add('error');
       return;
     }
+    // The server has cleared the session: show the signed-out screen with the confirmation.
     signedIn = false;
     resetUI();
     $('account').textContent = '';
@@ -1097,10 +1099,9 @@ $('deleteAccountBtn').addEventListener('click', async () => {
     $('signOut').hidden = true;
     $('uploadZone').classList.add('hidden');
     $('historyPanel').classList.remove('active');
-    $('deleteAccountPanel').classList.remove('active');
-    $('headerMeta').textContent = 'Select a video to view analysis';
-    $('deleteAccountMsg').textContent = 'Your account and data have been deleted.';
-    $('deleteAccountMsg').classList.remove('error');
+    $('noCreditPanel').classList.remove('active');
+    showSignedOut();
+    $('signedOutNote').textContent = 'Your account and data have been deleted.';
   } catch (e) {
     button.disabled = false;
     $('deleteAccountMsg').textContent = "Couldn't reach the server. Please try again.";
