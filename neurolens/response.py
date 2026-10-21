@@ -1,10 +1,11 @@
 """Pure maths: turns TRIBE v2 predictions into signed brain-response curves. numpy only.
 
-M3d §2: seven signals in three groups, each value the signed mean over the signal's vertices
-(no absolute value, no rescaling). The muted series are cut to the shared length of the two
-passes. See docs/M3d_spec.md.
+M3d §2: seven signals over the Glasser HCP-MMP1 areas, each value the signed mean over the
+signal's vertices (no absolute value, no rescaling). The muted series are cut to the shared
+length of the two passes. See docs/M3d_spec.md.
 """
 
+import hashlib
 import logging
 
 import numpy as np
@@ -14,18 +15,13 @@ logger = logging.getLogger("neurolens")
 N_VERTICES_PER_HEMISPHERE = 10242
 
 SIGNALS = {
-    "faces": ["G_oc-temp_lat-fusifor"],
-    "bodies": ["S_oc-temp_lat", "G_temporal_inf"],
-    "scenes": ["G_oc-temp_med-Parahip"],
-    "visual": ["S_calcarine", "G_cuneus", "Pole_occipital", "G_oc-temp_med-Lingual"],
-    "sound": ["G_temp_sup-G_T_transv", "G_temp_sup-Plan_tempo"],
-    "speech": [
-        "G_front_inf-Opercular",
-        "G_front_inf-Triangul",
-        "G_temporal_middle",
-        "G_temp_sup-Lateral",
-    ],
-    "social": ["S_temporal_sup"],
+    "faces": ["FFC"],
+    "bodies": ["V4t"],
+    "scenes": ["PHA1", "PHA2", "PHA3"],
+    "visual": ["V1", "V2", "V3"],
+    "sound": ["A1", "LBelt", "MBelt", "PBelt"],
+    "speech": ["A5", "STSva", "STSvp", "45"],
+    "social": ["PGi", "TE1a"],
 }
 
 LEFT_ONLY = {"speech"}
@@ -38,27 +34,63 @@ GROUPS = {
 
 SERIES = [*SIGNALS, *GROUPS, "overall"]
 
+HCP_MMP_FILES = {
+    "lh": (
+        "lh.HCPMMP1.annot",
+        "https://ndownloader.figshare.com/files/5528816",
+        "d4da634644b4c595dbda23963e01752059f0e7714be70169eb84e25e09ba2b44",
+    ),
+    "rh": (
+        "rh.HCPMMP1.annot",
+        "https://ndownloader.figshare.com/files/5528819",
+        "744eff4e57ce8121c43851eea425475baf92d9ba8686299a7435517ab972e9a2",
+    ),
+}
 
-def build_masks(labels_full, label_names):
-    """One boolean mask per signal, matching Destrieux labels by exact name.
 
-    Bytes names are decoded first. A target label missing from the atlas raises ValueError
-    naming it: a silent near-miss would leave a signal empty and its mean NaN.
+def _normalise_name(name):
+    """Drop the hemisphere prefix and the `_ROI` suffix from an HCP-MMP1 label name."""
+    if isinstance(name, bytes):
+        name = name.decode()
+    else:
+        name = str(name)
+    if name.startswith(("L_", "R_")):
+        name = name[2:]
+    if name.endswith("_ROI"):
+        name = name[: -len("_ROI")]
+    return name
+
+
+def build_masks(lh_labels, lh_names, rh_labels, rh_names):
+    """One boolean mask per signal over fsaverage5's left then right vertices.
+
+    Labels and names come from the Glasser HCP-MMP1 annot files. Each hemisphere's label array
+    is cut to its first 10,242 entries (fsaverage5). Bytes names are decoded and normalised by
+    dropping the leading `L_`/`R_` and trailing `_ROI`; only an exact match counts, and a target
+    missing from either hemisphere raises ValueError naming it and that hemisphere.
     """
-    labels = np.asarray(labels_full)
-    names = [name.decode() if isinstance(name, bytes) else str(name) for name in label_names]
+    lh_labels = np.asarray(lh_labels)[:N_VERTICES_PER_HEMISPHERE]
+    rh_labels = np.asarray(rh_labels)[:N_VERTICES_PER_HEMISPHERE]
+    hemispheres = (
+        ("left", lh_labels, [_normalise_name(name) for name in lh_names]),
+        ("right", rh_labels, [_normalise_name(name) for name in rh_names]),
+    )
 
-    missing = [target for targets in SIGNALS.values() for target in targets if target not in names]
-    if missing:
-        raise ValueError(f"Atlas labels missing (atlas changed?): {', '.join(missing)}")
+    for targets in SIGNALS.values():
+        for target in targets:
+            for side, _, names in hemispheres:
+                if target not in names:
+                    raise ValueError(f"Missing HCP-MMP1 label {target!r} in the {side} hemisphere.")
 
     masks = {}
     for signal, targets in SIGNALS.items():
-        mask = np.zeros(len(labels), dtype=bool)
+        left = np.zeros_like(lh_labels, dtype=bool)
+        right = np.zeros_like(rh_labels, dtype=bool)
         for target in targets:
-            mask |= labels == names.index(target)
-        if signal in LEFT_ONLY:
-            mask[N_VERTICES_PER_HEMISPHERE:] = False
+            left |= lh_labels == hemispheres[0][2].index(target)
+            if signal not in LEFT_ONLY:
+                right |= rh_labels == hemispheres[1][2].index(target)
+        mask = np.concatenate([left, right])
         masks[signal] = mask
         logger.info(f"  signal {signal}: {mask.sum()} vertices")
     return masks
@@ -72,6 +104,16 @@ def require_nonempty_masks(masks):
         raise ValueError(
             f"Signal masks with no vertices (atlas labels changed?): {', '.join(empty)}"
         )
+
+
+def verify_sha256(path, expected):
+    """Raise ValueError unless `path` hashes to `expected`; return None on a match."""
+    digest = hashlib.sha256()
+    with open(path, "rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    if digest.hexdigest() != expected:
+        raise ValueError(f"{path} does not match its pinned SHA-256 (the map file changed).")
 
 
 def _series(preds, masks):

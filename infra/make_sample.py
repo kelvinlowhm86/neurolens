@@ -5,8 +5,8 @@
 
 Downloads the job's result and brain file into data/output/<id>/ (id = the video's file stem),
 grabs a thumbnail at 1 s, and writes the entry into data/samples.json with the summary computed
-from the current config.json. Re-run it after a threshold change. This is an operator script: it
-talks to AWS and is never run by the tests.
+from the result. Re-run it after a summary rule change. This is an operator script: it talks to
+AWS and is never run by the tests.
 """
 
 import argparse
@@ -97,8 +97,7 @@ def main():
 
     make_thumbnail(video, thumbnail_path)
 
-    cfg = json.loads((ROOT / "config.json").read_text())
-    summary = results.summarise(result, cfg["response"])
+    summary = results.summarise(result)
     entry = {
         "id": sample_id,
         "title": args.title,

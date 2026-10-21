@@ -21,14 +21,11 @@ SERIES = [
 ]
 GROUPS = ["see", "hear", "understand"]
 COLUMNS = ["t", *SERIES, *(f"muted_{name}" for name in SERIES)]
-RESPONSE_KEYS = (
-    "well_above",
-    "above",
-    "below",
-    "dead_threshold",
-    "dead_min_seconds",
-    "colour_range",
-)
+OPENING_BAND = 0.25
+WINDOW_SECONDS = 3
+GAP_SECONDS = 2
+GROWTH_FRACTION = 2 / 3
+MAX_MOMENT_SECONDS = 10
 
 
 def _cell(value):
@@ -47,104 +44,170 @@ def _number(value):
 
 
 def validate_response_config(cfg):
-    """Raise ValueError unless cfg is a complete, usable `response` block (M3d §6)."""
+    """Raise ValueError unless cfg is a usable `response` block (M3d §6)."""
     if not isinstance(cfg, dict):
         raise ValueError("The response config must be an object.")
-    for key in RESPONSE_KEYS:
-        if key not in cfg:
-            raise ValueError(f"Missing response setting: {key}")
-        if not _number(cfg[key]):
-            raise ValueError(f"response.{key} must be a finite number.")
-    if not cfg["well_above"] > cfg["above"] > cfg["below"]:
-        raise ValueError("response thresholds must satisfy well_above > above > below.")
-    if cfg["dead_threshold"] <= 0:
-        raise ValueError("response.dead_threshold must be positive.")
-    if (
-        isinstance(cfg["dead_min_seconds"], bool)
-        or not isinstance(cfg["dead_min_seconds"], int)
-        or cfg["dead_min_seconds"] < 1
-    ):
-        raise ValueError("response.dead_min_seconds must be an integer of at least 1.")
-    if cfg["colour_range"] <= 0:
-        raise ValueError("response.colour_range must be positive.")
-
-
-def _level(value, cfg):
-    if value >= cfg["well_above"]:
-        return "well above typical"
-    if value >= cfg["above"]:
-        return "above typical"
-    if value <= cfg["below"]:
-        return "below typical"
-    return "typical"
+    if "colour_range" not in cfg:
+        raise ValueError("Missing response setting: colour_range")
+    if not _number(cfg["colour_range"]) or cfg["colour_range"] <= 0:
+        raise ValueError("response.colour_range must be a finite number greater than 0.")
 
 
 def _mean(values):
-    return sum(values) / len(values) if values else 0.0
+    return math.fsum(values) / len(values)
 
 
-def _dead_stretches(overall, threshold, minimum):
-    stretches = []
-    start = None
-    for t, value in enumerate(overall):
-        if value < -threshold:
-            if start is None:
-                start = t
-        elif start is not None:
-            if t - start >= minimum:
-                stretches.append({"start": start, "end": t})
-            start = None
-    if start is not None and len(overall) - start >= minimum:
-        stretches.append({"start": start, "end": len(overall)})
-    return stretches
+def _stdev(values):
+    mean = _mean(values)
+    return math.sqrt(sum((value - mean) ** 2 for value in values) / len(values))
+
+
+def _opening(overall):
+    length = len(overall)
+    if length == 1:
+        value = overall[0]
+    else:
+        value = _mean(overall[1 : min(3, length - 1) + 1])
+
+    rest = None
+    word = None
+    remaining = overall[4:]
+    if remaining:
+        deviation = _stdev(overall[1:])
+        if deviation >= 1e-6:
+            rest = _mean(remaining)
+            difference = value - rest
+            if difference > OPENING_BAND * deviation:
+                word = "stronger than the rest"
+            elif difference < -OPENING_BAND * deviation:
+                word = "weaker than the rest"
+            else:
+                word = "about the same as the rest"
+    return {"value": value, "rest": rest, "word": word}
+
+
+def _candidates(length):
+    if length == 1:
+        return [(0, 1)]
+    if length < 4:
+        return [(1, length)]
+    return [(start, start + WINDOW_SECONDS) for start in range(1, length - WINDOW_SECONDS + 1)]
+
+
+def _overlaps(start, end, moment):
+    return start < moment["end"] and end > moment["start"]
+
+
+def _clear_of_picks(start, end, picks):
+    for pick in picks:
+        if not (start >= pick["end"] + GAP_SECONDS or end + GAP_SECONDS <= pick["start"]):
+            return False
+    return True
+
+
+def _may_grow(second, picks, strong_moments, strongest):
+    for pick in picks:
+        if pick["start"] - GAP_SECONDS <= second <= pick["end"] + GAP_SECONDS - 1:
+            return False
+    if not strongest:
+        for moment in strong_moments:
+            if moment["start"] <= second < moment["end"]:
+                return False
+    return True
+
+
+def _grow(overall, start, end, *, strongest, picks, strong_moments):
+    length = len(overall)
+    if length >= 4:
+        video_mean = _mean(overall[1:])
+        window_mean = _mean(overall[start:end])
+        target = video_mean + GROWTH_FRACTION * (window_mean - video_mean)
+        while end - start < MAX_MOMENT_SECONDS:
+            options = []
+            if start - 1 >= 1:
+                options.append(start - 1)
+            if end < length:
+                options.append(end)
+            options = [
+                second for second in options if _may_grow(second, picks, strong_moments, strongest)
+            ]
+            if not options:
+                break
+            if strongest:
+                second = max(options, key=lambda value: (overall[value], -value))
+                if not overall[second] > target:
+                    break
+            else:
+                second = min(options, key=lambda value: (overall[value], value))
+                if not overall[second] < target:
+                    break
+            if second < start:
+                start = second
+            else:
+                end = second + 1
+    return {"start": int(start), "end": int(end), "value": _mean(overall[start:end])}
+
+
+def _pick_moments(overall, *, strongest, strong_moments=()):
+    candidates = _candidates(len(overall))
+    picks = []
+    for _ in range(2):
+        eligible = []
+        for start, end in candidates:
+            if not _clear_of_picks(start, end, picks):
+                continue
+            if not strongest and any(_overlaps(start, end, moment) for moment in strong_moments):
+                continue
+            eligible.append((start, end))
+        if not eligible:
+            break
+        if strongest:
+            start, end = min(
+                eligible, key=lambda window: (-_mean(overall[window[0] : window[1]]), window[0])
+            )
+        else:
+            start, end = min(
+                eligible, key=lambda window: (_mean(overall[window[0] : window[1]]), window[0])
+            )
+        picks.append(
+            _grow(
+                overall,
+                start,
+                end,
+                strongest=strongest,
+                picks=picks,
+                strong_moments=strong_moments,
+            )
+        )
+    moments = [
+        {"start": pick["start"], "end": pick["end"], "value": pick["value"]} for pick in picks
+    ]
+    return sorted(moments, key=lambda moment: moment["start"])
 
 
 def _audio_dependence(overall, muted):
     length = min(len(overall), len(muted))
-    denominator = sum(max(value, 0.0) for value in overall[:length])
+    start = 0 if len(overall) == 1 else 1
+    if start >= length:
+        return None
+    denominator = sum(max(value, 0.0) for value in overall[start:length])
     if denominator < 1e-6:
         return None
-    numerator = sum(max(value, 0.0) for value in muted[:length])
+    numerator = sum(max(value, 0.0) for value in muted[start:length])
     return round(min(max(1 - numerator / denominator, 0.0), 1.0), 2)
 
 
-def summarise(result, response_cfg):
-    """The cards served with a result, computed each time so a threshold change needs no rerun."""
-    signals = result["signals"]
-    muted = result["muted"]
-    overall = signals["overall"]
-    length = len(overall)
-
-    hook_length = min(3, length)
-    hook_group = max(
-        GROUPS,
-        key=lambda group: _mean(signals[group][:hook_length]),
-    )
-    hook_value = round(_mean(signals[hook_group][:hook_length]), 3)
-
-    if length == 1:
-        peak_t = 0
-    elif length > 1:
-        peak_t = max(range(1, length), key=lambda t: overall[t])
-    else:
-        peak_t = None
-    peak = (
-        None
-        if peak_t is None
-        else {"t": peak_t, "value": overall[peak_t], "level": _level(overall[peak_t], response_cfg)}
-    )
-
+def summarise(result):
+    """The four summary parts served with a result (M3d §6), computed at serve time."""
+    overall = result["signals"]["overall"]
+    muted = result["muted"]["overall"]
+    strong_moments = _pick_moments(overall, strongest=True)
+    weak_moments = _pick_moments(overall, strongest=False, strong_moments=strong_moments)
     return {
-        "hook": {
-            "group": hook_group,
-            "value": hook_value,
-            "level": _level(hook_value, response_cfg),
-        },
-        "peak": peak,
-        "dead": _dead_stretches(
-            overall, response_cfg["dead_threshold"], response_cfg["dead_min_seconds"]
-        ),
-        "audio_dependence": _audio_dependence(overall, muted["overall"]),
+        "opening": _opening(overall),
+        "strong_moments": strong_moments,
+        "weak_moments": weak_moments,
+        "audio_dependence": _audio_dependence(overall, muted),
     }
 
 

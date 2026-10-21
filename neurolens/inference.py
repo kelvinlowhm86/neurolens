@@ -4,15 +4,26 @@ import json
 import logging
 import math
 import os
+import shutil
 import subprocess
+import tempfile
 import time
+import urllib.request
+from pathlib import Path
 
 import numpy as np
 
 from neurolens import settings
-from neurolens.response import build_masks, require_nonempty_masks
+from neurolens.response import (
+    HCP_MMP_FILES,
+    build_masks,
+    require_nonempty_masks,
+    verify_sha256,
+)
 
 logger = logging.getLogger("neurolens")
+
+MAP_DOWNLOAD_TIMEOUT_SECONDS = 60  # each HCP-MMP1 file is ~1.3 MB
 
 N_VERTICES = 20484
 
@@ -35,8 +46,16 @@ def roi_masks():
     return _roi_masks
 
 
+def read_hcp_annot(path):
+    """The (labels, names) of a Glasser HCP-MMP1 annot file, read with nibabel."""
+    import nibabel.freesurfer as freesurfer
+
+    labels, _, names = freesurfer.read_annot(str(path))
+    return labels, names
+
+
 def load_model(cfg=None):
-    """Load the TRIBE v2 model (skipped in fake mode) and the Destrieux atlas, build ROI masks."""
+    """Load the TRIBE v2 model (skipped in fake mode) and the Glasser HCP-MMP1 maps, build masks."""
     global model, _roi_masks
 
     root = settings.get_root()
@@ -59,18 +78,35 @@ def load_model(cfg=None):
         )
         logger.info("TRIBE v2 loaded.")
 
-    logger.info("Loading Destrieux atlas...")
-    from nilearn import datasets as nl_datasets
+    logger.info("Loading Glasser HCP-MMP1 maps...")
+    maps_dir = Path(paths["data"]) / "hcp_mmp"
+    maps_dir.mkdir(parents=True, exist_ok=True)
+    for side in ("lh", "rh"):
+        filename, url, expected = HCP_MMP_FILES[side]
+        path = maps_dir / filename
+        if not path.exists():
+            logger.info(f"Downloading {filename}...")
+            fd, temporary = tempfile.mkstemp(dir=maps_dir, prefix=f"{filename}.", suffix=".tmp")
+            os.close(fd)
+            temporary = Path(temporary)
+            replaced = False
+            try:
+                with urllib.request.urlopen(url, timeout=MAP_DOWNLOAD_TIMEOUT_SECONDS) as response:
+                    with temporary.open("wb") as handle:
+                        shutil.copyfileobj(response, handle)
+                verify_sha256(temporary, expected)
+                temporary.replace(path)
+                replaced = True
+            finally:
+                if not replaced:
+                    temporary.unlink(missing_ok=True)
+        verify_sha256(path, expected)
 
-    destrieux = nl_datasets.fetch_atlas_surf_destrieux()
-    labels_lh = np.array(destrieux["map_left"])
-    labels_rh = np.array(destrieux["map_right"])
-    label_names = destrieux["labels"]
-    labels_full = np.concatenate([labels_lh, labels_rh])
-
-    _roi_masks = build_masks(labels_full, label_names)
+    lh_labels, lh_names = read_hcp_annot(maps_dir / HCP_MMP_FILES["lh"][0])
+    rh_labels, rh_names = read_hcp_annot(maps_dir / HCP_MMP_FILES["rh"][0])
+    _roi_masks = build_masks(lh_labels, lh_names, rh_labels, rh_names)
     require_nonempty_masks(_roi_masks)
-    logger.info("Atlas and ROI masks ready.")
+    logger.info("HCP-MMP1 atlas and ROI masks ready.")
 
 
 class UnreadableVideo(ValueError):

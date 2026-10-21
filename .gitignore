@@ -26,6 +26,9 @@ hub/
 # fully fetched). Re-downloads automatically on first run.
 /data/nilearn/
 
+# Glasser HCP-MMP1 map files, downloaded once by load_model (~2.6 MB, SHA-256 checked).
+/data/hcp_mmp/
+
 # ─── Sample media (large, re-obtainable) ───────────────────────────────────
 # 155 MB of source ads. Ignore the contents, but keep the manifest README --
 # a negation cannot rescue a file from inside an excluded *directory*, so the

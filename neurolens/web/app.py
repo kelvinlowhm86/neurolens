@@ -516,7 +516,7 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
         result, error = owned_result(job_id)
         if error:
             return error
-        return jsonify({**result, "summary": results.summarise(result, response_cfg)})
+        return jsonify({**result, "summary": results.summarise(result)})
 
     @app.route("/api/jobs/<job_id>/result.csv")
     def job_result_csv(job_id):

@@ -12,11 +12,6 @@
   "max_video_duration_seconds": 120,
   "max_upload_bytes": 300000000,
   "response": {
-    "well_above": 0.5,
-    "above": 0.2,
-    "below": -0.2,
-    "dead_threshold": 0.2,
-    "dead_min_seconds": 3,
     "colour_range": 0.5
   },
   "worker": {
