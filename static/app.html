@@ -242,14 +242,14 @@
   <a class="brand" href="/">NeuroLens</a>
   <nav aria-label="Main">
     <button id="navSamples">Samples</button>
-    <button id="navHistory">Your analyses</button>
+    <button id="navHistory" hidden>Your analyses</button>
   </nav>
   <div class="spacer"></div>
   <span class="header-meta" id="headerMeta">Select a video to see its brain response</span>
   <span class="credit" id="balance"></span>
   <span class="account" id="account"></span>
   <button class="header-link" id="signOut" hidden>Sign out</button>
-  <button class="btn-white" id="topUpload">Upload a video</button>
+  <button class="btn-white" id="topUpload" hidden>Upload a video</button>
 </header>
 
 <div class="D">
@@ -515,6 +515,9 @@ function showSignedOut() {
   $('account').textContent = '';
   $('balance').textContent = '';
   $('signOut').hidden = true;
+  $('navHistory').hidden = true;
+  $('topUpload').textContent = 'Sign in';
+  $('topUpload').hidden = false;
   $('headerMeta').textContent = IDLE_HEADER();
   loadLimits();
   loadSamples();
@@ -526,6 +529,9 @@ function showApp(meJson) {
   $('signInPanel').classList.remove('active');
   $('account').textContent = me.email;
   $('signOut').hidden = false;
+  $('navHistory').hidden = false;
+  $('topUpload').textContent = 'Upload a video';
+  $('topUpload').hidden = false;
   $('uploadZone').classList.remove('hidden');
   $('deleteAccountPanel').classList.add('active');
   $('headerMeta').textContent = IDLE_HEADER();
@@ -728,7 +734,7 @@ let pendingFile = null, pendingDuration = 0;
 ['dragleave','drop'].forEach(e => uploadZone.addEventListener(e, ev => { ev.preventDefault(); uploadZone.classList.remove('dragover'); }));
 uploadZone.addEventListener('drop', ev => { const f = ev.dataTransfer.files; if (f.length) handleFile(f[0]); });
 fileInput.addEventListener('change', ev => { if (ev.target.files.length) handleFile(ev.target.files[0]); });
-$('topUpload').addEventListener('click', () => { if (signedIn) fileInput.click(); else { showSignedOut(); $('signInPanel').scrollIntoView({ block: 'center' }); } });
+$('topUpload').addEventListener('click', () => { if (signedIn) fileInput.click(); else window.location.href = '/login'; });
 $('btnNew').addEventListener('click', resetUI);
 $('navSamples').addEventListener('click', resetUI);
 $('navHistory').addEventListener('click', () => { resetUI(); $('historyPanel').scrollIntoView({ block: 'nearest' }); });
