@@ -4,7 +4,6 @@ M3b §8 retired `/api/samples` (the page reads /data/samples.json), and with it 
 the route equals data/samples.json.
 """
 
-import json
 from pathlib import Path
 
 import pytest
@@ -28,14 +27,17 @@ def test_index_serves_index_html(client):
     resp.close()
 
 
-def test_thumbnail_is_served(client):
-    samples = json.loads((DATA_DIR / "samples.json").read_text())["samples"]
-    thumb = next(s["thumbnail"] for s in samples if s.get("thumbnail"))
-    assert thumb.startswith("output/")
-    expected = (DATA_DIR / thumb).read_bytes()
-    resp = client.get(f"/data/{thumb}")
+def test_thumbnail_is_served(tmp_path):
+    """A sample thumbnail under data/output/ is served as is. Uses its own data folder, so it does
+    not depend on which samples data/samples.json lists (M3d §9 empties it until the AWS day)."""
+    data = tmp_path / "data"
+    thumb = data / "output" / "clip" / "thumb.jpg"
+    thumb.parent.mkdir(parents=True)
+    thumb.write_bytes(b"\xff\xd8\xff\xe0 fake jpeg")
+    test_client = create_app(data_dir=data).test_client()
+    resp = test_client.get("/data/output/clip/thumb.jpg")
     assert resp.status_code == 200
-    assert resp.data == expected
+    assert resp.data == thumb.read_bytes()
     resp.close()
 
 
