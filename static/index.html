@@ -109,7 +109,7 @@
   .brain-box canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
   .brain-message { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 20px; text-align: center; font-size: 13px; color: var(--stage-muted); }
   .brain-legend { position: absolute; left: 14px; bottom: 12px; display: flex; gap: 8px; align-items: center; font-size: 11px; color: var(--stage-muted); pointer-events: none; }
-  .brain-legend i { width: 86px; height: 6px; border-radius: 3px; background: linear-gradient(90deg, #5A5F68, #6E0D0D, var(--heat-deep), var(--heat), var(--heat-light)); }
+  .brain-legend i { width: 86px; height: 6px; border-radius: 3px; background: linear-gradient(90deg, #D9DCE1, #6E0D0D, var(--heat-deep), var(--heat), var(--heat-light)); }
   .brain-time { position: absolute; right: 14px; top: 12px; font: 600 13px var(--display); color: var(--stage-muted); font-variant-numeric: tabular-nums; }
   .sample-meta { font-size: 11.5px; color: var(--stage-muted); line-height: 1.45; }
   .sample-meta:empty { display: none; }
@@ -175,7 +175,7 @@
   .compare-msg { font-size: 12px; color: var(--ink-2); min-height: 0; }
   .compare-msg:empty { display: none; }
   .compare-msg.error { color: #B4231A; }
-  .main-chart { flex: 1.22 1 0; min-height: 120px; display: flex; flex-direction: column; }
+  .main-chart { flex: 1.86 1 0; min-height: 120px; display: flex; flex-direction: column; }
   .main-chart .note { font-size: 12.5px; color: var(--ink-2); }
   .main-chart .chart { flex: 1; min-height: 0; margin-top: 22px; position: relative; }
   .chart { position: relative; width: 100%; }
@@ -205,6 +205,7 @@
   .parts .chart { flex: 1; min-height: 0; }
 
   .end-marker { position: absolute; font-size: 11px; line-height: 1.3; color: var(--ink-2); background: rgba(255,255,255,.82); padding: 0 3px; border-radius: 3px; white-space: nowrap; pointer-events: none; }
+  .end-drop { position: absolute; border-left: 1px dotted var(--cool); pointer-events: none; }
   .end-dot { position: absolute; width: 6px; height: 6px; border-radius: 50%; transform: translate(-50%, -50%); pointer-events: none; }
 
   .compare-table { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -1311,7 +1312,8 @@ function drawChart(host, { lines, range, height = 200, shade = false, zeroLabel 
       const i = line.values.length - 1;
       const raw = line.values[i];
       const cx = x(i), cy = y(Math.max(-range, Math.min(range, Number.isFinite(raw) ? raw : 0)));
-      const top = axisLabels ? `calc(${(cy / H) * 100}% - ${(cy / H) * 16}px)` : `${(cy / H) * 100}%`;
+      const at = py => axisLabels ? `calc(${(py / H) * 100}% - ${(py / H) * 16}px)` : `${(py / H) * 100}%`;
+      const top = at(cy), bottom = at(H - padB);
       const dot = document.createElement('div');
       dot.className = 'end-dot';
       dot.style.left = `${(cx / W) * 100}%`;
@@ -1321,9 +1323,14 @@ function drawChart(host, { lines, range, height = 200, shade = false, zeroLabel 
       label.className = 'end-marker';
       label.textContent = line.endLabel;
       label.style.left = `${(cx / W) * 100}%`;
-      label.style.top = top;
-      label.style.transform = cx < W * 0.15 ? 'translate(6px, -125%)' : 'translate(calc(-100% - 6px), -125%)';
-      host.append(dot, label);
+      label.style.top = bottom;
+      label.style.transform = cx < W * 0.15 ? 'translate(4px, -100%)' : 'translate(calc(-100% - 4px), -100%)';
+      const drop = document.createElement('div');
+      drop.className = 'end-drop';
+      drop.style.left = `${(cx / W) * 100}%`;
+      drop.style.top = top;
+      drop.style.height = `calc(${bottom} - ${top})`;
+      host.append(drop, dot, label);
     }
   });
 
@@ -1428,6 +1435,14 @@ function stripRange() {
   return niceRange(values);
 }
 
+function partsRange(group) {
+  const values = [];
+  [currentResult, comparison && comparison.result].forEach(r => {
+    if (r && r.signals) GROUPS[group].signals.forEach(sig => { if (r.signals[sig]) values.push(...r.signals[sig]); });
+  });
+  return niceRange(values);
+}
+
 function buildStrips() {
   if (!currentResult) return;
   clearScope('strips');
@@ -1446,7 +1461,7 @@ function buildStrips() {
       const button = document.createElement('button');
       button.textContent = `Show ${def.signals.length} parts`;
       button.setAttribute('aria-expanded', 'false');
-      button.addEventListener('click', () => swapParts(group, range));
+      button.addEventListener('click', () => swapParts(group));
       head.append(button);
     }
     const chart = document.createElement('div');
@@ -1462,7 +1477,7 @@ function buildStrips() {
   });
 }
 
-function swapParts(group, range) {
+function swapParts(group) {
   const host = $('stripsHost');
   const span = chartSpan();
   const keep = [...host.children];
@@ -1497,7 +1512,7 @@ function swapParts(group, range) {
     if (comparison && comparison.result.signals) {
       lines.push({ values: comparison.result.signals[signal] || [], colour: 'var(--cool)', dash: true, width: 1.4 });
     }
-    drawChart(chart, { lines, range: range * 1.3, height: 56, fill: true, span, scope: 'strips-parts' });
+    drawChart(chart, { lines, range: partsRange(group), height: 56, fill: true, span, scope: 'strips-parts' });
   });
   wrap.append(head, row);
   host.append(wrap);
@@ -2045,7 +2060,7 @@ function makeBrain() {
     baseColour = new Float32Array(mesh.V * 3);
     for (let i = 0; i < mesh.V; i++) {
       const shade = 0.5 - 0.5 * mesh.sulc[i];
-      const base = (0.30 + 0.26 * shade) * (mesh.noCortex[i] ? 0.7 : 1);
+      const base = (0.80 + 0.17 * shade) * (mesh.noCortex[i] ? 0.82 : 1);
       baseColour[3 * i] = base; baseColour[3 * i + 1] = base; baseColour[3 * i + 2] = base;
     }
     colourAttr = new THREE.BufferAttribute(new Float32Array(mesh.V * 3), 3);

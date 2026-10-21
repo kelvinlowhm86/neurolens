@@ -364,13 +364,13 @@ def _fake_predictions(events, rows):
     left = np.arange(N_VERTICES) < N_VERTICES // 2
     spread[left[:, None] != left[picks][None, :]] = 0  # each blob stays on its own hemisphere
     t = np.arange(rows)[:, None]
-    period, phase = rng.uniform(5, 20, 8), rng.uniform(0, 2 * np.pi, 8)
+    period, phase = rng.uniform(12, 30, 8), rng.uniform(0, 2 * np.pi, 8)
     strength = np.sin(2 * np.pi * t / period + phase)  # (rows, 8), between -1 and 1
     field = strength @ spread.T
     if not events.audio:
         field *= 0.6
     noise = np.random.default_rng(events.size + (0 if events.audio else 1))
-    return field + 0.1 * noise.standard_normal((rows, N_VERTICES))
+    return field + 0.05 * noise.standard_normal((rows, N_VERTICES))
 
 
 def predict(events, duration):
