@@ -4,13 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>NeuroLens — Video Brain Response Analysis</title>
+<link rel="icon" href="data:,">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,600;12..96,700&family=Public+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
   :root {
     --stage: #0D1320; --stage-2: #151D2E; --stage-text: #E7EAF0; --stage-muted: #8C96A8; --stage-rule: #253049;
     --paper: #F4F5F7; --surface: #FFFFFF; --ink: #161B26; --ink-2: #5A6272; --ink-3: #8A91A0; --rule: #DADDE3;
-    --heat: #F2711C; --heat-deep: #B4231A; --heat-light: #FBD24B; --cool: #6B7A99;
+    --heat: #F2711C; --heat-deep: #B4231A; --heat-light: #FF6A1A; --cool: #6B7A99;
     --display: 'Bricolage Grotesque', system-ui, sans-serif; --text: 'Public Sans', system-ui, sans-serif;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -108,15 +109,15 @@
   .brain-box canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
   .brain-message { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 20px; text-align: center; font-size: 13px; color: var(--stage-muted); }
   .brain-legend { position: absolute; left: 14px; bottom: 12px; display: flex; gap: 8px; align-items: center; font-size: 11px; color: var(--stage-muted); pointer-events: none; }
-  .brain-legend i { width: 86px; height: 6px; border-radius: 3px; background: linear-gradient(90deg, #5A5F68, var(--heat-deep), var(--heat), var(--heat-light)); }
+  .brain-legend i { width: 86px; height: 6px; border-radius: 3px; background: linear-gradient(90deg, #5A5F68, #6E0D0D, var(--heat-deep), var(--heat), var(--heat-light)); }
   .brain-time { position: absolute; right: 14px; top: 12px; font: 600 13px var(--display); color: var(--stage-muted); font-variant-numeric: tabular-nums; }
   .sample-meta { font-size: 11.5px; color: var(--stage-muted); line-height: 1.45; }
   .sample-meta:empty { display: none; }
-  .retention { display: none; flex-direction: column; gap: 6px; border-top: 1px solid var(--stage-rule); padding-top: 8px; }
+  .retention { display: none; flex: none; flex-direction: column; gap: 6px; border-top: 1px solid var(--rule); padding-top: 10px; }
   .retention.active { display: flex; }
-  .retention .rt-title { font-size: 12px; font-weight: 600; }
-  .retention .rt-text { font-size: 11.5px; color: var(--stage-muted); }
-  .retention .rt-text.error { color: #FCA5A5; }
+  .retention .rt-title { font-size: 12.5px; font-weight: 600; color: var(--ink); }
+  .retention .rt-text { font-size: 12px; color: var(--ink-2); }
+  .retention .rt-text.error { color: #B4231A; }
   .retention .actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 
   .timeline { display: grid; grid-template-columns: auto auto 1fr auto auto; gap: 10px; align-items: center; flex: none; }
@@ -166,6 +167,7 @@
   .legend-key { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--ink-2); }
   .legend-key i { width: 18px; height: 0; border-top: 2px solid var(--heat); }
   .legend-key i.dash { border-top: 2px dashed var(--cool); }
+  .legend-key i.swatch { width: 12px; height: 12px; border-top: 0; border-radius: 2px; background: rgba(242,113,28,.18); }
   .toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--ink-2); white-space: nowrap; }
   .toggle input { accent-color: var(--heat); }
   .compare-pick { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--ink-2); }
@@ -173,7 +175,7 @@
   .compare-msg { font-size: 12px; color: var(--ink-2); min-height: 0; }
   .compare-msg:empty { display: none; }
   .compare-msg.error { color: #B4231A; }
-  .main-chart { flex: 1; min-height: 150px; display: flex; flex-direction: column; }
+  .main-chart { flex: 1.22 1 0; min-height: 120px; display: flex; flex-direction: column; }
   .main-chart .note { font-size: 12.5px; color: var(--ink-2); }
   .main-chart .chart { flex: 1; min-height: 0; margin-top: 22px; position: relative; }
   .chart { position: relative; width: 100%; }
@@ -187,16 +189,23 @@
   .pin.hot::after { background: var(--heat); }
   .pin:hover span { color: var(--ink); }
 
-  .strips-wrap { flex: none; }
-  .strips { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; }
-  .strip { min-width: 0; }
+  .strips-wrap { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; }
+  .strips { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; }
+  .strips.swapped { grid-template-columns: 1fr; }
+  .strip { min-width: 0; display: flex; flex-direction: column; }
   .strip h3, .parts h3 { display: flex; justify-content: space-between; align-items: baseline; font: 600 15px var(--display); gap: 8px; margin-bottom: 4px; }
   .strip h3 button, .parts h3 button { background: none; border: 0; font: 500 12.5px var(--text); color: var(--ink-2); padding: 0; }
   .strip h3 button:hover, .parts h3 button:hover { color: var(--ink); }
-  .strip .chart { height: 78px; }
-  .parts .parts-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 18px; }
+  .strip .chart { flex: 1; min-height: 0; }
+  .parts { display: flex; flex-direction: column; min-height: 0; height: 100%; }
+  .parts h3 { justify-content: flex-start; gap: 12px; white-space: nowrap; }
+  .parts .parts-row { flex: 1; min-height: 0; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 18px; }
+  .parts .parts-row > div { display: flex; flex-direction: column; min-width: 0; }
   .parts h4, .sub h4 { font: 500 12px var(--text); color: var(--ink-2); margin-bottom: 2px; }
-  .parts .chart { height: 56px; }
+  .parts .chart { flex: 1; min-height: 0; }
+
+  .end-marker { position: absolute; font-size: 11px; line-height: 1.3; color: var(--ink-2); background: rgba(255,255,255,.82); padding: 0 3px; border-radius: 3px; white-space: nowrap; pointer-events: none; }
+  .end-dot { position: absolute; width: 6px; height: 6px; border-radius: 50%; transform: translate(-50%, -50%); pointer-events: none; }
 
   .compare-table { width: 100%; border-collapse: collapse; font-size: 13px; }
   .compare-table th, .compare-table td { text-align: left; padding: 8px 12px 8px 0; border-bottom: 1px solid var(--rule); vertical-align: top; }
@@ -212,7 +221,12 @@
     .main-chart .chart { height: 200px; flex: none; }
     .top { grid-template-columns: 1fr; }
     .D .report { padding: 20px 16px 60px; overflow: visible; }
+    .strips-wrap { flex: none; }
     .strips { grid-template-columns: 1fr; }
+    .strip .chart { height: 120px; flex: none; }
+    .parts { height: auto; }
+    .parts .parts-row { grid-auto-flow: row; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .parts .chart { height: 100px; flex: none; }
   }
   @media (max-width: 860px) {
     .bar { padding: 0 14px; gap: 10px; }
@@ -309,7 +323,7 @@
       </div>
       <div class="video-box" id="videoBox">
         <video id="videoPlayer" playsinline muted></video>
-        <div class="video-missing" id="videoMissing" hidden>The video is not on this device. Play moves the 3D brain through the seconds.</div>
+        <div class="video-missing" id="videoMissing" hidden>This video isn't replayed here. Uploads are deleted within 3 days (12 months if you agreed to keep it for research). Play moves the 3D brain through the seconds.</div>
       </div>
       <div class="brain-box" id="brainHost">
         <div class="brain-message" id="brainMessage">The 3D view is not available for this video.</div>
@@ -318,15 +332,6 @@
       </div>
       <div class="timeline" id="timeline"></div>
       <div class="sample-meta" id="sampleMeta"></div>
-      <div class="retention" id="retentionPanel">
-        <div class="rt-title">Real audience retention</div>
-        <div class="rt-text">Add the video's real audience-retention curve to keep with its analysis. <a href="/static/retention_guide.html">How to get the report</a></div>
-        <div class="actions">
-          <button class="btn-ghost" id="retentionPick">Add real audience retention</button>
-          <span class="rt-text" id="retentionMsg"></span>
-        </div>
-        <input type="file" accept=".json,application/json" id="retentionInput" hidden>
-      </div>
     </div>
   </aside>
 
@@ -355,6 +360,15 @@
         <p class="note" style="font-size:12.5px;color:var(--ink-2);margin-bottom:8px">Same scale on all three. Click any chart to jump there.</p>
         <div class="strips" id="stripsHost"></div>
       </section>
+      <div class="retention" id="retentionPanel">
+        <div class="rt-title">Real audience retention</div>
+        <div class="rt-text">Add the video's real audience-retention curve to keep with its analysis. <a href="/static/retention_guide.html">How to get the report</a></div>
+        <div class="actions">
+          <button class="btn-ghost" id="retentionPick">Add real audience retention</button>
+          <span class="rt-text" id="retentionMsg"></span>
+        </div>
+        <input type="file" accept=".json,application/json" id="retentionInput" hidden>
+      </div>
     </div>
   </div>
 </div>
@@ -388,6 +402,13 @@ function cap(word) { return word ? word[0].toUpperCase() + word.slice(1) : word;
 function hasLocalVideo() { return !!video.getAttribute('src'); }
 function currentTime() { return hasLocalVideo() ? (Number.isFinite(video.currentTime) ? video.currentTime : 0) : virtualTime; }
 function totalSeconds() { return currentResult && currentResult.signals && Array.isArray(currentResult.signals.overall) ? currentResult.signals.overall.length : 0; }
+function chartSpan() {
+  let span = totalSeconds();
+  if (comparison && comparison.result && comparison.result.signals && Array.isArray(comparison.result.signals.overall)) {
+    span = Math.max(span, comparison.result.signals.overall.length);
+  }
+  return span;
+}
 
 let brainImpl = null;
 const brainPending = { rows: null, count: 0, second: 0, message: BRAIN_UNAVAILABLE, range: null };
@@ -679,6 +700,7 @@ function loadSample(idx) {
     description: s.description,
     attribution: s.attribution,
     title: s.title,
+    fileName: s.video_file || s.title,
   });
   $('clipTitle').textContent = s.title || 'Sample';
   $('clipCredit').textContent = s.attribution || '';
@@ -803,7 +825,7 @@ async function startUpload() {
     if (xhr.status === 204) {
       $('upBar').style.width = '100%';
       $('upConfirm').style.display = 'none';
-      $('headerMeta').textContent = `Uploaded: ${file.name}`;
+      $('headerMeta').textContent = IDLE_HEADER();
       trackJob(presign.job_id, file);
     } else { uploadFailed(`Upload failed (HTTP ${xhr.status}).`); }
   };
@@ -1049,7 +1071,7 @@ async function showResult(jobId, file, consented) {
   if (file) setVideoFile(file, result.duration_seconds);
   else { clearVideoSource(); setViewName('player'); $('clipTitle').textContent = title; $('clipCredit').textContent = `${result.duration_seconds}s`; }
   try {
-    renderResult(result, result.summary || {}, { jobId, brainUrl: `/api/jobs/${jobId}/brain`, title });
+    renderResult(result, result.summary || {}, { jobId, brainUrl: `/api/jobs/${jobId}/brain`, title, fileName: title });
   } catch (e) {
     showResultUnavailable('The result could not be drawn.');
     return true;
@@ -1127,11 +1149,21 @@ function escapeHtml(text) {
   return String(text).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
+function currentVideoName() {
+  const ctx = currentContext || {};
+  if (ctx.fileName) return ctx.fileName;
+  if (ctx.jobId) {
+    const job = (jobsCache || []).find(j => j.job_id === ctx.jobId);
+    if (job && job.filename) return job.filename;
+  }
+  return ctx.title || 'Untitled video';
+}
+
 function compareTable() {
   const other = comparison ? comparison.summary || {} : {};
   const row = (name, a, b) => `<tr><th scope="row">${name}</th><td class="v">${a}</td><td class="v">${b}</td></tr>`;
   const audio = s => { const pct = audioPercent(s); return pct === null ? '—' : `${pct}%`; };
-  return `<table class="compare-table"><thead><tr><th></th><th>This video</th><th>${comparison ? escapeHtml(comparison.label) : 'Other video'}</th></tr></thead><tbody>
+  return `<table class="compare-table"><thead><tr><th></th><th>${escapeHtml(currentVideoName())}</th><th>${comparison ? escapeHtml(comparison.label) : ''}</th></tr></thead><tbody>
     ${row('Opening', openingText(currentSummary), openingText(other))}
     ${row('Strongest moments', momentRanges(currentSummary.strong_moments), momentRanges(other.strong_moments))}
     ${row('Weakest moments', momentRanges(currentSummary.weak_moments), momentRanges(other.weak_moments))}
@@ -1242,9 +1274,9 @@ function clearAllCharts() {
   $('timeline').replaceChildren();
 }
 
-function drawChart(host, { lines, range, height = 200, shade = false, zeroLabel = false, axisLabels = false, dark = false, fill = false, scope }) {
+function drawChart(host, { lines, range, height = 200, shade = false, zeroLabel = false, axisLabels = false, dark = false, fill = false, span = null, scope }) {
   host.replaceChildren();
-  const T = totalSeconds();
+  const T = span || totalSeconds();
   if (!T) return;
   const W = 1000, H = height, padT = 8, padB = axisLabels ? 18 : 4;
   const x = i => (T === 1 ? 0 : (i / (T - 1)) * W);
@@ -1275,6 +1307,24 @@ function drawChart(host, { lines, range, height = 200, shade = false, zeroLabel 
       'stroke-linejoin': 'round', 'stroke-linecap': 'round',
       'vector-effect': 'non-scaling-stroke',
     }, svg);
+    if (line.endLabel && line.values.length > 0 && line.values.length < T) {
+      const i = line.values.length - 1;
+      const raw = line.values[i];
+      const cx = x(i), cy = y(Math.max(-range, Math.min(range, Number.isFinite(raw) ? raw : 0)));
+      const top = axisLabels ? `calc(${(cy / H) * 100}% - ${(cy / H) * 16}px)` : `${(cy / H) * 100}%`;
+      const dot = document.createElement('div');
+      dot.className = 'end-dot';
+      dot.style.left = `${(cx / W) * 100}%`;
+      dot.style.top = top;
+      dot.style.background = line.colour;
+      const label = document.createElement('div');
+      label.className = 'end-marker';
+      label.textContent = line.endLabel;
+      label.style.left = `${(cx / W) * 100}%`;
+      label.style.top = top;
+      label.style.transform = cx < W * 0.15 ? 'translate(6px, -125%)' : 'translate(calc(-100% - 6px), -125%)';
+      host.append(dot, label);
+    }
   });
 
   const ph = svgEl('line', { y1: padT, y2: H - padB, stroke: dark ? '#E7EAF0' : '#161B26', 'stroke-width': 1.5, 'vector-effect': 'non-scaling-stroke' }, svg);
@@ -1314,7 +1364,7 @@ function drawChart(host, { lines, range, height = 200, shade = false, zeroLabel 
 
 function addPins(box) {
   if (!currentSummary) return;
-  const T = totalSeconds();
+  const T = chartSpan();
   if (!T) return;
   const row = document.createElement('div');
   row.className = 'pins';
@@ -1345,21 +1395,28 @@ function buildMainChart() {
   if (!currentResult) return;
   clearScope('main');
   const box = $('mainChartBox');
-  const lines = [{ values: currentResult.signals.overall, colour: 'var(--heat)', width: 2.5 }];
+  const span = chartSpan();
+  const name = currentVideoName();
+  const lines = [{ values: currentResult.signals.overall, colour: 'var(--heat)', width: 2.5, name }];
   let secondLabel = '';
   if (comparison && comparison.result.signals) {
-    lines.push({ values: comparison.result.signals.overall, colour: 'var(--cool)', dash: true, width: 1.8 });
-    secondLabel = 'Other video';
+    lines.push({ values: comparison.result.signals.overall || [], colour: 'var(--cool)', dash: true, width: 1.8, name: comparison.label });
+    secondLabel = comparison.label;
   } else if (mutedOn && currentResult.muted && currentResult.muted.overall) {
     lines.push({ values: currentResult.muted.overall, colour: 'var(--cool)', dash: true, width: 1.8 });
     secondLabel = 'Without sound';
   }
+  lines.forEach(line => {
+    if (line.name && line.values.length > 0 && line.values.length < span) line.endLabel = `${line.name} ends`;
+  });
   let range = 0;
   lines.forEach(line => { range = Math.max(range, niceRange(line.values)); });
-  drawChart(box, { lines, range, height: 220, shade: true, zeroLabel: true, axisLabels: true, fill: true, scope: 'main' });
+  drawChart(box, { lines, range, height: 220, shade: true, zeroLabel: true, axisLabels: true, fill: true, span, scope: 'main' });
   addPins(box);
-  $('chartKeys').innerHTML = `<span class="legend-key"><i></i>This video</span>` +
-    (secondLabel ? `<span class="legend-key"><i class="dash"></i>${escapeHtml(secondLabel)}</span>` : '');
+  const currentKey = `<span class="legend-key"><i></i>${escapeHtml(name)}</span>`;
+  const secondKey = secondLabel ? `<span class="legend-key"><i class="dash"></i>${escapeHtml(secondLabel)}</span>` : '';
+  const shadeKey = comparison ? `<span class="legend-key"><i class="swatch"></i>shaded: moments of ${escapeHtml(name)}</span>` : '';
+  $('chartKeys').innerHTML = currentKey + secondKey + shadeKey;
 }
 
 function stripRange() {
@@ -1379,6 +1436,7 @@ function buildStrips() {
   host.replaceChildren();
   host.classList.remove('swapped');
   const range = stripRange();
+  const span = chartSpan();
   Object.entries(GROUPS).forEach(([group, def]) => {
     const strip = document.createElement('div');
     strip.className = 'strip';
@@ -1400,12 +1458,13 @@ function buildStrips() {
     if (comparison && comparison.result.signals) {
       lines.push({ values: comparison.result.signals[group] || [], colour: 'var(--cool)', dash: true, width: 1.5 });
     }
-    drawChart(chart, { lines, range, height: 78, scope: 'strips' });
+    drawChart(chart, { lines, range, height: 78, fill: true, span, scope: 'strips' });
   });
 }
 
 function swapParts(group, range) {
   const host = $('stripsHost');
+  const span = chartSpan();
   const keep = [...host.children];
   keep.forEach(child => child.hidden = true);
   clearScope('strips-parts');
@@ -1438,7 +1497,7 @@ function swapParts(group, range) {
     if (comparison && comparison.result.signals) {
       lines.push({ values: comparison.result.signals[signal] || [], colour: 'var(--cool)', dash: true, width: 1.4 });
     }
-    drawChart(chart, { lines, range: range * 1.3, height: 56, scope: 'strips-parts' });
+    drawChart(chart, { lines, range: range * 1.3, height: 56, fill: true, span, scope: 'strips-parts' });
   });
   wrap.append(head, row);
   host.append(wrap);
@@ -1837,7 +1896,7 @@ const VERTICES = 20484;
 const MESH_URL = '/static/brain/fsaverage6_pial.bin';
 const HEAD_URL = '/static/brain/head.bin';
 const UNAVAILABLE = 'The 3D view is not available for this video.';
-const HEAT = [[0, [0.55, 0.05, 0.05]], [0.35, [0.85, 0.12, 0.10]], [0.7, [0.98, 0.50, 0.10]], [1, [1, 0.92, 0.40]]];
+const HEAT = [[0, [0.36, 0.03, 0.03]], [0.35, [0.62, 0.06, 0.04]], [0.7, [0.88, 0.20, 0.05]], [1, [1, 0.416, 0.102]]];
 
 function heat(t, out) {
   for (let i = 1; i < HEAT.length; i++) {
@@ -1986,20 +2045,19 @@ function makeBrain() {
     baseColour = new Float32Array(mesh.V * 3);
     for (let i = 0; i < mesh.V; i++) {
       const shade = 0.5 - 0.5 * mesh.sulc[i];
-      const base = (0.24 + 0.24 * shade) * (mesh.noCortex[i] ? 0.7 : 1);
+      const base = (0.30 + 0.26 * shade) * (mesh.noCortex[i] ? 0.7 : 1);
       baseColour[3 * i] = base; baseColour[3 * i + 1] = base; baseColour[3 * i + 2] = base;
     }
     colourAttr = new THREE.BufferAttribute(new Float32Array(mesh.V * 3), 3);
     colourAttr.setUsage(THREE.DynamicDrawUsage);
     colourAttr.array.set(baseColour);
-    geometry.setAttribute('color', colourAttr);
+    geometry.setAttribute('vcol', colourAttr);
 
-    const material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.75, metalness: 0 });
+    const material = new THREE.ShaderMaterial({
+      vertexShader: 'attribute vec3 vcol; varying vec3 vColor; varying vec3 vNormal; void main(){ vColor = vcol; vNormal = normalize(normalMatrix * normal); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+      fragmentShader: 'varying vec3 vColor; varying vec3 vNormal; void main(){ float d = max(0.0, dot(normalize(vNormal), normalize(vec3(0.35, 0.45, 0.9)))); gl_FragColor = vec4(vColor * (0.65 + 0.35 * d), 1.0); }',
+    });
     scene.add(new THREE.Mesh(geometry, material));
-    scene.add(new THREE.HemisphereLight(0xffffff, 0x445066, 1.2));
-    const light = new THREE.DirectionalLight(0xffffff, 1.4);
-    light.position.set(1, 1, 2);
-    scene.add(light);
 
     const sphere = geometry.boundingSphere;
     camera = new THREE.PerspectiveCamera(28, 1, 0.1, 3000);
