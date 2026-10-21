@@ -9,6 +9,7 @@ counted from `signed_in_at`, 401 on every /api/* route, cookie flags, JSON-only 
 import re
 import time
 import uuid
+from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 import pytest
@@ -27,8 +28,9 @@ from neurolens.web.app import create_app
 
 SESSION_KEYS = {"user_id", "email", "signed_in_at"}
 HOUR = 3600
-PUBLIC_RULES = {"/", "/login", "/auth/callback", "/logout", "/healthz"}
+PUBLIC_RULES = {"/", "/app", "/login", "/auth/callback", "/logout", "/healthz"}
 PUBLIC_PREFIXES = ("/static/", "/data/")
+STATIC = Path(__file__).resolve().parent.parent / "static"
 
 
 def session_of(client):
@@ -72,7 +74,7 @@ class ExplodingDatabase:
 def test_callback_signs_in_and_stores_only_user_id_email_and_signed_in_at(cognito_client, idp):
     resp = sign_in(cognito_client, idp, email="ann@example.com")
     assert resp.status_code in (302, 303)
-    assert urlparse(resp.headers["Location"]).path == "/"
+    assert urlparse(resp.headers["Location"]).path == "/app"
     sess = session_of(cognito_client)
     assert set(sess) == SESSION_KEYS
     assert uuid.UUID(sess["user_id"])
@@ -99,7 +101,7 @@ def test_callback_makes_a_permanent_session(cognito_client, idp):
         assert sess.permanent
 
 
-def test_callback_redirects_to_slash_never_to_a_url_from_the_request(cognito_client, idp):
+def test_callback_redirects_to_app_never_to_a_url_from_the_request(cognito_client, idp):
     login = cognito_client.get("/login")
     query = parse_qs(urlparse(login.headers["Location"]).query)
     now = int(time.time())
@@ -123,7 +125,7 @@ def test_callback_redirects_to_slash_never_to_a_url_from_the_request(cognito_cli
         },
     )
     location = urlparse(resp.headers["Location"])
-    assert location.path == "/"
+    assert location.path == "/app"
     assert location.netloc in ("", urlparse(PUBLIC_BASE_URL).netloc)
 
 
@@ -327,6 +329,20 @@ def test_the_public_routes_stay_public(cognito_app, tmp_path):
     assert client.get("/auth/callback").status_code == 400  # refused, but not 401
     assert client.post("/logout", json={}).status_code == 200
     assert client.get("/healthz").status_code == 200
+
+
+def test_app_serves_app_html_when_signed_out(cognito_client):
+    resp = cognito_client.get("/app")
+    assert resp.status_code == 200
+    assert resp.data == (STATIC / "app.html").read_bytes()
+    resp.close()
+
+
+def test_slash_serves_the_landing_page(cognito_client):
+    resp = cognito_client.get("/")
+    assert resp.status_code == 200
+    assert resp.data == (STATIC / "index.html").read_bytes()
+    resp.close()
 
 
 def test_limits_answer_signed_out_and_signed_in(cognito_client, idp):

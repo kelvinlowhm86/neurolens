@@ -1,9 +1,9 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NeuroLens — Video Brain Response Analysis</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NeuroLens</title>
 <link rel="icon" href="data:,">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,600;12..96,700&family=Public+Sans:wght@400;500;600&display=swap" rel="stylesheet">
@@ -15,2139 +15,256 @@
     --display: 'Bricolage Grotesque', system-ui, sans-serif; --text: 'Public Sans', system-ui, sans-serif;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { background: var(--paper); color: var(--ink); font: 15px/1.5 var(--text); }
-  button, input, select { font: inherit; }
-  button { cursor: pointer; }
-  :focus-visible { outline: 2px solid var(--heat); outline-offset: 2px; }
   [hidden] { display: none !important; }
+  body { background: var(--paper); color: var(--ink); font: 15px/1.55 var(--text); }
+  a { color: inherit; }
+  :focus-visible { outline: 2px solid var(--heat); outline-offset: 2px; }
 
-  .bar { background: var(--stage); color: var(--stage-text); display: flex; align-items: center; gap: 18px; padding: 0 24px; height: 60px; border-bottom: 1px solid var(--stage-rule); }
-  .brand { font: 700 21px/1 var(--display); letter-spacing: -0.01em; }
-  .bar nav { display: flex; gap: 4px; margin-left: 8px; }
-  .bar nav button { background: none; border: 0; color: var(--stage-muted); padding: 8px 12px; border-radius: 8px; }
-  .bar nav button:hover { color: var(--stage-text); background: var(--stage-2); }
-  .bar .spacer { flex: 1; }
-  .header-meta { color: var(--stage-muted); font-size: 12px; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .credit { color: var(--stage-muted); font-size: 13px; white-space: nowrap; }
-  .account { color: var(--stage-muted); font-size: 12px; max-width: 170px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .btn-white { background: #fff; color: var(--ink); border: 0; border-radius: 10px; padding: 9px 16px; font-weight: 600; }
+  .bar { background: var(--stage); color: var(--stage-text); display: flex; align-items: center; gap: 12px; padding: 0 24px; height: 60px; border-bottom: 1px solid var(--stage-rule); }
+  .brand { font: 700 21px/1 var(--display); letter-spacing: -0.01em; margin-right: auto; color: inherit; text-decoration: none; }
+  .btn-white { background: #fff; color: var(--ink); border-radius: 10px; padding: 9px 16px; font-weight: 600; text-decoration: none; display: inline-block; white-space: nowrap; }
   .btn-white:hover { background: #E7EAF0; }
-  .btn-white:disabled { opacity: .5; cursor: default; }
-  .btn-ghost { background: none; border: 1px solid var(--rule); color: var(--ink); border-radius: 10px; padding: 7px 12px; text-decoration: none; display: inline-block; }
-  .stage .btn-ghost, .side .btn-ghost { border-color: var(--stage-rule); color: var(--stage-text); }
-  .btn-ghost:hover { border-color: var(--heat); }
-  .btn-danger { background: none; border: 1px solid var(--stage-rule); color: #FCA5A5; border-radius: 10px; padding: 6px 12px; }
-  .btn-danger:hover { border-color: #FCA5A5; }
-  .btn-danger:disabled { opacity: .5; cursor: default; }
-  .header-link { font-size: 12px; color: #CBD5E1; background: none; border: 1px solid #334155; border-radius: 8px; padding: 5px 10px; }
-  .header-link:hover { color: #FFF; border-color: #94A3B8; }
+  .btn-line { border: 1px solid var(--stage-rule); color: var(--stage-text); border-radius: 10px; padding: 8px 15px; text-decoration: none; display: inline-block; white-space: nowrap; }
+  .btn-line:hover { border-color: var(--heat); }
+  h1 { font: 700 clamp(34px, 4.6vw, 60px)/1.02 var(--display); letter-spacing: -0.025em; }
+  h2 { font: 600 26px/1.15 var(--display); letter-spacing: -0.01em; }
+  h3 { font: 600 17px/1.25 var(--display); }
+  .lede { font-size: 17px; color: var(--stage-muted); max-width: 34em; }
+  .credit { font-size: 12px; color: var(--stage-muted); }
+  .actions { display: flex; gap: 10px; flex-wrap: wrap; }
 
-  .D { display: grid; grid-template-columns: minmax(360px, 40%) 1fr; height: calc(100vh - 60px); overflow: hidden; }
-  body:has(.D) { overflow: hidden; }
-  .D .side { background: var(--stage); color: var(--stage-text); padding: 16px 18px; display: flex; flex-direction: column; gap: 12px; min-height: 0; }
-  .D .report { padding: 18px 26px 16px; display: flex; flex-direction: column; gap: 12px; min-height: 0; overflow: hidden; }
+  .hero { background: var(--stage); color: var(--stage-text); display: grid; grid-template-columns: minmax(320px, 0.9fr) 1.1fr; gap: 48px; padding: 56px 48px; min-height: calc(100vh - 60px); align-items: center; }
+  .hero-copy { display: flex; flex-direction: column; gap: 22px; }
+  .hero-player { display: grid; grid-template-rows: minmax(0, 1fr) minmax(0, 1.25fr); gap: 12px; height: min(80vh, 760px); }
+  .hero-player.one { grid-template-rows: 1fr; }
 
-  .chooser { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; scrollbar-width: thin; }
-  .box { background: var(--stage-2); border: 1px solid var(--stage-rule); border-radius: 12px; padding: 14px 16px; display: none; flex-direction: column; gap: 8px; }
-  .box.active { display: flex; }
-  .box h2 { font: 600 16px/1.25 var(--display); }
-  .box p { font-size: 12.5px; color: var(--stage-muted); line-height: 1.5; }
-  .box p.error { color: #FCA5A5; }
-  .box .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 2px; align-items: center; }
-  .box a { color: var(--stage-text); }
-  .upload-zone { border: 2px dashed var(--stage-rule); border-radius: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; cursor: pointer; position: relative; padding: 26px 16px; text-align: center; background: var(--stage-2); }
-  .upload-zone:hover { border-color: var(--heat); }
-  .upload-zone.hidden { display: none; }
-  .upload-zone .up-title { font-weight: 600; font-size: 14px; }
-  .upload-zone .up-sub { font-size: 12px; color: var(--stage-muted); }
-  .upload-zone input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
-  .upload-note { font-size: 12px; color: #FCA5A5; }
-  .upload-note:empty { display: none; }
-  .upload-panel .file-name { font-weight: 600; font-size: 13px; word-break: break-all; }
-  .upload-panel .line { font-size: 12px; color: var(--stage-muted); }
-  .upload-panel .msg { font-size: 12px; color: var(--stage-muted); }
-  .upload-panel .msg.error { color: #FCA5A5; }
-  .consent-row { display: flex; align-items: flex-start; gap: 8px; font-size: 12px; line-height: 1.45; color: var(--stage-muted); }
-  .consent-row input { margin-top: 3px; flex-shrink: 0; }
-  .consent-row a { color: var(--stage-text); }
-  .upload-progress { display: none; height: 5px; background: #0A0F1A; border-radius: 3px; overflow: hidden; }
-  .upload-progress.active { display: block; }
-  .upload-bar { height: 100%; width: 0; background: var(--heat); transition: width .15s; }
-  .samples-section .label { font-size: 11px; font-weight: 600; color: var(--stage-muted); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 8px; }
-  .samples-grid { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 6px; }
-  .sample-card { flex: 0 0 132px; border-radius: 9px; overflow: hidden; cursor: pointer; border: 2px solid var(--stage-rule); background: #0A0F1A; text-align: left; color: var(--stage-text); padding: 0; }
-  .sample-card:hover { border-color: var(--heat); }
-  .sample-card.active { border-color: var(--heat); }
-  .sample-thumb { width: 100%; height: 74px; background: #070A12; display: flex; align-items: center; justify-content: center; color: var(--stage-muted); }
-  .sample-thumb img { width: 100%; height: 100%; object-fit: cover; }
-  .sample-info { padding: 7px 9px; }
-  .sample-title { font-size: 11px; font-weight: 600; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-  .sample-dur { font-size: 10px; color: var(--stage-muted); margin-top: 2px; }
-  .history-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0; border-top: 1px solid var(--stage-rule); font-size: 12px; }
-  .history-row:first-child { border-top: 0; }
-  .history-main { min-width: 0; }
-  .history-name { font-weight: 600; word-break: break-all; }
-  .history-sub { color: var(--stage-muted); font-size: 11px; margin-top: 2px; }
-  .history-actions { display: flex; gap: 6px; flex-shrink: 0; }
-  .field-row { display: flex; gap: 8px; }
-  .field-row input { flex: 1; min-width: 0; border: 1px solid var(--stage-rule); border-radius: 8px; padding: 7px 9px; font-size: 12px; background: #0A0F1A; color: var(--stage-text); }
-  .privacy-note { font-size: 11px; color: var(--stage-muted); margin-top: auto; padding: 4px 2px; }
-  .privacy-note a { color: var(--stage-muted); }
-  .spinner { width: 28px; height: 28px; border: 3px solid var(--stage-rule); border-top-color: var(--heat); border-radius: 50%; animation: spin .9s linear infinite; }
-  @keyframes spin { to { transform: rotate(360deg); } }
-
-  .player { flex: 1; min-height: 0; display: none; flex-direction: column; gap: 10px; }
-  .player.active { display: flex; }
-  .side-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; min-height: 20px; }
-  .clip-title { font: 600 18px/1.2 var(--display); }
-  .clip-credit { font-size: 12px; color: var(--stage-muted); }
-  .side-head .btn-ghost { padding: 3px 9px; font-size: 12px; margin-left: auto; }
-  .video-box { position: relative; background: #000; border-radius: 14px; overflow: hidden; aspect-ratio: 16 / 9; flex: none; }
-  .video-box video { width: 100%; height: 100%; display: block; object-fit: contain; }
-  .video-missing { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 22px; text-align: center; font-size: 13px; color: var(--stage-muted); background: radial-gradient(ellipse at 50% 45%, #1A2336 0%, #0A0F1A 75%); }
-  .brain-box { position: relative; background: radial-gradient(ellipse at 50% 45%, #1A2336 0%, #0A0F1A 70%); border-radius: 14px; overflow: hidden; flex: 1; min-height: 150px; }
+  .video-box { position: relative; background: #000; border-radius: 14px; overflow: hidden; aspect-ratio: 16 / 9; }
+  .video-box video { width: 100%; height: 100%; display: block; object-fit: cover; cursor: pointer; }
+  .brain-box { position: relative; background: radial-gradient(ellipse at 50% 45%, #1A2336 0%, #0A0F1A 70%); border-radius: 14px; overflow: hidden; min-height: 200px; }
   .brain-box canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
   .brain-message { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 20px; text-align: center; font-size: 13px; color: var(--stage-muted); }
-  .brain-legend { position: absolute; left: 14px; bottom: 12px; display: flex; gap: 8px; align-items: center; font-size: 11px; color: var(--stage-muted); pointer-events: none; }
+  .brain-legend { position: absolute; left: 14px; bottom: 12px; display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--stage-muted); pointer-events: none; }
   .brain-legend i { width: 86px; height: 6px; border-radius: 3px; background: linear-gradient(90deg, #D9DCE1, #800000 10%, #E61A0A 40%, #FF800A 66%, #FFD926 88%, #FFFFD9); }
   .brain-time { position: absolute; right: 14px; top: 12px; font: 600 13px var(--display); color: var(--stage-muted); font-variant-numeric: tabular-nums; }
-  .sample-meta { font-size: 11.5px; color: var(--stage-muted); line-height: 1.45; }
-  .sample-meta:empty { display: none; }
-  .retention { display: none; flex: none; flex-direction: column; gap: 6px; border-top: 1px solid var(--rule); padding-top: 10px; }
-  .retention.active { display: flex; }
-  .retention .rt-title { font-size: 12.5px; font-weight: 600; color: var(--ink); }
-  .retention .rt-text { font-size: 12px; color: var(--ink-2); }
-  .retention .rt-text.error { color: #B4231A; }
-  .retention .actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .brain-hint { position: absolute; right: 14px; bottom: 12px; font-size: 11px; color: var(--stage-muted); pointer-events: none; }
+  .coming-soon { background: var(--stage-2); border: 1px solid var(--stage-rule); border-radius: 14px; display: flex; align-items: center; justify-content: center; min-height: 300px; padding: 28px; text-align: center; color: var(--stage-muted); font-size: 15px; }
 
-  .timeline { display: grid; grid-template-columns: auto auto 1fr auto auto; gap: 10px; align-items: center; flex: none; }
-  .tl-btn { width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--stage-rule); background: var(--stage-2); color: var(--stage-text); display: grid; place-items: center; padding: 0; }
-  .tl-btn.play { width: 42px; height: 42px; background: var(--heat); color: #1A0D04; border: 0; }
-  .tl-btn svg { width: 15px; height: 15px; }
-  .tl-right { display: flex; gap: 8px; align-items: center; }
-  .tl-time { font: 600 13px var(--display); font-variant-numeric: tabular-nums; color: var(--stage-muted); min-width: 84px; text-align: right; }
-  .tl-track { position: relative; height: 50px; cursor: pointer; touch-action: none; }
-  .tl-track svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+  .how { max-width: 1120px; margin: 0 auto; padding: 72px 48px; display: grid; grid-template-columns: 260px 1fr; gap: 48px; }
+  .steps { list-style: none; display: grid; gap: 28px; grid-template-columns: repeat(3, 1fr); }
+  .steps li { counter-increment: step; }
+  .steps { counter-reset: step; }
+  .steps li::before { content: counter(step); display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 50%; background: var(--stage); color: #fff; font: 600 14px/1 var(--display); margin-bottom: 12px; }
+  .steps p { color: var(--ink-2); font-size: 14.5px; margin-top: 4px; }
+  .closing { max-width: 1120px; margin: 0 auto 64px; padding: 32px 48px; background: var(--stage); color: var(--stage-text); border-radius: 18px; display: flex; align-items: center; gap: 24px; flex-wrap: wrap; }
+  .closing h2 { margin-right: auto; }
+  footer { border-top: 1px solid var(--rule); padding: 22px 24px; font-size: 12px; color: var(--ink-3); display: flex; gap: 18px; flex-wrap: wrap; }
+  footer a { text-decoration: none; }
+  footer a:hover { color: var(--ink); }
 
-  .charts-empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: var(--ink-3); font-size: 14px; text-align: center; }
-  .charts-empty svg { width: 46px; height: 46px; opacity: .35; }
-  .report-body { flex: 1; min-height: 0; display: none; flex-direction: column; gap: 12px; }
-  .report-body.active { display: flex; }
-  .result-message { background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 18px 20px; font-size: 13px; line-height: 1.55; color: var(--ink-2); }
-  .result-message:empty { display: none; }
-
-  .top { display: grid; grid-template-columns: 1fr 1fr 220px; gap: 24px; align-items: start; flex: none; }
-  .top.compare { grid-template-columns: 1fr; }
-  .mgroup { border-top: 2px solid var(--cool); padding-top: 8px; display: flex; flex-direction: column; }
-  .mgroup.hot { border-top-color: var(--heat); }
-  .mgroup h3 { font: 600 16px var(--display); }
-  .mgroup > p { font-size: 12.5px; color: var(--ink-2); margin-bottom: 4px; }
-  .mgroup .empty { font-size: 13px; color: var(--ink-2); padding: 6px 0; }
-  .mrow { display: grid; grid-template-columns: 96px 1fr; gap: 12px; align-items: center; padding: 6px 0; background: none; border: 0; text-align: left; color: inherit; }
-  .mrow.no-thumb { grid-template-columns: 1fr; }
-  .mrow .thumb { width: 100%; aspect-ratio: 16 / 9; border-radius: 6px; background: #DDE1E7 center / cover; }
-  .mrow .when { font: 600 15px var(--display); font-variant-numeric: tabular-nums; }
-  .mrow.hot .when { color: #C2410C; }
-  .mrow:hover .when { text-decoration: underline; }
-  .sidefacts { display: flex; flex-direction: column; border-top: 2px solid var(--rule); }
-  .sidefacts h3 { font: 500 12.5px var(--text); color: var(--ink-2); }
-  .opening { padding: 8px 0 10px; border-bottom: 1px solid var(--rule); }
-  .opening strong { display: block; font: 600 18px/1.2 var(--display); }
-  .opening small { display: block; font-size: 12.5px; color: var(--ink-2); }
-  .audio { padding-top: 8px; }
-  .audio strong { display: block; font: 600 21px/1.15 var(--display); }
-  .audio small { display: block; font-size: 12.5px; color: var(--ink-2); margin-top: 2px; }
-  .split { height: 6px; border-radius: 3px; background: #E2E5EA; margin: 5px 0 4px; overflow: hidden; }
-  .split b { display: block; height: 100%; background: var(--heat); }
-
-  .chart-head { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
-  .chart-head h2 { font: 600 19px var(--display); }
-  .chart-head .grow { flex: 1; }
-  .keys { display: inline-flex; gap: 16px; }
-  .legend-key { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--ink-2); }
-  .legend-key i { width: 18px; height: 0; border-top: 2px solid var(--heat); }
-  .legend-key i.dash { border-top: 2px dashed var(--cool); }
-  .legend-key i.typical { border-top: 1.5px dashed var(--ink-3); }
-  .legend-key i.swatch { width: 12px; height: 12px; border-top: 0; border-radius: 2px; background: rgba(242,113,28,.18); }
-  .toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--ink-2); white-space: nowrap; }
-  .toggle input { accent-color: var(--heat); }
-  .compare-pick { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--ink-2); }
-  .compare-pick select { border: 1px solid var(--rule); border-radius: 8px; padding: 4px 8px; background: var(--surface); color: var(--ink); font-size: 12px; max-width: 190px; }
-  .compare-msg { font-size: 12px; color: var(--ink-2); min-height: 0; }
-  .compare-msg:empty { display: none; }
-  .compare-msg.error { color: #B4231A; }
-  .main-chart { flex: 1.86 1 0; min-height: 120px; display: flex; flex-direction: column; }
-  .main-chart .note { font-size: 12.5px; color: var(--ink-2); }
-  .main-chart .chart { flex: 1; min-height: 0; margin-top: 22px; position: relative; }
-  .chart { position: relative; width: 100%; }
-  .chart svg { display: block; width: 100%; overflow: visible; cursor: pointer; }
-  .xaxis { display: flex; justify-content: space-between; font-size: 11px; color: var(--ink-3); height: 16px; }
-  .pins { position: absolute; left: 0; right: 0; top: -22px; height: 20px; }
-  .pin { position: absolute; transform: translateX(-50%); bottom: 0; background: none; border: 0; padding: 0 2px; height: 20px; display: flex; align-items: flex-end; }
-  .pin::after { content: ''; position: absolute; left: 50%; bottom: -4px; width: 1.5px; height: 8px; background: var(--cool); }
-  .pin span { font: 600 11px var(--display); color: var(--ink-2); margin-bottom: 3px; font-variant-numeric: tabular-nums; }
-  .pin.hot span { color: #C2410C; }
-  .pin.hot::after { background: var(--heat); }
-  .pin:hover span { color: var(--ink); }
-
-  .strips-wrap { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; }
-  .strips { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; }
-  .strips.swapped { grid-template-columns: 1fr; }
-  .strip { min-width: 0; display: flex; flex-direction: column; }
-  .strip h3, .parts h3 { display: flex; justify-content: space-between; align-items: baseline; font: 600 15px var(--display); gap: 8px; margin-bottom: 4px; }
-  .strip h3 button, .parts h3 button { background: none; border: 0; font: 500 12.5px var(--text); color: var(--ink-2); padding: 0; }
-  .strip h3 button:hover, .parts h3 button:hover { color: var(--ink); }
-  .strip .chart { flex: 1; min-height: 0; }
-  .parts { display: flex; flex-direction: column; min-height: 0; height: 100%; }
-  .parts h3 { justify-content: flex-start; gap: 12px; white-space: nowrap; }
-  .parts .parts-row { flex: 1; min-height: 0; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 18px; }
-  .parts .parts-row > div { display: flex; flex-direction: column; min-width: 0; }
-  .parts h4, .sub h4 { font: 500 12px var(--text); color: var(--ink-2); margin-bottom: 2px; }
-  .parts .chart { flex: 1; min-height: 0; }
-
-  .end-marker { position: absolute; font-size: 11px; line-height: 1.3; color: var(--ink-2); background: rgba(255,255,255,.82); padding: 0 3px; border-radius: 3px; white-space: nowrap; pointer-events: none; }
-  .end-drop { position: absolute; border-left: 1px dotted var(--cool); pointer-events: none; }
-  .end-dot { position: absolute; width: 6px; height: 6px; border-radius: 50%; transform: translate(-50%, -50%); pointer-events: none; }
-
-  .compare-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  .compare-table th, .compare-table td { text-align: left; padding: 8px 12px 8px 0; border-bottom: 1px solid var(--rule); vertical-align: top; }
-  .compare-table th { font: 500 12.5px var(--text); color: var(--ink-2); }
-  .compare-table td.v { font: 600 15px var(--display); }
-
-  @media (max-width: 860px), (max-height: 620px) {
-    .D { display: block; height: auto; overflow: visible; }
-    body:has(.D) { overflow: auto; }
-    .chooser { overflow: visible; }
-    .player .brain-box { aspect-ratio: 16 / 10; flex: none; }
-    .main-chart { flex: none; }
-    .main-chart .chart { height: 200px; flex: none; }
-    .top { grid-template-columns: 1fr; }
-    .D .report { padding: 20px 16px 60px; overflow: visible; }
-    .strips-wrap { flex: none; }
-    .strips { grid-template-columns: 1fr; }
-    .strip .chart { height: 120px; flex: none; }
-    .parts { height: auto; }
-    .parts .parts-row { grid-auto-flow: row; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .parts .chart { height: 100px; flex: none; }
-  }
   @media (max-width: 860px) {
-    .bar { padding: 0 14px; gap: 10px; }
-    .bar nav, .header-meta { display: none; }
+    .bar { padding: 0 16px; }
+    .hero { grid-template-columns: 1fr; padding: 32px 16px; gap: 28px; min-height: 0; }
+    .hero-player { height: auto; grid-template-rows: auto 300px; }
+    .hero-player.one { grid-template-rows: 1fr; }
+    .video-box { aspect-ratio: 16 / 9; }
+    .how { grid-template-columns: 1fr; padding: 48px 16px; gap: 24px; }
+    .steps { grid-template-columns: 1fr; }
+    .closing { margin: 0 16px 48px; padding: 24px 20px; }
   }
-  @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto; } }
 </style>
 </head>
 <body>
 <header class="bar">
-  <div class="brand">NeuroLens</div>
-  <nav aria-label="Main">
-    <button id="navSamples">Samples</button>
-    <button id="navHistory">Your analyses</button>
-  </nav>
-  <div class="spacer"></div>
-  <span class="header-meta" id="headerMeta">Select a video to see its brain response</span>
-  <span class="credit" id="balance"></span>
-  <span class="account" id="account"></span>
-  <button class="header-link" id="signOut" hidden>Sign out</button>
-  <button class="btn-white" id="topUpload">Upload a video</button>
+  <a class="brand" href="/">NeuroLens</a>
+  <a class="btn-line" href="/app">Explore samples</a>
+  <a class="btn-white" id="topSignIn" href="/login">Sign in</a>
 </header>
 
-<div class="D">
-  <aside class="side">
-    <div class="chooser" id="chooser">
-      <div class="box active" id="startupPanel">
-        <h2 id="startupTitle">Starting up…</h2>
-        <p id="startupText"></p>
-        <div class="actions"><button class="btn-ghost" id="startupRetry" hidden>Try again</button></div>
+<main>
+  <section class="hero">
+    <div class="hero-copy">
+      <h1>Watch a brain watch your video.</h1>
+      <p class="lede">NeuroLens predicts how an average viewer's brain responds to a video, second by second: which areas light up for faces, places, speech and sound.</p>
+      <div class="actions">
+        <a class="btn-white" href="/app">Explore samples</a>
+        <a class="btn-line" id="heroSignIn" href="/login">Sign in to upload</a>
       </div>
-
-      <div class="box" id="signInPanel">
-        <p id="signedOutNote"></p>
-        <h2>Sign in to analyse your own videos</h2>
-        <p>Use Google, or an email address and password. Samples can be browsed without signing in.</p>
-        <div class="actions"><a class="btn-white" href="/login" style="display:inline-block;text-decoration:none;text-align:center">Sign in</a></div>
-      </div>
-
-      <div class="upload-zone hidden" id="uploadZone">
-        <div class="up-title">Upload a video for analysis</div>
-        <div class="up-sub" id="limitsText">MP4, MOV, or WebM</div>
-        <input type="file" accept="video/mp4,video/quicktime,video/webm" id="fileInput">
-      </div>
-      <div class="upload-note" id="uploadNote"></div>
-      <div class="box" id="noCreditPanel"><p>You have no credit yet. Ask the NeuroLens team for test credit.</p></div>
-
-      <div class="box upload-panel" id="uploadPanel">
-        <div class="file-name" id="upFileName"></div>
-        <div class="line" id="upDetail"></div>
-        <div class="line" id="upCost"></div>
-        <div class="consent-row" id="consentRow">
-          <input type="checkbox" id="consentBox">
-          <label for="consentBox">Keep this video and its analysis for up to 12 months to help build a future model linking brain response to real audience behaviour. I own the rights to this video. Optional: the analysis works either way. <a href="/static/privacy.html">Privacy policy</a></label>
-        </div>
-        <div class="upload-progress" id="upProgress"><div class="upload-bar" id="upBar"></div></div>
-        <div class="msg" id="upMsg"></div>
-        <div class="actions">
-          <button class="btn-white" id="upConfirm">Upload</button>
-          <button class="btn-ghost" id="upCancel">Cancel</button>
-        </div>
-      </div>
-
-      <div class="samples-section" id="samplesSection">
-        <div class="label">Sample videos</div>
-        <div class="samples-grid" id="samplesGrid"></div>
-        <p class="up-sub" id="samplesEmpty" hidden>Sample videos coming soon.</p>
-      </div>
-
-      <div class="box" id="historyPanel">
-        <h2>Your analyses</h2>
-        <div id="historyList"></div>
-        <p id="historyNote"></p>
-      </div>
-
-      <div class="box" id="deleteAccountPanel">
-        <h2>Delete my account</h2>
-        <p>This deletes every video, analysis and login for this account. Type DELETE to confirm.</p>
-        <div class="field-row">
-          <input id="deleteAccountConfirm" placeholder="DELETE" autocomplete="off" aria-label="Type DELETE to confirm">
-          <button class="btn-danger" id="deleteAccountBtn">Delete</button>
-        </div>
-        <p id="deleteAccountMsg"></p>
-      </div>
-
-      <div class="privacy-note"><a href="/static/privacy.html">Privacy policy</a></div>
+      <p class="credit" id="heroCredit" hidden></p>
     </div>
-
-    <div class="player" id="player" hidden>
-      <div class="side-head">
-        <span class="clip-title" id="clipTitle"></span>
-        <span class="clip-credit" id="clipCredit"></span>
-        <button class="btn-ghost" id="btnNew">Back</button>
+    <div class="hero-player" id="heroPlayer">
+      <div class="video-box" id="videoBox" hidden>
+        <video id="heroVideo" muted loop playsinline aria-label="Sample video. Click to pause or resume."></video>
       </div>
-      <div class="video-box" id="videoBox">
-        <video id="videoPlayer" playsinline muted></video>
-        <div class="video-missing" id="videoMissing" hidden>This video isn't replayed here. Uploads are deleted within 3 days (12 months if you agreed to keep it for research). Play moves the 3D brain through the seconds.</div>
-      </div>
-      <div class="brain-box" id="brainHost">
-        <div class="brain-message" id="brainMessage">The 3D view is not available for this video.</div>
+      <div class="brain-box" id="brainBox" hidden>
+        <div class="brain-message" id="brainMessage" hidden></div>
         <div class="brain-legend"><span>typical</span><i></i><span>higher</span></div>
         <span class="brain-time" id="brainSecond"></span>
+        <span class="brain-hint">drag to turn</span>
       </div>
-      <div class="timeline" id="timeline"></div>
-      <div class="sample-meta" id="sampleMeta"></div>
+      <div class="coming-soon" id="comingSoon" hidden>A sample video is coming soon.</div>
     </div>
-  </aside>
+  </section>
 
-  <div class="report">
-    <div class="charts-empty" id="chartsEmpty">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 3v18h18"/><path d="M7 16l4-8 4 4 5-9"/></svg>
-      <div>Select a sample or upload a video to see its brain response.</div>
-    </div>
-    <div class="report-body" id="reportBody">
-      <div class="result-message" id="resultMessage" hidden></div>
-      <div class="top" id="topArea"></div>
-      <section class="main-chart" id="chartCard">
-        <div class="chart-head">
-          <h2>Brain response over time</h2>
-          <span class="keys" id="chartKeys"></span>
-          <span class="grow"></span>
-          <label class="compare-pick" id="compareRow" hidden><span>Compare with…</span><select id="compareSelect"></select></label>
-          <label class="toggle" id="mutedLabel"><input type="checkbox" id="mutedToggle"> Show without sound</label>
-        </div>
-        <p class="note">Predicted response of an average viewer. The dashed line is typical. Click anywhere to jump there.</p>
-        <p class="compare-msg" id="compareMsg"></p>
-        <div class="chart" id="mainChartBox"></div>
-      </section>
-      <section class="strips-wrap" id="stripsCard">
-        <div class="chart-head"><h2>What the brain is doing</h2></div>
-        <p class="note" style="font-size:12.5px;color:var(--ink-2);margin-bottom:8px">Same scale on all three. Click any chart to jump there.</p>
-        <div class="strips" id="stripsHost"></div>
-      </section>
-      <div class="retention" id="retentionPanel">
-        <div class="rt-title">Real audience retention</div>
-        <div class="rt-text">Add the video's real audience-retention curve to keep with its analysis. <a href="/static/retention_guide.html">How to get the report</a></div>
-        <div class="actions">
-          <button class="btn-ghost" id="retentionPick">Add real audience retention</button>
-          <span class="rt-text" id="retentionMsg"></span>
-        </div>
-        <input type="file" accept=".json,application/json" id="retentionInput" hidden>
-      </div>
-    </div>
-  </div>
-</div>
+  <section class="how">
+    <h2>How it works</h2>
+    <ol class="steps">
+      <li>
+        <h3>Upload a clip</h3>
+        <p id="uploadLimit">Any video up to the upload limit. Sample videos are free to explore without an account.</p>
+      </li>
+      <li>
+        <h3>A brain model predicts the response</h3>
+        <p>TRIBE v2, a research model from Meta trained on brain scans of people watching films, estimates activity at 20,484 points across the brain for every second.</p>
+      </li>
+      <li>
+        <h3>Read the report</h3>
+        <p>Curves for seven brain areas, the strongest and weakest moments, and a 3D brain that replays with your video.</p>
+      </li>
+    </ol>
+  </section>
 
-<script>
+  <section class="closing">
+    <h2>See it on your own video.</h2>
+    <a class="btn-white" href="/login">Sign in to upload</a>
+    <a class="btn-line" href="/app">Explore samples</a>
+  </section>
+</main>
+
+<footer>
+  <a href="/static/privacy.html">Privacy policy</a>
+  <span>Brain model: TRIBE v2 by Meta, CC BY-NC 4.0</span>
+  <span id="footerCredit" hidden></span>
+</footer>
+
+<script type="module">
+import { createBrainView, decodeBrain, UNAVAILABLE } from '/static/brain_view.js';
+
 const $ = id => document.getElementById(id);
-const video = $('videoPlayer');
-const BRAIN_VERTICES = 20484;
-const BRAIN_UNAVAILABLE = 'The 3D view is not available for this video.';
-const GROUPS = {
-  see: { label: 'Seeing', signals: ['faces', 'bodies', 'scenes', 'visual'] },
-  hear: { label: 'Hearing', signals: ['sound'] },
-  understand: { label: 'Understanding', signals: ['speech', 'social'] },
-};
-const SIGNAL_LABELS = { faces: 'Faces', bodies: 'Bodies', scenes: 'Scenes', visual: 'Visual', sound: 'Sound', speech: 'Speech', social: 'Social' };
-const NS = 'http://www.w3.org/2000/svg';
+const player = $('heroPlayer');
+const videoBox = $('videoBox');
+const brainBox = $('brainBox');
+const brainSecond = $('brainSecond');
+const comingSoon = $('comingSoon');
+const heroCredit = $('heroCredit');
+const footerCredit = $('footerCredit');
+const heroVideo = $('heroVideo');
+const brainView = createBrainView(brainBox, $('brainMessage'));
+let brainShown = false;
 
-let samplesData = null, jobsCache = [];
-let currentResult = null, currentSummary = null, currentContext = null;
-let comparison = null, mutedOn = false, resultSeq = 0, compareRequest = 0;
-let signedIn = false, me = null, limits = null;
-let videoObjectUrl = null, virtualTime = 0, virtualPlaying = false, virtualAnchor = 0, virtualRaf = 0, videoRaf = 0;
-let playheads = [];
-
-function fmt(s) {
-  const n = Math.max(0, Math.floor(Number.isFinite(s) ? s : 0));
-  return `${Math.floor(n / 60)}:${String(n % 60).padStart(2, '0')}`;
-}
-function fmtRange(m) { return `${fmt(m.start)}–${fmt(m.end)}`; }
-function cap(word) { return word ? word[0].toUpperCase() + word.slice(1) : word; }
-function hasLocalVideo() { return !!video.getAttribute('src'); }
-function currentTime() { return hasLocalVideo() ? (Number.isFinite(video.currentTime) ? video.currentTime : 0) : virtualTime; }
-function totalSeconds() { return currentResult && currentResult.signals && Array.isArray(currentResult.signals.overall) ? currentResult.signals.overall.length : 0; }
-function chartSpan() {
-  let span = totalSeconds();
-  if (comparison && comparison.result && comparison.result.signals && Array.isArray(comparison.result.signals.overall)) {
-    span = Math.max(span, comparison.result.signals.overall.length);
+let limitsPromise = null;
+function getLimits() {
+  if (!limitsPromise) {
+    limitsPromise = fetch('/api/limits')
+      .then(res => res.ok ? res.json() : null)
+      .catch(() => null);
   }
-  return span;
+  return limitsPromise;
 }
 
-let brainImpl = null;
-const brainPending = { rows: null, count: 0, second: 0, message: BRAIN_UNAVAILABLE, range: null };
-window.brainMap = {
-  show(rows, count) {
-    brainPending.rows = rows; brainPending.count = count; brainPending.message = null;
-    $('brainMessage').hidden = true;
-    if (brainImpl) brainImpl.show(rows, count);
-  },
-  setSecond(t) {
-    brainPending.second = t;
-    if (brainImpl) brainImpl.setSecond(t);
-  },
-  clear(message) {
-    brainPending.rows = null; brainPending.message = message || BRAIN_UNAVAILABLE;
-    $('brainMessage').textContent = brainPending.message;
-    $('brainMessage').hidden = false;
-    if (brainImpl) brainImpl.clear(brainPending.message);
-  },
-  setColourRange(range) {
-    brainPending.range = range;
-    if (brainImpl) brainImpl.setColourRange(range);
-  },
-  _install(impl) {
-    brainImpl = impl;
-    if (brainPending.range != null) impl.setColourRange(brainPending.range);
-    if (brainPending.rows) { impl.show(brainPending.rows, brainPending.count); impl.setSecond(brainPending.second); $('brainMessage').hidden = true; }
-    else impl.clear(brainPending.message || BRAIN_UNAVAILABLE);
-  },
-};
-
-const params = new URLSearchParams(window.location.search);
-const dollars = cents => `$${(cents / 100).toFixed(2)}`;
-const IDLE_HEADER = () => (signedIn ? 'Upload a video or select a sample' : 'Select a video to see its brain response');
-
-async function postJSON(url, body) {
-  const text = JSON.stringify(body);
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
-  const hash = Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join('');
-  return fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-amz-content-sha256': hash },
-    body: text,
-  });
+async function loadLimit() {
+  const limits = await getLimits();
+  const seconds = limits && Number(limits.max_video_duration_seconds);
+  if (!Number.isFinite(seconds) || seconds <= 0) return;
+  const minutes = Math.max(1, Math.round(seconds / 60));
+  $('uploadLimit').textContent = `Any video up to ${minutes} ${minutes === 1 ? 'minute' : 'minutes'}. Sample videos are free to explore without an account.`;
 }
 
-function setViewName(name) {
-  const player = name === 'player';
-  $('chooser').hidden = player;
-  $('player').hidden = !player;
-  $('player').classList.toggle('active', player);
-}
-
-function showBalance() {
-  const b = me.balance;
-  const held = b.reserved_cents ? ` (${dollars(b.reserved_cents)} held)` : '';
-  $('balance').textContent = `Credit: ${dollars(b.available_cents)}${held}`;
-  $('noCreditPanel').classList.toggle('active', b.available_cents === 0 && b.reserved_cents === 0);
-}
-
-async function loadBalance() {
-  if (!signedIn) return;
+async function loadSignedIn() {
   try {
     const res = await fetch('/api/me');
-    if (res.status === 401) return window.location.reload();
     if (!res.ok) return;
-    me = await res.json();
-    showBalance();
-  } catch (e) { /* the balance is information only */ }
+    $('topSignIn').textContent = 'Open NeuroLens';
+    $('topSignIn').href = '/app';
+    $('heroSignIn').textContent = 'Upload a video';
+    $('heroSignIn').href = '/app';
+  } catch (error) { /* the landing page works signed out */ }
 }
 
-const refreshAccount = () => { loadBalance(); loadHistory(); };
-
-const STARTUP_RETRIES = 3, STARTUP_RETRY_MS = 5000;
-function startupFailed() {
-  $('startupTitle').textContent = 'Something went wrong';
-  $('startupText').textContent = 'Please try again in a minute.';
-  $('startupRetry').hidden = false;
-}
-async function start(attempt = 0) {
-  $('startupPanel').classList.add('active');
-  $('startupTitle').textContent = 'Starting up…';
-  $('startupText').textContent = '';
-  $('startupRetry').hidden = true;
-  let res;
-  try { res = await fetch('/api/me'); } catch (e) { return startupFailed(); }
-  if (res.status === 200) return showApp(await res.json());
-  if (res.status === 401) return showSignedOut();
-  if (res.status === 503 && attempt < STARTUP_RETRIES) {
-    $('startupText').textContent = 'Waking the database; this can take up to a minute.';
-    return setTimeout(() => start(attempt + 1), STARTUP_RETRY_MS);
-  }
-  startupFailed();
-}
-$('startupRetry').addEventListener('click', () => start());
-
-function showSignedOut() {
-  signedIn = false;
-  $('startupPanel').classList.remove('active');
-  $('signInPanel').classList.add('active');
-  $('deleteAccountPanel').classList.remove('active');
-  $('uploadZone').classList.add('hidden');
-  $('account').textContent = '';
-  $('balance').textContent = '';
-  $('signOut').hidden = true;
-  $('headerMeta').textContent = IDLE_HEADER();
-  loadLimits();
-  loadSamples();
+function showComingSoon() {
+  player.classList.add('one');
+  videoBox.hidden = true;
+  brainBox.hidden = true;
+  comingSoon.hidden = false;
+  heroCredit.hidden = true;
+  footerCredit.hidden = true;
 }
 
-function showApp(meJson) {
-  me = meJson; signedIn = true;
-  $('startupPanel').classList.remove('active');
-  $('signInPanel').classList.remove('active');
-  $('account').textContent = me.email;
-  $('signOut').hidden = false;
-  $('uploadZone').classList.remove('hidden');
-  $('deleteAccountPanel').classList.add('active');
-  $('headerMeta').textContent = IDLE_HEADER();
-  showBalance();
-  loadLimits();
-  loadHistory();
-  const jobParam = params.get('job');
-  if (jobParam && /^[0-9a-f-]{36}$/i.test(jobParam)) trackJob(jobParam, null);
+function showAttribution(text) {
+  if (!text) return;
+  heroCredit.textContent = text;
+  heroCredit.hidden = false;
+  footerCredit.textContent = text;
+  footerCredit.hidden = false;
 }
 
-$('signOut').addEventListener('click', async () => {
-  const button = $('signOut');
-  button.disabled = true;
-  button.textContent = 'Signing out…';
-  try {
-    const res = await postJSON('/logout', {});
-    if (!res.ok) throw new Error(`error ${res.status}`);
-    window.location.assign((await res.json()).logout_url);
-  } catch (e) {
-    button.disabled = false;
-    button.textContent = 'Sign out';
-    $('headerMeta').textContent = `Couldn't sign out (${e.message}). Please try again.`;
-  }
-});
-
-const RESULT_DAYS = 30;
-async function loadHistory() {
-  if (!signedIn) return;
-  try {
-    const res = await fetch('/api/jobs');
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    renderHistory(await res.json());
-  } catch (e) {
-    $('historyPanel').classList.add('active');
-    $('historyNote').textContent = "Couldn't load your earlier analyses.";
-  }
+function brainUnavailable() {
+  brainShown = false;
+  brainView.clear(UNAVAILABLE);
+  brainSecond.textContent = '';
 }
 
-function renderHistory(jobs) {
-  jobsCache = jobs;
-  const list = $('historyList');
-  list.replaceChildren(...jobs.map(historyRow));
-  $('historyPanel').classList.toggle('active', jobs.length > 0);
-  $('historyNote').textContent = jobs.length ? `Results are kept for ${RESULT_DAYS} days.` : '';
-  if (currentResult) showCompareRow();
-}
-
-function historyRow(job) {
-  const row = document.createElement('div'); row.className = 'history-row';
-  const main = document.createElement('div'); main.className = 'history-main';
-  const name = document.createElement('div'); name.className = 'history-name';
-  name.textContent = job.filename || `Job ${job.job_id.slice(0, 8)}`;
-  const sub = document.createElement('div'); sub.className = 'history-sub';
-  sub.textContent = historyDetail(job);
-  main.append(name, sub);
-  const actions = document.createElement('div'); actions.className = 'history-actions';
-  if (job.result_available || job.status === 'queued' || job.status === 'processing') {
-    const open = document.createElement('button'); open.className = 'btn-ghost'; open.textContent = 'Open';
-    open.addEventListener('click', () => { resetUI(); trackJob(job.job_id, null); });
-    actions.append(open);
-  }
-  if (job.result_available) {
-    const csv = document.createElement('a'); csv.className = 'btn-ghost'; csv.textContent = 'CSV';
-    csv.href = `/api/jobs/${job.job_id}/result.csv`;
-    actions.append(csv);
-  }
-  const del = document.createElement('button'); del.className = 'btn-danger'; del.textContent = 'Delete';
-  del.addEventListener('click', () => deleteJob(job));
-  actions.append(del);
-  row.append(main, actions);
-  return row;
-}
-
-async function deleteJob(job) {
-  const label = job.filename || `Job ${job.job_id.slice(0, 8)}`;
-  if (!window.confirm(`Delete ${label}? Its video, analysis and data will be removed.`)) return;
-  try {
-    const res = await fetch(`/api/jobs/${job.job_id}`, { method: 'DELETE' });
-    const data = await res.json().catch(() => ({}));
-    if (res.status === 401) return window.location.reload();
-    if (!res.ok) {
-      $('historyPanel').classList.add('active');
-      $('historyNote').textContent = data.message || `Couldn't delete this video (HTTP ${res.status}).`;
-      return;
-    }
-    if (trackedJob === job.job_id) resetUI();
-    refreshAccount();
-  } catch (e) {
-    $('historyPanel').classList.add('active');
-    $('historyNote').textContent = "Couldn't reach the server. Please try again.";
-  }
-}
-
-function historyDetail(job) {
-  const created = new Date(job.created_at);
-  const day = created.toLocaleDateString();
-  if (job.status === 'done') {
-    const cost = job.captured_cents != null ? ` · ${dollars(job.captured_cents)}` : '';
-    if (!job.result_available) return `${day}${cost} · result expired`;
-    const expires = new Date(created.getTime() + RESULT_DAYS * 86400000).toLocaleDateString();
-    return `${day}${cost} · result kept until ${expires}`;
-  }
-  if (job.status === 'failed') return `${day} · ${failureText(job.error_code)}${NOT_CHARGED}`;
-  return `${day} · ${job.status}`;
-}
-
-async function loadSamples() {
-  try {
-    const res = await fetch('/data/samples.json');
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    samplesData = await res.json();
-    renderSamples();
-  } catch (e) {
-    $('samplesEmpty').textContent = "Sample videos couldn't be loaded.";
-    $('samplesEmpty').hidden = false;
-  }
-}
-
-function renderSamples() {
-  const grid = $('samplesGrid');
-  if (!samplesData || !samplesData.samples || samplesData.samples.length === 0) {
-    grid.replaceChildren();
-    $('samplesEmpty').hidden = false;
+async function loadBrain(sample) {
+  const limits = await getLimits();
+  const range = limits && limits.colour_range;
+  if (!Number.isFinite(range) || range <= 0 || !sample.brain_file) {
+    brainUnavailable();
     return;
   }
-  $('samplesEmpty').hidden = true;
-  grid.replaceChildren();
-  samplesData.samples.forEach((s, idx) => {
-    const card = document.createElement('button');
-    card.className = 'sample-card';
-    card.dataset.idx = idx;
-    const thumb = document.createElement('div');
-    thumb.className = 'sample-thumb';
-    if (s.thumbnail) {
-      const img = document.createElement('img');
-      img.src = `/data/${s.thumbnail}`;
-      img.alt = '';
-      img.addEventListener('error', () => thumb.textContent = '▶');
-      thumb.append(img);
-    } else {
-      thumb.textContent = '▶';
-    }
-    const info = document.createElement('div');
-    info.className = 'sample-info';
-    const title = document.createElement('div');
-    title.className = 'sample-title';
-    title.textContent = s.title || 'Sample';
-    const duration = document.createElement('div');
-    duration.className = 'sample-dur';
-    const seconds = s.result && s.result.duration_seconds;
-    duration.textContent = Number.isFinite(seconds) ? `${seconds}s` : '';
-    info.append(title, duration);
-    card.append(thumb, info);
-    card.addEventListener('click', () => loadSample(idx));
-    grid.appendChild(card);
-  });
-}
-
-function loadSample(idx) {
-  const s = samplesData.samples[idx];
-  if (!s || !s.result) return;
-  document.querySelectorAll('.sample-card').forEach(c => c.classList.toggle('active', +c.dataset.idx === idx));
-  stopTracking();
-  showRetention(null);
-  $('uploadPanel').classList.remove('active');
-  $('samplesSection').style.display = '';
-  clearVideoSource();
-  video.src = `/data/${s.video_file}`;
-  showVideo(true);
-  renderResult(s.result, s.summary || s.result.summary || {}, {
-    jobId: null,
-    brainUrl: s.brain_file ? `/data/${s.brain_file}` : null,
-    description: s.description,
-    attribution: s.attribution,
-    title: s.title,
-    fileName: s.video_file || s.title,
-  });
-  $('clipTitle').textContent = s.title || 'Sample';
-  $('clipCredit').textContent = s.attribution || '';
-  video.muted = true;
-  updateTransport();
-  video.play().catch(() => {});
-}
-
-async function loadLimits() {
   try {
-    const res = await fetch('/api/limits');
-    if (!res.ok) return null;
-    limits = await res.json();
-    $('limitsText').textContent = `MP4, MOV, or WebM — max ${limits.max_video_duration_seconds} seconds`;
-    return limits;
-  } catch (e) { return null; }
-}
-const ACCEPTED_TYPES = ['video/mp4', 'video/quicktime', 'video/webm'];
-function estimateCostCents(d) { return 90 * Math.max(1, Math.ceil((d - 0.5) / 30)); }
-
-const uploadZone = $('uploadZone'), fileInput = $('fileInput');
-let pendingFile = null, pendingDuration = 0;
-['dragenter','dragover'].forEach(e => uploadZone.addEventListener(e, ev => { ev.preventDefault(); uploadZone.classList.add('dragover'); }));
-['dragleave','drop'].forEach(e => uploadZone.addEventListener(e, ev => { ev.preventDefault(); uploadZone.classList.remove('dragover'); }));
-uploadZone.addEventListener('drop', ev => { const f = ev.dataTransfer.files; if (f.length) handleFile(f[0]); });
-fileInput.addEventListener('change', ev => { if (ev.target.files.length) handleFile(ev.target.files[0]); });
-$('topUpload').addEventListener('click', () => { if (signedIn) fileInput.click(); else { showSignedOut(); $('signInPanel').scrollIntoView({ block: 'center' }); } });
-$('btnNew').addEventListener('click', resetUI);
-$('navSamples').addEventListener('click', resetUI);
-$('navHistory').addEventListener('click', () => { resetUI(); $('historyPanel').scrollIntoView({ block: 'nearest' }); });
-$('upConfirm').addEventListener('click', startUpload);
-$('upCancel').addEventListener('click', () => (trackedJob ? resetUI() : resetUpload()));
-
-function rejectFile(message) { $('uploadNote').textContent = message; fileInput.value = ''; }
-
-function readDuration(file) {
-  return new Promise((resolve, reject) => {
-    const v = document.createElement('video'), url = URL.createObjectURL(file);
-    v.preload = 'metadata';
-    v.onloadedmetadata = () => { URL.revokeObjectURL(url); resolve(v.duration); };
-    v.onerror = () => { URL.revokeObjectURL(url); reject(new Error('unreadable')); };
-    v.src = url;
-  });
+    const res = await fetch(`/data/${sample.brain_file}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const decoded = decodeBrain(await res.arrayBuffer());
+    if (!decoded) throw new Error('malformed brain file');
+    brainView.setColourRange(range);
+    brainView.show(decoded.rows, decoded.count);
+    brainShown = true;
+  } catch (error) {
+    console.warn('3D view:', error);
+    brainUnavailable();
+  }
 }
 
-async function handleFile(file) {
-  $('uploadNote').textContent = '';
-  if (!ACCEPTED_TYPES.includes(file.type)) return rejectFile('Unsupported file type. Use MP4, MOV or WebM.');
-  if (!limits) await loadLimits();
-  if (!limits) return rejectFile("Couldn't reach the server to check the upload limits. Try again.");
-  const maxBytes = limits.max_upload_bytes, maxSeconds = limits.max_video_duration_seconds;
-  if (maxBytes != null && file.size > maxBytes) return rejectFile(`File is too large (max ${Math.round(maxBytes / 1e6)} MB).`);
-  let duration;
-  try { duration = await readDuration(file); } catch (e) { return rejectFile("Couldn't read this video."); }
-  if (!Number.isFinite(duration) || duration <= 0) return rejectFile("Couldn't read this video's length.");
-  if (duration > maxSeconds) return rejectFile(`Video is too long (${duration.toFixed(0)}s). The maximum is ${maxSeconds}s.`);
-  showConfirm(file, duration);
-}
-
-function showConfirm(file, duration) {
-  pendingFile = file; pendingDuration = duration;
-  setViewName('chooser');
-  uploadZone.classList.add('hidden');
-  $('consentBox').checked = false; $('consentBox').disabled = false;
-  $('consentRow').classList.remove('hidden');
-  $('samplesSection').style.display = 'none';
-  $('upFileName').textContent = file.name;
-  $('upDetail').textContent = `${duration.toFixed(1)} s · ${(file.size / 1e6).toFixed(1)} MB`;
-  $('upCost').textContent = `Estimated cost: ${dollars(estimateCostCents(duration))}, held from your credit when you upload (adjusted to the measured length, refunded if the analysis fails)`;
-  $('upMsg').textContent = ''; $('upMsg').classList.remove('error');
-  $('upProgress').classList.remove('active'); $('upBar').style.width = '0';
-  $('upConfirm').disabled = false; $('upConfirm').style.display = '';
-  $('upCancel').textContent = 'Cancel';
-  $('uploadPanel').classList.add('active');
-  $('headerMeta').textContent = `Ready to upload: ${file.name}`;
-}
-
-function uploadFailed(message) {
-  $('upMsg').textContent = message; $('upMsg').classList.add('error');
-  $('upProgress').classList.remove('active');
-  $('upConfirm').disabled = false; $('upConfirm').style.display = '';
-  $('consentBox').disabled = false;
-  $('upCancel').textContent = 'Cancel';
-}
-
-async function startUpload() {
-  const file = pendingFile, duration = pendingDuration;
-  $('upConfirm').disabled = true; $('consentBox').disabled = true;
-  $('upMsg').classList.remove('error'); $('upMsg').textContent = 'Preparing upload...';
-
-  let presign;
+async function loadHero() {
+  let sample = null;
   try {
-    const res = await postJSON('/api/uploads/presign', {
-      filename: file.name, content_type: file.type,
-      client_duration_seconds: duration, client_declared_bytes: file.size,
-      research_consent: $('consentBox').checked,
-    });
-    presign = await res.json();
-    if (res.status === 401) return window.location.reload();
-    if (res.status === 402) {
-      return uploadFailed(`${knownFailure('insufficient_credit')} It needs ${dollars(presign.required_cents)}; ` +
-        `you have ${dollars(presign.available_cents)}.${NOT_CHARGED}`);
-    }
-    if (!res.ok) {
-      const known = knownFailure(presign.error);
-      return uploadFailed(known ? known + NOT_CHARGED : (presign.message || `HTTP ${res.status}`) + NOT_CHARGED);
-    }
-  } catch (err) { return uploadFailed(`Couldn't start the upload: ${err.message}`); }
-  refreshAccount();
-
-  const fd = new FormData();
-  Object.entries(presign.fields).forEach(([k, v]) => fd.append(k, v));
-  fd.append('file', file);
-
-  const xhr = new XMLHttpRequest();
-  xhr.open('POST', presign.url);
-  xhr.upload.onprogress = ev => {
-    if (!ev.lengthComputable) return;
-    $('upBar').style.width = `${Math.round(100 * ev.loaded / ev.total)}%`;
-  };
-  xhr.onload = () => {
-    if (xhr.status === 204) {
-      $('upBar').style.width = '100%';
-      $('upConfirm').style.display = 'none';
-      $('headerMeta').textContent = IDLE_HEADER();
-      trackJob(presign.job_id, file);
-    } else { uploadFailed(`Upload failed (HTTP ${xhr.status}).`); }
-  };
-  xhr.onerror = () => uploadFailed('Upload failed: network error.');
-  $('upMsg').textContent = 'Uploading...';
-  $('upProgress').classList.add('active');
-  xhr.send(fd);
-}
-
-function resetUpload() {
-  stopTracking();
-  pendingFile = null; pendingDuration = 0;
-  $('uploadPanel').classList.remove('active');
-  $('uploadNote').textContent = '';
-  fileInput.value = '';
-  if (signedIn) uploadZone.classList.remove('hidden');
-  $('samplesSection').style.display = '';
-  $('headerMeta').textContent = IDLE_HEADER();
-}
-
-const POLL_MS = 5000;
-const SLOW_AFTER_MS = 30 * 60 * 1000;
-const STOP_AFTER_MS = 60 * 60 * 1000;
-const STOPPED_TEXT = 'Still not finished. Reload this page (the link keeps your job) to check again.';
-const NOT_CHARGED = ' You have not been charged.';
-function knownFailure(code, message) {
-  const maxSeconds = limits ? limits.max_video_duration_seconds : 120;
-  switch (code) {
-    case 'insufficient_credit': return 'Not enough credit for this video.';
-    case 'insufficient_credit_for_actual_duration':
-      return "Your video is longer than the length we estimated, and your credit doesn't cover the difference.";
-    case 'duration_exceeds_max_estimated':
-    case 'duration_exceeds_max_verified': return `This video is longer than the ${maxSeconds}-second maximum.`;
-    case 'file_too_large': return 'This file is larger than the upload limit.';
-    case 'unreadable_video': return 'This file is not a readable video.';
-    case 'processing_failed':
-    case 'stalled': return 'Processing failed after retrying.' + (message ? ` ${message}` : '');
-    case 'upload_not_received': return "The upload didn't finish. Please try again.";
-    case 'upload_missing':
-      return 'The uploaded file was no longer available (uploads are kept 2 days). Please upload it again.';
-    case 'presign_failed': return "The upload couldn't be started. Please try again.";
-    case 'processing_paused': return 'Processing is paused right now, so no video can be analysed.';
-    default: return null;
-  }
-}
-const failureText = (code, message) => knownFailure(code, message) || 'Processing failed.';
-const QUEUED_TEXT = 'Queued. If no GPU worker is running, starting one can take up to about 20 minutes. ' +
-  'You can close this page and come back with this link.';
-const STEP_TEXT = {
-  downloading: ['Downloading your video to the analysis machine...', 10],
-  transcribing: ['Transcribing the speech, so the model can read the words...', 30],
-  inference_full: ['Predicting brain activity from the picture and the sound...', 55],
-  inference_noaudio: ['Predicting it again without the sound, to measure what the audio adds...', 80],
-  extracting_roi: ['Working out the brain response for each group of signals...', 95],
-  saving_dataset: ['Saving the results...', 98],
-  saving_result: ['Saving the results...', 98],
-};
-window.neurolensTimings = {};
-let trackedJob = null, pollTimer = null, trackStart = 0, pausedPoll = null;
-
-document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible' && pausedPoll) {
-    const resume = pausedPoll;
-    pausedPoll = null;
-    resume();
-  }
-});
-
-function setParam(name, value) {
-  try {
-    const u = new URL(window.location.href);
-    if (value) u.searchParams.set(name, value); else u.searchParams.delete(name);
-    history.replaceState(null, '', u);
-  } catch (e) { /* the address is a convenience only */ }
-}
-const setJobInUrl = jobId => setParam('job', jobId);
-
-function stopTracking() {
-  trackedJob = null;
-  pausedPoll = null;
-  clearTimeout(pollTimer);
-  setJobInUrl(null);
-}
-
-function trackJob(jobId, file) {
-  clearTimeout(pollTimer);
-  trackedJob = jobId; trackStart = Date.now();
-  setJobInUrl(jobId);
-  setViewName('chooser');
-  if (!file) {
-    uploadZone.classList.add('hidden');
-    $('consentRow').classList.add('hidden');
-    $('samplesSection').style.display = 'none';
-    $('upFileName').textContent = `Job ${jobId.slice(0, 8)}`;
-    $('upDetail').textContent = ''; $('upCost').textContent = '';
-    $('upConfirm').style.display = 'none';
-    $('uploadPanel').classList.add('active');
-    $('headerMeta').textContent = `Job ${jobId.slice(0, 8)}`;
-  }
-  $('upCancel').textContent = 'Upload another';
-  $('upMsg').classList.remove('error');
-  pollJob(jobId, file);
-}
-
-function showJobMsg(text, isError) {
-  const slow = !isError && Date.now() - trackStart > SLOW_AFTER_MS;
-  $('upMsg').textContent = slow ? `${text} This is taking longer than expected.` : text;
-  $('upMsg').classList.toggle('error', !!isError);
-}
-
-async function pollJob(jobId, file) {
-  if (trackedJob !== jobId) return;
-  if (Date.now() - trackStart > STOP_AFTER_MS) {
-    $('upProgress').classList.remove('active');
-    return showJobMsg(STOPPED_TEXT);
-  }
-  if (document.visibilityState === 'hidden') {
-    pausedPoll = () => pollJob(jobId, file);
+    const res = await fetch('/data/samples.json', { cache: 'no-store' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    sample = Array.isArray(data.samples) ? data.samples[0] : null;
+  } catch (error) { /* an empty list or a failed request both get the quiet panel */ }
+  if (!sample || !sample.video_file) {
+    showComingSoon();
     return;
   }
-  let again = true;
-  try {
-    const res = await fetch(`/api/jobs/${jobId}/status`);
-    if (trackedJob !== jobId) return;
-    if (res.status === 404) {
-      again = false;
-      $('upProgress').classList.remove('active');
-      showJobMsg('No such job for this account.', true);
-    } else if (!res.ok) {
-      showJobMsg(`Could not check the job (HTTP ${res.status}). Trying again...`);
-    } else {
-      const st = await res.json();
-      if (trackedJob !== jobId) return;
-      if (st.status === 'done') {
-        again = !(await showResult(jobId, file, st.research_consent));
-        if (!again) refreshAccount();
-      } else if (st.status === 'failed') {
-        again = false;
-        $('upProgress').classList.remove('active');
-        showJobMsg(failureText(st.error_code, st.error_message) + NOT_CHARGED, true);
-        refreshAccount();
-      } else if (st.status === 'queued') {
-        $('upProgress').classList.remove('active');
-        showJobMsg(st.attempt > 0 ? 'Waiting to retry after a problem with the last attempt...' : QUEUED_TEXT);
-      } else {
-        const step = STEP_TEXT[st.stage];
-        $('upProgress').classList.add('active');
-        $('upBar').style.width = `${step ? step[1] : 5}%`;
-        showJobMsg(step ? step[0] : 'Processing...');
-      }
-    }
-  } catch (e) {
-    showJobMsg('Could not reach the server. Trying again...');
-  }
-  if (again && trackedJob === jobId) pollTimer = setTimeout(() => pollJob(jobId, file), POLL_MS);
+  player.classList.remove('one');
+  comingSoon.hidden = true;
+  videoBox.hidden = false;
+  brainBox.hidden = false;
+  showAttribution(sample.attribution);
+  heroVideo.src = `/data/${sample.video_file}`;
+  heroVideo.muted = true;
+  heroVideo.play().catch(() => {});
+  loadBrain(sample);
 }
 
-function clearVideoSource() {
-  stopVirtual();
-  if (videoObjectUrl) { URL.revokeObjectURL(videoObjectUrl); videoObjectUrl = null; }
-  video.pause();
-  video.removeAttribute('src');
-  video.load();
-  showVideo(false);
-}
-
-function showVideo(has) {
-  video.hidden = !has;
-  $('videoMissing').hidden = has;
-}
-
-function setVideoFile(file, seconds) {
-  clearVideoSource();
-  videoObjectUrl = URL.createObjectURL(file);
-  video.src = videoObjectUrl;
-  video.muted = false;
-  showVideo(true);
-  $('clipTitle').textContent = file.name;
-  $('clipCredit').textContent = Number.isFinite(seconds) ? `${seconds}s` : '';
-}
-
-function showResultUnavailable(message, file) {
-  resultSeq += 1;
-  stopVirtual();
-  currentResult = null; currentSummary = null; currentContext = null; comparison = null;
-  mutedOn = false; virtualTime = 0;
-  clearAllCharts();
-  $('resultMessage').textContent = message;
-  $('resultMessage').hidden = false;
-  $('topArea').replaceChildren();
-  $('chartCard').hidden = true;
-  $('stripsCard').hidden = true;
-  $('compareRow').hidden = true;
-  $('compareSelect').replaceChildren();
-  $('compareMsg').textContent = '';
-  $('chartsEmpty').style.display = 'none';
-  $('reportBody').classList.add('active');
-  $('mutedToggle').checked = false;
-  $('brainSecond').textContent = '';
-  window.brainMap.clear(BRAIN_UNAVAILABLE);
-  $('sampleMeta').textContent = '';
-  $('timeline').replaceChildren();
-  showRetention(null);
-  setViewName('player');
-  if (file) setVideoFile(file, null);
-  else { $('clipTitle').textContent = ''; $('clipCredit').textContent = ''; }
-}
-
-async function showResult(jobId, file, consented) {
-  const seq = resultSeq;
-  let res;
-  try {
-    res = await fetch(`/api/jobs/${jobId}/result`);
-  } catch (e) {
-    showJobMsg('The analysis is done; loading the result...');
-    return false;
-  }
-  if (seq !== resultSeq) return true;
-  if (res.status === 410) {
-    const data = await res.json().catch(() => ({}));
-    if (seq !== resultSeq) return true;
-    $('upProgress').classList.remove('active');
-    showJobMsg('The analysis is done.');
-    showResultUnavailable(data.message || 'This result was made by an older version of NeuroLens. Upload the video again.', file);
-    return true;
-  }
-  if (!res.ok) {
-    showJobMsg('The analysis is done; loading the result...');
-    return false;
-  }
-  let result;
-  try { result = await res.json(); } catch (e) {
-    showJobMsg('The analysis is done; loading the result...');
-    return false;
-  }
-  if (seq !== resultSeq) return true;
-  const t0 = performance.now();
-  $('upProgress').classList.remove('active');
-  showJobMsg(`Done in ${Math.round(result.processing_time_seconds)}s of analysis time.`);
-  showRetention(consented ? jobId : null);
-  const cached = jobsCache.find(j => j.job_id === jobId);
-  const title = file ? file.name : (cached && cached.filename ? cached.filename : `Job ${jobId.slice(0, 8)}`);
-  if (file) setVideoFile(file, result.duration_seconds);
-  else { clearVideoSource(); setViewName('player'); $('clipTitle').textContent = title; $('clipCredit').textContent = `${result.duration_seconds}s`; }
-  try {
-    renderResult(result, result.summary || {}, { jobId, brainUrl: `/api/jobs/${jobId}/brain`, title, fileName: title });
-  } catch (e) {
-    showResultUnavailable('The result could not be drawn.');
-    return true;
-  }
-  requestAnimationFrame(() => requestAnimationFrame(() => {
-    window.neurolensTimings.render_ms = Math.round(performance.now() - t0);
-  }));
-  return true;
-}
-
-let retentionJob = null;
-function showRetention(jobId) {
-  retentionJob = jobId;
-  $('retentionPanel').classList.toggle('active', !!jobId);
-  $('retentionMsg').textContent = '';
-  $('retentionMsg').classList.remove('error');
-}
-
-$('retentionPick').addEventListener('click', () => $('retentionInput').click());
-$('retentionInput').addEventListener('change', async ev => {
-  const file = ev.target.files[0];
-  ev.target.value = '';
-  if (!file || !retentionJob) return;
-  $('retentionMsg').classList.remove('error');
-  $('retentionMsg').textContent = 'Reading the report...';
-  try {
-    const res = await postJSON(`/api/jobs/${retentionJob}/retention`, { report: await file.text() });
-    const data = await res.json().catch(() => ({}));
-    if (res.status === 401) return window.location.reload();
-    if (!res.ok) {
-      $('retentionMsg').textContent = data.message || `Couldn't save the report (HTTP ${res.status}).`;
-      $('retentionMsg').classList.add('error');
-      return;
-    }
-    $('retentionMsg').textContent = 'Real audience retention saved.';
-  } catch (e) {
-    $('retentionMsg').textContent = "Couldn't reach the server. Please try again.";
-    $('retentionMsg').classList.add('error');
-  }
+heroVideo.addEventListener('click', () => {
+  if (heroVideo.paused) heroVideo.play().catch(() => {});
+  else heroVideo.pause();
 });
-
-function openingText(s) {
-  return s && s.opening && s.opening.word ? cap(s.opening.word) : 'Too short to compare';
-}
-function audioPercent(s) {
-  return s && s.audio_dependence != null ? Math.round(s.audio_dependence * 100) : null;
-}
-function momentRanges(list) {
-  return (list || []).map(fmtRange).join(', ') || 'None';
-}
-
-function momentRows(list, hot) {
-  const withThumbs = hasLocalVideo();
-  return list.map(m => `<button class="mrow${hot ? ' hot' : ''}${withThumbs ? '' : ' no-thumb'}" data-seek="${m.start}">
-    ${withThumbs ? `<span class="thumb" data-thumb="${m.start}"></span>` : ''}
-    <span class="when">${fmtRange(m)}</span></button>`).join('');
-}
-
-function momentGroup(title, hint, list, hot) {
-  return `<div class="mgroup${hot ? ' hot' : ''}"><h3>${title}</h3><p>${hint}</p>
-    ${list.length ? momentRows(list, hot) : '<p class="empty">Too short to pick one</p>'}</div>`;
-}
-
-function sideFacts(s) {
-  const pct = audioPercent(s);
-  return `<div class="sidefacts">
-    <div class="opening"><h3>Opening</h3><strong>${openingText(s)}</strong><small>the first 3 seconds against the rest</small></div>
-    <div class="audio"><h3>Audio dependence</h3>
-      ${pct === null ? '<strong>—</strong><small>No strong response to measure</small>' :
-        `<strong>${pct}%</strong><div class="split" aria-hidden="true"><b style="width:${pct}%"></b></div><small>of the response comes from the sound</small>`}
-    </div></div>`;
-}
-
-function escapeHtml(text) {
-  return String(text).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-}
-
-function currentVideoName() {
-  const ctx = currentContext || {};
-  if (ctx.fileName) return ctx.fileName;
-  if (ctx.jobId) {
-    const job = (jobsCache || []).find(j => j.job_id === ctx.jobId);
-    if (job && job.filename) return job.filename;
-  }
-  return ctx.title || 'Untitled video';
-}
-
-function compareTable() {
-  const other = comparison ? comparison.summary || {} : {};
-  const row = (name, a, b) => `<tr><th scope="row">${name}</th><td class="v">${a}</td><td class="v">${b}</td></tr>`;
-  const audio = s => { const pct = audioPercent(s); return pct === null ? '—' : `${pct}%`; };
-  return `<table class="compare-table"><thead><tr><th></th><th>${escapeHtml(currentVideoName())}</th><th>${comparison ? escapeHtml(comparison.label) : ''}</th></tr></thead><tbody>
-    ${row('Opening', openingText(currentSummary), openingText(other))}
-    ${row('Strongest moments', momentRanges(currentSummary.strong_moments), momentRanges(other.strong_moments))}
-    ${row('Weakest moments', momentRanges(currentSummary.weak_moments), momentRanges(other.weak_moments))}
-    ${row('Audio dependence', audio(currentSummary), audio(other))}
-  </tbody></table>`;
-}
-
-function buildTop() {
-  const top = $('topArea');
-  if (!currentResult) { top.replaceChildren(); return; }
-  if (comparison) {
-    top.classList.add('compare');
-    top.innerHTML = compareTable();
-  } else {
-    top.classList.remove('compare');
-    const s = currentSummary || {};
-    top.innerHTML = momentGroup('Strongest parts', 'Good spots for the key message', s.strong_moments || [], true) +
-      momentGroup('Weakest parts', 'Worth a look in the edit', s.weak_moments || [], false) +
-      sideFacts(s);
-    fillThumbs(resultSeq);
-  }
-}
-
-let thumbSeq = 0;
-async function fillThumbs(seq) {
-  const src = video.getAttribute('src');
-  if (!src) return;
-  const els = [...document.querySelectorAll('[data-thumb]')];
-  if (!els.length) return;
-  const run = ++thumbSeq;
-  const v = document.createElement('video');
-  v.src = src; v.muted = true; v.preload = 'auto';
-  try {
-    await new Promise((resolve, reject) => {
-      v.addEventListener('loadeddata', resolve, { once: true });
-      v.addEventListener('error', reject, { once: true });
-    });
-    const canvas = document.createElement('canvas');
-    canvas.width = 320; canvas.height = 180;
-    const g = canvas.getContext('2d');
-    for (const el of els) {
-      if (run !== thumbSeq || seq !== resultSeq) return;
-      const t = Math.min(+el.dataset.thumb, Math.max(0, (v.duration || 0) - 0.05));
-      v.currentTime = t;
-      await new Promise(resolve => v.addEventListener('seeked', resolve, { once: true }));
-      if (run !== thumbSeq || seq !== resultSeq) return;
-      g.drawImage(v, 0, 0, canvas.width, canvas.height);
-      el.style.backgroundImage = `url(${canvas.toDataURL('image/jpeg', 0.75)})`;
-    }
-  } catch (e) { /* thumbnails are a nicety */ }
-}
-
-function renderResult(result, summary, ctx) {
-  resultSeq += 1;
-  currentResult = result;
-  currentSummary = summary || {};
-  currentContext = ctx || {};
-  comparison = null;
-  mutedOn = false;
-  virtualTime = 0;
-  stopVirtual();
-  $('mutedToggle').checked = false;
-  $('mutedToggle').disabled = false;
-  $('resultMessage').hidden = true;
-  $('resultMessage').textContent = '';
-  $('chartCard').hidden = false;
-  $('stripsCard').hidden = false;
-  $('chartsEmpty').style.display = 'none';
-  $('reportBody').classList.add('active');
-  $('compareMsg').textContent = '';
-  $('compareMsg').classList.remove('error');
-  $('sampleMeta').textContent = '';
-  if (ctx.description || ctx.attribution) {
-    $('sampleMeta').textContent = [ctx.description, ctx.attribution ? `Attribution: ${ctx.attribution}` : ''].filter(Boolean).join(' · ');
-  }
-  setViewName('player');
-  $('clipTitle').textContent = ctx.title || '';
-  if (hasLocalVideo()) {
-    $('clipCredit').textContent = `${result.duration_seconds}s` + (result.processing_time_seconds ? ` · analysed in ${Math.round(result.processing_time_seconds)}s` : '');
-  } else {
-    $('clipCredit').textContent = `${result.duration_seconds}s · no local video`;
-  }
-  buildTop();
-  buildAllCharts();
-  showCompareRow();
-  loadBrain();
-}
-
-function niceRange(values) {
-  let max = 0;
-  values.forEach(v => { if (Number.isFinite(v)) max = Math.max(max, Math.abs(v)); });
-  return Math.max(0.05, Math.ceil((max || 0.01) * 1.08 * 20) / 20);
-}
-
-function svgEl(tag, attrs, parent) {
-  const e = document.createElementNS(NS, tag);
-  for (const k in attrs) e.setAttribute(k, attrs[k]);
-  if (parent) parent.appendChild(e);
-  return e;
-}
-
-function clearScope(scope) { playheads = playheads.filter(p => p.scope !== scope); }
-
-function clearAllCharts() {
-  playheads = [];
-  $('mainChartBox').replaceChildren();
-  $('stripsHost').replaceChildren();
-  $('timeline').replaceChildren();
-}
-
-function drawChart(host, { lines, range, height = 200, shade = false, axisLabels = false, dark = false, fill = false, span = null, scope }) {
-  host.replaceChildren();
-  const T = span || totalSeconds();
-  if (!T) return;
-  const W = 1000, H = height, padT = 8, padB = axisLabels ? 18 : 4;
-  const x = i => (T === 1 ? 0 : (i / (T - 1)) * W);
-  const y = v => padT + (1 - (v + range) / (2 * range)) * (H - padT - padB);
-  const svg = svgEl('svg', { viewBox: `0 0 ${W} ${H}`, preserveAspectRatio: 'none', role: 'img' });
-  svg.style.height = fill ? `calc(100% - ${axisLabels ? 16 : 0}px)` : `${H}px`;
-  host.appendChild(svg);
-
-  if (shade && currentSummary) {
-    const band = (m, colour) => {
-      const left = x(Math.max(0, m.start));
-      const right = x(Math.min(T - 1, m.end));
-      if (right <= left) return;
-      svgEl('rect', { x: left, width: right - left, y: padT, height: H - padT - padB, fill: colour }, svg);
-    };
-    (currentSummary.strong_moments || []).forEach(m => band(m, 'rgba(242,113,28,.15)'));
-    (currentSummary.weak_moments || []).forEach(m => band(m, dark ? 'rgba(140,150,168,.16)' : 'rgba(107,122,153,.13)'));
-  }
-
-  svgEl('line', { x1: 0, x2: W, y1: y(0), y2: y(0), stroke: dark ? '#3A4560' : '#B9BEC8', 'stroke-dasharray': '6 6', 'vector-effect': 'non-scaling-stroke' }, svg);
-
-  lines.forEach(line => {
-    const points = line.values.slice(0, T).map((v, i) => `${x(i)},${y(Math.max(-range, Math.min(range, Number.isFinite(v) ? v : 0)))}`).join(' ');
-    svgEl('polyline', {
-      points, fill: 'none', stroke: line.colour,
-      'stroke-width': line.width || 2,
-      'stroke-dasharray': line.dash ? '7 5' : 'none',
-      'stroke-linejoin': 'round', 'stroke-linecap': 'round',
-      'vector-effect': 'non-scaling-stroke',
-    }, svg);
-    if (line.endLabel && line.values.length > 0 && line.values.length < T) {
-      const i = line.values.length - 1;
-      const raw = line.values[i];
-      const cx = x(i), cy = y(Math.max(-range, Math.min(range, Number.isFinite(raw) ? raw : 0)));
-      const at = py => axisLabels ? `calc(${(py / H) * 100}% - ${(py / H) * 16}px)` : `${(py / H) * 100}%`;
-      const top = at(cy), bottom = at(H - padB);
-      const dot = document.createElement('div');
-      dot.className = 'end-dot';
-      dot.style.left = `${(cx / W) * 100}%`;
-      dot.style.top = top;
-      dot.style.background = line.colour;
-      const label = document.createElement('div');
-      label.className = 'end-marker';
-      label.textContent = line.endLabel;
-      label.style.left = `${(cx / W) * 100}%`;
-      label.style.top = bottom;
-      label.style.transform = cx < W * 0.15 ? 'translate(4px, -100%)' : 'translate(calc(-100% - 4px), -100%)';
-      const drop = document.createElement('div');
-      drop.className = 'end-drop';
-      drop.style.left = `${(cx / W) * 100}%`;
-      drop.style.top = top;
-      drop.style.height = `calc(${bottom} - ${top})`;
-      host.append(drop, dot, label);
-    }
-  });
-
-  const ph = svgEl('line', { y1: padT, y2: H - padB, stroke: dark ? '#E7EAF0' : '#161B26', 'stroke-width': 1.5, 'vector-effect': 'non-scaling-stroke' }, svg);
-  playheads.push({ scope, fn: t => {
-    const px = x(Math.min(Math.max(0, t), Math.max(0, T - 1)));
-    ph.setAttribute('x1', px); ph.setAttribute('x2', px);
-  } });
-
-  svg.addEventListener('pointerdown', e => {
-    const rect = svg.getBoundingClientRect();
-    if (!rect.width) return;
-    seek(((e.clientX - rect.left) / rect.width) * (T - 1));
-  });
-
-  if (axisLabels) {
-    const axis = document.createElement('div');
-    axis.className = 'xaxis';
-    const step = T > 40 ? 10 : Math.max(1, Math.ceil(T / 6));
-    for (let s = 0; s <= T; s += step) {
-      const span = document.createElement('span');
-      span.textContent = fmt(s);
-      axis.appendChild(span);
-    }
-    host.appendChild(axis);
-  }
-}
-
-function addPins(box) {
-  if (!currentSummary) return;
-  const T = chartSpan();
-  if (!T) return;
-  const row = document.createElement('div');
-  row.className = 'pins';
-  const items = [
-    ...(currentSummary.strong_moments || []).map(m => ({ t: m.start, mid: (m.start + m.end - 1) / 2, hot: true })),
-    ...(currentSummary.weak_moments || []).map(m => ({ t: m.start, mid: (m.start + m.end - 1) / 2, hot: false })),
-  ].sort((a, b) => a.mid - b.mid);
-  let lastPct = -100;
-  items.forEach(it => {
-    const pct = T === 1 ? 0 : (it.mid / (T - 1)) * 100;
-    const button = document.createElement('button');
-    button.className = 'pin' + (it.hot ? ' hot' : '');
-    button.style.left = `${pct}%`;
-    button.dataset.seek = it.t;
-    button.setAttribute('aria-label', `Jump to ${fmt(it.t)}`);
-    if (pct - lastPct > 5) {
-      const span = document.createElement('span');
-      span.textContent = fmt(it.t);
-      button.appendChild(span);
-      lastPct = pct;
-    }
-    row.appendChild(button);
-  });
-  box.prepend(row);
-}
-
-function buildMainChart() {
-  if (!currentResult) return;
-  clearScope('main');
-  const box = $('mainChartBox');
-  const span = chartSpan();
-  const name = currentVideoName();
-  const lines = [{ values: currentResult.signals.overall, colour: 'var(--heat)', width: 2.5, name }];
-  let secondLabel = '';
-  if (comparison && comparison.result.signals) {
-    lines.push({ values: comparison.result.signals.overall || [], colour: 'var(--cool)', dash: true, width: 1.8, name: comparison.label });
-    secondLabel = comparison.label;
-  } else if (mutedOn && currentResult.muted && currentResult.muted.overall) {
-    lines.push({ values: currentResult.muted.overall, colour: 'var(--cool)', dash: true, width: 1.8 });
-    secondLabel = 'Without sound';
-  }
-  lines.forEach(line => {
-    if (line.name && line.values.length > 0 && line.values.length < span) line.endLabel = `${line.name} ends`;
-  });
-  let range = 0;
-  lines.forEach(line => { range = Math.max(range, niceRange(line.values)); });
-  drawChart(box, { lines, range, height: 220, shade: true, axisLabels: true, fill: true, span, scope: 'main' });
-  addPins(box);
-  const currentKey = `<span class="legend-key"><i></i>${escapeHtml(name)}</span>`;
-  const secondKey = secondLabel ? `<span class="legend-key"><i class="dash"></i>${escapeHtml(secondLabel)}</span>` : '';
-  const shadeKey = comparison ? `<span class="legend-key"><i class="swatch"></i>shaded: moments of ${escapeHtml(name)}</span>` : '';
-  const typicalKey = '<span class="legend-key"><i class="typical"></i>typical</span>';
-  $('chartKeys').innerHTML = currentKey + secondKey + typicalKey + shadeKey;
-}
-
-function stripRange() {
-  const values = [];
-  Object.keys(GROUPS).forEach(g => { if (currentResult.signals[g]) values.push(...currentResult.signals[g]); });
-  if (comparison && comparison.result.signals) {
-    Object.keys(GROUPS).forEach(g => { if (comparison.result.signals[g]) values.push(...comparison.result.signals[g]); });
-  }
-  return niceRange(values);
-}
-
-function partsRange(group) {
-  const values = [];
-  [currentResult, comparison && comparison.result].forEach(r => {
-    if (r && r.signals) GROUPS[group].signals.forEach(sig => { if (r.signals[sig]) values.push(...r.signals[sig]); });
-  });
-  return niceRange(values);
-}
-
-function buildStrips() {
-  if (!currentResult) return;
-  clearScope('strips');
-  clearScope('strips-parts');
-  const host = $('stripsHost');
-  host.replaceChildren();
-  host.classList.remove('swapped');
-  const range = stripRange();
-  const span = chartSpan();
-  Object.entries(GROUPS).forEach(([group, def]) => {
-    const strip = document.createElement('div');
-    strip.className = 'strip';
-    const head = document.createElement('h3');
-    head.append(document.createTextNode(def.label));
-    if (def.signals.length > 1) {
-      const button = document.createElement('button');
-      button.textContent = `Show ${def.signals.length} parts`;
-      button.setAttribute('aria-expanded', 'false');
-      button.addEventListener('click', () => swapParts(group));
-      head.append(button);
-    }
-    const chart = document.createElement('div');
-    chart.className = 'chart';
-    strip.append(head, chart);
-    host.append(strip);
-
-    const lines = [{ values: currentResult.signals[group] || [], colour: 'var(--ink)', width: 1.75 }];
-    if (comparison && comparison.result.signals) {
-      lines.push({ values: comparison.result.signals[group] || [], colour: 'var(--cool)', dash: true, width: 1.5 });
-    }
-    drawChart(chart, { lines, range, height: 78, fill: true, span, scope: 'strips' });
-  });
-}
-
-function swapParts(group) {
-  const host = $('stripsHost');
-  const span = chartSpan();
-  const keep = [...host.children];
-  keep.forEach(child => child.hidden = true);
-  clearScope('strips-parts');
-  const wrap = document.createElement('div');
-  wrap.className = 'parts';
-  const head = document.createElement('h3');
-  const back = document.createElement('button');
-  back.textContent = '← All three';
-  back.addEventListener('click', () => {
-    wrap.remove();
-    keep.forEach(child => child.hidden = false);
-    host.classList.remove('swapped');
-    clearScope('strips-parts');
-    tick();
-  });
-  const title = document.createElement('span');
-  title.textContent = `${GROUPS[group].label}: its ${GROUPS[group].signals.length} parts`;
-  head.append(back, title);
-  const row = document.createElement('div');
-  row.className = 'parts-row';
-  GROUPS[group].signals.forEach(signal => {
-    const cell = document.createElement('div');
-    const h4 = document.createElement('h4');
-    h4.textContent = SIGNAL_LABELS[signal] || cap(signal);
-    const chart = document.createElement('div');
-    chart.className = 'chart';
-    cell.append(h4, chart);
-    row.append(cell);
-    const lines = [{ values: currentResult.signals[signal] || [], colour: 'var(--ink-2)', width: 1.5 }];
-    if (comparison && comparison.result.signals) {
-      lines.push({ values: comparison.result.signals[signal] || [], colour: 'var(--cool)', dash: true, width: 1.4 });
-    }
-    drawChart(chart, { lines, range: partsRange(group), height: 56, fill: true, span, scope: 'strips-parts' });
-  });
-  wrap.append(head, row);
-  host.append(wrap);
-  host.classList.add('swapped');
-  tick();
-}
-
-function buildTimeline() {
-  clearScope('timeline');
-  const host = $('timeline');
-  host.replaceChildren();
-  if (!currentResult) return;
-  host.innerHTML = `
-    <button class="tl-btn play" id="tlPlay" aria-label="Play"></button>
-    <button class="tl-btn" id="tlBack" aria-label="One second back"></button>
-    <div class="tl-track" id="tlTrack" aria-label="Timeline"></div>
-    <button class="tl-btn" id="tlFwd" aria-label="One second forward"></button>
-    <div class="tl-right"><span class="tl-time" id="tlTime"></span><button class="tl-btn" id="tlSound" aria-label="Sound on"></button></div>`;
-  const track = $('tlTrack');
-  drawChart(track, { lines: [{ values: currentResult.signals.overall, colour: 'var(--heat)', width: 2 }], range: niceRange(currentResult.signals.overall), height: 50, shade: true, dark: true, scope: 'timeline' });
-  $('tlPlay').addEventListener('click', togglePlay);
-  $('tlBack').addEventListener('click', () => seek(Math.floor(currentTime()) - 1));
-  $('tlFwd').addEventListener('click', () => seek(Math.floor(currentTime()) + 1));
-  const snd = $('tlSound');
-  snd.hidden = !hasLocalVideo();
-  snd.addEventListener('click', () => {
-    video.muted = !video.muted;
-    updateTransport();
-  });
-  const drag = e => {
-    const rect = track.getBoundingClientRect();
-    if (rect.width) seek(((e.clientX - rect.left) / rect.width) * (totalSeconds() - 1));
-  };
-  track.addEventListener('pointerdown', e => {
-    track.setPointerCapture(e.pointerId);
-    track.onpointermove = drag;
-  });
-  track.addEventListener('pointerup', () => { track.onpointermove = null; });
-  updateTransport();
-}
-
-const ICON = {
-  play: '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5v11l9-5.5z"/></svg>',
-  pause: '<svg viewBox="0 0 16 16" fill="currentColor"><rect x="3.5" y="2.5" width="3" height="11" rx="1"/><rect x="9.5" y="2.5" width="3" height="11" rx="1"/></svg>',
-  back: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10 3 5 8l5 5"/></svg>',
-  fwd: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m6 3 5 5-5 5"/></svg>',
-  sound: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2.5 6h2.5l3.5-3v10L5 10H2.5z"/><path d="M11 5.5a3.5 3.5 0 0 1 0 5M12.8 3.8a6 6 0 0 1 0 8.4"/></svg>',
-  mute: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2.5 6h2.5l3.5-3v10L5 10H2.5z"/><path d="m11 6 4 4m0-4-4 4"/></svg>',
-};
-
-function updateTransport() {
-  const T = totalSeconds();
-  const t = currentTime();
-  const play = $('tlPlay');
-  if (play) {
-    const playing = hasLocalVideo() ? !video.paused : virtualPlaying;
-    play.innerHTML = playing ? ICON.pause : ICON.play;
-    play.setAttribute('aria-label', playing ? 'Pause' : 'Play');
-  }
-  const back = $('tlBack'), fwd = $('tlFwd');
-  if (back) back.innerHTML = ICON.back;
-  if (fwd) fwd.innerHTML = ICON.fwd;
-  const time = $('tlTime');
-  if (time) time.textContent = `${fmt(t)} / ${fmt(T)}`;
-  const snd = $('tlSound');
-  if (snd && hasLocalVideo()) {
-    snd.innerHTML = video.muted ? ICON.mute : ICON.sound;
-    snd.setAttribute('aria-label', video.muted ? 'Sound on' : 'Sound off');
-  }
-  const second = $('brainSecond');
-  if (second) second.textContent = currentResult ? fmt(t) : '';
-}
 
 function tick() {
-  const t = currentTime();
-  playheads.forEach(p => p.fn(t));
-  updateTransport();
-  if (currentResult) window.brainMap.setSecond(t);
+  const t = Number.isFinite(heroVideo.currentTime) ? heroVideo.currentTime : 0;
+  if (brainShown) {
+    brainView.setSecond(t);
+    brainSecond.textContent = `${Math.floor(t)} s`;
+  }
+  requestAnimationFrame(tick);
 }
+requestAnimationFrame(tick);
 
-function buildAllCharts() {
-  buildMainChart();
-  buildStrips();
-  buildTimeline();
-  tick();
-}
-
-function showCompareRow() {
-  const row = $('compareRow'), select = $('compareSelect');
-  const currentId = currentContext && currentContext.jobId;
-  const candidates = (jobsCache || []).filter(j => j.result_available && j.status === 'done' && j.job_id !== currentId);
-  if (!signedIn || !currentResult || candidates.length === 0) {
-    row.hidden = true;
-    select.replaceChildren();
-    if (comparison) { comparison = null; buildTop(); buildMainChart(); buildStrips(); }
-    return;
-  }
-  row.hidden = false;
-  const keep = comparison ? comparison.jobId : '';
-  select.replaceChildren();
-  const none = document.createElement('option');
-  none.value = ''; none.textContent = 'None';
-  select.append(none);
-  candidates.forEach(job => {
-    const option = document.createElement('option');
-    option.value = job.job_id;
-    option.textContent = job.filename || `Job ${job.job_id.slice(0, 8)}`;
-    select.append(option);
-  });
-  if (keep && candidates.some(job => job.job_id === keep)) {
-    select.value = keep;
-  } else {
-    select.value = '';
-    if (comparison) { comparison = null; buildTop(); buildMainChart(); buildStrips(); }
-  }
-}
-
-async function loadComparison() {
-  const select = $('compareSelect'), msg = $('compareMsg');
-  const id = select.value;
-  msg.classList.remove('error');
-  if (!id) {
-    comparison = null; msg.textContent = '';
-    $('mutedToggle').disabled = false;
-    buildTop(); buildMainChart(); buildStrips(); tick();
-    return;
-  }
-  const job = (jobsCache || []).find(j => j.job_id === id);
-  const label = job && job.filename ? job.filename : `Job ${id.slice(0, 8)}`;
-  const request = ++compareRequest;
-  const seq = resultSeq;
-  msg.textContent = 'Loading…';
-  try {
-    const res = await fetch(`/api/jobs/${id}/result`);
-    const data = await res.json().catch(() => ({}));
-    if (request !== compareRequest || seq !== resultSeq) return;
-    if (!res.ok || !data.signals) {
-      msg.textContent = data.message || (res.status === 410
-        ? 'This result was made by an older version of NeuroLens. Upload the video again.'
-        : `Couldn't load that result (HTTP ${res.status}).`);
-      msg.classList.add('error');
-      comparison = null; buildTop(); buildMainChart(); buildStrips();
-      return;
-    }
-    comparison = { result: data, summary: data.summary || {}, label, jobId: id };
-    mutedOn = false;
-    $('mutedToggle').checked = false;
-    $('mutedToggle').disabled = true;
-    msg.textContent = '';
-    buildTop(); buildMainChart(); buildStrips(); tick();
-  } catch (e) {
-    if (request !== compareRequest || seq !== resultSeq) return;
-    msg.textContent = "Couldn't reach the server. Please try again.";
-    msg.classList.add('error');
-    comparison = null; buildTop(); buildMainChart(); buildStrips();
-  }
-}
-$('compareSelect').addEventListener('change', loadComparison);
-
-$('mutedToggle').addEventListener('change', () => {
-  mutedOn = $('mutedToggle').checked;
-  if (mutedOn && comparison) {
-    comparison = null;
-    $('compareSelect').value = '';
-    $('mutedToggle').disabled = false;
-    buildTop();
-  }
-  buildMainChart(); buildStrips(); tick();
-});
-
-$('reportBody').addEventListener('click', e => {
-  const target = e.target.closest('[data-seek]');
-  if (target) seek(+target.dataset.seek);
-});
-
-function seek(t) {
-  const T = totalSeconds();
-  if (!T) return;
-  const value = Math.max(0, Math.min(T - 0.01, Number.isFinite(t) ? t : 0));
-  if (hasLocalVideo()) {
-    virtualTime = value;
-    video.currentTime = value;
-  } else {
-    virtualTime = value;
-    if (virtualPlaying) virtualAnchor = performance.now() - value * 1000;
-    tick();
-  }
-}
-
-function startVirtual() {
-  cancelAnimationFrame(virtualRaf);
-  virtualPlaying = true;
-  virtualAnchor = performance.now() - virtualTime * 1000;
-  const loop = now => {
-    if (!virtualPlaying) return;
-    const T = totalSeconds();
-    if (!T) return;
-    virtualTime = Math.min(T - 0.01, (now - virtualAnchor) / 1000);
-    if (virtualTime >= T - 0.01) {
-      virtualTime = 0;
-      virtualAnchor = now;
-    }
-    tick();
-    virtualRaf = requestAnimationFrame(loop);
-  };
-  virtualRaf = requestAnimationFrame(loop);
-}
-
-function stopVirtual() {
-  virtualPlaying = false;
-  cancelAnimationFrame(virtualRaf);
-}
-
-function togglePlay() {
-  if (!currentResult) return;
-  if (hasLocalVideo()) {
-    if (video.paused) video.play().catch(() => {});
-    else video.pause();
-  } else if (virtualPlaying) {
-    stopVirtual();
-    updateTransport();
-  } else {
-    startVirtual();
-    updateTransport();
-  }
-}
-
-function videoLoop() {
-  tick();
-  if (!video.paused) videoRaf = requestAnimationFrame(videoLoop);
-}
-video.addEventListener('play', () => {
-  cancelAnimationFrame(videoRaf);
-  videoRaf = requestAnimationFrame(videoLoop);
-});
-video.addEventListener('pause', () => {
-  cancelAnimationFrame(videoRaf);
-  tick();
-});
-video.addEventListener('seeked', tick);
-video.addEventListener('timeupdate', () => { if (video.paused) tick(); });
-video.addEventListener('loadedmetadata', tick);
-
-let float16Lookup = null;
-function float16Table() {
-  if (float16Lookup) return float16Lookup;
-  const table = new Float32Array(65536);
-  for (let h = 0; h < 65536; h++) {
-    const sign = h & 0x8000 ? -1 : 1;
-    const exp = (h >> 10) & 0x1f;
-    const mant = h & 0x3ff;
-    if (exp === 0) table[h] = sign * mant * 2 ** -24;
-    else if (exp === 31) table[h] = mant ? NaN : sign * Infinity;
-    else table[h] = sign * (1 + mant / 1024) * 2 ** (exp - 15);
-  }
-  float16Lookup = table;
-  return table;
-}
-
-function decodeBrain(buffer) {
-  const bytesPerRow = BRAIN_VERTICES * 2;
-  if (!buffer.byteLength || buffer.byteLength % bytesPerRow !== 0) return null;
-  const count = buffer.byteLength / bytesPerRow;
-  const view = new DataView(buffer);
-  const table = float16Table();
-  const rows = new Float32Array(count * BRAIN_VERTICES);
-  for (let i = 0; i < rows.length; i++) rows[i] = table[view.getUint16(i * 2, true)];
-  return { rows, count };
-}
-
-async function ensureColourRange() {
-  if (!limits) await loadLimits();
-  const range = limits && limits.colour_range;
-  return Number.isFinite(range) && range > 0 ? range : null;
-}
-
-async function loadBrain() {
-  if (!currentResult) return;
-  const seq = resultSeq;
-  const range = await ensureColourRange();
-  if (seq !== resultSeq) return;
-  const url = currentContext && currentContext.brainUrl;
-  if (range === null) {
-    window.brainMap.clear(BRAIN_UNAVAILABLE);
-    $('brainSecond').textContent = '';
-    return;
-  }
-  window.brainMap.setColourRange(range);
-  if (!url) {
-    window.brainMap.clear(BRAIN_UNAVAILABLE);
-    $('brainSecond').textContent = '';
-    return;
-  }
-  window.brainMap.clear('Loading the 3D view…');
-  $('brainSecond').textContent = '';
-  try {
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const buffer = await res.arrayBuffer();
-    if (seq !== resultSeq) return;
-    const decoded = decodeBrain(buffer);
-    if (!decoded) throw new Error('malformed brain file');
-    window.brainMap.show(decoded.rows, decoded.count);
-    tick();
-    setTimeout(() => {
-      if (seq === resultSeq && !brainImpl) {
-        window.brainMap.clear(BRAIN_UNAVAILABLE);
-        $('brainSecond').textContent = '';
-      }
-    }, 20000);
-  } catch (e) {
-    if (seq !== resultSeq) return;
-    window.brainMap.clear(BRAIN_UNAVAILABLE);
-    $('brainSecond').textContent = '';
-  }
-}
-
-function resetUI() {
-  resultSeq += 1;
-  stopVirtual();
-  currentResult = null; currentSummary = null; currentContext = null; comparison = null;
-  mutedOn = false; virtualTime = 0;
-  clearAllCharts();
-  clearVideoSource();
-  $('mutedToggle').checked = false;
-  $('mutedToggle').disabled = false;
-  $('resultMessage').hidden = true;
-  $('resultMessage').textContent = '';
-  $('topArea').replaceChildren();
-  $('topArea').classList.remove('compare');
-  $('chartKeys').replaceChildren();
-  $('compareRow').hidden = true;
-  $('compareSelect').replaceChildren();
-  $('compareMsg').textContent = '';
-  $('compareMsg').classList.remove('error');
-  $('chartCard').hidden = false;
-  $('stripsCard').hidden = false;
-  $('brainSecond').textContent = '';
-  $('sampleMeta').textContent = '';
-  $('clipTitle').textContent = '';
-  $('clipCredit').textContent = '';
-  window.brainMap.clear(BRAIN_UNAVAILABLE);
-  $('reportBody').classList.remove('active');
-  $('chartsEmpty').style.display = '';
-  setViewName('chooser');
-  if (signedIn) $('uploadZone').classList.remove('hidden');
-  $('samplesSection').style.display = '';
-  $('headerMeta').textContent = IDLE_HEADER();
-  showRetention(null);
-  resetUpload();
-  document.querySelectorAll('.sample-card').forEach(c => c.classList.remove('active'));
-}
-
-$('deleteAccountBtn').addEventListener('click', async () => {
-  const button = $('deleteAccountBtn');
-  button.disabled = true;
-  $('deleteAccountMsg').classList.remove('error');
-  $('deleteAccountMsg').textContent = 'Deleting...';
-  try {
-    const res = await postJSON('/api/account/delete', { confirm: $('deleteAccountConfirm').value });
-    const data = await res.json().catch(() => ({}));
-    if (res.status === 401) return window.location.reload();
-    if (!res.ok) {
-      button.disabled = false;
-      $('deleteAccountMsg').textContent = res.status === 404
-        ? 'Account deletion is only available when sign-in is on.'
-        : (data.message || `Couldn't delete the account (HTTP ${res.status}).`);
-      $('deleteAccountMsg').classList.add('error');
-      return;
-    }
-    signedIn = false;
-    resetUI();
-    $('account').textContent = '';
-    $('balance').textContent = '';
-    $('signOut').hidden = true;
-    $('uploadZone').classList.add('hidden');
-    $('historyPanel').classList.remove('active');
-    $('noCreditPanel').classList.remove('active');
-    showSignedOut();
-    $('signedOutNote').textContent = 'Your account and data have been deleted.';
-  } catch (e) {
-    button.disabled = false;
-    $('deleteAccountMsg').textContent = "Couldn't reach the server. Please try again.";
-    $('deleteAccountMsg').classList.add('error');
-  }
-});
-
-start();
-loadSamples();
-</script>
-<script type="module">
-import * as THREE from '/static/three/three.module.min.js';
-import { OrbitControls } from '/static/three/OrbitControls.js';
-
-const VERTICES = 20484;
-const MESH_URL = '/static/brain/fsaverage6_pial.bin';
-const HEAD_URL = '/static/brain/head.bin';
-const UNAVAILABLE = 'The 3D view is not available for this video.';
-const HEAT = [[0, [0.50, 0.0, 0.0]], [0.35, [0.90, 0.10, 0.04]], [0.65, [1, 0.50, 0.04]], [0.88, [1, 0.85, 0.15]], [1, [1, 1, 0.85]]];
-
-function heat(t, out) {
-  for (let i = 1; i < HEAT.length; i++) {
-    if (t <= HEAT[i][0]) {
-      const [a, ca] = HEAT[i - 1], [b, cb] = HEAT[i], u = (t - a) / (b - a);
-      for (let k = 0; k < 3; k++) out[k] = ca[k] + (cb[k] - ca[k]) * u;
-      return;
-    }
-  }
-  out[0] = HEAT[HEAT.length - 1][1][0];
-  out[1] = HEAT[HEAT.length - 1][1][1];
-  out[2] = HEAT[HEAT.length - 1][1][2];
-}
-
-function parseMesh(buffer) {
-  const dv = new DataView(buffer);
-  const V = dv.getUint32(0, true), F = dv.getUint32(4, true);
-  const expected = 8 + V * 12 + F * 12 + V + V * 4 + V * 8;
-  if (buffer.byteLength !== expected) throw new Error('wrong mesh length');
-  let o = 8;
-  const xyz = new Float32Array(dv.buffer.slice(o, o + V * 12)); o += V * 12;
-  const faces = new Uint32Array(dv.buffer.slice(o, o + F * 12)); o += F * 12;
-  const noCortex = new Uint8Array(dv.buffer.slice(o, o + V)); o += V;
-  const sulc = new Float32Array(dv.buffer.slice(o, o + V * 4)); o += V * 4;
-  const parents = new Uint32Array(dv.buffer.slice(o, o + V * 8));
-  for (let i = 0; i < faces.length; i++) if (faces[i] >= V) throw new Error('face index out of range');
-  for (let i = 0; i < parents.length; i++) if (parents[i] >= VERTICES) throw new Error('parent index out of range');
-  return { V, F, xyz, faces, noCortex, sulc, parents };
-}
-
-function parseHead(buffer) {
-  const dv = new DataView(buffer);
-  const V = dv.getUint32(0, true), F = dv.getUint32(4, true);
-  const expected = 8 + V * 12 + F * 12;
-  if (buffer.byteLength !== expected) throw new Error('wrong head length');
-  const xyz = new Float32Array(dv.buffer.slice(8, 8 + V * 12));
-  const faces = new Uint32Array(dv.buffer.slice(8 + V * 12, expected));
-  for (let i = 0; i < faces.length; i++) if (faces[i] >= V) throw new Error('head face out of range');
-  return { V, F, xyz, faces };
-}
-
-function makeBrain() {
-  const host = document.getElementById('brainHost');
-  const message = document.getElementById('brainMessage');
-  if (!host || !message) return { show() {}, setSecond() {}, clear() {}, setColourRange() {} };
-
-  let rows = null, rowCount = 0, second = 0, range = null;
-  let ready = false, meshFailed = false, meshPromise = null;
-  let renderer, scene, camera, controls, geometry, colourAttr, baseColour, parents, cortexMask;
-  let lastPaint = -1;
-
-  function setMessage(text) {
-    message.textContent = text;
-    message.hidden = !text;
-    renderer?.domElement?.toggleAttribute('hidden', !!text);
-    if (!text) resize();
-  }
-
-  function resize() {
-    if (!ready) return;
-    const width = host.clientWidth, height = host.clientHeight;
-    if (!width || !height) return;
-    renderer.setSize(width, height, false);
-    camera.aspect = width / height;
-    camera.updateProjectionMatrix();
-    fitCamera();
-  }
-
-  function fitCamera() {
-    if (!ready) return;
-    const sphere = geometry.boundingSphere;
-    if (!sphere) return;
-    const vf = THREE.MathUtils.degToRad(camera.fov);
-    const hf = 2 * Math.atan(Math.tan(vf / 2) * camera.aspect);
-    const distance = (sphere.radius * 1.08) / Math.sin(Math.min(vf, hf) / 2);
-    const dir = new THREE.Vector3(-1, 1, 0.42).normalize();
-    camera.position.copy(sphere.center).addScaledVector(dir, distance);
-    controls.target.copy(sphere.center);
-    controls.update();
-  }
-
-  function paint(time) {
-    if (!ready || !rows || !range) return;
-    if (Math.abs(time - lastPaint) < 0.02) return;
-    lastPaint = time;
-    const t = Math.max(0, Math.min(rowCount - 1, time));
-    const a0 = Math.floor(t), b = Math.min(a0 + 1, rowCount - 1), u = t - a0;
-    const values = colourAttr.array, tmp = [0, 0, 0];
-    const heatRange = range;
-    for (let i = 0; i < geometry.attributes.position.count; i++) {
-      const parentA = parents[2 * i], parentB = parents[2 * i + 1];
-      const va = rows[a0 * VERTICES + parentA] + (rows[b * VERTICES + parentA] - rows[a0 * VERTICES + parentA]) * u;
-      const vb = rows[a0 * VERTICES + parentB] + (rows[b * VERTICES + parentB] - rows[a0 * VERTICES + parentB]) * u;
-      const value = (va + vb) / 2;
-      let r = baseColour[3 * i], g = baseColour[3 * i + 1], bl = baseColour[3 * i + 2];
-      if (!cortexMask[i]) {
-        const shade = Math.max(0, Math.min(1, value / heatRange));
-        const w = Math.min(1, Math.max(0, (shade - 0.04) / 0.12));  // a short fade, so a hot area has a clear dark-red edge
-        if (w > 0) {
-          heat(shade, tmp);
-          r += (tmp[0] - r) * w; g += (tmp[1] - g) * w; bl += (tmp[2] - bl) * w;
-        }
-      }
-      values[3 * i] = r; values[3 * i + 1] = g; values[3 * i + 2] = bl;
-    }
-    colourAttr.needsUpdate = true;
-  }
-
-  function applyState() {
-    if (!ready) {
-      if (meshFailed) { setMessage(UNAVAILABLE); return; }
-      if (range && rows) { setMessage('Loading the 3D view…'); ensureMesh(); }
-      else setMessage(UNAVAILABLE);
-      return;
-    }
-    if (!range || !rows) { setMessage(UNAVAILABLE); return; }
-    setMessage('');
-    paint(second);
-  }
-
-  async function build() {
-    const [meshBuffer, headBuffer] = await Promise.all([
-      fetch(MESH_URL).then(res => {
-        if (!res.ok) throw new Error(`mesh HTTP ${res.status}`);
-        return res.arrayBuffer();
-      }),
-      fetch(HEAD_URL).then(res => res.ok ? res.arrayBuffer() : null).catch(() => null),
-    ]);
-    const mesh = parseMesh(meshBuffer);
-    cortexMask = mesh.noCortex;
-    parents = mesh.parents;
-
-    renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-    renderer.setClearColor(0x000000, 0);
-    if ('outputColorSpace' in renderer) renderer.outputColorSpace = THREE.SRGBColorSpace;
-    host.prepend(renderer.domElement);
-
-    scene = new THREE.Scene();
-    geometry = new THREE.BufferGeometry();
-    geometry.setAttribute('position', new THREE.BufferAttribute(mesh.xyz, 3));
-    geometry.setIndex(new THREE.BufferAttribute(mesh.faces, 1));
-    geometry.computeVertexNormals();
-    geometry.computeBoundingSphere();
-
-    baseColour = new Float32Array(mesh.V * 3);
-    for (let i = 0; i < mesh.V; i++) {
-      const shade = 0.5 - 0.5 * mesh.sulc[i];
-      const base = (0.80 + 0.17 * shade) * (mesh.noCortex[i] ? 0.82 : 1);
-      baseColour[3 * i] = base; baseColour[3 * i + 1] = base; baseColour[3 * i + 2] = base;
-    }
-    colourAttr = new THREE.BufferAttribute(new Float32Array(mesh.V * 3), 3);
-    colourAttr.setUsage(THREE.DynamicDrawUsage);
-    colourAttr.array.set(baseColour);
-    geometry.setAttribute('vcol', colourAttr);
-
-    const material = new THREE.ShaderMaterial({
-      vertexShader: 'attribute vec3 vcol; varying vec3 vColor; varying vec3 vNormal; void main(){ vColor = vcol; vNormal = normalize(normalMatrix * normal); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
-      fragmentShader: 'varying vec3 vColor; varying vec3 vNormal; void main(){ float d = max(0.0, dot(normalize(vNormal), normalize(vec3(0.35, 0.45, 0.9)))); gl_FragColor = vec4(vColor * (0.65 + 0.35 * d), 1.0); }',
-    });
-    scene.add(new THREE.Mesh(geometry, material));
-
-    const sphere = geometry.boundingSphere;
-    camera = new THREE.PerspectiveCamera(28, 1, 0.1, 3000);
-    camera.up.set(0, 0, 1);
-    controls = new OrbitControls(camera, renderer.domElement);
-    controls.enableDamping = true;
-    controls.enableZoom = false;
-    controls.enablePan = false;
-    controls.autoRotate = !matchMedia('(prefers-reduced-motion: reduce)').matches;
-    controls.autoRotateSpeed = 0.5;
-
-    if (headBuffer) {
-      try {
-        const head = parseHead(headBuffer);
-        const hg = new THREE.BufferGeometry();
-        hg.setAttribute('position', new THREE.BufferAttribute(head.xyz, 3));
-        hg.setIndex(new THREE.BufferAttribute(head.faces, 1));
-        hg.computeVertexNormals();
-        const hm = new THREE.Mesh(hg, new THREE.ShaderMaterial({
-          transparent: true, depthWrite: false, side: THREE.DoubleSide,
-          vertexShader: 'varying vec3 n; varying vec3 v; void main(){ vec4 mv = modelViewMatrix*vec4(position,1.); n = normalize(normalMatrix*normal); v = normalize(-mv.xyz); gl_Position = projectionMatrix*mv; }',
-          fragmentShader: 'varying vec3 n; varying vec3 v; void main(){ float f = pow(1.0-abs(dot(normalize(n),normalize(v))), 3.0); gl_FragColor = vec4(0.42,0.55,0.78, f*0.35); }',
-        }));
-        hm.renderOrder = 2;
-        scene.add(hm);
-      } catch (e) { /* the head is a nicety */ }
-    }
-
-    ready = true;
-    camera.aspect = Math.max(1, host.clientWidth) / Math.max(1, host.clientHeight);
-    camera.updateProjectionMatrix();
-    fitCamera();
-    new ResizeObserver(resize).observe(host);
-    resize();
-    applyState();
-    renderer.setAnimationLoop(() => {
-      controls.update();
-      renderer.render(scene, camera);
-    });
-  }
-
-  function ensureMesh() {
-    if (!meshPromise) {
-      meshPromise = build().catch(error => {
-        meshFailed = true;
-        ready = false;
-        setMessage(UNAVAILABLE);
-        console.warn('3D view:', error);
-      });
-    }
-    return meshPromise;
-  }
-
-  return {
-    show(nextRows, count) {
-      rows = nextRows; rowCount = count;
-      second = Math.max(0, Math.min(count - 1, second));
-      lastPaint = -1;
-      applyState();
-    },
-    setSecond(value) {
-      second = Number.isFinite(value) ? value : 0;
-      if (ready && rows) paint(second);
-    },
-    clear(text) {
-      rows = null; rowCount = 0;
-      setMessage(text || UNAVAILABLE);
-    },
-    setColourRange(value) {
-      range = Number.isFinite(value) && value > 0 ? value : null;
-      if (!range) rows = null;
-      lastPaint = -1;
-      applyState();
-    },
-  };
-}
-
-try {
-  if (window.brainMap) window.brainMap._install(makeBrain());
-} catch (error) {
-  console.warn('3D view:', error);
-  if (window.brainMap) window.brainMap.clear('The 3D view is not available for this video.');
-}
+loadHero();
+loadSignedIn();
+loadLimit();
 </script>
 </body>
 </html>

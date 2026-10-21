@@ -28,6 +28,7 @@ trap 'rm -rf "$STAGE"' EXIT
 mkdir -p "$STAGE/static" "$STAGE/data"
 git archive HEAD static | tar -x -C "$STAGE"
 cp static/index.html "$STAGE/index.html"
+cp static/app.html "$STAGE/app"
 # Only samples whose clip is listed in data/videos/SOURCES.md (open-licensed) are public; third-party
 # ads never are. Their video and thumbnail go with them. None qualifies today: the list is empty.
 python3 -I - "$STAGE" <<'PY'
@@ -51,6 +52,8 @@ aws s3 sync "$STAGE" "s3://$BUCKET/site/" --delete --only-show-errors
 # The page itself: browsers must check for a new version on every load, or a tab can keep running
 # an old page after a deploy (without Cache-Control they guess how long to keep it).
 aws s3 cp "$STAGE/index.html" "s3://$BUCKET/site/index.html" --cache-control no-cache \
+  --content-type "text/html; charset=utf-8" --only-show-errors
+aws s3 cp "$STAGE/app" "s3://$BUCKET/site/app" --cache-control no-cache \
   --content-type "text/html; charset=utf-8" --only-show-errors
 aws cloudfront create-invalidation --distribution-id "$DISTRIBUTION" --paths '/*' \
   --query Invalidation.Id --output text >/dev/null

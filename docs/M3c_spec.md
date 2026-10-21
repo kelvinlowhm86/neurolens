@@ -99,7 +99,7 @@ S3 is deleted first, so a failure part-way leaves a job that still shows but who
 ## 6. Stripe removal
 - Tag first: `git tag custom-gpu-stripe <last commit with Stripe>`, then push the tag.
 - Delete:
-  - `neurolens/web/stripe_webhook.py`, `billing.credit_test_topup`, `/api/top-up/checkout`, `STRIPE_PARAMETERS`, `allowlist_emails`, `can_top_up` (it leaves `/api/me`), and the top-up panel and its script in `static/index.html`;
+  - `neurolens/web/stripe_webhook.py`, `billing.credit_test_topup`, `/api/top-up/checkout`, `STRIPE_PARAMETERS`, `allowlist_emails`, `can_top_up` (it leaves `/api/me`), and the top-up panel and its script in `static/app.html`;
   - the `stripe` block in `config.json`, `stripe` in `requirements/web.txt`, and `tests/test_m3b_stripe.py`;
   - the Stripe parts of the other tests (named in §8).
 - Terraform: delete the webhook function, its URL, role and alarm entry, the `stripe_webhook_url` output, and the webhook loop entry in `deploy_web.sh`.

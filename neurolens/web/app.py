@@ -255,6 +255,10 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
     def index():
         return send_from_directory(str(static_dir), "index.html")
 
+    @app.route("/app")
+    def app_page():
+        return send_from_directory(str(static_dir), "app.html")
+
     @app.route("/healthz")
     def healthz():
         return jsonify({"ok": True})
@@ -287,7 +291,7 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
                 return _error("sign_in_failed", "Sign-in failed. Please try again.")
             user_id = billing.sign_in(db, claims["iss"], claims["sub"], email, starter_cents)
             auth.start_session(user_id, email)
-            return redirect("/")
+            return redirect("/app")
 
     @app.route("/logout", methods=["POST"])
     def logout():
