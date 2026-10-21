@@ -158,7 +158,12 @@ def test_result_returns_the_stored_json(client, aws, db, owned):
     resp = client.get(f"/api/jobs/{job_id}/result")
     assert resp.status_code == 200
     data = resp.get_json()
-    assert data.pop("summary")["peak"]
+    assert set(data.pop("summary")) == {
+        "opening",
+        "strong_moments",
+        "weak_moments",
+        "audio_dependence",
+    }
     assert data == result
 
 
@@ -206,8 +211,7 @@ with mock_aws():
                 "sqs_queue_url": "https://sqs.us-east-1.amazonaws.com/123456789012/q"},
         "max_video_duration_seconds": 120,
         "max_upload_bytes": 300000000,
-        "response": {"well_above": 0.5, "above": 0.2, "below": -0.2,
-                     "dead_threshold": 0.2, "dead_min_seconds": 3, "colour_range": 0.5},
+        "response": {"colour_range": 0.5},
         "auth": {"mode": "dev", "dev_user_id": "dev-user", "dev_email": "dev@localhost"},
         "billing": {"starter_cents": 500},
         "server": {"host": "127.0.0.1", "port": 5003},

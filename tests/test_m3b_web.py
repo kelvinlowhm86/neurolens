@@ -313,7 +313,12 @@ def test_a_processing_job_whose_result_exists_serves_it(aws, client, db, route):
     assert resp.status_code == 200
     if route == "result":
         data = resp.get_json()
-        assert data.pop("summary")["peak"]
+        assert set(data.pop("summary")) == {
+            "opening",
+            "strong_moments",
+            "weak_moments",
+            "audio_dependence",
+        }
         assert data == result
     else:
         rows = parse_csv(resp.get_data(as_text=True))

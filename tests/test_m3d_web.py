@@ -117,7 +117,7 @@ def put_brain(aws, job_id, body=b"brain bytes"):
     aws.s3.put_object(Bucket=aws.bucket, Key=f"results/{job_id}.brain", Body=body)
 
 
-def test_result_is_the_stored_result_plus_the_summary(client, aws, db, make_cfg):
+def test_result_is_the_stored_result_plus_the_summary(client, aws, db):
     job_id = done_job(db)
     result = result_for(job_id)
     store_result(aws, job_id, result)
@@ -127,7 +127,7 @@ def test_result_is_the_stored_result_plus_the_summary(client, aws, db, make_cfg)
     assert resp.status_code == 200
     assert resp.get_json() == {
         **result,
-        "summary": results.summarise(result, make_cfg()["response"]),
+        "summary": results.summarise(result),
     }
 
 

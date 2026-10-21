@@ -3,6 +3,7 @@
 import csv
 import io
 import json
+import math
 
 import pytest
 from neurolens import results
@@ -22,136 +23,286 @@ SERIES = [
     "overall",
 ]
 COLUMNS = ["t", *SERIES, *(f"muted_{name}" for name in SERIES)]
-CFG = {
-    "well_above": 0.5,
-    "above": 0.2,
-    "below": -0.2,
-    "dead_threshold": 0.2,
-    "dead_min_seconds": 3,
-    "colour_range": 0.5,
-}
+CFG = {"colour_range": 0.5}
+SUMMARY_KEYS = {"opening", "strong_moments", "weak_moments", "audio_dependence"}
 
 
 def zeros(length):
     return [0.0] * length
 
 
-def make_result(overall, *, see=None, hear=None, understand=None, signals=None, muted=None):
+def make_result(overall, muted=None):
     T = len(overall)
-    series = {name: zeros(T) for name in SERIES}
-    series.update(
-        {
-            "see": list(see) if see is not None else zeros(T),
-            "hear": list(hear) if hear is not None else zeros(T),
-            "understand": list(understand) if understand is not None else zeros(T),
-            "overall": list(overall),
-        }
-    )
-    if signals:
-        series.update(signals)
-    muted_series = {name: zeros(T) for name in SERIES}
-    muted_series["overall"] = list(overall if muted is None else muted)
+    signals = {name: zeros(T) for name in SERIES}
+    signals["overall"] = list(overall)
+    muted_signals = {name: zeros(T) for name in SERIES}
+    muted_signals["overall"] = list(overall if muted is None else muted)
     return {
         "format": 2,
         "duration_seconds": T,
-        "signals": series,
-        "muted": muted_series,
+        "signals": signals,
+        "muted": muted_signals,
     }
 
 
 def summary_for(overall, **kwargs):
-    return results.summarise(make_result(overall, **kwargs), CFG)
+    return results.summarise(make_result(overall, **kwargs))
 
 
-# ---------------------------------------------------------------- hook
+def mean(values):
+    return sum(values) / len(values)
 
 
-def test_hook_uses_the_first_three_seconds_and_the_highest_group_mean():
-    summary = summary_for([0.0, 0.0, 0.0], see=[0.0, 0.0, 3.0], hear=[0.8, 0.8, 0.8])
-    assert summary["hook"] == {"group": "see", "value": 1.0, "level": "well above typical"}
+# ---------------------------------------------------------------- opening
 
 
-def test_hook_uses_fewer_seconds_for_a_short_video():
-    summary = summary_for([0.0, 0.0], see=[1.0, 0.0], hear=[0.8, 0.8])
-    assert summary["hook"] == {"group": "hear", "value": 0.8, "level": "well above typical"}
+def test_opening_is_stronger_than_the_rest():
+    opening = summary_for([0.0, 2.0, 2.0, 2.0, 0.0, 0.0, 0.0])["opening"]
+
+    assert opening["value"] == pytest.approx(2.0, abs=1e-6)
+    assert opening["rest"] == pytest.approx(0.0, abs=1e-6)
+    assert opening["word"] == "stronger than the rest"
 
 
-def test_hook_with_a_one_second_video():
-    summary = summary_for([0.0], see=[1.0], hear=[0.8])
-    assert summary["hook"] == {"group": "see", "value": 1.0, "level": "well above typical"}
+def test_opening_is_weaker_than_the_rest():
+    opening = summary_for([0.0, -2.0, -2.0, -2.0, 0.0, 0.0, 0.0])["opening"]
+
+    assert opening["value"] == pytest.approx(-2.0, abs=1e-6)
+    assert opening["rest"] == pytest.approx(0.0, abs=1e-6)
+    assert opening["word"] == "weaker than the rest"
 
 
-# ---------------------------------------------------------------- peak
+def test_opening_is_about_the_same_as_the_rest():
+    opening = summary_for([0.0, 0.0, 3.0, 0.0, 0.0, 3.0, 0.0])["opening"]
+
+    assert opening["value"] == pytest.approx(1.0, abs=1e-6)
+    assert opening["rest"] == pytest.approx(1.0, abs=1e-6)
+    assert opening["word"] == "about the same as the rest"
+
+
+def test_opening_exactly_on_the_band_edge_is_about_the_same():
+    x = math.sqrt(47.25)
+    overall = [0.0, 1.0, 1.0, 1.0, x, -x, 0.0]
+    opening = summary_for(overall)["opening"]
+
+    values = overall[1:]
+    sd = math.sqrt(sum((value - mean(values)) ** 2 for value in values) / len(values))
+    assert opening["value"] - opening["rest"] == pytest.approx(0.25 * sd, abs=1e-6)
+    assert opening["word"] == "about the same as the rest"
 
 
 @pytest.mark.parametrize(
-    "overall, expected_t, expected_value, expected_level",
+    "overall, expected_value",
     [
-        ([0.7], 0, 0.7, "well above typical"),
-        ([0.9, 0.3], 1, 0.3, "above typical"),
-        ([0.9, 0.2, 0.5], 2, 0.5, "well above typical"),
+        ([0.1], 0.1),
+        ([0.1, 0.2], 0.2),
+        ([0.1, 0.2, 0.3], 0.25),
+        ([0.1, 0.2, 0.3, 0.4], 0.3),
     ],
-    ids=["T=1 includes zero", "T=2 skips zero", "T=3 skips zero"],
+    ids=["T=1", "T=2", "T=3", "T=4"],
 )
-def test_peak_skips_second_zero_except_for_a_one_second_video(
-    overall, expected_t, expected_value, expected_level
-):
-    peak = summary_for(overall)["peak"]
-    assert peak == {"t": expected_t, "value": expected_value, "level": expected_level}
+def test_opening_rest_and_word_are_null_for_short_videos(overall, expected_value):
+    opening = summary_for(overall)["opening"]
+
+    assert opening["value"] == pytest.approx(expected_value, abs=1e-6)
+    assert opening["rest"] is None
+    assert opening["word"] is None
 
 
-def test_peak_tie_goes_to_the_earliest_second():
-    assert summary_for([0.1, 0.4, 0.4])["peak"] == {
-        "t": 1,
-        "value": 0.4,
-        "level": "above typical",
+def test_opening_rest_and_word_are_null_for_a_flat_line():
+    opening = summary_for([0.7] * 7)["opening"]
+
+    assert opening["value"] == pytest.approx(0.7, abs=1e-6)
+    assert opening["rest"] is None
+    assert opening["word"] is None
+
+
+# ---------------------------------------------------------------- moments
+
+
+def test_summary_keys_are_the_four_new_ones():
+    assert set(summary_for([0.0] * 7)) == SUMMARY_KEYS
+
+
+def test_strong_pick_skips_the_second_best_window_next_to_the_best():
+    summary = summary_for([0.0, 1.0, 1.0, 1.0, -1.0, -1.0, -1.0])
+
+    assert summary["strong_moments"] == [
+        {"start": 1, "end": 4, "value": pytest.approx(1.0, abs=1e-6)}
+    ]
+
+
+def test_two_strong_picks_keep_a_two_second_gap():
+    summary = summary_for([0.0, 2.0, 2.0, 2.0, -1.0, -1.0, -1.0, 2.0, 2.0, 2.0])
+
+    assert summary["strong_moments"] == [
+        {"start": 1, "end": 4, "value": pytest.approx(2.0, abs=1e-6)},
+        {"start": 7, "end": 10, "value": pytest.approx(2.0, abs=1e-6)},
+    ]
+
+
+def test_strong_tie_goes_to_the_earliest_window():
+    summary = summary_for([0.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0])
+
+    assert summary["strong_moments"] == [
+        {"start": 1, "end": 4, "value": pytest.approx(1.0, abs=1e-6)}
+    ]
+
+
+def test_weak_pick_skips_the_second_lowest_window_next_to_the_lowest():
+    summary = summary_for([0.0, -1.0, -1.0, -1.0, 1.0, 1.0, 1.0])
+
+    assert summary["weak_moments"] == [
+        {"start": 1, "end": 4, "value": pytest.approx(-1.0, abs=1e-6)}
+    ]
+
+
+def test_weak_picks_skip_windows_that_overlap_a_strong_moment():
+    overall = [0.0, 10.0, 10.0, 10.0, -50.0, -50.0, 10.0, 10.0]
+    summary = summary_for(overall)
+
+    assert summary["strong_moments"][0] == {
+        "start": 1,
+        "end": 4,
+        "value": pytest.approx(10.0, abs=1e-6),
     }
+    assert summary["weak_moments"] == [
+        {"start": 4, "end": 7, "value": pytest.approx(-30.0, abs=1e-6)}
+    ]
+
+
+def test_weak_picks_keep_a_two_second_gap_and_come_back_in_time_order():
+    overall = [0.0, -2.0, -2.0, -2.0, 1.0, 1.0, 1.0, -2.0, -2.0, -2.0]
+    summary = summary_for(overall)
+
+    assert summary["weak_moments"] == [
+        {"start": 1, "end": 4, "value": pytest.approx(-2.0, abs=1e-6)},
+        {"start": 7, "end": 10, "value": pytest.approx(-2.0, abs=1e-6)},
+    ]
+    assert summary["weak_moments"] == sorted(summary["weak_moments"], key=lambda m: m["start"])
+
+
+# ---------------------------------------------------------------- growing
+
+
+def test_a_plateau_grows_to_its_edges():
+    overall = [0.0, -2.0, 2.0, 2.0, 2.0, 2.0, 2.0, -2.0, -2.0, -2.0]
+    summary = summary_for(overall)
+
+    assert summary["strong_moments"] == [
+        {"start": 2, "end": 7, "value": pytest.approx(2.0, abs=1e-6)}
+    ]
+
+
+def test_a_lone_spike_stays_three_seconds():
+    summary = summary_for([0.0, 0.0, 0.0, 5.0, 0.0, 0.0, 0.0])
+
+    assert summary["strong_moments"] == [
+        {"start": 1, "end": 4, "value": pytest.approx(5 / 3, abs=1e-6)}
+    ]
+
+
+def test_growth_stops_at_the_ten_second_cap():
+    overall = [0.0] + [2.0] * 15 + [-2.0] * 4
+    summary = summary_for(overall)
+
+    first = summary["strong_moments"][0]
+    assert first["start"] == 1
+    assert first["end"] == 11
+    assert first["value"] == pytest.approx(2.0, abs=1e-6)
+
+
+def test_growth_stops_at_the_gap_to_an_earlier_pick():
+    overall = [0.0, 3.0, 3.0, 3.0, 3.0, -3.0, 3.0, 3.0, 3.0, 3.0]
+    summary = summary_for(overall)
+
+    assert summary["strong_moments"] == [
+        {"start": 1, "end": 5, "value": pytest.approx(3.0, abs=1e-6)},
+        {"start": 7, "end": 10, "value": pytest.approx(3.0, abs=1e-6)},
+    ]
+
+
+def test_weak_growth_never_enters_a_strong_moment():
+    overall = [0.0, 0.0, 0.0, -100.0, 50.0, 50.0, -50.0, -20.0, -20.0, -20.0]
+    summary = summary_for(overall)
+
+    assert summary["strong_moments"] == [
+        {"start": 4, "end": 7, "value": pytest.approx(50 / 3, abs=1e-6)}
+    ]
+    # Without the strong moment's block, the second weak pick would grow into second 6.
+    assert summary["weak_moments"] == [
+        {"start": 1, "end": 4, "value": pytest.approx(-100 / 3, abs=1e-6)},
+        {"start": 7, "end": 10, "value": pytest.approx(-20.0, abs=1e-6)},
+    ]
+
+
+# ---------------------------------------------------------------- the lengths
 
 
 @pytest.mark.parametrize(
-    "value, level",
+    "overall, expected",
     [
-        (0.5, "well above typical"),
-        (0.499, "above typical"),
-        (0.2, "above typical"),
-        (0.199, "typical"),
-        (-0.199, "typical"),
-        (-0.2, "below typical"),
-        (-0.5, "below typical"),
+        (
+            [5.0],
+            {
+                "opening": {"value": 5.0, "rest": None, "word": None},
+                "strong_moments": [{"start": 0, "end": 1, "value": 5.0}],
+                "weak_moments": [],
+                "audio_dependence": 0.0,
+            },
+        ),
+        (
+            [9.0, 1.0],
+            {
+                "opening": {"value": 1.0, "rest": None, "word": None},
+                "strong_moments": [{"start": 1, "end": 2, "value": 1.0}],
+                "weak_moments": [],
+                "audio_dependence": 0.0,
+            },
+        ),
+        (
+            [9.0, 1.0, 3.0],
+            {
+                "opening": {"value": 2.0, "rest": None, "word": None},
+                "strong_moments": [{"start": 1, "end": 3, "value": 2.0}],
+                "weak_moments": [],
+                "audio_dependence": 0.0,
+            },
+        ),
+        (
+            [9.0, 1.0, 3.0, 5.0],
+            {
+                "opening": {"value": 3.0, "rest": None, "word": None},
+                "strong_moments": [{"start": 1, "end": 4, "value": 3.0}],
+                "weak_moments": [],
+                "audio_dependence": 0.0,
+            },
+        ),
+        (
+            [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
+            {
+                "opening": {"value": 2.0, "rest": 5.0, "word": "weaker than the rest"},
+                "strong_moments": [{"start": 4, "end": 7, "value": 5.0}],
+                "weak_moments": [{"start": 1, "end": 4, "value": 2.0}],
+                "audio_dependence": 0.0,
+            },
+        ),
     ],
+    ids=["T=1", "T=2", "T=3", "T=4", "T=7"],
 )
-def test_level_words_use_the_configured_thresholds(value, level):
-    assert summary_for([value])["peak"]["level"] == level
+def test_the_short_and_ordinary_lengths(overall, expected):
+    summary = summary_for(overall)
 
-
-# ---------------------------------------------------------------- dead stretches
-
-
-def test_a_dead_stretch_at_the_very_start():
-    summary = summary_for([-0.3, -0.3, -0.3, 0.1])
-    assert summary["dead"] == [{"start": 0, "end": 3}]
-
-
-def test_a_dead_stretch_at_the_very_end():
-    summary = summary_for([0.1, -0.3, -0.3, -0.3])
-    assert summary["dead"] == [{"start": 1, "end": 4}]
-
-
-def test_a_dead_stretch_exactly_dead_min_seconds_long_counts():
-    assert summary_for([0.1, -0.3, -0.3, -0.3, 0.1])["dead"] == [{"start": 1, "end": 4}]
-
-
-def test_a_dead_stretch_one_second_too_short_does_not_count():
-    assert summary_for([0.1, -0.3, -0.3, 0.1])["dead"] == []
-
-
-def test_every_dead_stretch_is_reported():
-    summary = summary_for([0.0, -0.3, -0.3, -0.3, 0.0, -0.3, -0.3, -0.3])
-    assert summary["dead"] == [{"start": 1, "end": 4}, {"start": 5, "end": 8}]
-
-
-def test_a_value_exactly_at_the_threshold_is_not_dead():
-    assert summary_for([-0.2, -0.2, -0.2])["dead"] == []
+    assert summary["opening"]["value"] == pytest.approx(expected["opening"]["value"], abs=1e-6)
+    assert summary["opening"]["rest"] == expected["opening"]["rest"]
+    assert summary["opening"]["word"] == expected["opening"]["word"]
+    for key in ("strong_moments", "weak_moments"):
+        assert len(summary[key]) == len(expected[key])
+        for actual, wanted in zip(summary[key], expected[key], strict=True):
+            assert actual["start"] == wanted["start"]
+            assert actual["end"] == wanted["end"]
+            assert actual["value"] == pytest.approx(wanted["value"], abs=1e-6)
+    assert summary["audio_dependence"] == pytest.approx(expected["audio_dependence"], abs=1e-6)
 
 
 # ---------------------------------------------------------------- audio dependence
@@ -161,12 +312,12 @@ def test_audio_dependence_is_one_when_muted_has_no_positive_response():
     assert summary_for([1.0, 1.0], muted=[0.0, 0.0])["audio_dependence"] == 1.0
 
 
-def test_audio_dependence_is_the_positive_area_ratio():
+def test_audio_dependence_is_the_positive_area_ratio_from_the_second_second():
     assert summary_for([1.0, 1.0], muted=[0.5, 0.5])["audio_dependence"] == 0.5
 
 
 def test_audio_dependence_uses_the_shared_length():
-    assert summary_for([1.0, 1.0, 1.0], muted=[0.5])["audio_dependence"] == 0.5
+    assert summary_for([0.0, 1.0, 1.0, 1.0], muted=[9.0, 0.5])["audio_dependence"] == 0.5
 
 
 def test_audio_dependence_is_null_without_a_positive_response():
@@ -174,78 +325,61 @@ def test_audio_dependence_is_null_without_a_positive_response():
 
 
 def test_audio_dependence_is_null_below_the_denominator_floor():
-    assert summary_for([5e-7, 0.0], muted=[0.0, 0.0])["audio_dependence"] is None
+    assert summary_for([0.0, 5e-7], muted=[0.0, 0.0])["audio_dependence"] is None
 
 
 def test_audio_dependence_is_clipped_to_zero():
-    assert summary_for([1.0], muted=[2.0])["audio_dependence"] == 0.0
+    assert summary_for([0.0, 1.0], muted=[5.0, 2.0])["audio_dependence"] == 0.0
+
+
+def test_audio_dependence_is_clipped_to_one():
+    assert summary_for([0.0, 1.0], muted=[5.0, -2.0])["audio_dependence"] == 1.0
 
 
 def test_audio_dependence_is_rounded_to_two_decimals():
-    assert summary_for([1.0, 1.0, 1.0], muted=[1.0, 1.0, 0.0])["audio_dependence"] == 0.33
+    assert summary_for([0.0, 1.0, 1.0, 1.0], muted=[0.0, 1.0, 1.0, 0.0])["audio_dependence"] == 0.33
+
+
+def test_audio_dependence_ignores_the_second_zero():
+    without = summary_for([0.0, 1.0, 1.0], muted=[0.0, 0.5, 0.5])
+    with_huge_zero = summary_for([1000.0, 1.0, 1.0], muted=[1000.0, 0.5, 0.5])
+
+    assert with_huge_zero["audio_dependence"] == without["audio_dependence"] == 0.5
+
+
+def test_the_second_zero_changes_nothing_when_the_video_is_longer():
+    without = summary_for(
+        [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
+        muted=[0.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0],
+    )
+    with_huge_zero = summary_for(
+        [1000.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
+        muted=[1000.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0],
+    )
+
+    assert with_huge_zero == without
 
 
 # ---------------------------------------------------------------- config validation
-
-
-def block(**overrides):
-    cfg = dict(CFG)
-    cfg.update(overrides)
-    return cfg
 
 
 def test_a_valid_response_block_is_accepted():
     assert results.validate_response_config(CFG) is None
 
 
-@pytest.mark.parametrize("key", list(CFG))
-@pytest.mark.parametrize("value", ["0.5", None, [0.5]])
-def test_every_setting_must_be_a_number(key, value):
+@pytest.mark.parametrize("value", [None, "0.5", True, False, [0.5], 0, -0.1])
+def test_colour_range_must_be_a_positive_number(value):
     with pytest.raises(ValueError):
-        results.validate_response_config(block(**{key: value}))
+        results.validate_response_config({"colour_range": value})
 
 
-@pytest.mark.parametrize(
-    "overrides",
-    [
-        {"well_above": 0.2, "above": 0.2},
-        {"well_above": 0.1, "above": 0.2},
-        {"above": -0.2, "below": -0.2},
-        {"above": -0.3, "below": -0.2},
-    ],
-)
-def test_the_level_thresholds_must_strictly_descend(overrides):
+def test_a_missing_colour_range_is_refused():
     with pytest.raises(ValueError):
-        results.validate_response_config(block(**overrides))
-
-
-@pytest.mark.parametrize("value", [0, -0.1])
-def test_dead_threshold_must_be_positive(value):
-    with pytest.raises(ValueError):
-        results.validate_response_config(block(dead_threshold=value))
-
-
-@pytest.mark.parametrize("value", [0, -1, 1.5, "3"])
-def test_dead_min_seconds_must_be_an_integer_of_at_least_one(value):
-    with pytest.raises(ValueError):
-        results.validate_response_config(block(dead_min_seconds=value))
-
-
-@pytest.mark.parametrize("value", [0, -1])
-def test_colour_range_must_be_positive(value):
-    with pytest.raises(ValueError):
-        results.validate_response_config(block(colour_range=value))
-
-
-def test_a_missing_setting_is_refused():
-    cfg = block()
-    del cfg["colour_range"]
-    with pytest.raises(ValueError):
-        results.validate_response_config(cfg)
+        results.validate_response_config({})
 
 
 def test_create_app_refuses_a_bad_response_block(make_cfg, tmp_path):
-    cfg = make_cfg(with_aws=False, response=block(dead_min_seconds=0))
+    cfg = make_cfg(with_aws=False, response={"colour_range": 0})
     with pytest.raises(ValueError):
         create_app(cfg=cfg, data_dir=tmp_path / "data")
 
