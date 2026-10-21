@@ -370,7 +370,7 @@ def _fake_predictions(events, rows):
     if not events.audio:
         field *= 0.6
     noise = np.random.default_rng(events.size + (0 if events.audio else 1))
-    return field + 0.05 * noise.standard_normal((rows, N_VERTICES))
+    return field + 0.01 * noise.standard_normal((rows, N_VERTICES))  # below the map's fade-in
 
 
 def predict(events, duration):

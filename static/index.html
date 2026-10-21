@@ -11,7 +11,7 @@
   :root {
     --stage: #0D1320; --stage-2: #151D2E; --stage-text: #E7EAF0; --stage-muted: #8C96A8; --stage-rule: #253049;
     --paper: #F4F5F7; --surface: #FFFFFF; --ink: #161B26; --ink-2: #5A6272; --ink-3: #8A91A0; --rule: #DADDE3;
-    --heat: #F2711C; --heat-deep: #B4231A; --heat-light: #FF6A1A; --cool: #6B7A99;
+    --heat: #F2711C; --cool: #6B7A99;
     --display: 'Bricolage Grotesque', system-ui, sans-serif; --text: 'Public Sans', system-ui, sans-serif;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -109,7 +109,7 @@
   .brain-box canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
   .brain-message { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 20px; text-align: center; font-size: 13px; color: var(--stage-muted); }
   .brain-legend { position: absolute; left: 14px; bottom: 12px; display: flex; gap: 8px; align-items: center; font-size: 11px; color: var(--stage-muted); pointer-events: none; }
-  .brain-legend i { width: 86px; height: 6px; border-radius: 3px; background: linear-gradient(90deg, #D9DCE1, #6E0D0D, var(--heat-deep), var(--heat), var(--heat-light)); }
+  .brain-legend i { width: 86px; height: 6px; border-radius: 3px; background: linear-gradient(90deg, #D9DCE1, #730505, #D91A0D, #FF730D, #FFD133, #FFF7C7); }
   .brain-time { position: absolute; right: 14px; top: 12px; font: 600 13px var(--display); color: var(--stage-muted); font-variant-numeric: tabular-nums; }
   .sample-meta { font-size: 11.5px; color: var(--stage-muted); line-height: 1.45; }
   .sample-meta:empty { display: none; }
@@ -167,6 +167,7 @@
   .legend-key { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--ink-2); }
   .legend-key i { width: 18px; height: 0; border-top: 2px solid var(--heat); }
   .legend-key i.dash { border-top: 2px dashed var(--cool); }
+  .legend-key i.typical { border-top: 1.5px dashed var(--ink-3); }
   .legend-key i.swatch { width: 12px; height: 12px; border-top: 0; border-radius: 2px; background: rgba(242,113,28,.18); }
   .toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--ink-2); white-space: nowrap; }
   .toggle input { accent-color: var(--heat); }
@@ -1275,7 +1276,7 @@ function clearAllCharts() {
   $('timeline').replaceChildren();
 }
 
-function drawChart(host, { lines, range, height = 200, shade = false, zeroLabel = false, axisLabels = false, dark = false, fill = false, span = null, scope }) {
+function drawChart(host, { lines, range, height = 200, shade = false, axisLabels = false, dark = false, fill = false, span = null, scope }) {
   host.replaceChildren();
   const T = span || totalSeconds();
   if (!T) return;
@@ -1346,16 +1347,6 @@ function drawChart(host, { lines, range, height = 200, shade = false, zeroLabel 
     seek(((e.clientX - rect.left) / rect.width) * (T - 1));
   });
 
-  if (zeroLabel) {
-    const label = document.createElement('div');
-    label.textContent = 'typical';
-    Object.assign(label.style, {
-      position: 'absolute', right: '0',
-      top: fill ? `calc(${(y(0) / H) * 100}% - 18px)` : `${y(0) - 18}px`,
-      fontSize: '11px', color: dark ? '#8C96A8' : '#8A91A0', pointerEvents: 'none',
-    });
-    host.appendChild(label);
-  }
   if (axisLabels) {
     const axis = document.createElement('div');
     axis.className = 'xaxis';
@@ -1418,12 +1409,13 @@ function buildMainChart() {
   });
   let range = 0;
   lines.forEach(line => { range = Math.max(range, niceRange(line.values)); });
-  drawChart(box, { lines, range, height: 220, shade: true, zeroLabel: true, axisLabels: true, fill: true, span, scope: 'main' });
+  drawChart(box, { lines, range, height: 220, shade: true, axisLabels: true, fill: true, span, scope: 'main' });
   addPins(box);
   const currentKey = `<span class="legend-key"><i></i>${escapeHtml(name)}</span>`;
   const secondKey = secondLabel ? `<span class="legend-key"><i class="dash"></i>${escapeHtml(secondLabel)}</span>` : '';
   const shadeKey = comparison ? `<span class="legend-key"><i class="swatch"></i>shaded: moments of ${escapeHtml(name)}</span>` : '';
-  $('chartKeys').innerHTML = currentKey + secondKey + shadeKey;
+  const typicalKey = '<span class="legend-key"><i class="typical"></i>typical</span>';
+  $('chartKeys').innerHTML = currentKey + secondKey + typicalKey + shadeKey;
 }
 
 function stripRange() {
@@ -1911,7 +1903,7 @@ const VERTICES = 20484;
 const MESH_URL = '/static/brain/fsaverage6_pial.bin';
 const HEAD_URL = '/static/brain/head.bin';
 const UNAVAILABLE = 'The 3D view is not available for this video.';
-const HEAT = [[0, [0.36, 0.03, 0.03]], [0.35, [0.62, 0.06, 0.04]], [0.7, [0.88, 0.20, 0.05]], [1, [1, 0.416, 0.102]]];
+const HEAT = [[0, [0.45, 0.02, 0.02]], [0.3, [0.85, 0.10, 0.05]], [0.6, [1, 0.45, 0.05]], [0.85, [1, 0.82, 0.20]], [1, [1, 0.97, 0.78]]];
 
 function heat(t, out) {
   for (let i = 1; i < HEAT.length; i++) {
