@@ -283,7 +283,7 @@ TRIBE v2 itself (`facebook/tribev2`) is freely downloadable under CC BY-NC 4.0.
 
 ## Test Drive: Running the Exploration Notebook
 
-The `notebooks/explore.ipynb` notebook validates the full NeuroLens pipeline end-to-end on a sample video. Follow these steps to run it on a Linux machine with GPU access.
+The `notebooks/explore.ipynb` notebook validates the original pipeline end-to-end on a sample video. It keeps the original maths (Destrieux atlas, five regions, engagement scores rescaled to 0-1), so its outputs below differ from the app's (see "What it shows" above). Follow these steps to run it on a Linux machine with GPU access.
 
 ### Prerequisites
 
@@ -471,18 +471,16 @@ The brain heatmap on the left **updates in real time** as the video plays — in
 
 **Borrow:**
 
-- The **synchronised playback** pattern — brain state updates as video plays. This is the core UX and it works well.
-- The **dark theme** — brain activity heatmaps are most readable on black. Our charts should also be on a dark background.
-- The **transport controls** — play/pause, scrubber, mute. Standard and effective.
-- The **True vs Predicted toggle concept** — we should let users toggle between "with audio" and "without audio" views in our charts, similar to how Meta lets users toggle between real fMRI and predicted.
+- The **synchronised playback** pattern: a 3D brain map that updates as the video plays, on one timeline with the video.
+- The **transport controls**: play/pause, scrubber, mute.
+- The **toggle concept**: our chart can overlay the muted (no-audio) response on the normal one, as Meta toggles between real fMRI and predicted.
 
-**Improve on:**
+**Add:**
 
-- Replace the 3D brain (requires neuroscience literacy) with **line charts that anyone can read**. The brain is beautiful but most users can't map "the yellow blob in the temporal region" to "faces are driving engagement here." Our per-region labelled charts solve this.
-- Add **quantitative metrics** — the demo shows only a visual heatmap with no numbers. We produce engagement scores per second.
-- Add **user video upload** — the demo only works with pre-loaded clips. NeuroLens accepts any video.
-- Add **audio contribution analysis** — the demo has no way to isolate audio's effect. Our dual-inference approach (with audio vs without) directly addresses this.
-- Add **timeline annotations** — mark peaks and label what's driving them ("face appears", "dialogue starts", "scene change").
+- **Numbers next to the map**: 7 labelled signals in 3 groups (see, hear, understand) and an overall line, second by second on a chart anyone can read, plus the strongest and weakest moments.
+- **User video upload**: the demo only works with pre-loaded clips.
+- **Audio dependence**: the second, muted pass shows how much of the response needs the soundtrack.
+- **Compare**: two of the user's own videos side by side.
 
 ---
 
@@ -585,7 +583,7 @@ df = model.get_events_dataframe(text_path="path/to/script.txt")
 df = model.get_events_dataframe(audio_path="path/to/audio.wav")
 ```
 
-This is what enables our **audio contribution analysis** — we run video-only (by stripping audio with ffmpeg first) and compare against full video.
+This is what enables our **audio dependence** measure: the worker runs a second pass on the video's events with the audio and word events removed (`without_audio` in `neurolens/inference.py`) and compares it with the full pass.
 
 ### Known gotchas from the community
 
@@ -632,7 +630,7 @@ Transcribed  ──→ LLaMA 3.2-3B (frozen)  ──→ D=2048 embeddings at 2 H
                   Output: (T, 20484)
 ```
 
-The `modality dropout (p=0.3)` during training means any modality can be zeroed out and the model still produces meaningful predictions. This is critical for our audio comparison — when we strip audio before inference, the model gracefully handles the missing modality rather than crashing.
+The `modality dropout (p=0.3)` during training means any modality can be zeroed out and the model still produces meaningful predictions. This is critical for our muted pass: when the audio events are removed, the model handles the missing modality rather than crashing.
 
 ---
 
