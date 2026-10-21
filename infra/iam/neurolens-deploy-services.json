@@ -32,6 +32,12 @@
       "Resource": "*"
     },
     {
+      "Sid": "ApiCallHistoryRead",
+      "Effect": "Allow",
+      "Action": "cloudtrail:LookupEvents",
+      "Resource": "*"
+    },
+    {
       "Sid": "AlarmsOnlyNeurolens",
       "Effect": "Allow",
       "Action": [
