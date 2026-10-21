@@ -8,7 +8,7 @@
 - **Why the change.** The five old regions detect content (faces, bodies, scenes, social cues, sound), not interest. The old score took the absolute value of each region's mean (so a dip counted as a rise) and stretched every video to 0-1 on its own, so two videos could not be compared. Two outside attempts to predict engagement from TRIBE output failed (r = 0.25 on 24 videos; a null result on 48 in arXiv 2607.01400).
 - **Built-in scale.** TRIBE was trained on fMRI responses z-scored per vertex, so its raw output already has a reference: 0 means typical film/TV viewing. Values are shown signed and unscaled.
 - **No lag fix.** tribev2 already shifts its predictions 5 s back to cancel the blood-flow delay (its README and demo), so second *t* of the result is second *t* of the video.
-- **7 signals in 3 groups**, an overall line, a muted (no-audio) copy, summary cards, a 3D brain map, and A-vs-B comparison against the user's own videos.
+- **7 signals in 3 groups**, read from the Glasser areas the TRIBE v2 paper tested (§2), an overall line, a muted (no-audio) copy, summary cards, a 3D brain map, and A-vs-B comparison against the user's own videos.
 - **The raw brain output is stored** (with-audio pass), so the map and any later change to the regions need no GPU rerun.
 - **No value or persuasion signal**: the model gives no evidence for one.
 - **Samples** become open-licensed Blender clips; the 14 third-party samples are removed.
@@ -26,19 +26,22 @@ The new maths (`neurolens/response.py`, replacing `neurolens/engagement.py`); re
 - Converting old stored results: they expire within 30 days (§4).
 
 ## 2. Signals (`neurolens/response.py`)
-Destrieux atlas labels (fsaverage5, as now). Vertex order is the left hemisphere (indices 0-10,241) then the right (10,242-20,483), as the model outputs them.
+Areas from the Glasser HCP-MMP1 map (360 areas), the map the TRIBE v2 paper and tribev2's own `get_hcp_labels` use, so each signal reads the area the paper tested (§5.9 and figures 4-5 of arXiv 2605.04326). Vertex order is the left hemisphere (indices 0-10,241) then the right (10,242-20,483), as the model outputs them.
 
-| Signal | Labels | Hemisphere | Group |
-|---|---|---|---|
-| faces | G_oc-temp_lat-fusifor | both | see |
-| bodies | S_oc-temp_lat, G_temporal_inf | both | see |
-| scenes | G_oc-temp_med-Parahip | both | see |
-| visual | S_calcarine, G_cuneus, Pole_occipital, G_oc-temp_med-Lingual | both | see |
-| sound | G_temp_sup-G_T_transv, G_temp_sup-Plan_tempo | both | hear |
-| speech | G_front_inf-Opercular, G_front_inf-Triangul, G_temporal_middle, G_temp_sup-Lateral | left only | understand |
-| social | S_temporal_sup | both | understand |
+| Signal | Areas | Hemisphere | Group | Why these areas |
+|---|---|---|---|---|
+| faces | FFC | both | see | paper: face area (FFA) |
+| bodies | V4t | both | see | paper: body area (EBA) |
+| scenes | PHA1, PHA2, PHA3 | both | see | place area (PPA): the paper's label list omits it; its figure 4 shows it on the medial underside, which is PHA1-3. Our reading, not the paper's words |
+| visual | V1, V2, V3 | both | see | early visual cortex (the paper's best-predicted areas for video) |
+| sound | A1, LBelt, MBelt, PBelt | both | hear | early auditory cortex (the paper's "Auditory (Early)") |
+| speech | A5, STSva, STSvp, 45 | left only | understand | paper's language localiser: A5, STS, Broca's area 45 |
+| social | PGi, TE1a | both | understand | paper's emotional-vs-physical-pain contrast: TPJ, MTG |
 
-- **Exact match.** A label matches only when its name equals the target (bytes names are decoded first). Every target label must exist in the atlas: `build_masks` raises `ValueError` naming any that does not. `require_nonempty_masks` stays.
+- **Map files.** `lh.HCPMMP1.annot` and `rh.HCPMMP1.annot` (fsaverage, figshare files 5528816 and 5528819, the copies MNE's `fetch_hcp_mmp_parcellation` downloads). `load_model` downloads them once into `data/hcp_mmp/` (git-ignored, like `data/nilearn/`) and checks their SHA-256 (lh `d4da6346…2b44`, rh `744eff4e…e9a2`, full values as constants in `response.py`); a mismatch or failed download raises, so the worker never runs on a changed map. The AMI build runs `load_model`, so the files are baked into the worker image, never committed and never in a Docker image. They are read with `nibabel.freesurfer.read_annot` (installed with nilearn); mne is not needed.
+- **fsaverage5.** fsaverage5 is the first 10,242 vertices of each fsaverage hemisphere, so each hemisphere's label array is cut to its first 10,242 entries (as tribev2 does).
+- **Licence.** The map is HCP data under the WU-Minn HCP Open Access Data Use Terms: no attempt to identify subjects, redistribution only under the same terms, and the HCP acknowledgement in the report (§11).
+- **Exact match.** A name is normalised by dropping the `L_`/`R_` prefix and the `_ROI` suffix (bytes names decoded first); an area matches only when the normalised name equals the target. Every target must exist in both hemispheres' maps: `build_masks` raises `ValueError` naming any that does not. `require_nonempty_masks` stays. Sizes on fsaverage5 (left + right) range from 29 vertices (bodies) upward.
 - **Disjoint.** No vertex belongs to two signals.
 - **Values.** For each second, the signed mean of the prediction over the signal's vertices: no absolute value, no rescaling.
 - **Groups.** see = mean(faces, bodies, scenes, visual); hear = sound; understand = mean(speech, social). **overall** = mean(see, hear, understand). Groups are means of the signal series, not of pooled vertices, so a large region does not outweigh a small one.
@@ -135,7 +138,7 @@ There is no reference set of videos to say how big a "normal" rise or dip is, so
 
 ## 10. Tests
 Existing tests that pin the old format (`timesteps`, `regions`, `engagement_overall`, the 0-1 rescale) are **rewritten** to format 2. This is the intended change this spec approves, not editing tests to make them pass. The old golden file `tests/fixtures/extract_engagement_golden.json` is **replaced** by `extract_response_golden.json`, regenerated from the new code.
-- **Masks:** exact labels (a near-miss name does not match; a missing label raises); speech only on left vertices; no overlap; none empty.
+- **Masks:** name normalisation (`L_FFC_ROI` matches `FFC`); exact names (a near-miss does not match; an area missing from either hemisphere raises); the cut to 10,242 vertices per hemisphere; speech only on left vertices; no overlap; none empty. Tests build a small synthetic annot file and make no network call; a wrong SHA-256 raises.
 - **Values:** signed means with no rescaling (a region with negative predictions gives negative values); groups and overall from the signal series; the muted length cut; 3-decimal rounding; series order.
 - **`summarise`:** the opening's three words and its band edge; `rest`/`word` null for T ≤ 4 and for a flat line; strongest and weakest picks with the 2-second gap (a second-best window next to the best is skipped), the earliest winning a tie, weak picks skipping windows that overlap a strong one, time order; growing (a plateau grows to its edges, a lone spike stays 3 seconds, growth stops at the 10-second cap, at the gap to an earlier pick and at a strong moment); T = 1, 2, 3, 4 and 7; the null audio dependence; clipping to 0-1.
 - **Config:** `validate_response_config` refuses a missing, non-numeric or non-positive `colour_range`; `create_app` refuses a bad block.
@@ -149,7 +152,8 @@ Existing tests that pin the old format (`timesteps`, `regions`, `engagement_over
 
 ## 11. Docs (current-state only)
 - `AGENTS.md`: the layout names `response.py`; the normalisation rule becomes "signed, no rescaling; muted cut to the shared length"; the golden-file rule names `extract_response` and its new fixture.
-- `README.md`: the result-format section.
+- `README.md`: the result-format section, and the brain-area map (Glasser HCP-MMP1, downloaded on first worker start).
+- Report acknowledgement (HCP terms): "Data were provided [in part] by the Human Connectome Project, WU-Minn Consortium (Principal Investigators: David Van Essen and Kamil Ugurbil; 1U54MH091657) funded by the 16 NIH Institutes and Centers that support the NIH Blueprint for Neuroscience Research; and by the McDonnell Center for Systems Neuroscience at Washington University." plus a citation of Glasser et al. 2016.
 - `static/privacy.html`: the brain output is part of the result and of the dataset copy, and delete removes it.
 - M1/M2a/M3b sections that describe the old format get a one-line pointer to this spec.
 - Close-out: report wording (the pitch "virtual brain-response pre-test", honest limits, future work), architecture page, learning log, ai_log.
