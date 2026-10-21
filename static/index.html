@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NeuroLens — Video Engagement Analysis</title>
+<title>NeuroLens — Video Brain Response Analysis</title>
 <script src="/static/chart.min.js"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700&family=JetBrains+Mono:wght@400;500&display=swap');
@@ -149,30 +149,74 @@
   .field-row { display: flex; gap: 8px; }
   .field-row input { flex: 1; min-width: 0; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 10px; font: inherit; font-size: 12px; }
 
-  /* Charts */
+  /* Results */
   .charts-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 12px; color: var(--text-muted); font-size: 14px; }
   .charts-empty svg { width: 48px; height: 48px; opacity: 0.3; }
   .charts-container { display: none; }
   .charts-container.active { display: block; }
+  .result-message { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; font-size: 13px; line-height: 1.6; color: var(--text-secondary); margin-bottom: 14px; }
+  .result-message[hidden] { display: none; }
+
+  .result-stats { display: grid; grid-template-columns: 1fr; gap: 10px; margin-bottom: 16px; }
+  .result-stats.compare { grid-template-columns: 1fr 1fr; }
+  .cards-group { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .cards-label { font-size: 10px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .cards-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+  .result-stats.compare .cards-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .stat-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px; text-align: center; min-width: 0; }
+  .stat-value { font-size: 20px; font-weight: 700; font-family: 'JetBrains Mono', monospace; color: var(--accent); overflow-wrap: anywhere; }
+  .stat-value.small { font-size: 12px; line-height: 1.35; }
+  .stat-detail { font-size: 11px; color: var(--text-secondary); margin-top: 2px; overflow-wrap: anywhere; }
+  .stat-label { font-size: 10px; color: var(--text-muted); margin-top: 4px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; }
+
+  .compare-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; font-size: 12px; color: var(--text-secondary); }
+  .compare-row[hidden] { display: none; }
+  .compare-row select { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 6px 8px; background: var(--bg-card); color: var(--text-primary); font: inherit; font-size: 12px; max-width: 240px; }
+  .compare-msg { font-size: 12px; color: var(--text-secondary); }
+  .compare-msg.error { color: var(--red); }
 
   .chart-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 20px; margin-bottom: 14px; box-shadow: var(--shadow-sm); }
-  .chart-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .chart-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
   .chart-title { font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
   .chart-dot { width: 8px; height: 8px; border-radius: 50%; }
-  .chart-peak { font-size: 11px; font-family: 'JetBrains Mono', monospace; color: var(--text-muted); }
-  .chart-wrapper { height: 120px; }
-  .chart-wrapper.tall { height: 150px; }
-  .chart-desc { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); font-size: 12px; line-height: 1.5; color: var(--text-muted); }
+  .chart-note { font-size: 12px; color: var(--text-muted); margin: 0 0 10px; }
+  .chart-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+  .group-btn { border: 1px solid var(--border); background: var(--bg-card); color: var(--text-secondary); border-radius: 999px; padding: 3px 10px; font: inherit; font-size: 11px; cursor: pointer; }
+  .group-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .group-btn.active { background: var(--accent-light); border-color: var(--accent); color: var(--accent); }
+  .muted-toggle { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-secondary); white-space: nowrap; }
+  .muted-toggle input { accent-color: var(--accent); }
+  .chart-wrapper { height: 280px; }
 
-  .result-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 16px; }
-  .stat-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 14px; text-align: center; }
-  .stat-value { font-size: 24px; font-weight: 700; font-family: 'JetBrains Mono', monospace; color: var(--accent); }
-  .stat-label { font-size: 10px; color: var(--text-muted); margin-top: 3px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; }
+  .brain-panel { position: relative; height: 320px; background: linear-gradient(180deg, #F8FAFC, #EEF2F7); border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; }
+  .brain-canvas { width: 100%; height: 100%; }
+  .brain-canvas canvas { display: block; width: 100%; height: 100%; }
+  .brain-message { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 20px; text-align: center; font-size: 13px; color: var(--text-muted); }
+  .brain-message[hidden] { display: none; }
+  .brain-caption { font-size: 11px; color: var(--text-muted); font-family: 'JetBrains Mono', monospace; }
+  .brain-legend { display: flex; flex-direction: column; gap: 4px; margin-top: 10px; }
+  .brain-legend[hidden] { display: none; }
+  .brain-legend-bar { height: 8px; border-radius: 4px; border: 1px solid var(--border); background: linear-gradient(90deg, #2563EB, #FFFFFF, #DC2626); }
+  .brain-legend-labels { display: flex; justify-content: space-between; font-size: 10px; color: var(--text-muted); }
+  .brain-legend-range { text-align: center; font-size: 10px; color: var(--text-muted); font-family: 'JetBrains Mono', monospace; }
+
+  .sample-meta { padding: 10px 14px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 12px; line-height: 1.5; color: var(--text-secondary); }
+  .sample-meta[hidden] { display: none; }
+  .sample-attribution { color: var(--text-muted); margin-top: 4px; }
 
   @media (max-width: 1024px) {
     .layout { grid-template-columns: 1fr; }
     .panel-left { position: relative; top: 0; height: auto; min-height: 400px; border-right: none; border-bottom: 1px solid var(--border); }
     .panel-right { height: auto; }
+  }
+
+  @media (max-width: 700px) {
+    .cards-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .result-stats.compare { grid-template-columns: 1fr; }
+    .chart-header { align-items: flex-start; }
+    .chart-controls { justify-content: flex-start; }
+    .chart-wrapper { height: 240px; }
+    .brain-panel { height: 240px; }
   }
 </style>
 </head>
@@ -183,7 +227,7 @@
     <div class="logo-text">Neuro<span>Lens</span></div>
   </div>
   <div class="header-right">
-    <div class="header-meta" id="headerMeta">Select a video to view analysis</div>
+    <div class="header-meta" id="headerMeta">Select a video to view its brain response</div>
     <div class="header-meta" id="balance"></div>
     <div class="header-meta" id="account"></div>
     <button class="header-link" id="signOut" hidden>Sign out</button>
@@ -226,7 +270,7 @@
       <div class="upload-panel-line" id="upCost"></div>
     <div class="consent-row" id="consentRow">
       <input type="checkbox" id="consentBox">
-      <label for="consentBox">Keep this video and its analysis for up to 12 months to help build a future engagement model. I own the rights to this video. Optional: the analysis works either way. <a href="/static/privacy.html">Privacy policy</a></label>
+      <label for="consentBox">Keep this video and its analysis for up to 12 months to help build a future model linking brain response to real audience behaviour. I own the rights to this video. Optional: the analysis works either way. <a href="/static/privacy.html">Privacy policy</a></label>
     </div>
       <div class="upload-progress" id="upProgress"><div class="upload-bar" id="upBar"></div></div>
       <div class="upload-panel-msg" id="upMsg"></div>
@@ -276,7 +320,7 @@
     <!-- Processing -->
     <div class="processing" id="processing">
       <div class="spinner"></div>
-      <div class="processing-text">Analysing neural engagement...</div>
+      <div class="processing-text">Analysing brain response...</div>
       <div class="processing-detail" id="processingDetail">Running TRIBE v2 inference</div>
     </div>
 
@@ -288,66 +332,113 @@
         <div class="video-stats"><span id="videoDuration"></span><span id="videoProcessTime"></span></div>
         <button class="btn-new" id="btnNew">Back</button>
       </div>
+      <div class="sample-meta" id="sampleMeta" hidden>
+        <div id="sampleDescription"></div>
+        <div class="sample-attribution" id="sampleAttribution"></div>
+      </div>
     </div>
   </div>
 
   <div class="panel-right">
     <div class="charts-empty" id="chartsEmpty">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 3v18h18"/><path d="M7 16l4-8 4 4 5-9"/></svg>
-      <div>Select a video to view its engagement analysis</div>
+      <div>Select a video to view its brain response</div>
     </div>
     <div class="charts-container" id="chartsContainer">
+      <div class="result-message" id="resultMessage" hidden></div>
       <div class="result-stats" id="resultStats"></div>
 
-      <div class="chart-card">
-        <div class="chart-header"><div class="chart-title"><span class="chart-dot" style="background:var(--orange)"></span> Overall Engagement</div><div class="chart-peak" id="peakOverall"></div></div>
-        <div class="chart-wrapper tall"><canvas id="chartOverall"></canvas></div>
-        <div class="chart-desc">The combined neural engagement score across all five brain regions. Higher values mean the brain is processing more of the video content at that moment. Look for peaks (high-attention moments) and troughs (where viewers may disengage).</div>
+      <div class="compare-row" id="compareRow" hidden>
+        <label for="compareSelect">Compare with…</label>
+        <select id="compareSelect"></select>
+        <span class="compare-msg" id="compareMsg"></span>
       </div>
 
-      <div class="chart-card">
-        <div class="chart-header"><div class="chart-title"><span class="chart-dot" style="background:var(--red)"></span> FFA — Faces</div><div class="chart-peak" id="peakFfa"></div></div>
-        <div class="chart-wrapper"><canvas id="chartFfa"></canvas></div>
-        <div class="chart-desc">Activation of the Fusiform Face Area — the brain region specialised for face recognition. Spikes when faces appear on screen. Strong face activation typically correlates with higher emotional engagement and memorability.</div>
+      <div class="chart-card" id="chartCard">
+        <div class="chart-header">
+          <div class="chart-title"><span class="chart-dot" style="background:var(--orange)"></span> Brain response</div>
+          <div class="chart-controls">
+            <button class="group-btn" data-group="see">See</button>
+            <button class="group-btn" data-group="hear">Hear</button>
+            <button class="group-btn" data-group="understand">Understand</button>
+            <label class="muted-toggle"><input type="checkbox" id="mutedToggle"> Show without sound</label>
+          </div>
+        </div>
+        <div class="chart-note">Predicted response of an average viewer, relative to typical film and TV viewing.</div>
+        <div class="chart-wrapper"><canvas id="mainChart"></canvas></div>
       </div>
 
-      <div class="chart-card">
-        <div class="chart-header"><div class="chart-title"><span class="chart-dot" style="background:var(--blue)"></span> EBA — Bodies</div><div class="chart-peak" id="peakEba"></div></div>
-        <div class="chart-wrapper"><canvas id="chartEba"></canvas></div>
-        <div class="chart-desc">Activation of the Extrastriate Body Area — responds to human bodies, hands, and gestures. Sustained elevation means people are consistently on screen. Drops may indicate product-only shots or environment-focused moments.</div>
-      </div>
-
-      <div class="chart-card">
-        <div class="chart-header"><div class="chart-title"><span class="chart-dot" style="background:var(--green)"></span> PPA — Scenes</div><div class="chart-peak" id="peakPpa"></div></div>
-        <div class="chart-wrapper"><canvas id="chartPpa"></canvas></div>
-        <div class="chart-desc">Activation of the Parahippocampal Place Area — responds to environments, landscapes, and spatial scenes. High when the video shows wide establishing shots, interiors, or location context. Low during close-ups on people or products.</div>
-      </div>
-
-      <div class="chart-card">
-        <div class="chart-header"><div class="chart-title"><span class="chart-dot" style="background:var(--gold)"></span> STS — Social Cues</div><div class="chart-peak" id="peakSts"></div></div>
-        <div class="chart-wrapper"><canvas id="chartSts"></canvas></div>
-        <div class="chart-desc">Activation of the Superior Temporal Sulcus — responds to social signals like eye gaze, facial expressions, and biological motion. High during interpersonal moments, dialogue, and emotionally charged interactions between people.</div>
-      </div>
-
-      <div class="chart-card">
-        <div class="chart-header"><div class="chart-title"><span class="chart-dot" style="background:var(--purple)"></span> Auditory Cortex — Audio Contribution</div><div class="chart-peak" id="peakAud"></div></div>
-        <div class="chart-wrapper tall"><canvas id="chartAuditory"></canvas></div>
-        <div class="chart-desc">The solid line shows auditory cortex activation with the full audio track; the dashed line shows activation with audio stripped. The shaded gap between them is the audio's independent contribution. Large gaps mean the soundtrack is doing real work — important for assessing impact on muted social media placements.</div>
+      <div class="chart-card" id="brainCard">
+        <div class="chart-header">
+          <div class="chart-title"><span class="chart-dot" style="background:var(--accent)"></span> 3D brain map</div>
+          <div class="brain-caption" id="brainSecond"></div>
+        </div>
+        <div class="brain-panel" id="brainPanel">
+          <div class="brain-message" id="brainMessage">The 3D view is not available for this video.</div>
+          <div class="brain-canvas" id="brainCanvas" hidden></div>
+        </div>
+        <div class="brain-legend" id="brainLegend" hidden>
+          <div class="brain-legend-bar"></div>
+          <div class="brain-legend-labels"><span>below typical</span><span>typical</span><span>above typical</span></div>
+          <div class="brain-legend-range" id="brainLegendRange"></div>
+        </div>
       </div>
     </div>
   </div>
 </div>
 
 <script>
-let analysisData = null, charts = [], videoFile = null, samplesData = null;
+let charts = [], samplesData = null, jobsCache = [];
+let currentResult = null, currentSummary = null, currentContext = null;
+let comparison = null, expandedGroups = new Set(), mutedOn = false, selectedSecond = 0, resultSeq = 0, compareRequest = 0, brainShown = false;
+let videoObjectUrl = null;
 const $ = id => document.getElementById(id);
 const video = $('videoPlayer');
+const BRAIN_VERTICES = 20484;
+const BRAIN_UNAVAILABLE = 'The 3D view is not available for this video.';
+const GROUPS = {
+  see: { label: 'Seeing', colour: '#DC2626', signals: ['faces', 'bodies', 'scenes', 'visual'] },
+  hear: { label: 'Hearing', colour: '#2563EB', signals: ['sound'] },
+  understand: { label: 'Understanding', colour: '#D97706', signals: ['speech', 'social'] },
+};
+const SIGNAL_LABELS = { faces: 'Faces', bodies: 'Bodies', scenes: 'Scenes', visual: 'Visual', sound: 'Sound', speech: 'Speech', social: 'Social' };
+const OVERALL_COLOUR = '#EA580C';
+const MUTED_COLOUR = '#0F1629';
+const hasVideo = () => !!video.getAttribute('src');
+
+// The 3D module may load after this script: queue its state until it installs itself.
+let brainImpl = null;
+const brainPending = { rows: null, count: 0, second: 0, message: BRAIN_UNAVAILABLE, range: null };
+window.brainMap = {
+  show(rows, count) {
+    brainPending.rows = rows; brainPending.count = count; brainPending.message = null;
+    if (brainImpl) brainImpl.show(rows, count);
+  },
+  setSecond(i) {
+    brainPending.second = i;
+    if (brainImpl) brainImpl.setSecond(i);
+  },
+  clear(message) {
+    brainPending.rows = null; brainPending.message = message || BRAIN_UNAVAILABLE;
+    if (brainImpl) brainImpl.clear(brainPending.message);
+  },
+  setColourRange(range) {
+    brainPending.range = range;
+    if (brainImpl) brainImpl.setColourRange(range);
+  },
+  _install(impl) {
+    brainImpl = impl;
+    if (brainPending.range != null) impl.setColourRange(brainPending.range);
+    if (brainPending.rows) { impl.show(brainPending.rows, brainPending.count); impl.setSecond(brainPending.second); }
+    else impl.clear(brainPending.message || BRAIN_UNAVAILABLE);
+  },
+};
 
 // ─── Account: who is signed in, and what they can do ───────────────────────
 const params = new URLSearchParams(window.location.search);
 let signedIn = false, me = null;
 const dollars = cents => `$${(cents / 100).toFixed(2)}`;
-const IDLE_HEADER = () => (signedIn ? 'Upload a video or select a sample' : 'Select a video to view analysis');
+const IDLE_HEADER = () => (signedIn ? 'Upload a video or select a sample' : 'Select a video to view its brain response');
 
 // Every POST goes through here. Behind CloudFront's Lambda origin access control, Lambda accepts
 // a POST only when x-amz-content-sha256 holds the hex SHA-256 of the body (docs/M3b_spec.md §3b);
@@ -413,6 +504,7 @@ function showSignedOut() {
   $('signInPanel').classList.add('active');
   $('deleteAccountPanel').classList.remove('active');
   $('headerMeta').textContent = IDLE_HEADER();
+  loadLimits();
 }
 
 function showApp(meJson) {
@@ -461,10 +553,12 @@ async function loadHistory() {
 }
 
 function renderHistory(jobs) {
+  jobsCache = jobs;
   const list = $('historyList');
   list.replaceChildren(...jobs.map(historyRow));
   $('historyPanel').classList.toggle('active', jobs.length > 0);
   $('historyNote').textContent = jobs.length ? `Results are kept for ${RESULT_DAYS} days.` : '';
+  if (currentResult) showCompareRow();
 }
 
 // Filenames and error messages come from users: only textContent, never innerHTML.
@@ -534,22 +628,64 @@ Chart.defaults.font.family = "'Plus Jakarta Sans', sans-serif";
 Chart.defaults.font.size = 11;
 Chart.defaults.animation.duration = 600;
 
+const resultBandsPlugin = {
+  id: 'resultBands',
+  beforeDatasetsDraw(chart) {
+    if (!currentResult || !currentSummary) return;
+    const area = chart.chartArea, x = chart.scales.x;
+    const band = (start, end, colour) => {
+      if (!Number.isFinite(start) || !Number.isFinite(end)) return;
+      const left = Math.max(area.left, x.getPixelForValue(start));
+      const right = Math.min(area.right, x.getPixelForValue(end));
+      if (right <= left) return;
+      chart.ctx.save();
+      chart.ctx.fillStyle = colour;
+      chart.ctx.fillRect(left, area.top, right - left, area.bottom - area.top);
+      chart.ctx.restore();
+    };
+    if (currentSummary.peak) band(currentSummary.peak.t, currentSummary.peak.t + 1, 'rgba(234,88,12,0.10)');
+    (currentSummary.dead || []).forEach(d => band(d.start, d.end, 'rgba(37,99,235,0.08)'));
+  }
+};
+
+const zeroLinePlugin = {
+  id: 'zeroLine',
+  afterDatasetsDraw(chart) {
+    if (!currentResult) return;
+    const area = chart.chartArea, y = chart.scales.y.getPixelForValue(0);
+    if (y < area.top || y > area.bottom) return;
+    const ctx = chart.ctx;
+    ctx.save();
+    ctx.beginPath(); ctx.setLineDash([5, 4]); ctx.strokeStyle = 'rgba(15,22,41,0.3)'; ctx.lineWidth = 1;
+    ctx.moveTo(area.left, y); ctx.lineTo(area.right, y); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = '#64748B'; ctx.font = "500 10px 'JetBrains Mono', monospace";
+    ctx.textAlign = 'right'; ctx.textBaseline = 'bottom';
+    ctx.fillText('typical viewing', area.right - 4, y - 3);
+    ctx.restore();
+  }
+};
+
 const playheadPlugin = {
   id: 'playhead',
   afterDraw(chart) {
-    if (!analysisData || !video.duration) return;
-    const x = chart.scales.x.getPixelForValue(video.currentTime);
+    if (!currentResult) return;
+    let t = null;
+    if (hasVideo() && Number.isFinite(video.currentTime)) t = video.currentTime;
+    else if (!hasVideo()) t = selectedSecond;
+    if (t == null) return;
+    const x = chart.scales.x.getPixelForValue(t);
     if (x < chart.scales.x.left || x > chart.scales.x.right) return;
     const ctx = chart.ctx;
     ctx.save();
     ctx.beginPath(); ctx.moveTo(x, chart.chartArea.top); ctx.lineTo(x, chart.chartArea.bottom);
     ctx.strokeStyle = 'rgba(15,22,41,0.3)'; ctx.lineWidth = 1.5; ctx.setLineDash([4,3]); ctx.stroke();
     ctx.fillStyle = '#0F1629'; ctx.font = "500 10px 'JetBrains Mono', monospace"; ctx.textAlign = 'center';
-    ctx.fillText(Math.floor(video.currentTime) + 's', x, chart.chartArea.top - 4);
+    ctx.fillText(`${hasVideo() ? Math.floor(t) : t}s`, x, chart.chartArea.top - 4);
     ctx.restore();
   }
 };
-Chart.register(playheadPlugin);
+Chart.register(resultBandsPlugin, zeroLinePlugin, playheadPlugin);
 
 // ─── Load samples ───────────────────────────────────────────────────────────
 async function loadSamples() {
@@ -568,60 +704,82 @@ async function loadSamples() {
 function renderSamples() {
   const grid = $('samplesGrid');
   if (!samplesData || !samplesData.samples || samplesData.samples.length === 0) {
+    grid.replaceChildren();
     $('samplesEmpty').hidden = false;  // "Sample videos coming soon."
     return;
   }
   $('samplesEmpty').hidden = true;
-  grid.innerHTML = '';
+  grid.replaceChildren();
   samplesData.samples.forEach((s, idx) => {
     const card = document.createElement('div');
     card.className = 'sample-card';
     card.dataset.idx = idx;
-    card.innerHTML = `
-      <div class="sample-thumb">
-        ${s.thumbnail ? `<img src="/data/${s.thumbnail}" onerror="this.parentElement.innerHTML='<div class=sample-thumb-placeholder>▶</div>'">` : '<div class="sample-thumb-placeholder">▶</div>'}
-      </div>
-      <div class="sample-info">
-        <div class="sample-title">${s.title}</div>
-        <div class="sample-dur">${s.duration_seconds}s</div>
-      </div>
-    `;
+    const thumb = document.createElement('div');
+    thumb.className = 'sample-thumb';
+    if (s.thumbnail) {
+      const img = document.createElement('img');
+      img.src = `/data/${s.thumbnail}`;
+      img.alt = '';
+      img.addEventListener('error', () => thumb.replaceChildren(samplePlaceholder()));
+      thumb.append(img);
+    } else {
+      thumb.append(samplePlaceholder());
+    }
+    const info = document.createElement('div');
+    info.className = 'sample-info';
+    const title = document.createElement('div');
+    title.className = 'sample-title';
+    title.textContent = s.title || 'Sample';
+    const duration = document.createElement('div');
+    duration.className = 'sample-dur';
+    const seconds = s.result && s.result.duration_seconds;
+    duration.textContent = Number.isFinite(seconds) ? `${seconds}s` : '';
+    info.append(title, duration);
+    card.append(thumb, info);
     card.addEventListener('click', () => loadSample(idx));
     grid.appendChild(card);
   });
 }
 
+function samplePlaceholder() {
+  const placeholder = document.createElement('div');
+  placeholder.className = 'sample-thumb-placeholder';
+  placeholder.textContent = '▶';
+  return placeholder;
+}
+
 function loadSample(idx) {
   const s = samplesData.samples[idx];
+  if (!s || !s.result) return;
 
   // Highlight active card
   document.querySelectorAll('.sample-card').forEach(c => c.classList.remove('active'));
-  document.querySelector(`.sample-card[data-idx="${idx}"]`).classList.add('active');
+  const active = document.querySelector(`.sample-card[data-idx="${idx}"]`);
+  if (active) active.classList.add('active');
 
-  // Load video
-  video.src = `/data/${s.video_file}`;
-  $('videoFilename').textContent = s.video_file;
-  $('videoDuration').textContent = `${s.duration_seconds}s`;
-  $('videoProcessTime').textContent = '';
-
-  // Load pre-computed data
-  analysisData = {
-    filename: s.video_file,
-    duration_seconds: s.duration_seconds,
-    timesteps: s.timesteps,
-    processing_time_seconds: 0,
-  };
-
-  // Show results
+  stopTracking();
+  showRetention(null);
+  $('uploadPanel').classList.remove('active');
   $('uploadZone').classList.add('hidden');
   $('processing').classList.remove('active');
-  $('videoContainer').classList.add('active');
-  $('chartsEmpty').style.display = 'none';
-  $('chartsContainer').classList.add('active');
-  $('headerMeta').textContent = `${s.title} — ${s.duration_seconds}s`;
+  $('samplesSection').style.display = '';
 
-  renderStats();
-  buildCharts();
+  const result = s.result;
+  const summary = s.summary || result.summary || {};
+  clearVideoSource();
+  video.src = `/data/${s.video_file}`;
+  $('videoFilename').textContent = s.video_file;
+  $('videoDuration').textContent = `${result.duration_seconds}s`;
+  $('videoProcessTime').textContent = '';
+  $('videoContainer').classList.add('active');
+  $('headerMeta').textContent = `${s.title} — ${result.duration_seconds}s`;
+
+  renderResult(result, summary, {
+    jobId: null,
+    brainUrl: s.brain_file ? `/data/${s.brain_file}` : null,
+    description: s.description,
+    attribution: s.attribution,
+  });
 }
 
 loadSamples();
@@ -635,10 +793,11 @@ let limits = null;
 async function loadLimits() {
   try {
     const res = await fetch('/api/limits');
-    if (!res.ok) return;
+    if (!res.ok) return null;
     limits = await res.json();
     $('limitsText').textContent = `MP4, MOV, or WebM — max ${limits.max_video_duration_seconds} seconds`;
-  } catch (e) { /* handled in handleFile */ }
+    return limits;
+  } catch (e) { return null; /* handled in handleFile */ }
 }
 const ACCEPTED_TYPES = ['video/mp4', 'video/quicktime', 'video/webm'];
 function estimateCostCents(d) { return 90 * Math.max(1, Math.ceil((d - 0.5) / 30)); }
@@ -806,7 +965,7 @@ const STEP_TEXT = {
   transcribing: ['Transcribing the speech, so the model can read the words...', 30],
   inference_full: ['Predicting brain activity from the picture and the sound...', 55],
   inference_noaudio: ['Predicting it again without the sound, to measure what the audio adds...', 80],
-  extracting_roi: ['Working out the engagement for each brain region...', 95],
+  extracting_roi: ['Working out the brain response for each group of signals...', 95],
   saving_dataset: ['Saving the results...', 98],
   saving_result: ['Saving the results...', 98],
 };
@@ -912,42 +1071,90 @@ async function pollJob(jobId, file) {
   if (again && trackedJob === jobId) pollTimer = setTimeout(() => pollJob(jobId, file), POLL_MS);
 }
 
+function clearVideoSource() {
+  if (videoObjectUrl) { URL.revokeObjectURL(videoObjectUrl); videoObjectUrl = null; }
+  video.pause();
+  video.removeAttribute('src');
+  video.load();
+}
+
+function setVideoFile(file, seconds) {
+  clearVideoSource();
+  videoObjectUrl = URL.createObjectURL(file);
+  video.src = videoObjectUrl;
+  $('videoFilename').textContent = file.name;
+  $('videoDuration').textContent = `${seconds}s`;
+  $('videoProcessTime').textContent = '';
+  $('videoContainer').classList.add('active');
+}
+
+function showResultUnavailable(message) {
+  resultSeq += 1;
+  currentResult = null; currentSummary = null; currentContext = null; comparison = null;
+  expandedGroups.clear(); mutedOn = false; selectedSecond = 0; brainShown = false;
+  $('mutedToggle').checked = false;
+  charts.forEach(c => c.destroy()); charts = [];
+  $('resultStats').replaceChildren();
+  $('resultStats').classList.remove('compare');
+  $('resultMessage').textContent = message;
+  $('resultMessage').hidden = false;
+  $('chartCard').hidden = true;
+  $('brainCard').hidden = true;
+  $('compareRow').hidden = true;
+  $('compareSelect').replaceChildren();
+  $('compareMsg').textContent = '';
+  $('brainSecond').textContent = '';
+  clearSampleMeta();
+  window.brainMap.clear(BRAIN_UNAVAILABLE);
+  updateBrainLegend(null);
+  $('chartsEmpty').style.display = 'none';
+  $('chartsContainer').classList.add('active');
+}
+
 // True when the result is on screen; false means "try again on the next poll".
 async function showResult(jobId, file, consented) {
-  let result;
+  const seq = resultSeq;
+  let res;
   try {
-    const res = await fetch(`/api/jobs/${jobId}/result`);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    result = await res.json();
+    res = await fetch(`/api/jobs/${jobId}/result`);
   } catch (e) {
     showJobMsg('The analysis is done; loading the result...');
     return false;
   }
+  if (seq !== resultSeq) return true;  // another result was opened while this loaded
+  if (res.status === 410) {  // an old result: final, and the server's sentence is the message
+    const data = await res.json().catch(() => ({}));
+    if (seq !== resultSeq) return true;
+    $('upProgress').classList.remove('active');
+    showJobMsg('The analysis is done.');
+    showResultUnavailable(data.message || 'This result was made by an older version of NeuroLens. Upload the video again.');
+    return true;
+  }
+  if (!res.ok) {
+    showJobMsg('The analysis is done; loading the result...');
+    return false;
+  }
+  let result;
+  try { result = await res.json(); } catch (e) {
+    showJobMsg('The analysis is done; loading the result...');
+    return false;
+  }
+  if (seq !== resultSeq) return true;
   const t0 = performance.now();
-  analysisData = {
-    filename: file ? file.name : `Job ${jobId.slice(0, 8)}`,
-    duration_seconds: result.duration_seconds,
-    timesteps: result.timesteps,
-    processing_time_seconds: result.processing_time_seconds,
-  };
   $('upProgress').classList.remove('active');
   showJobMsg(`Done in ${Math.round(result.processing_time_seconds)}s of analysis time.`);
   showRetention(consented ? jobId : null);
-  $('chartsEmpty').style.display = 'none';
-  $('chartsContainer').classList.add('active');
-  if (file) {  // the video is only on this computer: a resumed link shows the charts alone
-    video.src = URL.createObjectURL(file);
-    $('videoFilename').textContent = file.name;
-    $('videoDuration').textContent = `${result.duration_seconds}s`;
-    $('videoProcessTime').textContent = '';
-    $('videoContainer').classList.add('active');
+  if (file) {  // the video is only on this computer: a resumed link shows the result alone
+    setVideoFile(file, result.duration_seconds);
+  } else {
+    clearVideoSource();
+    $('videoContainer').classList.remove('active');
   }
   try {
-    renderStats();
-    buildCharts();
+    renderResult(result, result.summary || {}, { jobId, brainUrl: `/api/jobs/${jobId}/brain` });
   } catch (e) {
     console.error('Could not draw the result:', e);
-    showJobMsg('The analysis is done, but the result could not be drawn. Reload the page.', true);
+    showResultUnavailable('The result could not be drawn.');
     return true;  // not a reason to ask the server again
   }
   requestAnimationFrame(() => requestAnimationFrame(() => {
@@ -987,84 +1194,452 @@ $('retentionInput').addEventListener('change', async ev => {
   }
 });
 
-function renderStats() {
-  const ts = analysisData.timesteps;
-  const eng = ts.map(t => t.engagement_overall);
-  const peak = eng.indexOf(Math.max(...eng));
-  const avg = (eng.reduce((a,b) => a+b, 0) / eng.length).toFixed(2);
-  $('resultStats').innerHTML = `
-    <div class="stat-card"><div class="stat-value">${analysisData.duration_seconds}s</div><div class="stat-label">Duration</div></div>
-    <div class="stat-card"><div class="stat-value">${avg}</div><div class="stat-label">Avg Engagement</div></div>
-    <div class="stat-card"><div class="stat-value">${peak}s</div><div class="stat-label">Peak Moment</div></div>`;
+// ─── Result: cards, chart, 3D map ──────────────────────────────────────────
+function renderResult(result, summary, ctx) {
+  resultSeq += 1;
+  currentResult = result;
+  currentSummary = summary || {};
+  currentContext = ctx || {};
+  comparison = null;
+  brainShown = false;
+  expandedGroups.clear();
+  mutedOn = false;
+  $('mutedToggle').checked = false;
+  const T = (result.signals && result.signals.overall) ? result.signals.overall.length : 0;
+  const peakT = currentSummary.peak ? currentSummary.peak.t : 0;
+  selectedSecond = T ? Math.max(0, Math.min(T - 1, Math.floor(Number.isFinite(peakT) ? peakT : 0))) : 0;
+
+  $('resultMessage').hidden = true;
+  $('resultMessage').textContent = '';
+  $('chartCard').hidden = false;
+  $('brainCard').hidden = false;
+  $('chartsEmpty').style.display = 'none';
+  $('chartsContainer').classList.add('active');
+  $('compareMsg').textContent = '';
+  $('compareMsg').classList.remove('error');
+  clearSampleMeta();
+  showSampleMeta(currentContext);
+
+  renderCards();
+  updateGroupButtons();
+  buildMainChart();
+  showCompareRow();
+  updateBrainCaption();
+  loadBrain();
 }
 
-// ─── Charts ─────────────────────────────────────────────────────────────────
-function buildCharts() {
-  charts.forEach(c => c.destroy()); charts = [];
-  const ts = analysisData.timesteps, labels = ts.map(t => t.t);
-  function peakInfo(d) { const m = Math.max(...d); return `peak ${m.toFixed(2)} @ ${d.indexOf(m)}s`; }
+function clearSampleMeta() {
+  $('sampleDescription').textContent = '';
+  $('sampleAttribution').textContent = '';
+  $('sampleMeta').hidden = true;
+}
 
-  function make(id, data, color, fill = true) {
-    const ctx = $(id).getContext('2d');
-    const g = ctx.createLinearGradient(0, 0, 0, ctx.canvas.parentElement.offsetHeight);
-    g.addColorStop(0, color + '20'); g.addColorStop(1, color + '02');
-    const c = new Chart(ctx, {
-      type: 'line',
-      data: { labels, datasets: [{ data, borderColor: color, backgroundColor: fill ? g : 'transparent', fill, borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, pointHoverBackgroundColor: color, pointHoverBorderColor: '#FFF', pointHoverBorderWidth: 2, tension: 0.35 }] },
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        interaction: { mode: 'index', intersect: false },
-        onClick: (e) => { const x = c.scales.x.getValueForPixel(e.x); if (x >= 0 && x < analysisData.duration_seconds) video.currentTime = x; },
-        plugins: { legend: { display: false }, tooltip: { backgroundColor: '#0F1629', titleColor: '#E2E8F0', bodyColor: '#FFF', borderColor: '#1E293B', borderWidth: 1, cornerRadius: 8, padding: 10, titleFont: { family: "'JetBrains Mono', monospace", size: 11 }, bodyFont: { family: "'JetBrains Mono', monospace", size: 12, weight: '500' }, callbacks: { title: i => `t = ${i[0].label}s`, label: i => ` ${i.parsed.y.toFixed(3)}` } } },
-        scales: { x: { grid: { display: false }, ticks: { maxTicksLimit: 15, font: { family: "'JetBrains Mono', monospace", size: 10 }, color: '#94A3B8' } }, y: { min: 0, max: 1.05, grid: { color: 'rgba(15,22,41,0.04)' }, ticks: { display: false } } }
-      }
+function showSampleMeta(ctx) {
+  if (!ctx || (!ctx.description && !ctx.attribution)) return;
+  $('sampleDescription').textContent = ctx.description || '';
+  $('sampleAttribution').textContent = ctx.attribution ? `Attribution: ${ctx.attribution}` : '';
+  $('sampleMeta').hidden = false;
+}
+
+function groupWord(group) {
+  return (GROUPS[group] && GROUPS[group].label) || '—';
+}
+
+function statCard(label, value, detail, small) {
+  const card = document.createElement('div'); card.className = 'stat-card';
+  const valueEl = document.createElement('div');
+  valueEl.className = small ? 'stat-value small' : 'stat-value';
+  valueEl.textContent = value;
+  card.append(valueEl);
+  if (detail) {
+    const detailEl = document.createElement('div'); detailEl.className = 'stat-detail';
+    detailEl.textContent = detail;
+    card.append(detailEl);
+  }
+  const labelEl = document.createElement('div'); labelEl.className = 'stat-label';
+  labelEl.textContent = label;
+  card.append(labelEl);
+  return card;
+}
+
+function summaryCards(s) {
+  const hook = s.hook || {};
+  const peak = s.peak || {};
+  const dead = (s.dead || []).map(d => `${d.start}-${d.end}s`).join(', ') || 'None';
+  const hookWord = groupWord(hook.group);
+  const audio = s.audio_dependence == null ? '—' : `${Math.round(s.audio_dependence * 100)}%`;
+  return [
+    statCard('Hook', hookWord, hook.level || '', hookWord.length > 8),
+    statCard('Peak', Number.isFinite(peak.t) ? `${peak.t}s` : '—', peak.level || '', false),
+    statCard('Dead stretches', dead, '', dead.length > 12),
+    statCard('Audio dependence', audio, s.audio_dependence == null ? 'no strong response to measure' : '', false),
+  ];
+}
+
+function cardsColumn(summary, label) {
+  const group = document.createElement('div'); group.className = 'cards-group';
+  if (label) {
+    const labelEl = document.createElement('div'); labelEl.className = 'cards-label';
+    labelEl.textContent = label;
+    group.append(labelEl);
+  }
+  const grid = document.createElement('div'); grid.className = 'cards-grid';
+  summaryCards(summary || {}).forEach(card => grid.append(card));
+  group.append(grid);
+  return group;
+}
+
+function renderCards() {
+  if (!currentResult) { $('resultStats').replaceChildren(); return; }
+  const container = $('resultStats');
+  container.classList.toggle('compare', !!comparison);
+  container.replaceChildren(cardsColumn(currentSummary || {}, comparison ? 'This video' : ''));
+  if (comparison) container.append(cardsColumn(comparison.summary || {}, comparison.label));
+}
+
+function updateGroupButtons() {
+  document.querySelectorAll('.group-btn').forEach(btn => {
+    btn.classList.toggle('active', expandedGroups.has(btn.dataset.group));
+  });
+}
+
+function toggleGroup(group) {
+  if (!currentResult || !GROUPS[group]) return;
+  if (expandedGroups.has(group)) expandedGroups.delete(group);
+  else expandedGroups.add(group);
+  updateGroupButtons();
+  buildMainChart();
+}
+
+function buildMainChart() {
+  charts.forEach(c => c.destroy()); charts = [];
+  if (!currentResult || !currentResult.signals) return;
+  const sig = currentResult.signals;
+  const T = Array.isArray(sig.overall) ? sig.overall.length : 0;
+  const labels = Array.from({ length: T }, (_, i) => i);
+  const datasets = [];
+  const add = (label, data, colour, opts = {}) => {
+    datasets.push({
+      label,
+      data: (Array.isArray(data) ? data : []).slice(0, T),
+      borderColor: colour,
+      backgroundColor: 'transparent',
+      borderWidth: opts.width || 1.6,
+      borderDash: opts.dash || [],
+      pointRadius: 0,
+      pointHoverRadius: 4,
+      pointHoverBackgroundColor: colour,
+      pointHoverBorderColor: '#FFF',
+      pointHoverBorderWidth: 2,
+      tension: 0.3,
+      fill: false,
+      groupKey: opts.groupKey,
+      compare: !!opts.compare,
     });
-    charts.push(c); return c;
+  };
+
+  add('Overall', sig.overall, OVERALL_COLOUR, { width: 3 });
+  Object.keys(GROUPS).forEach(g => add(GROUPS[g].label, sig[g], GROUPS[g].colour, { width: 1.6, groupKey: g }));
+  expandedGroups.forEach(g => GROUPS[g].signals.forEach(s => {
+    add(SIGNAL_LABELS[s], sig[s], GROUPS[g].colour, { width: 1.1, dash: [2, 3] });
+  }));
+  if (mutedOn && currentResult.muted) {
+    add('Overall without sound', currentResult.muted.overall, MUTED_COLOUR, { width: 1.5, dash: [6, 4] });
+  }
+  if (comparison && comparison.result.signals) {
+    const cs = comparison.result.signals;
+    add(`Overall · ${comparison.label}`, cs.overall, OVERALL_COLOUR, { width: 1.6, dash: [5, 4], compare: true });
+    Object.keys(GROUPS).forEach(g => {
+      add(`${GROUPS[g].label} · ${comparison.label}`, cs[g], GROUPS[g].colour, { width: 1.2, dash: [5, 4], compare: true });
+    });
   }
 
-  make('chartOverall', ts.map(t => t.engagement_overall), '#EA580C'); $('peakOverall').textContent = peakInfo(ts.map(t => t.engagement_overall));
-  make('chartFfa', ts.map(t => t.regions.ffa_faces), '#DC2626'); $('peakFfa').textContent = peakInfo(ts.map(t => t.regions.ffa_faces));
-  make('chartEba', ts.map(t => t.regions.eba_bodies), '#2563EB'); $('peakEba').textContent = peakInfo(ts.map(t => t.regions.eba_bodies));
-  make('chartPpa', ts.map(t => t.regions.ppa_scenes), '#16A34A'); $('peakPpa').textContent = peakInfo(ts.map(t => t.regions.ppa_scenes));
-  make('chartSts', ts.map(t => t.regions.sts_social), '#D97706'); $('peakSts').textContent = peakInfo(ts.map(t => t.regions.sts_social));
+  let maxAbs = 0;
+  datasets.forEach(ds => ds.data.forEach(v => {
+    if (Number.isFinite(v)) maxAbs = Math.max(maxAbs, Math.abs(v));
+  }));
+  const yMax = Math.max(0.05, Math.ceil((maxAbs || 0.01) * 1.08 * 20) / 20);
 
-  const awD = ts.map(t => t.auditory_with_audio).filter(v => v !== null);
-  const aoD = ts.map(t => t.auditory_without_audio).filter(v => v !== null);
-  const aL = labels.slice(0, awD.length);
-  const actx = $('chartAuditory').getContext('2d');
-  const ag = actx.createLinearGradient(0, 0, 0, 150); ag.addColorStop(0, '#9333EA18'); ag.addColorStop(1, '#9333EA02');
-  const ac = new Chart(actx, {
+  const c = new Chart($('mainChart').getContext('2d'), {
     type: 'line',
-    data: { labels: aL, datasets: [
-      { label: 'With audio', data: awD, borderColor: '#9333EA', backgroundColor: ag, fill: '+1', borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, tension: 0.35 },
-      { label: 'Without audio', data: aoD, borderColor: '#9333EA50', borderDash: [5,4], backgroundColor: 'transparent', fill: false, borderWidth: 1.5, pointRadius: 0, pointHoverRadius: 4, tension: 0.35 }
-    ] },
+    data: { labels, datasets },
     options: {
       responsive: true, maintainAspectRatio: false,
       interaction: { mode: 'index', intersect: false },
-      onClick: (e) => { const x = ac.scales.x.getValueForPixel(e.x); if (x >= 0 && x < analysisData.duration_seconds) video.currentTime = x; },
-      plugins: { legend: { display: true, position: 'top', align: 'end', labels: { boxWidth: 14, boxHeight: 2, padding: 12, color: '#475569', font: { size: 11, family: "'Plus Jakarta Sans', sans-serif" } } }, tooltip: { backgroundColor: '#0F1629', titleColor: '#E2E8F0', bodyColor: '#FFF', cornerRadius: 8, titleFont: { family: "'JetBrains Mono', monospace", size: 11 }, bodyFont: { family: "'JetBrains Mono', monospace", size: 11 }, callbacks: { title: i => `t = ${i[0].label}s` } } },
-      scales: { x: { grid: { display: false }, ticks: { maxTicksLimit: 15, font: { family: "'JetBrains Mono', monospace", size: 10 }, color: '#94A3B8' } }, y: { min: 0, max: 1.05, grid: { color: 'rgba(15,22,41,0.04)' }, ticks: { display: false } } }
-    }
+      onClick: (e) => {
+        if (!T) return;
+        const x = c.scales.x.getValueForPixel(e.x);
+        if (!Number.isFinite(x)) return;
+        if (hasVideo()) {
+          video.currentTime = Math.max(0, Math.min(T, x));
+        } else {
+          selectedSecond = Math.max(0, Math.min(T - 1, Math.floor(x)));
+          charts.forEach(ch => ch.update('none'));
+          updateBrain();
+        }
+      },
+      plugins: {
+        legend: {
+          display: true, position: 'top', align: 'end',
+          labels: {
+            boxWidth: 14, boxHeight: 2, padding: 10, color: '#475569',
+            font: { size: 11, family: "'Plus Jakarta Sans', sans-serif" },
+            filter: item => !datasets[item.datasetIndex].compare,
+          },
+          onClick: (e, item) => {
+            const ds = c.data.datasets[item.datasetIndex];
+            if (ds.groupKey) { toggleGroup(ds.groupKey); return; }
+            const meta = c.getDatasetMeta(item.datasetIndex);
+            meta.hidden = !meta.hidden;
+            c.update();
+          },
+        },
+        tooltip: {
+          backgroundColor: '#0F1629', titleColor: '#E2E8F0', bodyColor: '#FFF',
+          borderColor: '#1E293B', borderWidth: 1, cornerRadius: 8, padding: 10,
+          titleFont: { family: "'JetBrains Mono', monospace", size: 11 },
+          bodyFont: { family: "'JetBrains Mono', monospace", size: 12, weight: '500' },
+          callbacks: {
+            title: i => `t = ${i[0].label}s`,
+            label: i => ` ${i.dataset.label}: ${Number(i.parsed.y).toFixed(3)}`,
+          },
+        },
+      },
+      scales: {
+        x: {
+          grid: { display: false },
+          ticks: { maxTicksLimit: 15, font: { family: "'JetBrains Mono', monospace", size: 10 }, color: '#94A3B8', callback: v => `${v}s` },
+        },
+        y: {
+          min: -yMax, max: yMax,
+          grid: { color: 'rgba(15,22,41,0.06)' },
+          ticks: { display: true, maxTicksLimit: 7, font: { family: "'JetBrains Mono', monospace", size: 10 }, color: '#94A3B8', callback: v => Number(v).toFixed(1) },
+        },
+      },
+    },
   });
-  charts.push(ac); $('peakAud').textContent = peakInfo(awD);
+  charts.push(c);
+}
+
+document.querySelectorAll('.group-btn').forEach(btn => {
+  btn.addEventListener('click', () => toggleGroup(btn.dataset.group));
+});
+$('mutedToggle').addEventListener('change', () => {
+  mutedOn = $('mutedToggle').checked;
+  buildMainChart();
+});
+
+// ─── Comparison ────────────────────────────────────────────────────────────
+function showCompareRow() {
+  const row = $('compareRow'), select = $('compareSelect');
+  const currentId = currentContext && currentContext.jobId;
+  const candidates = (jobsCache || []).filter(j =>
+    j.result_available && j.status === 'done' && j.job_id !== currentId);
+  if (!signedIn || !currentResult || candidates.length === 0) {
+    row.hidden = true;
+    select.replaceChildren();
+    if (comparison) { comparison = null; renderCards(); buildMainChart(); }
+    return;
+  }
+  row.hidden = false;
+  const keep = comparison ? comparison.jobId : '';
+  select.replaceChildren();
+  const none = document.createElement('option');
+  none.value = ''; none.textContent = 'None';
+  select.append(none);
+  candidates.forEach(job => {
+    const option = document.createElement('option');
+    option.value = job.job_id;
+    option.textContent = job.filename || `Job ${job.job_id.slice(0, 8)}`;
+    select.append(option);
+  });
+  if (keep && candidates.some(job => job.job_id === keep)) {
+    select.value = keep;
+  } else {
+    select.value = '';
+    if (comparison) { comparison = null; renderCards(); buildMainChart(); }
+  }
+}
+
+async function loadComparison() {
+  const select = $('compareSelect'), msg = $('compareMsg');
+  const id = select.value;
+  msg.classList.remove('error');
+  if (!id) {
+    comparison = null; msg.textContent = '';
+    renderCards(); buildMainChart();
+    return;
+  }
+  const job = (jobsCache || []).find(j => j.job_id === id);
+  const label = job && job.filename ? job.filename : `Job ${id.slice(0, 8)}`;
+  const request = ++compareRequest;
+  const seq = resultSeq;
+  msg.textContent = 'Loading…';
+  try {
+    const res = await fetch(`/api/jobs/${id}/result`);
+    const data = await res.json().catch(() => ({}));
+    if (request !== compareRequest || seq !== resultSeq) return;
+    if (!res.ok || !data.signals) {
+      msg.textContent = data.message || (res.status === 410
+        ? 'This result was made by an older version of NeuroLens. Upload the video again.'
+        : `Couldn't load that result (HTTP ${res.status}).`);
+      msg.classList.add('error');
+      comparison = null; renderCards(); buildMainChart();
+      return;
+    }
+    comparison = { result: data, summary: data.summary || {}, label, jobId: id };
+    msg.textContent = '';
+    renderCards(); buildMainChart();
+  } catch (e) {
+    if (request !== compareRequest || seq !== resultSeq) return;
+    msg.textContent = "Couldn't reach the server. Please try again.";
+    msg.classList.add('error');
+    comparison = null; renderCards(); buildMainChart();
+  }
+}
+$('compareSelect').addEventListener('change', loadComparison);
+
+// ─── 3D brain map ──────────────────────────────────────────────────────────
+let float16Lookup = null;
+function float16Table() {
+  if (float16Lookup) return float16Lookup;
+  const table = new Float32Array(65536);
+  for (let h = 0; h < 65536; h++) {
+    const sign = h & 0x8000 ? -1 : 1;
+    const exp = (h >> 10) & 0x1f;
+    const mant = h & 0x3ff;
+    if (exp === 0) table[h] = sign * mant * 2 ** -24;
+    else if (exp === 31) table[h] = mant ? NaN : sign * Infinity;
+    else table[h] = sign * (1 + mant / 1024) * 2 ** (exp - 15);
+  }
+  float16Lookup = table;
+  return table;
+}
+
+function decodeBrain(buffer) {
+  const bytesPerRow = BRAIN_VERTICES * 2;
+  if (!buffer.byteLength || buffer.byteLength % bytesPerRow !== 0) return null;
+  const count = buffer.byteLength / bytesPerRow;
+  const view = new DataView(buffer);
+  const table = float16Table();
+  const rows = new Float32Array(count * BRAIN_VERTICES);
+  for (let i = 0; i < rows.length; i++) rows[i] = table[view.getUint16(i * 2, true)];
+  return { rows, count };
+}
+
+function updateBrainLegend(range) {
+  const legend = $('brainLegend');
+  if (!Number.isFinite(range) || range <= 0) {
+    legend.hidden = true;
+    $('brainLegendRange').textContent = '';
+    return;
+  }
+  legend.hidden = false;
+  $('brainLegendRange').textContent = `−${range.toFixed(2)} to +${range.toFixed(2)}`;
+}
+
+function updateBrainCaption() {
+  if (!currentResult || !brainShown) { $('brainSecond').textContent = ''; return; }
+  const second = hasVideo() ? Math.max(0, Math.floor(video.currentTime || 0)) : selectedSecond;
+  $('brainSecond').textContent = hasVideo() ? `Second ${second}` : `Selected second ${second}`;
+}
+
+function updateBrain() {
+  if (!currentResult) return;
+  const second = hasVideo() ? Math.max(0, Math.floor(video.currentTime || 0)) : selectedSecond;
+  window.brainMap.setSecond(second);
+  updateBrainCaption();
+}
+
+async function ensureColourRange() {
+  if (!limits) await loadLimits();
+  const range = limits && limits.colour_range;
+  return Number.isFinite(range) && range > 0 ? range : null;
+}
+
+async function loadBrain() {
+  if (!currentResult) return;
+  const seq = resultSeq;
+  const range = await ensureColourRange();
+  if (seq !== resultSeq) return;
+  window.brainMap.setColourRange(range);
+  updateBrainLegend(range);
+  const url = currentContext && currentContext.brainUrl;
+  if (!range || !url) {
+    brainShown = false;
+    window.brainMap.clear(BRAIN_UNAVAILABLE);
+    $('brainSecond').textContent = '';
+    return;
+  }
+  brainShown = false;
+  window.brainMap.clear('Loading the 3D view…');
+  $('brainSecond').textContent = '';
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const buffer = await res.arrayBuffer();
+    if (seq !== resultSeq) return;
+    const decoded = decodeBrain(buffer);
+    if (!decoded) throw new Error('malformed brain file');
+    brainShown = true;
+    window.brainMap.show(decoded.rows, decoded.count);
+    updateBrain();
+    setTimeout(() => {
+      if (seq === resultSeq && !brainImpl) {
+        brainShown = false;
+        window.brainMap.clear(BRAIN_UNAVAILABLE);
+        $('brainSecond').textContent = '';
+      }
+    }, 20000);  // the module never loaded: do not leave the panel saying "Loading" for ever
+  } catch (e) {
+    if (seq !== resultSeq) return;
+    brainShown = false;
+    window.brainMap.clear(BRAIN_UNAVAILABLE);
+    $('brainSecond').textContent = '';
+  }
 }
 
 // ─── Video sync ─────────────────────────────────────────────────────────────
 let rafId = null;
-function syncPlayhead() { charts.forEach(c => c.update('none')); if (!video.paused) rafId = requestAnimationFrame(syncPlayhead); }
-video.addEventListener('play', () => { rafId = requestAnimationFrame(syncPlayhead); });
-video.addEventListener('pause', () => { cancelAnimationFrame(rafId); charts.forEach(c => c.update('none')); });
-video.addEventListener('seeked', () => { charts.forEach(c => c.update('none')); });
+function syncPlayhead() {
+  charts.forEach(c => c.update('none'));
+  updateBrain();
+  if (!video.paused) rafId = requestAnimationFrame(syncPlayhead);
+}
+video.addEventListener('play', () => { cancelAnimationFrame(rafId); rafId = requestAnimationFrame(syncPlayhead); });
+video.addEventListener('pause', () => { cancelAnimationFrame(rafId); charts.forEach(c => c.update('none')); updateBrain(); });
+video.addEventListener('seeked', () => { charts.forEach(c => c.update('none')); updateBrain(); });
 
 // ─── Reset ──────────────────────────────────────────────────────────────────
 function resetUI() {
-  analysisData = null; videoFile = null; video.src = '';
+  resultSeq += 1;
+  currentResult = null; currentSummary = null; currentContext = null; comparison = null;
+  expandedGroups.clear(); mutedOn = false; selectedSecond = 0; brainShown = false;
+  $('mutedToggle').checked = false;
   charts.forEach(c => c.destroy()); charts = [];
+  clearVideoSource();
+  $('resultMessage').hidden = true;
+  $('resultMessage').textContent = '';
+  $('resultStats').replaceChildren();
+  $('resultStats').classList.remove('compare');
+  $('compareRow').hidden = true;
+  $('compareSelect').replaceChildren();
+  $('compareMsg').textContent = '';
+  $('compareMsg').classList.remove('error');
+  $('chartCard').hidden = false;
+  $('brainCard').hidden = false;
+  $('brainSecond').textContent = '';
+  clearSampleMeta();
+  window.brainMap.clear(BRAIN_UNAVAILABLE);
+  updateBrainLegend(null);
+  updateGroupButtons();
   if (signedIn) $('uploadZone').classList.remove('hidden');
   $('samplesSection').style.display = '';
   $('processing').classList.remove('active');
   $('videoContainer').classList.remove('active');
+  $('videoFilename').textContent = '';
+  $('videoDuration').textContent = '';
+  $('videoProcessTime').textContent = '';
   $('chartsEmpty').style.display = '';
   $('chartsContainer').classList.remove('active');
   $('headerMeta').textContent = IDLE_HEADER();
@@ -1111,6 +1686,218 @@ $('deleteAccountBtn').addEventListener('click', async () => {
 
 // ─── Start ──────────────────────────────────────────────────────────────────
 start();
+</script>
+
+<script type="module">
+import * as THREE from '/static/three/three.module.min.js';
+import { OrbitControls } from '/static/three/OrbitControls.js';
+
+const VERTICES = 20484;
+const MESH_URL = '/static/brain/fsaverage5_inflated.bin';
+const UNAVAILABLE = 'The 3D view is not available for this video.';
+
+function srgb(hex) {
+  const colour = new THREE.Color(hex);
+  if (colour.convertSRGBToLinear) colour.convertSRGBToLinear();
+  return colour;
+}
+
+function makeBrain() {
+  const host = document.getElementById('brainCanvas');
+  const message = document.getElementById('brainMessage');
+  if (!host || !message) return { show() {}, setSecond() {}, clear() {}, setColourRange() {} };
+
+  const RED = srgb('#DC2626'), BLUE = srgb('#2563EB'), GREY = srgb('#94A3B8');
+  let rows = null, rowCount = 0, second = 0, range = null;
+  let ready = false, meshFailed = false, meshPromise = null;
+  let renderer, scene, camera, controls, geometry, colourAttr, cortexMask;
+  let renderPending = false;
+
+  function setMessage(text) {
+    message.textContent = text;
+    message.hidden = !text;
+    host.hidden = !!text;
+    if (!text) resize();
+  }
+
+  function requestRender() {
+    if (!ready || renderPending) return;
+    renderPending = true;
+    requestAnimationFrame(() => {
+      renderPending = false;
+      if (ready) renderer.render(scene, camera);
+    });
+  }
+
+  function resize() {
+    if (!ready || host.hidden) return;
+    const width = host.clientWidth, height = host.clientHeight;
+    if (!width || !height) return;
+    renderer.setSize(width, height, false);
+    camera.aspect = width / height;
+    camera.updateProjectionMatrix();
+    requestRender();
+  }
+
+  function paint() {
+    if (!ready || !rows || !range) return;
+    const t = Math.max(0, Math.min(rowCount - 1, second));
+    const offset = t * VERTICES;
+    const values = colourAttr.array;
+    for (let v = 0; v < VERTICES; v++) {
+      let r, g, b;
+      if (cortexMask[v]) {
+        r = GREY.r; g = GREY.g; b = GREY.b;
+      } else {
+        let value = rows[offset + v];
+        if (!Number.isFinite(value)) value = 0;
+        const clamped = Math.max(-1, Math.min(1, value / range));
+        if (clamped >= 0) {
+          r = 1 + (RED.r - 1) * clamped;
+          g = 1 + (RED.g - 1) * clamped;
+          b = 1 + (RED.b - 1) * clamped;
+        } else {
+          const u = -clamped;
+          r = 1 + (BLUE.r - 1) * u;
+          g = 1 + (BLUE.g - 1) * u;
+          b = 1 + (BLUE.b - 1) * u;
+        }
+      }
+      values[3 * v] = r; values[3 * v + 1] = g; values[3 * v + 2] = b;
+    }
+    colourAttr.needsUpdate = true;
+    requestRender();
+  }
+
+  function applyState() {
+    if (!ready) {
+      if (meshFailed) { setMessage(UNAVAILABLE); return; }
+      if (range && rows) { setMessage('Loading the 3D view…'); ensureMesh(); }
+      else setMessage(UNAVAILABLE);
+      return;
+    }
+    if (!range || !rows) { setMessage(UNAVAILABLE); return; }
+    setMessage('');
+    paint();
+  }
+
+  async function buildMesh() {
+    const res = await fetch(MESH_URL);
+    if (!res.ok) throw new Error(`mesh HTTP ${res.status}`);
+    const buffer = await res.arrayBuffer();
+    if (buffer.byteLength < 8) throw new Error('mesh is too short');
+    const view = new DataView(buffer);
+    const vertexCount = view.getUint32(0, true), faceCount = view.getUint32(4, true);
+    if (vertexCount !== VERTICES) throw new Error('wrong vertex count');
+    const expected = 8 + vertexCount * 12 + faceCount * 12 + vertexCount;
+    if (buffer.byteLength !== expected) throw new Error('wrong mesh length');
+
+    const positions = new Float32Array(vertexCount * 3);
+    for (let i = 0; i < vertexCount; i++) {
+      const o = 8 + i * 12;
+      positions[3 * i] = view.getFloat32(o, true);
+      positions[3 * i + 1] = view.getFloat32(o + 4, true);
+      positions[3 * i + 2] = view.getFloat32(o + 8, true);
+    }
+    const faceOffset = 8 + vertexCount * 12;
+    const indices = new Uint32Array(faceCount * 3);
+    for (let i = 0; i < faceCount; i++) {
+      const o = faceOffset + i * 12;
+      for (let k = 0; k < 3; k++) {
+        const index = view.getUint32(o + k * 4, true);
+        if (index >= vertexCount) throw new Error('face index out of range');
+        indices[3 * i + k] = index;
+      }
+    }
+    cortexMask = new Uint8Array(buffer, faceOffset + faceCount * 12, vertexCount);
+
+    host.replaceChildren();
+    renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.setClearColor(0x000000, 0);
+    if ('outputColorSpace' in renderer) renderer.outputColorSpace = THREE.SRGBColorSpace;
+    host.appendChild(renderer.domElement);
+
+    scene = new THREE.Scene();
+    geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometry.setIndex(new THREE.BufferAttribute(indices, 1));
+    colourAttr = new THREE.BufferAttribute(new Float32Array(vertexCount * 3), 3);
+    colourAttr.setUsage(THREE.DynamicDrawUsage);
+    geometry.setAttribute('color', colourAttr);
+    geometry.computeVertexNormals();
+    geometry.computeBoundingSphere();
+
+    const material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, metalness: 0.0 });
+    scene.add(new THREE.Mesh(geometry, material));
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x334155, 1.6));
+    const light = new THREE.DirectionalLight(0xffffff, 1.4);
+    light.position.set(1, 1, 1);
+    scene.add(light);
+
+    const sphere = geometry.boundingSphere || new THREE.Sphere(new THREE.Vector3(), 1);
+    const radius = Math.max(sphere.radius, 1);
+    camera = new THREE.PerspectiveCamera(35, 1, radius / 100, radius * 30);
+    camera.up.set(0, 0, 1);  // front view: anterior is +y, superior is +z
+    camera.position.set(sphere.center.x, sphere.center.y + radius * 3.6, sphere.center.z);
+    camera.lookAt(sphere.center);
+
+    controls = new OrbitControls(camera, renderer.domElement);
+    controls.target.copy(sphere.center);
+    controls.enableDamping = false;
+    controls.enablePan = false;
+    controls.minDistance = radius * 1.4;
+    controls.maxDistance = radius * 9;
+    controls.addEventListener('change', requestRender);
+    controls.update();
+
+    new ResizeObserver(resize).observe(host);
+    ready = true;
+    applyState();
+  }
+
+  function ensureMesh() {
+    if (!meshPromise) {
+      meshPromise = buildMesh().catch(error => {
+        meshFailed = true;
+        ready = false;
+        setMessage(UNAVAILABLE);
+        console.warn('3D view:', error);
+      });
+    }
+    return meshPromise;
+  }
+
+  return {
+    show(nextRows, count) {
+      rows = nextRows; rowCount = count;
+      second = Math.max(0, Math.min(count - 1, second));
+      applyState();
+    },
+    setSecond(nextSecond) {
+      const value = Number.isFinite(nextSecond) ? Math.floor(nextSecond) : 0;
+      if (value === second) return;
+      second = value;
+      if (ready && rows) paint();
+    },
+    clear(text) {
+      rows = null; rowCount = 0;
+      setMessage(text || UNAVAILABLE);
+    },
+    setColourRange(value) {
+      range = Number.isFinite(value) && value > 0 ? value : null;
+      if (!range) rows = null;
+      applyState();
+    },
+  };
+}
+
+try {
+  if (window.brainMap) window.brainMap._install(makeBrain());
+} catch (error) {
+  console.warn('3D view:', error);
+  if (window.brainMap) window.brainMap.clear('The 3D view is not available for this video.');
+}
 </script>
 </body>
 </html>
