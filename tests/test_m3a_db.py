@@ -26,14 +26,15 @@ def test_migrations_hold_only_plain_statements_the_data_api_can_run_one_by_one()
         assert not re.search(r"\bCREATE\s+(OR\s+REPLACE\s+)?FUNCTION\b", statement, re.I)
 
 
-def test_schema_has_the_five_tables(pg):
+def test_schema_has_the_four_tables(pg):
     names = {
         r["table_name"]
         for r in pg.rows(
             "SELECT table_name FROM information_schema.tables WHERE table_schema = current_schema()"
         )
     }
-    assert {"users", "balances", "jobs", "ledger", "refunds"} <= names
+    assert {"users", "balances", "jobs", "ledger"} <= names
+    assert "refunds" not in names
 
 
 # ---------------------------------------------------------------- transaction()

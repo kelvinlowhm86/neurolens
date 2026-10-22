@@ -283,22 +283,21 @@ INVARIANT_QUERIES = {
             SELECT sum(j.reserved_cents) FROM jobs j
             WHERE j.user_id = b.user_id AND j.status IN ('queued', 'processing')), 0)
     """,
-    # 4. done: one capture row, no refund; failed: one refund row and one refunds row;
-    #    a job still open has neither (only the two terminal functions write them)
+    # 4. done: exactly one capture row and no refund; failed: exactly one refund row and no
+    #    capture; a job still open has neither (only the two terminal functions write them)
     "terminal job without exactly one outcome": """
         WITH c AS (
             SELECT j.job_id, j.status,
                 (SELECT count(*) FROM ledger l
                  WHERE l.job_id = j.job_id AND l.kind = 'capture') AS captures,
                 (SELECT count(*) FROM ledger l
-                 WHERE l.job_id = j.job_id AND l.kind = 'refund') AS refund_rows,
-                (SELECT count(*) FROM refunds r WHERE r.job_id = j.job_id) AS refunds
+                 WHERE l.job_id = j.job_id AND l.kind = 'refund') AS refunds
             FROM jobs j
         )
         SELECT job_id::text FROM c
-        WHERE (status = 'done' AND (captures, refund_rows, refunds) <> (1, 0, 0))
-           OR (status = 'failed' AND (captures, refund_rows, refunds) <> (0, 1, 1))
-           OR (status IN ('queued', 'processing') AND (captures, refund_rows, refunds) <> (0, 0, 0))
+        WHERE (status = 'done' AND (captures, refunds) <> (1, 0))
+           OR (status = 'failed' AND (captures, refunds) <> (0, 1))
+           OR (status IN ('queued', 'processing') AND (captures, refunds) <> (0, 0))
     """,
 }
 
@@ -390,8 +389,11 @@ class Pg:
         return [row["kind"] for row in self.ledger(user_id)]
 
     def refund_reason(self, job_id):
-        row = self.one("SELECT reason FROM refunds WHERE job_id = %s::uuid", str(job_id))
-        return None if row is None else row["reason"]
+        row = self.one(
+            "SELECT error_code FROM jobs WHERE job_id = %s::uuid AND status = 'failed'",
+            str(job_id),
+        )
+        return None if row is None else row["error_code"]
 
     def age(self, job_id, *, updated_s=None, created_s=None):
         """Move the job's updated_at / created_at that many seconds into the past."""
@@ -414,7 +416,6 @@ class Pg:
             "balances": self.rows("SELECT * FROM balances ORDER BY user_id"),
             "ledger": self.rows("SELECT * FROM ledger ORDER BY id"),
             "jobs": self.rows("SELECT * FROM jobs ORDER BY job_id"),
-            "refunds": self.rows("SELECT * FROM refunds ORDER BY job_id"),
         }
 
 
