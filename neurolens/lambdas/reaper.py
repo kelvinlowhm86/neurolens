@@ -3,10 +3,10 @@ open 24 hours after it was created, unless a worker is running it.
 
 One rule: a job not done or failed 24 hours after `created_at`, and that no worker is running
 (it is `queued`, or `processing` with no heartbeat for 10 minutes), is settled if its result
-exists, else refunded as `deadline_passed` and its upload deleted (M3a §7b).
+exists, else refunded as `deadline_passed` and every file of the job deleted (M3a §7b).
 
 Every refund re-checks its condition under the job's row lock, so a job claimed between this
-query and its refund is left alone. One job's error, including a failed upload delete after a
+query and its refund is left alone. One job's error, including a failed file delete after a
 refund, does not stop the others; the run then raises, so the failure shows in the Lambda's
 error metric.
 """
@@ -52,7 +52,9 @@ def reap(db, s3, bucket, job):
         processing_stale_s=HEARTBEAT_STALE_S,
     ):
         logger.warning(f"{job_id}: past the 24-hour deadline, refunded")
-        storage.delete_object(s3, bucket, job["object_key"])
+        # A failed delete raises after the refund, never undoing it; the run then fails loudly.
+        if not storage.delete_keys(s3, bucket, storage.job_keys(job_id, job["object_key"])):
+            raise RuntimeError(f"{job_id}: refunded, but S3 could not delete all of its files")
 
 
 def handler(event, context):

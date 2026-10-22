@@ -1,12 +1,15 @@
 """S3 helpers shared by the web app and the worker. No torch, no neurolens.inference."""
 
 import json
+import logging
 import uuid
 from datetime import UTC, datetime
 from pathlib import PurePosixPath
 from urllib.parse import unquote_plus
 
 from botocore.exceptions import ClientError
+
+logger = logging.getLogger("neurolens")
 
 # The extension of the stored object comes from the declared content type, never from the
 # user's filename.
@@ -192,9 +195,31 @@ def object_exists(s3, bucket, key):
     return True
 
 
-def delete_object(s3, bucket, key):
-    """Delete one object. S3 treats a key that is already gone as success."""
-    s3.delete_object(Bucket=bucket, Key=key)
+def job_keys(job_id, object_key):
+    """Every S3 key one job can have: the upload, its result and brain, and the research copy
+    (M3a §7b), with the dataset video's real extension."""
+    job_id = str(job_id)
+    ext = PurePosixPath(object_key).suffix
+    return [
+        object_key,
+        f"results/{job_id}.json",
+        f"results/{job_id}.brain",
+        f"dataset/{job_id}/video{ext}",
+        f"dataset/{job_id}/result.json",
+        f"dataset/{job_id}/brain",
+        f"dataset/{job_id}/retention.csv",
+    ]
+
+
+def delete_keys(s3, bucket, keys):
+    """Delete keys in batches of up to 1000. False if S3 reported an error for any key."""
+    for start in range(0, len(keys), 1000):
+        objects = [{"Key": key} for key in keys[start : start + 1000]]
+        reported = s3.delete_objects(Bucket=bucket, Delete={"Objects": objects}).get("Errors")
+        if reported:
+            logger.error(f"S3 reported {len(reported)} failed deletes in {bucket}")
+            return False
+    return True
 
 
 def result_exists(s3, bucket, job_id):

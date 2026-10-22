@@ -82,10 +82,6 @@ def _refund(tx, job_id, job, reason, message):
     cents = job["reserved_cents"]
     _move(tx, job["user_id"], job_id, "refund", cents, -cents)
     tx.execute(
-        "INSERT INTO refunds (job_id, reason) VALUES (CAST(:job_id AS uuid), :reason)",
-        {"job_id": job_id, "reason": reason},
-    )
-    tx.execute(
         "UPDATE jobs SET status = :failed, error_code = :reason, error_message = :message, "
         "updated_at = now() WHERE job_id = CAST(:job_id AS uuid)",
         {"failed": FAILED, "reason": reason, "message": message, "job_id": job_id},
@@ -245,11 +241,6 @@ def delete_account(db, user_id):
         )
         if active:
             raise JobActive(f"user {user_id!r} has an active job")
-        tx.execute(
-            "DELETE FROM refunds WHERE job_id IN "
-            "(SELECT job_id FROM jobs WHERE user_id = :user_id)",
-            {"user_id": user_id},
-        )
         tx.execute("DELETE FROM ledger WHERE user_id = :user_id", {"user_id": user_id})
         tx.execute("DELETE FROM jobs WHERE user_id = :user_id", {"user_id": user_id})
         tx.execute("DELETE FROM balances WHERE user_id = :user_id", {"user_id": user_id})

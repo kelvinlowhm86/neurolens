@@ -70,29 +70,8 @@ def _old_result():
 
 
 def _job_keys(job):
-    """Every S3 key §4 step 2 names for one job, with the dataset video's real extension."""
-    job_id = str(job["job_id"])
-    ext = PurePosixPath(job["object_key"]).suffix
-    return [
-        job["object_key"],
-        f"results/{job_id}.json",
-        f"results/{job_id}.brain",
-        f"dataset/{job_id}/video{ext}",
-        f"dataset/{job_id}/result.json",
-        f"dataset/{job_id}/brain",
-        f"dataset/{job_id}/retention.csv",
-    ]
-
-
-def _delete_keys(s3, bucket, keys):
-    """Delete keys in batches of up to 1000. False if S3 reported an error for any key."""
-    for start in range(0, len(keys), 1000):
-        objects = [{"Key": key} for key in keys[start : start + 1000]]
-        reported = s3.delete_objects(Bucket=bucket, Delete={"Objects": objects}).get("Errors")
-        if reported:
-            logger.error(f"S3 reported {len(reported)} failed deletes in {bucket}")
-            return False
-    return True
+    """Every S3 key for one job row (the shared storage.job_keys)."""
+    return storage.job_keys(job["job_id"], job["object_key"])
 
 
 def _worker_group_paused(autoscaling, group_name):
@@ -590,9 +569,14 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
                 "not_cancellable", "This job has already started or finished.", status=409
             )
         try:
-            storage.delete_object(s3, bucket, job["object_key"])
+            deleted = storage.delete_keys(
+                s3, bucket, storage.job_keys(job["job_id"], job["object_key"])
+            )
         except Exception:
-            logger.exception(f"Could not delete the upload for cancelled {job['job_id']}")
+            logger.exception(f"Could not delete the files for cancelled {job['job_id']}")
+        else:
+            if not deleted:
+                logger.error(f"S3 reported failed deletes for cancelled {job['job_id']}")
         return jsonify({"cancelled": True})
 
     @app.route("/api/jobs/<job_id>/retention", methods=["POST"])
@@ -649,7 +633,8 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
             return _job_active()
         if s3 is None or not bucket:
             return _not_configured()
-        if not _delete_keys(s3, bucket, _job_keys(job)):
+        keys = storage.job_keys(job["job_id"], job["object_key"])
+        if not storage.delete_keys(s3, bucket, keys):
             return _error(
                 "delete_failed", "Could not delete this video's files. Please try again.", 500
             )
@@ -677,8 +662,8 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
             return _job_active()
         if s3 is None or not bucket:
             return _not_configured()
-        keys = [key for job in jobs for key in _job_keys(job)]
-        if not _delete_keys(s3, bucket, keys):
+        keys = [key for job in jobs for key in storage.job_keys(job["job_id"], job["object_key"])]
+        if not storage.delete_keys(s3, bucket, keys):
             return _error(
                 "delete_failed", "Could not delete this account's files. Please try again.", 500
             )

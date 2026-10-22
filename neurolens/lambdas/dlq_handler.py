@@ -4,12 +4,13 @@ SQS event source on the dead-letter queue, batch size 1. For each job in the S3 
 - unknown, or already done/failed: nothing to do;
 - its result exists (a worker crashed before settling): charge it;
 - otherwise refund it as `processing_failed` with the job's last error message, if it is queued
-  or its worker has stopped heartbeating (stale for 90 s), then delete its upload (M3a §7b).
+  or its worker has stopped heartbeating (stale for 90 s), then delete every file of the job
+  (M3a §7b).
 
 A job whose worker still holds a fresh claim (a duplicate message for a job still running) is
 left alone and the handler raises once every job has been seen, so SQS retries the message
 later, by which time the job has finished or gone stale. It returns normally only when every job
-is settled, refunded or already terminal. A failed upload delete is logged and also makes the
+is settled, refunded or already terminal. A failed file delete is logged and also makes the
 handler raise, but never undoes the refund.
 """
 
@@ -52,7 +53,9 @@ def settle_or_refund(db, s3, bucket, job_id):
         processing_stale_s=STALE_AFTER_S,
     ):
         logger.warning(f"{job_id}: failed twice, refunded")
-        storage.delete_object(s3, bucket, object_key)
+        # A failed delete raises after the refund, never undoing it; the run then fails loudly.
+        if not storage.delete_keys(s3, bucket, storage.job_keys(job_id, object_key)):
+            raise RuntimeError(f"{job_id}: refunded, but S3 could not delete all of its files")
         return True
     state = billing.job_state(db, job_id)
     return state is not None and state["status"] in billing.TERMINAL

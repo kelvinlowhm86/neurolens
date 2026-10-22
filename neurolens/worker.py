@@ -326,7 +326,7 @@ def handle_record(bucket, key, *, s3, db, cfg, roi_masks, heartbeat):
                     # A refund deleted the upload; this one landed afterwards (M3a §7b). A done
                     # job keeps its upload as the replay copy.
                     try:
-                        storage.delete_object(s3, bucket, key)
+                        s3.delete_object(Bucket=bucket, Key=key)
                     except Exception:
                         logger.exception(f"Could not delete the upload for refunded {job_id}")
                 logger.info(f"Skipped {job_id}: already finished")
@@ -383,8 +383,8 @@ def _analyse(bucket, key, job_id, attempt, *, s3, db, cfg, roi_masks, research_c
         return _reject(s3, db, bucket, key, job_id, attempt, reason, message, delete=delete)
 
     # Size backstop first: S3's own size cap should already have stopped a big file, but
-    # never download, probe or run inference on one that got through. A queued job can outlive
-    # its upload (uploads expire after 2 days, queue messages after 4).
+    # never download, probe or run inference on one that got through. The upload is rarely gone
+    # (kept 30 days; the reaper ends a job after 24 hours), but can be deleted by hand.
     try:
         size = s3.head_object(Bucket=bucket, Key=key)["ContentLength"]
     except ClientError as err:

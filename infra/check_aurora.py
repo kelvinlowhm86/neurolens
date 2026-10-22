@@ -51,7 +51,6 @@ EXPECTED_TYPES = {
 CLEANUP = [  # children before parents
     "DELETE FROM identities WHERE user_id = :user_id",
     "DELETE FROM ledger WHERE user_id = :user_id",
-    "DELETE FROM refunds WHERE job_id IN (SELECT job_id FROM jobs WHERE user_id = :user_id)",
     "DELETE FROM jobs WHERE user_id = :user_id",
     "DELETE FROM balances WHERE user_id = :user_id",
     "DELETE FROM users WHERE user_id = :user_id",

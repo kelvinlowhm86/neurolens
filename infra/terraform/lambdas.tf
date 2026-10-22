@@ -69,11 +69,15 @@ resource "aws_iam_role_policy" "m3a_lambda" {
         Resource = ["${aws_s3_bucket.main.arn}/results/*", "${aws_s3_bucket.main.arn}/uploads/*"]
       },
       {
-        # A refund deletes the job's upload (M3a §7b).
-        Sid      = "DeleteUploadsAfterRefund"
-        Effect   = "Allow"
-        Action   = "s3:DeleteObject"
-        Resource = "${aws_s3_bucket.main.arn}/uploads/*"
+        # A refund deletes every file the job has (M3a §7b).
+        Sid    = "DeleteAJobsFilesAfterRefund"
+        Effect = "Allow"
+        Action = "s3:DeleteObject"
+        Resource = [
+          "${aws_s3_bucket.main.arn}/uploads/*",
+          "${aws_s3_bucket.main.arn}/results/*",
+          "${aws_s3_bucket.main.arn}/dataset/*",
+        ]
       },
       {
         # Without it S3 answers 403, not 404, for a missing object. No s3:prefix condition: a HEAD
