@@ -181,9 +181,9 @@
 
   .chart-head { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
   .chart-head h2 { font: 600 19px var(--display); }
-  .chart-head .grow { flex: 1; }
-  .keys { display: inline-flex; gap: 16px; }
-  .legend-key { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--ink-2); }
+  .keys { display: flex; flex-wrap: wrap; gap: 4px 16px; order: 1; flex-basis: 100%; }
+  .chart-controls { display: inline-flex; align-items: center; gap: 14px; margin-left: auto; }
+  .legend-key { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--ink-2); white-space: nowrap; }
   .legend-key i { width: 18px; height: 0; border-top: 2px solid var(--heat); }
   .legend-key i.dash { border-top: 2px dashed var(--cool); }
   .legend-key i.typical { border-top: 1.5px dashed var(--ink-3); }
@@ -232,8 +232,9 @@
   .compare-table th, .compare-table td { text-align: left; padding: 8px 12px 8px 0; border-bottom: 1px solid var(--rule); vertical-align: top; }
   .compare-table th { font: 500 12.5px var(--text); color: var(--ink-2); }
   .compare-table td.v { font: 600 15px var(--display); }
-  .compare-table .moment-link, .compare-table .compare-swap { background: none; border: 0; padding: 0; font: inherit; color: var(--heat); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
-  .compare-table .moment-link:hover, .compare-table .compare-swap:hover { color: var(--ink); }
+  .compare-table .moment-link { background: none; border: 0; padding: 0; font: inherit; color: var(--heat); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+  .compare-table .moment-link:hover { color: var(--ink); }
+  .compare-table .compare-swap { padding: 4px 10px; font-size: 12px; cursor: pointer; }
 
   @media (max-width: 860px), (max-height: 620px) {
     .D { display: block; height: auto; overflow: visible; }
@@ -373,9 +374,10 @@
         <div class="chart-head">
           <h2>Brain response over time</h2>
           <span class="keys" id="chartKeys"></span>
-          <span class="grow"></span>
-          <label class="compare-pick" id="compareRow" hidden><span>Compare with…</span><select id="compareSelect"></select></label>
-          <label class="toggle" id="mutedLabel"><input type="checkbox" id="mutedToggle"> Show if muted</label>
+          <span class="chart-controls">
+            <label class="compare-pick" id="compareRow" hidden><span>Compare with…</span><select id="compareSelect"></select></label>
+            <label class="toggle" id="mutedLabel"><input type="checkbox" id="mutedToggle"> Show if muted</label>
+          </span>
         </div>
         <p class="note">Predicted response of an average viewer. The dashed line is typical. Click anywhere to jump there.</p>
         <p class="compare-msg" id="compareMsg"></p>
@@ -1475,7 +1477,7 @@ function compareTable() {
   const name = currentVideoName();
   const otherName = comparison ? comparison.label : '';
   const swap = comparison && currentContext && currentContext.jobId
-    ? `<button class="compare-swap" data-swap="${escapeHtml(comparison.jobId)}">Swap</button>` : '';
+    ? `<button class="btn-ghost compare-swap" title="Make the other video the main one" data-swap="${escapeHtml(comparison.jobId)}">⇄ Swap</button>` : '';
   return `<table class="compare-table"><thead><tr><th>${swap}</th><th title="${escapeHtml(name)}">${escapeHtml(shortName(name))}</th><th title="${escapeHtml(otherName)}">${escapeHtml(shortName(otherName))}</th></tr></thead><tbody>
     ${row('Opening', openingText(currentSummary), openingText(other))}
     ${row('Average (overall)', averageOverall(currentResult), averageOverall(comparison && comparison.result))}
@@ -1735,7 +1737,7 @@ function buildMainChart() {
   addPins(box);
   const currentKey = `<span class="legend-key" title="${escapeHtml(name)}"><i></i>${escapeHtml(shortName(name))}</span>`;
   const secondKey = secondLabel ? `<span class="legend-key" title="${escapeHtml(secondLabel)}"><i class="dash"></i>${escapeHtml(shortName(secondLabel))}</span>` : '';
-  const shadeKey = comparison ? `<span class="legend-key" title="${escapeHtml(name)}"><i class="swatch"></i>shaded: moments of ${escapeHtml(shortName(name))}</span>` : '';
+  const shadeKey = comparison ? '<span class="legend-key"><i class="swatch"></i>shaded: moments of the solid line</span>' : '';
   const typicalKey = '<span class="legend-key"><i class="typical"></i>typical</span>';
   $('chartKeys').innerHTML = currentKey + secondKey + typicalKey + shadeKey;
 }
