@@ -161,6 +161,47 @@ def probe_duration(path):
     return duration
 
 
+class ThumbnailFailed(RuntimeError):
+    """ffmpeg could not make a thumbnail: the file is not a video, it timed out, or it wrote
+    nothing."""
+
+
+def make_thumbnail(path, seconds):
+    """A still from `seconds` into the video, 320 px wide, as JPEG bytes (M3d §5b).
+
+    Raises ThumbnailFailed on a non-zero exit, a timeout (30 s) or empty output. It is only a
+    picture, so the worker carries on without one.
+    """
+    try:
+        result = subprocess.run(
+            [
+                "ffmpeg",
+                "-v",
+                "error",
+                "-ss",
+                str(max(seconds, 0)),
+                "-i",
+                str(path),
+                "-frames:v",
+                "1",
+                "-vf",
+                "scale=320:-2",
+                "-q:v",
+                "5",
+                "-f",
+                "image2pipe",
+                "-",
+            ],
+            capture_output=True,
+            timeout=30,
+        )
+    except subprocess.TimeoutExpired as err:
+        raise ThumbnailFailed(f"ffmpeg timed out making a thumbnail from {path}") from err
+    if result.returncode != 0 or not result.stdout:
+        raise ThumbnailFailed(f"ffmpeg could not make a thumbnail from {path}")
+    return result.stdout
+
+
 class TimelineError(RuntimeError):
     """Predicted rows do not form one row per second of the video: never publish such a result."""
 

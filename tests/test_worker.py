@@ -345,7 +345,8 @@ def test_pipeline_passes_events_and_predictions_along(
 def test_pipeline_writes_no_noaudio_file_and_runs_no_ffmpeg(
     aws, make_cfg, roi_masks_small, db, new_job, clip_path, calls, ffmpeg_runs
 ):
-    """The no-audio pass reuses the same video file: no audio-free copy is made."""
+    """The no-audio pass reuses the same video file: no audio-free copy is made. The one ffmpeg
+    run, the thumbnail (M3d §5b), writes to a pipe, never to a file."""
     cfg = make_cfg()
     _, key = new_job()
     upload_clip(aws, key, clip_path)
@@ -363,7 +364,7 @@ def test_pipeline_writes_no_noaudio_file_and_runs_no_ffmpeg(
     seen_files = calls["files_at_extract"]
     assert seen_files, "extract_response was not reached"
     assert not [name for name in seen_files if "noaudio" in name]
-    assert ffmpeg_runs == []
+    assert all(cmd[-1] == "-" for cmd in ffmpeg_runs)
 
 
 def test_a_timeline_error_from_predict_is_a_failure_not_an_outcome(

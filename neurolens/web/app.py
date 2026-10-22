@@ -533,6 +533,21 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
             return _error("brain_missing", "The brain file for this result is missing.", status=404)
         return redirect(_presigned_get(s3, bucket, key, expires_in=300))
 
+    @app.route("/api/jobs/<job_id>/thumbnail")
+    def job_thumbnail(job_id):
+        """Redirect to a five-minute presigned GET of the video's thumbnail (M3d §7)."""
+        job, error = owned_job(job_id)
+        if error:
+            return error
+        if job["status"] != billing.DONE:
+            return _error("thumbnail_missing", "No thumbnail for this job.", status=404)
+        if s3 is None or not bucket:
+            return _not_configured()
+        key = f"results/{uuid.UUID(job_id)}.jpg"
+        resp = redirect(_presigned_get(s3, bucket, key, expires_in=300))
+        resp.headers["Cache-Control"] = "private, max-age=300"
+        return resp
+
     @app.route("/api/jobs/<job_id>/video")
     def job_video(job_id):
         """A one-hour presigned GET of the caller's own video (M3d §7)."""

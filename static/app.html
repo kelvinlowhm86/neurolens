@@ -94,7 +94,9 @@
   .sample-dur { font-size: 10px; color: var(--stage-muted); margin-top: 2px; }
   .history-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0; border-top: 1px solid var(--stage-rule); font-size: 12px; }
   .history-row:first-child { border-top: 0; }
-  .history-main { min-width: 0; }
+  .history-thumb { width: 64px; height: 40px; flex: none; border-radius: 5px; overflow: hidden; background: var(--stage-rule); }
+  .history-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .history-main { min-width: 0; flex: 1; }
   .history-name { font-weight: 600; word-break: break-all; }
   .history-sub { color: var(--stage-muted); font-size: 11px; margin-top: 2px; }
   .history-actions { display: flex; gap: 6px; flex-shrink: 0; }
@@ -715,6 +717,25 @@ function redrawHistory() {
   if (signedIn && jobsLoaded) renderHistory(jobsCache);
 }
 
+// History redraws on every poll, so each job's thumbnail element is made once and reused.
+const historyThumbs = new Map();
+
+function historyThumb(job) {
+  const key = `${job.job_id}:${job.status}`;
+  let box = historyThumbs.get(key);
+  if (box) return box;
+  box = document.createElement('div'); box.className = 'history-thumb';
+  if (job.status === 'done') {
+    const img = document.createElement('img');
+    img.alt = '';
+    img.addEventListener('error', () => img.remove());
+    img.src = `/api/jobs/${job.job_id}/thumbnail`;
+    box.append(img);
+  }
+  historyThumbs.set(key, box);
+  return box;
+}
+
 function historyRow(job) {
   const row = document.createElement('div'); row.className = 'history-row';
   const main = document.createElement('div'); main.className = 'history-main';
@@ -744,7 +765,7 @@ function historyRow(job) {
     del.addEventListener('click', () => deleteJob(job));
     actions.append(del);
   }
-  row.append(main, actions);
+  row.append(historyThumb(job), main, actions);
   return row;
 }
 

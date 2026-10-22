@@ -128,6 +128,16 @@ def put_brain(s3, bucket, job_id, preds):
     )
 
 
+def put_thumbnail(s3, bucket, job_id, data):
+    """Write results/<job_id>.jpg, replacing an earlier copy (M3d §5b)."""
+    s3.put_object(
+        Bucket=bucket,
+        Key=f"results/{job_id}.jpg",
+        Body=data,
+        ContentType="image/jpeg",
+    )
+
+
 def put_dataset(s3, bucket, job_id, upload_key, result, brain):
     """Keep a consented job's video, result and brain under dataset/<job_id>/ (M3c §3b, M3d §5).
 
@@ -196,14 +206,15 @@ def object_exists(s3, bucket, key):
 
 
 def job_keys(job_id, object_key):
-    """Every S3 key one job can have: the upload, its result and brain, and the research copy
-    (M3a §7b), with the dataset video's real extension."""
+    """Every S3 key one job can have: the upload, its result, brain and thumbnail, and the
+    research copy (M3a §7b), with the dataset video's real extension."""
     job_id = str(job_id)
     ext = PurePosixPath(object_key).suffix
     return [
         object_key,
         f"results/{job_id}.json",
         f"results/{job_id}.brain",
+        f"results/{job_id}.jpg",
         f"dataset/{job_id}/video{ext}",
         f"dataset/{job_id}/result.json",
         f"dataset/{job_id}/brain",

@@ -412,6 +412,16 @@ def _analyse(bucket, key, job_id, attempt, *, s3, db, cfg, roi_masks, research_c
             # Not a video, corrupt, audio-only or no duration: it can never succeed, so do not
             # retry it.
             return reject("unreadable_video", "The file is not a readable video.")
+
+        # A still from the middle of the video for History, while the download is still here.
+        # A failed grab never fails the job: it is only a picture, and the video already passed
+        # probe_duration, so a failure here is rare (M3d §5b).
+        try:
+            thumbnail = inference.make_thumbnail(local, duration / 2)
+        except inference.ThumbnailFailed:
+            logger.error(f"Could not make a thumbnail for {job_id}")
+            thumbnail = None
+
         verdict = billing.verify(
             db, job_id, attempt, round(duration * 1000), settings.max_duration(cfg)
         )
@@ -457,8 +467,12 @@ def _analyse(bucket, key, job_id, attempt, *, s3, db, cfg, roi_masks, research_c
     # late worker must not leave a result behind for a job the reaper has refunded (M3c §3b).
     stage("saving_result")
 
-    # The brain file first: a result always has its brain (M3d §5). A failed brain write raises,
-    # so the normal failure path retries and no result is published.
+    # After the claim check, so a late worker for a refunded job writes none (M3d §5b).
+    if thumbnail is not None:
+        storage.put_thumbnail(s3, bucket, job_id, thumbnail)
+
+    # The brain file before the result: a result always has its brain (M3d §5). A failed brain
+    # write raises, so the normal failure path retries and no result is published.
     storage.put_brain(s3, bucket, job_id, preds_full)
 
     # Publish to S3 without ever replacing an earlier result (a redelivered notice must not
