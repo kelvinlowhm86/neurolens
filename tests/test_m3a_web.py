@@ -15,6 +15,7 @@ from neurolens.web.app import create_app
 TIME_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
 STATUS_KEYS = {
     "job_id",
+    "filename",
     "status",
     "stage",
     "stages",

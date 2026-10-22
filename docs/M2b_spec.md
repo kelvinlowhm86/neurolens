@@ -138,7 +138,7 @@ Results are never duplicated, and M3a's claim (a database lock with a staleness 
 After the presigned S3 POST succeeds (204), the page currently shows "Uploaded — processing (job …)" and stops. Replace that with:
 - Put the job in the page's address (`history.replaceState` to `?job=<job_id>`). On load, a `?job=` parameter starts polling directly, so the user can close the tab and come back with the link (results are kept 30 days).
 - Poll `GET /api/jobs/{job_id}/status` every 5 s and show the state in the existing upload panel's message line and progress area (reuse the visual design):
-  - `queued`: "Queued. If no GPU worker is running, starting one can take up to about 20 minutes. You can close this page and come back with this link."
+  - `queued`: "Waiting for a GPU · <n> min. This can take up to about 20 minutes; you can close this page." (whole minutes since the status's `updated_at`, "under a minute" below one; no progress bar, since the wait is unknown). A retry: "Waiting to retry after a problem with the last attempt · <n> min."
   - `downloading` / `transcribing` / `inference_full` / `inference_noaudio` / `extracting_roi`: a plain description of each step.
   - `failed`: the real `error` text, no `alert()`.
   - `done`: fetch `GET /api/jobs/{job_id}/result` and render it through the same code path as a sample result.

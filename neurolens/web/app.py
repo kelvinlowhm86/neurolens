@@ -442,7 +442,7 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
         user_id, _ = signed_in_user()
         with db.transaction() as tx:
             rows = tx.execute(
-                "SELECT job_id, object_key, status, stage, stages, attempt, updated_at, "
+                "SELECT job_id, object_key, filename, status, stage, stages, attempt, updated_at, "
                 "error_code, error_message, research_consent FROM jobs "
                 "WHERE job_id = CAST(:job_id AS uuid) AND user_id = :user_id "
                 "AND deleted_at IS NULL",

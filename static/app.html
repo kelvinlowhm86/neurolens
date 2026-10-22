@@ -63,7 +63,7 @@
   .box a:not(.btn-white) { color: var(--stage-text); }
   .upload-zone { border: 2px dashed var(--stage-rule); border-radius: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; cursor: pointer; position: relative; padding: 26px 16px; text-align: center; background: var(--stage-2); }
   .upload-zone:hover { border-color: var(--heat); }
-  .upload-zone.hidden { display: none; }
+  .upload-zone.hidden, .consent-row.hidden { display: none; }
   .upload-zone .up-title { font-weight: 600; font-size: 14px; }
   .upload-zone .up-sub { font-size: 12px; color: var(--stage-muted); }
   .upload-zone input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
@@ -258,7 +258,7 @@
 <header class="bar">
   <a class="brand" href="/">NeuroLens</a>
   <div class="spacer"></div>
-  <span class="header-meta" id="headerMeta">Select a video to see its brain response</span>
+  <span class="header-meta" id="headerMeta"></span>
   <span class="credit" id="balance"></span>
   <div class="account-wrap" id="accountWrap" hidden>
     <button class="account" id="account" aria-haspopup="menu" aria-expanded="false" aria-controls="accountMenu"></button>
@@ -295,7 +295,7 @@
         <div class="upload-zone hidden" id="uploadZone">
           <div class="up-title">Upload a video for analysis</div>
           <div class="up-sub" id="limitsText">MP4, MOV, or WebM</div>
-          <input type="file" accept="video/mp4,video/quicktime,video/webm" id="fileInput">
+          <input type="file" accept="video/mp4,video/quicktime,video/webm" id="fileInput" title="">
         </div>
         <div class="upload-note" id="uploadNote"></div>
         <div class="box" id="noCreditPanel"><p>You have no credit yet. Ask the NeuroLens team for test credit.</p></div>
@@ -306,7 +306,7 @@
           <div class="line" id="upCost"></div>
           <div class="consent-row" id="consentRow">
             <input type="checkbox" id="consentBox">
-            <label for="consentBox">Keep this video and its analysis for up to 12 months to help build a future model linking brain response to real audience behaviour. I own the rights to this video. Optional: the analysis works either way. <a href="/static/privacy.html">Privacy policy</a></label>
+            <label for="consentBox">Optional: keep this video and its analysis for up to 12 months for research into how brain response relates to real audiences. I own the rights to this video. <a href="/static/privacy.html">Privacy policy</a></label>
           </div>
           <div class="upload-progress" id="upProgress"><div class="upload-bar" id="upBar"></div></div>
           <div class="status-line">
@@ -420,7 +420,7 @@ const GROUPS = {
 const SIGNAL_LABELS = { faces: 'Faces', bodies: 'Bodies', scenes: 'Scenes', visual: 'Visual', sound: 'Sound', speech: 'Speech', social: 'Social' };
 const NS = 'http://www.w3.org/2000/svg';
 
-let samplesData = null, jobsCache = [];
+let samplesData = null, jobsCache = [], jobsLoaded = false;
 let currentResult = null, currentSummary = null, currentContext = null;
 let comparison = null, mutedOn = false, resultSeq = 0, compareRequest = 0;
 let signedIn = false, me = null, limits = null;
@@ -478,7 +478,6 @@ window.brainMap = {
 
 const params = new URLSearchParams(window.location.search);
 const dollars = cents => `$${(cents / 100).toFixed(2)}`;
-const IDLE_HEADER = () => (signedIn ? 'Upload a video or select a sample' : 'Select a video to see its brain response');
 
 function applyChooser() {
   $('chooserTabs').hidden = !signedIn;
@@ -640,7 +639,7 @@ function showSignedOut() {
   $('balance').textContent = '';
   $('topUpload').textContent = 'Sign in';
   $('topUpload').hidden = false;
-  $('headerMeta').textContent = IDLE_HEADER();
+  $('headerMeta').textContent = '';
   applyChooser();
   loadLimits();
   loadSamples();
@@ -656,7 +655,7 @@ function showApp(meJson) {
   $('topUpload').hidden = false;
   $('uploadZone').classList.remove('hidden');
   $('historyPanel').classList.add('active');
-  $('headerMeta').textContent = IDLE_HEADER();
+  $('headerMeta').textContent = '';
   activeTab = 'analyses';
   applyChooser();
   showBalance();
@@ -696,14 +695,24 @@ async function loadHistory() {
   }
 }
 
+// The open job shown in the upload box is left out, so it never appears twice.
+const inUploadBox = job => job.job_id === trackedJob && (job.status === 'queued' || job.status === 'processing');
+
 function renderHistory(jobs) {
-  jobsCache = jobs;
+  jobsCache = jobs; jobsLoaded = true;
+  const shown = jobs.filter(job => !inUploadBox(job));
   const list = $('historyList');
-  list.replaceChildren(...jobs.map(historyRow));
-  $('historyPanel').classList.add('active');
-  $('historyEmpty').hidden = jobs.length > 0;
-  $('historyNote').textContent = jobs.length ? `Results are kept for ${RESULT_DAYS} days.` : '';
+  list.replaceChildren(...shown.map(historyRow));
+  // Hidden when its only job is the one in the upload box; "No analyses yet." only when there are none.
+  $('historyPanel').classList.toggle('active', shown.length > 0 || jobs.length === 0);
+  $('historyEmpty').hidden = shown.length > 0;
+  $('historyNote').textContent = '';
   if (currentResult) showCompareRow();
+}
+
+// Redraws from the last list after the tracked job changes; only once the list has loaded.
+function redrawHistory() {
+  if (signedIn && jobsLoaded) renderHistory(jobsCache);
 }
 
 function historyRow(job) {
@@ -730,9 +739,11 @@ function historyRow(job) {
     csv.href = `/api/jobs/${job.job_id}/result.csv`;
     actions.append(csv);
   }
-  const del = document.createElement('button'); del.className = 'btn-danger'; del.textContent = 'Delete';
-  del.addEventListener('click', () => deleteJob(job));
-  actions.append(del);
+  if (job.status === 'done' || job.status === 'failed') {
+    const del = document.createElement('button'); del.className = 'btn-danger'; del.textContent = 'Delete';
+    del.addEventListener('click', () => deleteJob(job));
+    actions.append(del);
+  }
   row.append(main, actions);
   return row;
 }
@@ -757,14 +768,17 @@ async function deleteJob(job) {
   }
 }
 
+// "21 Nov 2026": a numeric date reads differently in different countries.
+const longDate = d => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+
 function historyDetail(job) {
   const created = new Date(job.created_at);
-  const day = created.toLocaleDateString();
+  const day = longDate(created);
   if (job.status === 'done') {
     const cost = job.captured_cents != null ? ` · ${dollars(job.captured_cents)}` : '';
     if (!job.result_available) return `${day}${cost} · result expired`;
-    const expires = new Date(created.getTime() + RESULT_DAYS * 86400000).toLocaleDateString();
-    return `${day}${cost} · result kept until ${expires}`;
+    const expires = longDate(new Date(created.getTime() + RESULT_DAYS * 86400000));
+    return `${day}${cost} · kept until ${expires}`;
   }
   if (job.status === 'failed') return `${day} · ${failureText(job.error_code)}${NOT_CHARGED}`;
   return `${day} · ${job.status}`;
@@ -911,7 +925,7 @@ function showConfirm(file, duration) {
   $('consentRow').classList.remove('hidden');
   $('upFileName').textContent = file.name;
   $('upDetail').textContent = `${duration.toFixed(1)} s · ${(file.size / 1e6).toFixed(1)} MB`;
-  $('upCost').textContent = `Estimated cost: ${dollars(estimateCostCents(duration))}, held from your credit when you upload (adjusted to the measured length, refunded if the analysis fails)`;
+  $('upCost').textContent = `Cost: about ${dollars(estimateCostCents(duration))}, held from your credit and refunded if the analysis fails.`;
   $('upMsg').textContent = ''; $('upMsg').classList.remove('error');
   $('upProgress').classList.remove('active'); $('upBar').style.width = '0';
   $('upConfirm').disabled = false; $('upConfirm').style.display = '';
@@ -967,7 +981,7 @@ async function startUpload() {
     if (xhr.status === 204) {
       $('upBar').style.width = '100%';
       $('upConfirm').style.display = 'none';
-      $('headerMeta').textContent = IDLE_HEADER();
+      $('headerMeta').textContent = '';
       trackJob(presign.job_id, file);
     } else { uploadFailed(`Upload failed (HTTP ${xhr.status}).`); }
   };
@@ -985,7 +999,7 @@ function resetUpload() {
   $('uploadNote').textContent = '';
   fileInput.value = '';
   if (signedIn) uploadZone.classList.remove('hidden');
-  $('headerMeta').textContent = IDLE_HEADER();
+  $('headerMeta').textContent = '';
 }
 
 const POLL_MS = 5000;
@@ -1016,8 +1030,12 @@ function knownFailure(code, message) {
   }
 }
 const failureText = (code, message) => knownFailure(code, message) || 'Processing failed.';
-const QUEUED_TEXT = 'Queued. If no GPU worker is running, starting one can take up to about 20 minutes. ' +
-  'You can close this page and come back with this link.';
+const QUEUED_TEXT = 'This can take up to about 20 minutes; you can close this page.';
+// Whole minutes since the job last changed state, so a waiting user sees time pass without a ticking clock.
+function waitedText(since) {
+  const minutes = Math.max(0, Math.floor((Date.now() - Date.parse(since)) / 60000));
+  return minutes < 1 ? 'under a minute' : `${minutes} min`;
+}
 const STEP_TEXT = {
   downloading: ['Downloading your video to the analysis machine...', 10],
   transcribing: ['Transcribing the speech, so the model can read the words...', 30],
@@ -1052,12 +1070,14 @@ function stopTracking() {
   pausedPoll = null;
   clearTimeout(pollTimer);
   setJobInUrl(null);
+  redrawHistory();
 }
 
 function trackJob(jobId, file) {
   clearTimeout(pollTimer);
   trackedJob = jobId; trackStart = Date.now();
   setJobInUrl(jobId);
+  redrawHistory();
   setViewName('chooser');
   playerOriginTab = 'analyses';
   setChooserTab('analyses');
@@ -1113,8 +1133,8 @@ async function cancelJob(jobId) {
 
 async function pollJob(jobId, file) {
   if (trackedJob !== jobId) return;
-  showJobCancel(false);
   if (Date.now() - trackStart > STOP_AFTER_MS) {
+    showJobCancel(false);
     $('upProgress').classList.remove('active');
     return showJobMsg(STOPPED_TEXT);
   }
@@ -1128,6 +1148,7 @@ async function pollJob(jobId, file) {
     if (trackedJob !== jobId) return;
     if (res.status === 404) {
       again = false;
+      showJobCancel(false);
       $('upProgress').classList.remove('active');
       showJobMsg('No such job for this account.', true);
     } else if (!res.ok) {
@@ -1135,6 +1156,8 @@ async function pollJob(jobId, file) {
     } else {
       const st = await res.json();
       if (trackedJob !== jobId) return;
+      if (!file && st.filename) { $('upFileName').textContent = st.filename; $('headerMeta').textContent = st.filename; }
+      showJobCancel(st.status === 'queued');
       if (st.status === 'done') {
         again = !(await showResult(jobId, file, st.research_consent));
         if (!again) refreshAccount();
@@ -1145,8 +1168,10 @@ async function pollJob(jobId, file) {
         refreshAccount();
       } else if (st.status === 'queued') {
         $('upProgress').classList.remove('active');
-        showJobCancel(true);
-        showJobMsg(st.attempt > 0 ? 'Waiting to retry after a problem with the last attempt...' : QUEUED_TEXT);
+        const waited = waitedText(st.updated_at);
+        showJobMsg(st.attempt > 0
+          ? `Waiting to retry after a problem with the last attempt · ${waited}.`
+          : `Waiting for a GPU · ${waited}. ${QUEUED_TEXT}`);
       } else {
         const step = STEP_TEXT[st.stage];
         $('upProgress').classList.add('active');
@@ -2081,7 +2106,7 @@ function resetUI() {
   $('chartsEmpty').style.display = '';
   setViewName('chooser');
   if (signedIn) $('uploadZone').classList.remove('hidden');
-  $('headerMeta').textContent = IDLE_HEADER();
+  $('headerMeta').textContent = '';
   showRetention(null);
   resetUpload();
   activeTab = playerOriginTab;
