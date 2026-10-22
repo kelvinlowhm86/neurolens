@@ -117,7 +117,7 @@
   .clip-credit { font-size: 12px; color: var(--stage-muted); }
   .side-head .btn-ghost { padding: 3px 9px; font-size: 12px; margin-left: auto; }
   .video-box { position: relative; background: #000; border-radius: 14px; overflow: hidden; aspect-ratio: 16 / 9; flex: none; }
-  .video-box video { width: 100%; height: 100%; display: block; object-fit: contain; }
+  .video-box video { width: 100%; height: 100%; display: block; object-fit: contain; cursor: pointer; }
   .video-missing { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 22px; text-align: center; font-size: 13px; color: var(--stage-muted); background: radial-gradient(ellipse at 50% 45%, #1A2336 0%, #0A0F1A 75%); }
   .brain-box { position: relative; background: radial-gradient(ellipse at 50% 45%, #1A2336 0%, #0A0F1A 70%); border-radius: 14px; overflow: hidden; flex: 1; min-height: 150px; }
   .brain-box canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
@@ -1152,7 +1152,7 @@ async function loadJobVideo(jobId, seq, resume) {
   if (!res.ok) return { ok: false, deleted: res.status === 404 && data.error === 'video_deleted' };
   videoJob = jobId;
   videoRetried = !!(resume && resume.retried);
-  video.muted = false;
+  video.muted = resume ? resume.muted : true;
   video.src = data.url;
   if (resume) {
     video.addEventListener('loadedmetadata', () => {
@@ -1171,7 +1171,7 @@ function setVideoFile(file, seconds) {
   clearVideoSource();
   videoObjectUrl = URL.createObjectURL(file);
   video.src = videoObjectUrl;
-  video.muted = false;
+  video.muted = true;
   showVideo(true);
   $('clipTitle').textContent = file.name;
   $('clipCredit').textContent = Number.isFinite(seconds) ? `${seconds}s` : '';
@@ -1927,6 +1927,7 @@ video.addEventListener('pause', () => {
   cancelAnimationFrame(videoRaf);
   tick();
 });
+video.addEventListener('click', togglePlay);
 video.addEventListener('seeked', tick);
 video.addEventListener('timeupdate', () => { if (video.paused) tick(); });
 video.addEventListener('loadedmetadata', tick);
@@ -1934,7 +1935,7 @@ video.addEventListener('error', async () => {
   const jobId = videoJob;
   if (!jobId || !currentContext || currentContext.jobId !== jobId) return;
   const time = Number.isFinite(video.currentTime) ? video.currentTime : 0;
-  const playing = videoPlaying;
+  const playing = videoPlaying, muted = video.muted;
   if (videoRetried) {
     virtualTime = time;
     clearVideoSource();
@@ -1944,7 +1945,7 @@ video.addEventListener('error', async () => {
     updateTransport();
     return;
   }
-  const outcome = await loadJobVideo(jobId, resultSeq, { time, playing, retried: true });
+  const outcome = await loadJobVideo(jobId, resultSeq, { time, playing, muted, retried: true });
   if (!outcome || outcome.ok) return;
   virtualTime = time;
   clearVideoSource();
