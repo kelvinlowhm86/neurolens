@@ -172,6 +172,7 @@ def test_a_second_cancel_is_409_and_does_not_refund_again(client, aws, db, pg):
 def test_cancel_of_another_users_job_is_404_and_changes_nothing(client, aws, db, pg):
     job_id, key = make_job(db, user_id="someone-else")
     upload(aws, key)
+    assert client.get("/api/me").status_code == 200  # the caller exists before the snapshot
     before = pg.snapshot()
 
     resp = cancel(client, job_id)

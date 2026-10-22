@@ -217,7 +217,7 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
             return _error("json_required", "The request body must be JSON.", status=415)
         return None
 
-    def signed_in_user(create_user=True):
+    def signed_in_user():
         """(user_id, email) of the caller. Dev mode creates its user with the starter credit on
         first sight; a Cognito user was created at sign-in."""
         user_id, email = auth.current_user()
@@ -225,7 +225,7 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
             return user_id, email
         with known_lock:
             known = user_id in known_users
-        if not known and create_user:
+        if not known:
             billing.ensure_user(db, user_id, email, starter_cents)
             with known_lock:
                 known_users.add(user_id)
@@ -430,7 +430,7 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
             ]
         )
 
-    def owned_job(job_id, create_user=True):
+    def owned_job(job_id):
         """(job, None) for the caller's own job, else (None, an error response). Checked in the
         database before any S3 request, so a job's existence never leaks to another user."""
         try:
@@ -439,7 +439,7 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
             return None, _error("bad_job_id", "The job id is not valid.")
         if db is None:
             return None, _not_configured()
-        user_id, _ = signed_in_user(create_user=create_user)
+        user_id, _ = signed_in_user()
         with db.transaction() as tx:
             rows = tx.execute(
                 "SELECT job_id, object_key, status, stage, stages, attempt, updated_at, "
@@ -555,7 +555,7 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
     @app.route("/api/jobs/<job_id>/cancel", methods=["POST"])
     def cancel_job(job_id):
         """Refund and delete a queued job the caller owns (M3d §7)."""
-        job, error = owned_job(job_id, create_user=False)
+        job, error = owned_job(job_id)
         if error:
             return error
         if job["status"] != billing.QUEUED:
