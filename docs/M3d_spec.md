@@ -145,7 +145,7 @@ There is no reference set of videos to say how big a "normal" rise or dip is, so
 - **Remove:** the 14 current entries in `data/samples.json` and their thumbnails under `data/output/`. The git-ignored third-party videos stay on Josh's laptop, unused.
 - **New samples:** the Sintel trailer, and Big Buck Bunny re-encoded to about 720p (a SOURCES.md row). Tears of Steel is optional (CC BY 3.0, live action with faces and speech); if used, it gets a SOURCES.md row too.
 - **`infra/make_sample.py <job_id> <video> <title> <attribution>`** (operator script, `AWS_PROFILE=neurolens`):
-  - Downloads that job's result and brain file into `data/output/<id>/` (`<id>` = the video's file stem), grabs a thumbnail at 1 s with ffmpeg, and adds or replaces the entry in `data/samples.json`.
+  - Downloads that job's result and brain file into `data/output/<id>/` (`<id>` = the video's file stem), grabs a thumbnail with ffmpeg at 1 s, or at `--thumbnail-at <seconds>` when that frame is dark (a fade-in), and adds or replaces the entry in `data/samples.json`.
   - The entry is `{id, title, description, attribution, video_file, thumbnail, brain_file, result, summary}`, with the summary computed from the current `config.json`. Re-run it after a threshold change.
   - `.gitignore` adds `/data/output/**/brain`.
 - **`deploy_web.sh`:** publishes only samples whose clip is listed in SOURCES.md (unchanged) and also copies each one's brain file. It uploads `static/app.html` as `site/app` (§8b).

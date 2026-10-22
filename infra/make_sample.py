@@ -4,9 +4,9 @@
     AWS_PROFILE=neurolens python infra/make_sample.py <job_id> <video> <title> <attribution>
 
 Downloads the job's result and brain file into data/output/<id>/ (id = the video's file stem),
-grabs a thumbnail at 1 s, and writes the entry into data/samples.json with the summary computed
-from the result. Re-run it after a summary rule change. This is an operator script: it talks to
-AWS and is never run by the tests.
+grabs a thumbnail at 1 s (or --thumbnail-at), and writes the entry into data/samples.json with the
+summary computed from the result. Re-run it after a summary rule change. This is an operator
+script: it talks to AWS and is never run by the tests.
 """
 
 import argparse
@@ -45,7 +45,7 @@ def video_in_data(video):
     return target
 
 
-def make_thumbnail(video, target):
+def make_thumbnail(video, target, seconds):
     subprocess.run(
         [
             "ffmpeg",
@@ -53,7 +53,7 @@ def make_thumbnail(video, target):
             "-loglevel",
             "error",
             "-ss",
-            "1",
+            str(seconds),
             "-i",
             str(video),
             "-frames:v",
@@ -73,6 +73,9 @@ def main():
     parser.add_argument("title")
     parser.add_argument("attribution")
     parser.add_argument("--description", default=None)
+    parser.add_argument(
+        "--thumbnail-at", type=float, default=1.0, help="the frame to use, in seconds (default 1)"
+    )
     args = parser.parse_args()
 
     import boto3
@@ -95,7 +98,7 @@ def main():
     if result.get("format") != 2:
         raise SystemExit(f"results/{args.job_id}.json is not format 2: rerun the job first")
 
-    make_thumbnail(video, thumbnail_path)
+    make_thumbnail(video, thumbnail_path, args.thumbnail_at)
 
     summary = results.summarise(result)
     entry = {
