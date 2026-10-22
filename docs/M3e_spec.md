@@ -253,6 +253,7 @@ The same rules as the old `verify` (length limit first, then record the duration
   - the architecture page master copy (`docs/architecture.local.html`), at the milestone close-out.
 
 ## 11. Tests (written first; PostgreSQL for billing)
+- **Interfaces the tests pin:** `dispatcher.dispatch(bucket, key, *, s3, sagemaker, db, endpoint, max_upload_bytes, max_duration_s)` → `"invoked"`/`"skipped"`/`"refunded"`, calling the module-level `probe_duration`; `lambdas.sagemaker_client()` and `lambdas.finish_job`; `worker.handle_job(..., keep_alive=None)` returns an `Outcome` (`DONE, DUPLICATE, REJECTED, SKIPPED, FAILED, LOST_CLAIM`) and never raises after the claim (`not_verified` and `unreadable_video` are `REJECTED`); `worker.make_server(host, port, *, s3, db, cfg, roi_masks)`; `verify_queued` on an unknown job → `"not_queued"`.
 - **Dispatcher:**
   - each refusal (missing, too large, unreadable, too long, short credit) refunds, deletes the upload where §3 says, and never invokes;
   - a cancelled or processing job is not invoked;
