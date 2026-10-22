@@ -1751,6 +1751,7 @@ function updateTransport() {
   const time = $('tlTime');
   if (time) time.textContent = `${fmt(t)} / ${fmt(T)}`;
   const snd = $('tlSound');
+  if (snd) snd.hidden = !hasLocalVideo();
   if (snd && hasLocalVideo()) {
     snd.innerHTML = video.muted ? ICON.mute : ICON.sound;
     snd.setAttribute('aria-label', video.muted ? 'Sound on' : 'Sound off');
