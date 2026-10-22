@@ -8,7 +8,7 @@
 ### In scope
 - Aurora Serverless v2 (PostgreSQL) reached through the **RDS Data API**, which scales to zero when idle
 - A database layer with two interchangeable backends: the Data API (AWS) and plain PostgreSQL (tests and laptop)
-- Schema: users, balances, jobs, ledger, refunds, with versioned migrations
+- Schema: users, balances, jobs, ledger, with versioned migrations
 - Three-stage credit billing: reserve at upload, verify after measuring, capture on success; refund on every failure path
 - Job ownership, claiming and status in Aurora; S3 status objects retired
 - A dead-letter-queue Lambda and a scheduled reaper Lambda that settle or refund stuck jobs
@@ -81,12 +81,11 @@ CREATE TABLE ledger (
   created_at             TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE TABLE refunds (
-  job_id      UUID PRIMARY KEY REFERENCES jobs(job_id),   -- at most one refund per job, ever
-  reason      TEXT NOT NULL,
-  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
-);
+-- 004_one_ending_per_job.sql: a job ends at most once, ever (one charge or one refund).
+CREATE UNIQUE INDEX ledger_one_ending_per_job ON ledger (job_id) WHERE kind IN ('capture', 'refund');
+DROP TABLE refunds;
 ```
+- **One ending per job:** the database itself refuses a second `capture` or `refund` ledger row for a job, so even a code bug cannot charge and refund the same job, or either twice: the transaction fails and nothing changes. The refund's reason is the job's `error_code`. (Migration 004 also drops the old `refunds` table. It creates the index first, in one transaction, so live rows that broke the rule stop it before anything changes.)
 - **Ledger invariant:** for every user, the sums of `available_delta_cents` and `reserved_delta_cents` over their ledger rows equal their `balances` row exactly. Every balance change writes its ledger row in the same transaction.
 - `infra/apply_schema.py --backend data_api|postgres` applies `infra/migrations/*.sql` in order and records each in a `schema_migrations` table, so re-running it is safe. The Data API runs one statement per call, so migrations contain only plain statements (no functions or `DO` blocks), each ending with `;` at the end of a line, which is where the script splits. The tests apply the same files to their database, so the schema itself is tested.
 
@@ -127,7 +126,7 @@ Every function takes a `Database` as its first argument and does its work in **o
   - `queued_before_s`: `status='queued'` and `updated_at` older than that many seconds (0 means any queued job);
   - `processing_stale_s`: `status='processing'` and `updated_at` older than that many seconds.
 
-  Calling it with no condition raises `ValueError`, so every caller must state why the refund is safe. If it proceeds: moves `reserved_cents` back to available (a `refund` ledger row), inserts the `refunds` row, sets `status='failed'`, `error_code=reason`, `error_message=message`. Otherwise returns `False` and changes nothing. This closes the race where a reaper or dead-letter handler decides to refund, a worker claims the job a moment later, and the refund would land on a job being processed.
+  Calling it with no condition raises `ValueError`, so every caller must state why the refund is safe. If it proceeds: moves `reserved_cents` back to available (a `refund` ledger row), sets `status='failed'`, `error_code=reason`, `error_message=message`. Otherwise returns `False` and changes nothing. This closes the race where a reaper or dead-letter handler decides to refund, a worker claims the job a moment later, and the refund would land on a job being processed.
 
 **Only `settle_success` and `issue_refund` set a terminal status or `error_code`, or release a reservation at the end of a job.** Because both lock the job row and both refuse a terminal job, a job is charged or refunded exactly once, never both.
 
@@ -229,10 +228,11 @@ Database tests run against a real **PostgreSQL 16**: a service container in CI, 
   1. ledger sums equal the `balances` row;
   2. no balance is negative;
   3. `reserved_cents` equals the sum of `reserved_cents` over the user's `queued` and `processing` jobs;
-  4. every `done` job has exactly one `capture` ledger row and no `refunds` row, and every `failed` job has exactly one `refund` ledger row and one `refunds` row.
+  4. every `done` job has exactly one `capture` ledger row and no `refund` row, and every `failed` job has exactly one `refund` ledger row and no `capture` row.
 - **Stage 1:** exact reservation and ledger row; `InsufficientCredit` leaves everything unchanged; two threads calling `ensure_user` for a new user at once both succeed and grant the starter credit once.
 - **Stage 2:** all branches (equal, higher and covered, higher and not covered, lower, over the maximum). The over-maximum case refunds even when the balance is large, and before any adjustment.
 - **Stage 3:** capture of exactly the verified price.
+- **One ending per job (schema):** writing a second `capture` or `refund` ledger row for a job (a second refund, a second capture, or a refund after a capture) raises and leaves the balances and ledger unchanged; rows of other kinds for the same job, and rows with no job, are not limited; the `refunds` table no longer exists. Migration 004 on a database that already holds two `refund` rows for one job fails and changes nothing (the table is still there). Break-it: drop the index from 004, a test must fail.
 - **Exclusivity:** `settle_success` then `issue_refund` (and the reverse) gives one terminal outcome; repeated calls are no-ops; `issue_refund` with no condition raises `ValueError`.
 - **Attempt guards:** after a job is re-claimed (attempt 2), every call with attempt 1 (`touch`, `set_stage`, `verify`, `release_for_retry`, `issue_refund(attempt=1)`) returns `False`/`"lost_claim"` and moves no money. After a reaper refund, `verify` with the old attempt returns `"lost_claim"` and moves no money.
 - **Refund guards:** a reaper-style `issue_refund(queued_before_s=3600)` on a job that a worker has just claimed returns `False`; the DLQ-style call on a freshly claimed `processing` job returns `False`, on a stale one succeeds.

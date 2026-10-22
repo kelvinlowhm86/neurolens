@@ -82,7 +82,7 @@ S3 is deleted first, so a failure part-way leaves a job that still shows but who
   2. In one transaction, `billing.delete_account(db, user_id)`:
      - lock the `balances` row (`FOR UPDATE`, the same lock `reserve` takes, so no new job can start in between);
      - refuse with `JobActive` if any job is active. A job created after step 1 is necessarily `queued`, so it is refused too, and no job's files are left behind;
-     - delete the user's `refunds`, `ledger` and `jobs` rows, then `balances`, then `identities` (`DELETE … RETURNING issuer, subject`), then `users`.
+     - delete the user's `ledger` and `jobs` rows, then `balances`, then `identities` (`DELETE … RETURNING issuer, subject`), then `users`.
 
      Credit is free, so no financial record needs to be kept.
 

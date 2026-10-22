@@ -58,7 +58,7 @@ It then uploads the run to `s3://<bucket>/experiments/study/<run_id>/`. For each
 
 ### 4b. Withdrawal (`infra/withdraw_participant.py <participant_code>`)
 Until 13 November, a participant can withdraw. The script looks up their email in the mapping, shows what it will delete, asks for confirmation, then:
-- in one transaction, deletes their `ledger`, `refunds`, `jobs`, `balances` and `users` rows, in that order (foreign keys);
+- in one transaction, deletes their `ledger`, `jobs`, `balances` and `users` rows, in that order (foreign keys);
 - deletes their objects under `uploads/{user_id}/` and `results/{job_id}.json` for each of their jobs;
 - removes their row from the mapping.
 It then prints the manual steps: delete their questionnaire response in Google Forms, remove them as a Google test user, and re-run the export and consolidation. Their consent-form response is kept as the record of consent and withdrawal. If someone withdraws, the report says so and uses the remaining participants' data.
