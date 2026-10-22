@@ -12,7 +12,7 @@ import uuid
 
 import pytest
 from botocore.exceptions import ClientError
-from conftest import USER_ID
+from conftest import STARTER_CENTS, USER_ID
 from neurolens import billing, storage
 
 LAMBDA_MODULES = ("neurolens.lambdas.dlq_handler", "neurolens.lambdas.reaper")
@@ -88,6 +88,30 @@ def failed_twice(db, pg, job_id):
     for attempt in (1, 2):
         assert billing.claim(db, job_id) == attempt
         assert billing.release_for_retry(db, job_id, attempt, f"RuntimeError: crash {attempt}")
+
+
+def consented_job(db, new_key, *, ext=".mp4", user_id=USER_ID):
+    """A reserved job whose owner consented to the research copy (M3c §3a)."""
+    job_id, key = new_key(ext, user_id=user_id)
+    billing.ensure_user(db, user_id, f"{user_id}@example.com", STARTER_CENTS)
+    billing.reserve(db, user_id, job_id, key, f"clip{ext}", 3000, research_consent=True)
+    return job_id, key
+
+
+def research_keys(job_id, ext=".mp4"):
+    """The research copy's keys, as `storage.put_dataset` writes them (M3c §3b)."""
+    return [
+        f"dataset/{job_id}/video{ext}",
+        f"dataset/{job_id}/result.json",
+        f"dataset/{job_id}/brain",
+    ]
+
+
+def write_research_copy(aws, job_id, key):
+    """An upload, its research copy, and the raw brain the worker writes before the result."""
+    upload(aws, key)
+    storage.put_dataset(aws.s3, aws.bucket, job_id, key, {"job_id": job_id}, brain=b"brain bytes")
+    aws.s3.put_object(Bucket=aws.bucket, Key=f"results/{job_id}.brain", Body=b"brain bytes")
 
 
 # ---------------------------------------------------------------- dead-letter handler
@@ -187,6 +211,24 @@ def test_a_dead_letter_refund_deletes_the_jobs_upload(aws, db, pg, lambda_env, n
     assert not storage.object_exists(aws.s3, aws.bucket, key)
 
 
+def test_a_dead_letter_refund_of_a_consented_job_deletes_its_research_copy(
+    aws, db, pg, lambda_env, new_key
+):
+    """A crash after the worker wrote the dataset copy but before the result (M3a §7b)."""
+    job_id, key = consented_job(db, new_key)
+    write_research_copy(aws, job_id, key)
+    failed_twice(db, pg, job_id)
+    assert not storage.result_exists(aws.s3, aws.bucket, job_id)
+
+    dlq_handler()(sqs_event(key, bucket=aws.bucket), None)
+
+    job = pg.job(job_id)
+    assert job["status"] == "failed" and job["error_code"] == "processing_failed"
+    assert pg.balance() == (STARTER_CENTS, 0)
+    for gone in [key, f"results/{job_id}.brain", *research_keys(job_id)]:
+        assert not storage.object_exists(aws.s3, aws.bucket, gone)
+
+
 # ---------------------------------------------------------------- reaper
 
 DEADLINE_S = 24 * 60 * 60
@@ -218,6 +260,26 @@ class DeleteFails:
         keys = [obj["Key"] for obj in kwargs.get("Delete", {}).get("Objects", [])]
         if self.key in keys:
             self._error("DeleteObjects")
+        return self._inner.delete_objects(**kwargs)
+
+    def __getattr__(self, name):
+        return getattr(self._inner, name)
+
+
+class DeleteReportsErrors:
+    """A boto3 S3 client whose `delete_objects` reports a per-key error instead of raising."""
+
+    def __init__(self, inner, key):
+        self._inner = inner
+        self.key = key
+
+    def delete_objects(self, **kwargs):
+        objects = kwargs.get("Delete", {}).get("Objects", [])
+        if self.key in [obj["Key"] for obj in objects]:
+            return {
+                "Errors": [{"Key": self.key, "Code": "InternalError", "Message": "delete failed"}],
+                "Deleted": [],
+            }
         return self._inner.delete_objects(**kwargs)
 
     def __getattr__(self, name):
@@ -260,6 +322,23 @@ def test_reaper_leaves_a_queued_job_younger_than_24_hours_even_without_an_upload
     assert pg.snapshot() == before
 
 
+def test_reaper_refunds_a_job_past_the_deadline_and_deletes_its_research_copy(
+    aws, db, pg, lambda_env, new_key
+):
+    job_id, key = consented_job(db, new_key)
+    write_research_copy(aws, job_id, key)
+    pg.age(job_id, updated_s=DEADLINE_S + 3600, created_s=DEADLINE_S + 3600)
+
+    run_reaper()
+
+    job = pg.job(job_id)
+    assert job["status"] == "failed" and job["error_code"] == "deadline_passed"
+    assert pg.refund_reason(job_id) == "deadline_passed"
+    assert pg.balance() == (STARTER_CENTS, 0)
+    for gone in [key, f"results/{job_id}.brain", *research_keys(job_id)]:
+        assert not storage.object_exists(aws.s3, aws.bucket, gone)
+
+
 def test_reaper_settles_a_job_past_the_deadline_whose_result_exists_and_keeps_the_upload(
     aws, db, pg, lambda_env, new_job
 ):
@@ -272,6 +351,23 @@ def test_reaper_settles_a_job_past_the_deadline_whose_result_exists_and_keeps_th
     assert job["status"] == "done" and job["captured_cents"] == 90
     assert pg.balance() == (410, 0)
     assert storage.object_exists(aws.s3, aws.bucket, key)
+
+
+def test_reaper_settles_a_job_with_a_result_and_keeps_its_research_copy(
+    aws, db, pg, lambda_env, new_key
+):
+    job_id, key = consented_job(db, new_key)
+    write_research_copy(aws, job_id, key)
+    put_result(aws, job_id)
+    pg.age(job_id, updated_s=DEADLINE_S + 3600, created_s=DEADLINE_S + 3600)
+
+    run_reaper()
+
+    job = pg.job(job_id)
+    assert job["status"] == "done" and job["captured_cents"] == 90
+    assert pg.balance() == (410, 0)
+    for kept in [key, f"results/{job_id}.json", f"results/{job_id}.brain", *research_keys(job_id)]:
+        assert storage.object_exists(aws.s3, aws.bucket, kept)
 
 
 def test_reaper_leaves_a_processing_job_past_the_deadline_that_beat_a_minute_ago(
@@ -372,6 +468,32 @@ def test_reaper_refunds_a_job_whose_upload_delete_fails_and_still_reaps_the_othe
     assert pg.balance() == (500, 0)
     assert not storage.object_exists(aws.s3, aws.bucket, second_key)
     assert storage.object_exists(aws.s3, aws.bucket, first_key)
+
+
+def test_reaper_refunds_and_raises_when_s3_reports_a_failed_delete(
+    aws, db, pg, lambda_env, new_job, monkeypatch
+):
+    job_id, key = new_job()
+    upload(aws, key)
+    pg.age(job_id, updated_s=DEADLINE_S + 3600, created_s=DEADLINE_S + 3600)
+
+    import boto3
+
+    real_client = boto3.client
+
+    def client(service_name, *args, **kwargs):
+        inner = real_client(service_name, *args, **kwargs)
+        return DeleteReportsErrors(inner, key) if service_name == "s3" else inner
+
+    monkeypatch.setattr(boto3, "client", client)
+    with pytest.raises(Exception):  # noqa: B017 - the spec says the run raises
+        run_reaper()
+
+    job = pg.job(job_id)
+    assert job["status"] == "failed" and job["error_code"] == "deadline_passed"
+    assert pg.refund_reason(job_id) == "deadline_passed"
+    assert pg.balance() == (500, 0)
+    assert storage.object_exists(aws.s3, aws.bucket, key)
 
 
 def test_reaper_leaves_terminal_jobs_and_runs_twice_safely(aws, db, pg, lambda_env, new_job):
