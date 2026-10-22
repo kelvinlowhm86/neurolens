@@ -16,7 +16,7 @@
 
 ## 1. Scope
 ### In scope
-The dispatcher Lambda; the container (`neurolens/worker.py` rewritten), its image and its build; the SageMaker model, endpoint, scaling and notifications in Terraform; the error-notification Lambda; the GPU guard; the reaper's new bounds and the dataset clean-up; migration 004; the web's pause check and History link; `start_work.sh`/`stop_work.sh` rewritten; the experiment scripts that read the worker group; deleting everything the custom workers needed; docs.
+The dispatcher Lambda; the container (`neurolens/worker.py` rewritten), its image and its build; the SageMaker model, endpoint, scaling and notifications in Terraform; the error-notification Lambda; the GPU guard; the reaper's new bounds, its delete retries and the dataset clean-up; migration 005; `worker.max_job_minutes` 75 → 55 in `config.json`; the web's pause check and History link; `start_work.sh`/`stop_work.sh` rewritten; the experiment scripts that read the worker group; deleting everything the custom workers needed; docs.
 
 ### Out of scope
 - Running more than one GPU at a time (`max_instances` stays 1; quota is 2). Experiment 2's burst run is redesigned with M4.
@@ -45,9 +45,10 @@ The dispatcher Lambda; the container (`neurolens/worker.py` rewritten), its imag
      - `ok` → invoke;
      - `not_queued` (cancelled or claimed meanwhile) → skip;
      - otherwise it refunded (too long, or not enough credit) → delete the upload.
-  7. `InvokeEndpointAsync(EndpointName, InputLocation="s3://<bucket>/<key>", InferenceId=job_id, CustomAttributes=job_id, ContentType="application/octet-stream", RequestTTLSeconds=7200, InvocationTimeoutSeconds=3600)`.
+  7. **Time left:** `ttl = min(7200, 10800 − seconds since created_at)`. Below 300 → refund `deadline_passed`, delete the upload. This keeps the 4-hour bound of §5 true for a job dispatched late (an outage, redeliveries): its request expires before the reaper may refund it.
+  8. `InvokeEndpointAsync(EndpointName, InputLocation="s3://<bucket>/<key>", InferenceId=job_id, CustomAttributes=job_id, ContentType="application/octet-stream", RequestTTLSeconds=ttl, InvocationTimeoutSeconds=3600)`.
 - **Refunds** use `issue_refund(..., queued_before_s=0)`, so a job claimed meanwhile is never refunded.
-- **Errors:** any other exception (S3, Data API, SageMaker throttling) propagates, so SQS redelivers the message. A second dispatch of the same job is harmless: `verify_queued` is idempotent (the price difference is then 0), and the container skips a job it cannot claim.
+- **Errors:** any other exception (S3, Data API, SageMaker throttling) propagates, so SQS redelivers the message. The jobs queue's visibility timeout becomes 720 s (AWS's rule: at least 6 times the function timeout of 120 s), so a slow run is not redelivered while it is still invoking. A second dispatch of the same job is harmless: `verify_queued` is idempotent (the price difference is then 0), and the container skips a job it cannot claim.
 - **ffprobe:** a static Linux x86-64 ffprobe in a Lambda layer, built by `infra/build_ffprobe_layer.sh` from a pinned release URL with a SHA-256 check. Lambda memory 1024 MB, timeout 120 s, and `probe_duration`'s ffprobe timeout is a parameter here (90 s).
 - **`neurolens/media.py`** (new, standard library only): `probe_duration(path_or_url, timeout_s=30)` and `UnreadableVideo`, moved unchanged from `inference.py` apart from the timeout parameter. `inference.py` and the container import them from here.
 
@@ -83,8 +84,8 @@ The same rules as the old `verify` (length limit first, then record the duration
 - **Claim keep-alive:** `ClaimKeepAlive(on_beat, interval_seconds, max_seconds)`. It is the old `Heartbeat` minus SQS: it calls `billing.touch` every `worker.heartbeat_seconds` (50) and stops after `worker.max_job_minutes` (now **55**), logging an error. A hung job's claim therefore goes stale before SageMaker's 60-minute timeout, so the error handler can refund it at once.
 
 ### 4c. Failure inside the container
-- Any exception after the claim: `issue_refund(db, job_id, "processing_failed", _error_text(err), attempt=attempt)`, then delete every file of the job (`storage.job_keys`). Answer 500.
-  - A refund that finds the claim lost does nothing, and the handler answers 500 too.
+- Any exception after the claim: `issue_refund(db, job_id, "processing_failed", _error_text(err), attempt=attempt)`. **Only if it returned True**, delete every file of the job (`storage.job_keys`). Answer 500.
+  - A refund that returns False (the claim was lost, or the job is already `done` because `settle_success` committed but its response was lost) deletes nothing: the files may belong to a charged result. The handler answers 500 too.
   - A failed file delete is logged with `REFUND_DELETE_FAILED <job_id>` and never undoes the refund. It still answers 500.
 - A SIGTERM (SageMaker removing the instance) is not handled. The process ends, the claim goes stale within 90 s, and §5 refunds.
 
@@ -95,9 +96,10 @@ The same rules as the old `verify` (length limit first, then record the duration
   - `requirements/worker.txt` and `requirements/model.txt`;
   - ffmpeg;
   - `data/warmup.mp4`;
+  - the committed `config.json`, with `NEUROLENS_ROOT=/opt/neurolens` and a symlink `/opt/neurolens/models` → `/opt/ml/model`, so the config's `./models` path is the weights SageMaker copies in (they include `data/hcp_mmp/`). The container's start-up fails loudly if `config.json` or the model folder is missing;
   - the WhisperX tool environment, created at build time with the exact `uvx` command tribev2 runs (so `UV_OFFLINE=1` works at run time).
 - **No weights, tokens or secrets** in the image.
-- **Environment at run time:** `HF_HUB_OFFLINE=1`, `UV_OFFLINE=1`, `NEUROLENS_DEPLOYED=1`, and the deployment values from the SageMaker model (§9). The model and data paths point at `/opt/ml/model`.
+- **Environment at run time:** `HF_HUB_OFFLINE=1`, `UV_OFFLINE=1`, `NEUROLENS_DEPLOYED=1`, `NEUROLENS_ROOT=/opt/neurolens`, and the deployment values from the SageMaker model (§9).
 - **Weights:** SageMaker copies the uncompressed S3 prefix `model-data/` to `/opt/ml/model` when an instance starts. `infra/make_model_data.sh` fills that prefix once, by a server-side copy of `models/` without `*/blobs/*` (the layout the EC2 boot sync produced, including `data/hcp_mmp/`). It checks the object count and total size against the source.
 - **Build:**
   - `infra/build_image.sh` zips the repository at `HEAD` (refusing a dirty tree), uploads it to `s3://<bucket>/build/source.zip`, starts the CodeBuild project, waits and prints the image digest.
@@ -120,9 +122,11 @@ The same rules as the old `verify` (length limit first, then record the duration
   - While the claim is fresh it raises. Lambda's asynchronous retries (2, over about 3 minutes) then try again, and the reaper is the backstop after that.
   - An unparseable notification is logged and dropped.
 - **Reaper:**
-  - It runs **hourly** (was 3-hourly). `DEADLINE_S` becomes **4 hours** after `created_at` (was 24): 2 hours of queue TTL, plus 60 minutes of invocation timeout, plus 1 hour for the upload and dispatch.
+  - It stays **every 3 hours**: each run wakes Aurora for about 11 minutes, and hourly measured about $15 a month against $3 (`infra/terraform/lambdas.tf`). It is the backstop for a lost notification, so speed matters less than cost.
+  - `DEADLINE_S` becomes **4 hours** after `created_at` (was 24): the dispatcher never gives a request more than 3 hours from creation (§3 step 7), plus 60 minutes of invocation timeout. A lost notification is therefore refunded within about 7 hours.
   - `HEARTBEAT_STALE_S` stays 10 minutes.
-  - The user-facing text that promised release "within about 4 hours" (M3c §4) is now true.
+  - User-facing text: the `job_active` release (M3c §4) says "within about 7 hours"; the page's `deadline_passed` message says "within 4 hours".
+  - **Delete retries:** every run also calls `storage.delete_keys` on `storage.job_keys` for every `failed` job whose `updated_at` is within the last 2 days. Deleting a missing key is a no-op, so this finishes any refund whose delete failed (container, error handler, dispatcher's DLQ handler, Cancel) and removes files a late write left behind. A delete that still fails makes the run raise, so the error alarm emails. `done` jobs are never touched by this.
   - It also runs the dataset clean-up (§7).
 
 ## 6. Scaling, pause and the guard
@@ -152,15 +156,17 @@ The same rules as the old `verify` (length limit first, then record the duration
 
 ### 6c. GPU guard (`neurolens/lambdas/gpu_guard.py`, every 10 minutes)
 - **Stops the GPU** (`UpdateEndpointWeightsAndCapacities(DesiredInstanceCount=0)`) when all of these hold:
-  - `DescribeEndpoint` shows at least one instance and the status `InService`;
+  - `DescribeEndpoint` shows at least one instance;
   - the scalable target's min is 0 (no keep-warm);
-  - no job is `processing`;
-  - no job's `updated_at` is newer than 30 minutes.
+  - no live claim: no `processing` job with `updated_at` within 90 s (the heartbeat is 50 s, so a dead worker's row does not keep the GPU on);
+  - no dispatched job waiting: no `queued` job with `verified_duration_ms` set and `created_at` within 3 hours (the dispatcher gives no request longer, §3 step 7);
+  - no job of any status has `updated_at` within 30 minutes.
 
   It then logs `GPU_GUARD_STOPPED <instance count>`.
 - **Reads our database, not the backlog metric** that the scale-in alarm uses, so one broken signal cannot blind both.
 - A job created in the last 30 minutes blocks it, because `reserve` sets `updated_at`. So it never stops a GPU that a fresh upload is waiting for.
-- **Any other status blocks it** (`Updating` while an instance is added or removed, `Creating`, `Failed`): a slow start-up can pass 30 minutes (provisioning up to 10, model loading up to 30) while a queued job waits for it, and stopping it then would only make SageMaker start it again. The guard acts only on an instance that is up and getting no work.
+- **A dispatched job waiting blocks it:** a slow start-up can pass 30 minutes (provisioning up to 10, model loading up to 30) while the job waits for it, and stopping the GPU then would only make SageMaker start it again. The rule reads our database, so it does not depend on what `DescribeEndpoint` reports while an instance starts.
+- **It is never more eager than SageMaker:** the 30-minute quiet rule means it acts at least 30 minutes after the last job activity, while scale-in acts after 7.
 - **Alarms:**
   - a log metric filter on `GPU_GUARD_STOPPED` feeds the alarm `neurolens-gpu-guard-stopped`, which emails the alerts topic (the normal scale-in failed, so a person should look);
   - the guard's own failures use the existing per-Lambda error alarm;
@@ -168,15 +174,16 @@ The same rules as the old `verify` (length limit first, then record the duration
 - **Permissions:** `sagemaker:DescribeEndpoint` and `sagemaker:UpdateEndpointWeightsAndCapacities` on our endpoint only, plus `application-autoscaling:DescribeScalableTargets`.
 
 ## 7. Research consent needs the retention curve
-- **Migration `infra/migrations/004_retention_rule.sql`:** `jobs.retention_added_at TIMESTAMPTZ`, `jobs.dataset_removed_at TIMESTAMPTZ`.
+- **Migration `infra/migrations/005_retention_rule.sql`:** `jobs.retention_added_at TIMESTAMPTZ`, `jobs.dataset_removed_at TIMESTAMPTZ`.
 - **Consent box** (one line, replaces M3c §3a's text): "Keep this video for research for up to 12 months and add its audience retention once it is published ([how](/static/retention_guide.html)); without retention, the copy is deleted after 60 days. I own the rights to this video."
 - **Retention upload** (M3c §3c):
   - On success it sets `retention_added_at = now()`.
   - It is refused with 409 `dataset_removed` ("This video's research copy was deleted after 60 days without retention.") when `dataset_removed_at` is set.
 - **History:** a done, consented, not-removed job without `retention_added_at` shows a small "Add retention" link in its row, no banner. The link opens the job with the retention upload in view. `list_jobs` returns `needs_retention` (bool) for this.
-- **Clean-up** (in the reaper's hourly run): select every job that is `done`, has `research_consent`, has no `retention_added_at` and no `dataset_removed_at`, is not deleted, and has `created_at` older than 60 days. For each:
-  1. delete `dataset/<id>/video<ext>`, `result.json` and `brain` with `storage.delete_keys`;
-  2. only if every delete succeeded, set `dataset_removed_at`.
+- **Clean-up** (in the reaper's run): select every job that is `done`, has `research_consent`, has no `retention_added_at` and no `dataset_removed_at`, is not deleted, and has `created_at` older than 60 days. For each:
+  1. if `dataset/<id>/retention.csv` exists (a curve uploaded before migration 005, or one whose database update failed), set `retention_added_at` and skip the job. A HEAD error other than not-found raises;
+  2. delete `dataset/<id>/video<ext>`, `result.json` and `brain` with `storage.delete_keys`;
+  3. only if every delete succeeded, set `dataset_removed_at`.
 
   A failure leaves the row for the next run and makes the run raise, so the Lambda error alarm emails. The user's own result, brain and thumbnail are untouched.
 - **Privacy page:** a consented copy without retention is deleted 60 days after upload. The 12-month rule for the rest is unchanged.
@@ -195,7 +202,7 @@ The same rules as the old `verify` (length limit first, then record the duration
 - the ECR repository `neurolens-worker` (keep the last 3 images);
 - the CodeBuild project `neurolens-worker-image` (Linux x86-64, privileged for Docker, 60-minute timeout) and its role, which may only read `build/source.zip`, push to the repository and write its log group;
 - the SageMaker execution role:
-  - read on `model-data/*` and `uploads/*`;
+  - read on `model-data/*`, `uploads/*` and `results/*` (the container checks for an existing result before it claims), and `s3:ListBucket` on the bucket (SageMaker lists `model-data/`, and without it a missing result answers 403 instead of 404, which `object_exists` raises on);
   - put on `results/*`, `dataset/*`, `experiments/boots/*` and `sagemaker-output/*`;
   - delete on the job prefixes (refund clean-up);
   - the Data API and the database secret;
@@ -210,7 +217,11 @@ The same rules as the old `verify` (length limit first, then record the duration
 - `aws_sagemaker_endpoint` `neurolens`;
 - the scaling of §6a;
 - the topic `neurolens-gpu-errors` and its Lambda subscription;
-- the Lambdas `dispatcher`, `gpu_failed` and `gpu_guard` (the one M3a zip; the dispatcher also gets the ffprobe layer), their schedules, alarms and permissions;
+- the Lambdas `dispatcher`, `gpu_failed` and `gpu_guard` (the one M3a zip; the dispatcher also gets the ffprobe layer), their schedules and alarms;
+- their roles, each scoped to `neurolens` resources:
+  - `dispatcher`: consume the jobs queue (receive, delete, get attributes); `s3:GetObject` and `s3:DeleteObject` on `uploads/*`, `s3:ListBucket` on the bucket; `sagemaker:InvokeEndpointAsync` on the endpoint; the Data API and the database secret; its logs;
+  - `gpu_failed`: the M3a Lambda role (the DLQ handler's rights, same work);
+  - `gpu_guard`: §6c's permissions, the Data API and the database secret, its logs;
 - the lifecycle rules: `sagemaker-output/` 1 day, `build/` 7 days;
 - `var.fake_inference` (default false): when true, the pools are one `ml.m5.xlarge` (a CPU rehearsal at about $0.23/h, real price list) and `FAKE_INFERENCE=1`.
 
@@ -222,7 +233,7 @@ The same rules as the old `verify` (length limit first, then record the duration
 - the S3 gateway endpoint (nothing in the network uses S3 any more);
 - `worker_ami_id`, the outputs that only served those resources, and the SQS permissions of the deleted worker role.
 
-**Kept:** the VPC and private subnets (Aurora's subnet group needs them), the database security group, the jobs queue and DLQ (now consumed by the dispatcher).
+**Kept:** the VPC and private subnets (Aurora's subnet group needs them), the database security group, the jobs queue (visibility 720 s, §3) and DLQ (now consumed by the dispatcher).
 
 **IAM paste by Josh** (one batch):
 - `infra/iam/neurolens-deploy-*.json` gain SageMaker, ECR, CodeBuild and Application Auto Scaling actions scoped to `neurolens*`, and lose EC2/Auto Scaling launch rights;
@@ -238,7 +249,7 @@ The same rules as the old `verify` (length limit first, then record the duration
 - **Docs:**
   - `AGENTS.md` Layout (`worker.py` is the SageMaker container; the new Lambdas; `media.py`);
   - `README.md` deploy steps;
-  - `infra/terraform/README.md`;
+  - `infra/terraform/README.md` and `infra/iam/README.md`;
   - the architecture page master copy (`docs/architecture.local.html`), at the milestone close-out.
 
 ## 11. Tests (written first; PostgreSQL for billing)
@@ -247,12 +258,15 @@ The same rules as the old `verify` (length limit first, then record the duration
   - a cancelled or processing job is not invoked;
   - a good job is invoked once, with `InferenceId` = job id;
   - an exception before the invoke leaves the job queued with its reservation;
-  - a second dispatch is harmless.
+  - a second dispatch is harmless;
+  - a job created 2 h 50 min ago is invoked with `RequestTTLSeconds` about 600; one created 2 h 56 min ago is refunded `deadline_passed`.
 - **`verify_queued`:** the old `verify` cases, plus `not_queued` for processing and terminal jobs, and idempotence.
 - **Container:**
   - `handle_job` keeps every `handle_record` test that still applies (claim, stages, dataset copy, claim checks before writes, thumbnail, brain, duplicate result, settle);
   - a failure refunds and deletes at once and answers 500;
-  - a lost claim answers 500 without refunding;
+  - a lost claim answers 500 without refunding and without deleting any file;
+  - `settle_success` that commits and then raises leaves the job `done`, charged once, with every result file kept;
+  - `max_job_minutes * 60` is less than the invocation timeout (3600);
   - `not_verified` is refunded;
   - the body is streamed to disk;
   - a missing job-id header → 400;
@@ -262,11 +276,12 @@ The same rules as the old `verify` (length limit first, then record the duration
 - **Error handler:** done result → settled; queued or stale → refunded and files deleted; fresh claim → raises; already terminal → no-op; garbage → logged and dropped.
 - **Guard:**
   - stops only when all four conditions hold;
-  - an endpoint that is not `InService` (an instance still starting) blocks it, even with an old queued job;
+  - a dispatched queued job created over 30 minutes ago (a slow start-up) blocks it;
+  - a `processing` row with a stale `updated_at` (a dead worker) does not block it once the 30-minute rule is past;
   - each condition alone blocks it;
   - it logs the marker;
   - a keep-warm (min ≥ 1) blocks it.
-- **Reaper:** the 4-hour deadline; the clean-up deletes only the right jobs' dataset files, marks them only after the deletes succeed, and leaves the user's own result.
+- **Reaper:** the 4-hour deadline; a refunded job whose files are still there has them deleted on the next run, with no second refund; a `done` job's files are never deleted; the clean-up deletes only the right jobs' dataset files, skips (and marks) a job whose `retention.csv` exists, marks them only after the deletes succeed, and leaves the user's own result.
 - **Retention:** sets `retention_added_at`; refused after removal; `list_jobs` `needs_retention`.
 - **Web:** paused when max 0 or no target; a read failure → 500.
 - **Break-it checks (3):**
@@ -297,7 +312,9 @@ Order, with no long gap between the steps:
 7. Measure:
    - cold start (upload to `transcribing`), split by the boot record;
    - the first job's `transcribing` against a later job's (the warm-up must make them alike);
-   - cost per video.
+   - cost per video;
+   - that `ApproximateBacklogSize` has a point every minute while a job runs;
+   - that the endpoint accepted both instance pools (`DescribeEndpointConfig`).
 8. Fallback: not forced. Record which type ran.
 9. Finish: confirm `ALL STOPPED`. Nothing stays running: there is no NAT to switch off.
 
@@ -308,6 +325,12 @@ Order, with no long gap between the steps:
 - the day itself about $3–5.
 
 Measured figures replace these in the build log.
+
+## 12a. Known limitations (accepted)
+- **An invoke whose answer is lost, twice:** SageMaker accepted the request, the dispatcher saw an error both times, and the DLQ handler refunds the job. The request then finds a `failed` job and skips it. The user is refunded and uploads again; at most one start-up is wasted.
+- **Retention added in the same moment as the 60-day clean-up:** the clean-up checks `retention.csv` just before deleting, so the window is a fraction of a second, once per job.
+- **A new upload between the guard's check and its stop:** SageMaker starts the GPU again for it; one start-up is wasted.
+- **The scale-in alarm reads missing backlog data as empty.** If AWS ever stopped publishing it during a running job for 7 minutes, the job would be cut off and refunded. Day B checks the data is continuous during a job (§12 step 7).
 
 ## 13. Acceptance criteria
 1. The full suite passes with PostgreSQL, and `ruff` is clean.
