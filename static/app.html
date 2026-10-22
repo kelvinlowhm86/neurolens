@@ -232,6 +232,8 @@
   .compare-table th, .compare-table td { text-align: left; padding: 8px 12px 8px 0; border-bottom: 1px solid var(--rule); vertical-align: top; }
   .compare-table th { font: 500 12.5px var(--text); color: var(--ink-2); }
   .compare-table td.v { font: 600 15px var(--display); }
+  .compare-table .moment-link, .compare-table .compare-swap { background: none; border: 0; padding: 0; font: inherit; color: var(--heat); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+  .compare-table .moment-link:hover, .compare-table .compare-swap:hover { color: var(--ink); }
 
   @media (max-width: 860px), (max-height: 620px) {
     .D { display: block; height: auto; overflow: visible; }
@@ -373,7 +375,7 @@
           <span class="keys" id="chartKeys"></span>
           <span class="grow"></span>
           <label class="compare-pick" id="compareRow" hidden><span>Compare with…</span><select id="compareSelect"></select></label>
-          <label class="toggle" id="mutedLabel"><input type="checkbox" id="mutedToggle"> Show without sound</label>
+          <label class="toggle" id="mutedLabel"><input type="checkbox" id="mutedToggle"> Show if muted</label>
         </div>
         <p class="note">Predicted response of an average viewer. The dashed line is typical. Click anywhere to jump there.</p>
         <p class="compare-msg" id="compareMsg"></p>
@@ -424,7 +426,7 @@ const NS = 'http://www.w3.org/2000/svg';
 
 let samplesData = null, jobsCache = [], jobsLoaded = false;
 let currentResult = null, currentSummary = null, currentContext = null;
-let comparison = null, mutedOn = false, resultSeq = 0, compareRequest = 0;
+let comparison = null, mutedOn = false, resultSeq = 0, compareRequest = 0, pendingCompareId = null;
 let signedIn = false, me = null, limits = null;
 let activeTab = 'analyses', playerOriginTab = 'analyses';
 let videoObjectUrl = null, virtualTime = 0, virtualPlaying = false, virtualAnchor = 0, virtualRaf = 0, videoRaf = 0;
@@ -437,6 +439,16 @@ function fmt(s) {
 }
 function fmtRange(m) { return `${fmt(m.start)}–${fmt(m.end)}`; }
 function cap(word) { return word ? word[0].toUpperCase() + word.slice(1) : word; }
+function shortName(name, max = 32) {
+  const text = String(name || '');
+  if (text.length <= max) return text;
+  const dot = text.lastIndexOf('.');
+  const ext = dot > 0 && dot > text.length - 12 ? text.slice(dot) : '';
+  const room = Math.max(1, max - 1 - ext.length);
+  const head = Math.ceil(room / 2);
+  const tail = room - head;
+  return text.slice(0, head) + '…' + text.slice(-(tail + ext.length));
+}
 function hasLocalVideo() { return !!video.getAttribute('src'); }
 function currentTime() { return hasLocalVideo() ? (Number.isFinite(video.currentTime) ? video.currentTime : 0) : virtualTime; }
 function totalSeconds() { return currentResult && currentResult.signals && Array.isArray(currentResult.signals.overall) ? currentResult.signals.overall.length : 0; }
@@ -740,7 +752,9 @@ function historyRow(job) {
   const row = document.createElement('div'); row.className = 'history-row';
   const main = document.createElement('div'); main.className = 'history-main';
   const name = document.createElement('div'); name.className = 'history-name';
-  name.textContent = job.filename || `Job ${job.job_id.slice(0, 8)}`;
+  const label = job.filename || `Job ${job.job_id.slice(0, 8)}`;
+  name.textContent = shortName(label);
+  name.title = label;
   const sub = document.createElement('div'); sub.className = 'history-sub';
   sub.textContent = historyDetail(job);
   main.append(name, sub);
@@ -877,7 +891,8 @@ function loadSample(idx) {
     title: s.title,
     fileName: s.video_file || s.title,
   });
-  $('clipTitle').textContent = s.title || 'Sample';
+  $('clipTitle').textContent = shortName(s.title || 'Sample');
+  $('clipTitle').title = s.title || 'Sample';
   $('clipCredit').textContent = s.attribution || '';
   video.muted = true;
   updateTransport();
@@ -965,6 +980,7 @@ function uploadFailed(message) {
 
 async function startUpload() {
   const file = pendingFile, duration = pendingDuration;
+  pendingCompareId = null;
   $('upConfirm').disabled = true; $('consentBox').disabled = true;
   $('upMsg').classList.remove('error'); $('upMsg').textContent = 'Preparing upload...';
 
@@ -1088,6 +1104,7 @@ const setJobInUrl = jobId => setParam('job', jobId);
 
 function stopTracking() {
   trackedJob = null;
+  pendingCompareId = null;
   pausedPoll = null;
   clearTimeout(pollTimer);
   setJobInUrl(null);
@@ -1266,7 +1283,8 @@ function setVideoFile(file, seconds) {
   video.src = videoObjectUrl;
   video.muted = true;
   showVideo(true);
-  $('clipTitle').textContent = file.name;
+  $('clipTitle').textContent = shortName(file.name);
+  $('clipTitle').title = file.name;
   $('clipCredit').textContent = Number.isFinite(seconds) ? `${seconds}s` : '';
 }
 
@@ -1274,6 +1292,7 @@ function showResultUnavailable(message, file) {
   resultSeq += 1;
   stopVirtual();
   currentResult = null; currentSummary = null; currentContext = null; comparison = null;
+  pendingCompareId = null;
   mutedOn = false; virtualTime = 0;
   clearAllCharts();
   $('resultMessage').textContent = message;
@@ -1294,7 +1313,7 @@ function showResultUnavailable(message, file) {
   showRetention(null);
   setViewName('player');
   if (file) setVideoFile(file, null);
-  else { $('videoMissing').textContent = ''; $('clipTitle').textContent = ''; $('clipCredit').textContent = ''; }
+  else { $('videoMissing').textContent = ''; $('clipTitle').textContent = ''; $('clipTitle').title = ''; $('clipCredit').textContent = ''; }
 }
 
 async function showResult(jobId, file, consented) {
@@ -1336,7 +1355,8 @@ async function showResult(jobId, file, consented) {
     clearVideoSource();
     $('videoMissing').textContent = '';
     setViewName('player');
-    $('clipTitle').textContent = title;
+    $('clipTitle').textContent = shortName(title);
+    $('clipTitle').title = title;
     $('clipCredit').textContent = `${result.duration_seconds}s`;
   }
   try {
@@ -1398,6 +1418,19 @@ function audioPercent(s) {
 function momentRanges(list) {
   return (list || []).map(fmtRange).join(', ') || 'None';
 }
+function momentLinks(list) {
+  return (list || []).map(m => `<button class="moment-link" data-seek="${m.start}">${fmtRange(m)}</button>`).join(', ') || 'None';
+}
+function averageOverall(result) {
+  const values = result && result.signals && Array.isArray(result.signals.overall) ? result.signals.overall : [];
+  const used = values.length > 1 ? values.slice(1) : values;
+  if (!used.length) return '—';
+  const mean = used.reduce((sum, v) => sum + v, 0) / used.length;
+  const rounded = Math.round(mean * 100) / 100;
+  if (rounded > 0) return `+${rounded.toFixed(2)}`;
+  if (rounded < 0) return `-${Math.abs(rounded).toFixed(2)}`;
+  return '0.00';
+}
 
 function momentRows(list, hot) {
   const withThumbs = hasLocalVideo();
@@ -1439,12 +1472,26 @@ function compareTable() {
   const other = comparison ? comparison.summary || {} : {};
   const row = (name, a, b) => `<tr><th scope="row">${name}</th><td class="v">${a}</td><td class="v">${b}</td></tr>`;
   const audio = s => { const pct = audioPercent(s); return pct === null ? '—' : `${pct}%`; };
-  return `<table class="compare-table"><thead><tr><th></th><th>${escapeHtml(currentVideoName())}</th><th>${comparison ? escapeHtml(comparison.label) : ''}</th></tr></thead><tbody>
+  const name = currentVideoName();
+  const otherName = comparison ? comparison.label : '';
+  const swap = comparison && currentContext && currentContext.jobId
+    ? `<button class="compare-swap" data-swap="${escapeHtml(comparison.jobId)}">Swap</button>` : '';
+  return `<table class="compare-table"><thead><tr><th>${swap}</th><th title="${escapeHtml(name)}">${escapeHtml(shortName(name))}</th><th title="${escapeHtml(otherName)}">${escapeHtml(shortName(otherName))}</th></tr></thead><tbody>
     ${row('Opening', openingText(currentSummary), openingText(other))}
-    ${row('Strongest moments', momentRanges(currentSummary.strong_moments), momentRanges(other.strong_moments))}
-    ${row('Weakest moments', momentRanges(currentSummary.weak_moments), momentRanges(other.weak_moments))}
+    ${row('Average (overall)', averageOverall(currentResult), averageOverall(comparison && comparison.result))}
+    ${row('Strongest moments', momentLinks(currentSummary.strong_moments), momentRanges(other.strong_moments))}
+    ${row('Weakest moments', momentLinks(currentSummary.weak_moments), momentRanges(other.weak_moments))}
     ${row('Audio dependence', audio(currentSummary), audio(other))}
   </tbody></table>`;
+}
+
+function swapComparison() {
+  const previousId = currentContext && currentContext.jobId;
+  const otherId = comparison && comparison.jobId;
+  if (!previousId || !otherId) return;
+  resetUI();
+  pendingCompareId = previousId;
+  trackJob(otherId, null);
 }
 
 function buildTop() {
@@ -1516,7 +1563,8 @@ function renderResult(result, summary, ctx) {
     $('sampleMeta').textContent = [ctx.description, ctx.attribution ? `Attribution: ${ctx.attribution}` : ''].filter(Boolean).join(' · ');
   }
   setViewName('player');
-  $('clipTitle').textContent = ctx.title || '';
+  $('clipTitle').textContent = shortName(ctx.title || '');
+  $('clipTitle').title = ctx.title || '';
   if (hasLocalVideo()) {
     $('clipCredit').textContent = `${result.duration_seconds}s` + (result.processing_time_seconds ? ` · analysed in ${Math.round(result.processing_time_seconds)}s` : '');
   } else {
@@ -1676,18 +1724,18 @@ function buildMainChart() {
     secondLabel = comparison.label;
   } else if (mutedOn && currentResult.muted && currentResult.muted.overall) {
     lines.push({ values: currentResult.muted.overall, colour: 'var(--cool)', dash: true, width: 1.8 });
-    secondLabel = 'Without sound';
+    secondLabel = 'muted';
   }
   lines.forEach(line => {
-    if (line.name && line.values.length > 0 && line.values.length < span) line.endLabel = `${line.name} ends`;
+    if (line.name && line.values.length > 0 && line.values.length < span) line.endLabel = `${shortName(line.name)} ends`;
   });
   let range = 0;
   lines.forEach(line => { range = Math.max(range, niceRange(line.values)); });
   drawChart(box, { lines, range, height: 220, shade: true, axisLabels: true, fill: true, span, scope: 'main' });
   addPins(box);
-  const currentKey = `<span class="legend-key"><i></i>${escapeHtml(name)}</span>`;
-  const secondKey = secondLabel ? `<span class="legend-key"><i class="dash"></i>${escapeHtml(secondLabel)}</span>` : '';
-  const shadeKey = comparison ? `<span class="legend-key"><i class="swatch"></i>shaded: moments of ${escapeHtml(name)}</span>` : '';
+  const currentKey = `<span class="legend-key" title="${escapeHtml(name)}"><i></i>${escapeHtml(shortName(name))}</span>`;
+  const secondKey = secondLabel ? `<span class="legend-key" title="${escapeHtml(secondLabel)}"><i class="dash"></i>${escapeHtml(shortName(secondLabel))}</span>` : '';
+  const shadeKey = comparison ? `<span class="legend-key" title="${escapeHtml(name)}"><i class="swatch"></i>shaded: moments of ${escapeHtml(shortName(name))}</span>` : '';
   const typicalKey = '<span class="legend-key"><i class="typical"></i>typical</span>';
   $('chartKeys').innerHTML = currentKey + secondKey + typicalKey + shadeKey;
 }
@@ -1872,25 +1920,31 @@ function showCompareRow() {
   const currentId = currentContext && currentContext.jobId;
   const candidates = (jobsCache || []).filter(j => j.result_available && j.status === 'done' && j.job_id !== currentId);
   if (!signedIn || !currentResult || candidates.length === 0) {
+    pendingCompareId = null;
     row.hidden = true;
     select.replaceChildren();
     if (comparison) { comparison = null; buildTop(); buildMainChart(); buildStrips(); }
     return;
   }
+  const pending = pendingCompareId;
+  pendingCompareId = null;
   row.hidden = false;
-  const keep = comparison ? comparison.jobId : '';
+  const keep = comparison ? comparison.jobId : pending || '';
   select.replaceChildren();
   const none = document.createElement('option');
   none.value = ''; none.textContent = 'None';
   select.append(none);
   candidates.forEach(job => {
+    const label = job.filename || `Job ${job.job_id.slice(0, 8)}`;
     const option = document.createElement('option');
     option.value = job.job_id;
-    option.textContent = job.filename || `Job ${job.job_id.slice(0, 8)}`;
+    option.textContent = shortName(label);
+    option.title = label;
     select.append(option);
   });
   if (keep && candidates.some(job => job.job_id === keep)) {
     select.value = keep;
+    if (pending) loadComparison();
   } else {
     select.value = '';
     if (comparison) { comparison = null; buildTop(); buildMainChart(); buildStrips(); }
@@ -1925,6 +1979,7 @@ async function loadComparison() {
       return;
     }
     comparison = { result: data, summary: data.summary || {}, label, jobId: id };
+    select.value = id;
     mutedOn = false;
     $('mutedToggle').checked = false;
     $('mutedToggle').disabled = true;
@@ -1951,6 +2006,8 @@ $('mutedToggle').addEventListener('change', () => {
 });
 
 $('reportBody').addEventListener('click', e => {
+  const swap = e.target.closest('[data-swap]');
+  if (swap) return swapComparison();
   const target = e.target.closest('[data-seek]');
   if (target) seek(+target.dataset.seek);
 });
@@ -2101,6 +2158,7 @@ function resetUI() {
   resultSeq += 1;
   stopVirtual();
   currentResult = null; currentSummary = null; currentContext = null; comparison = null;
+  pendingCompareId = null;
   mutedOn = false; virtualTime = 0;
   clearAllCharts();
   clearVideoSource();
@@ -2121,6 +2179,7 @@ function resetUI() {
   $('brainSecond').textContent = '';
   $('sampleMeta').textContent = '';
   $('clipTitle').textContent = '';
+  $('clipTitle').title = '';
   $('clipCredit').textContent = '';
   window.brainMap.clear(BRAIN_UNAVAILABLE);
   $('reportBody').classList.remove('active');
