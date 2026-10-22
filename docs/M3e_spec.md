@@ -152,7 +152,7 @@ The same rules as the old `verify` (length limit first, then record the duration
 
 ### 6c. GPU guard (`neurolens/lambdas/gpu_guard.py`, every 10 minutes)
 - **Stops the GPU** (`UpdateEndpointWeightsAndCapacities(DesiredInstanceCount=0)`) when all of these hold:
-  - `DescribeEndpoint` shows at least one instance;
+  - `DescribeEndpoint` shows at least one instance and the status `InService`;
   - the scalable target's min is 0 (no keep-warm);
   - no job is `processing`;
   - no job's `updated_at` is newer than 30 minutes.
@@ -160,6 +160,7 @@ The same rules as the old `verify` (length limit first, then record the duration
   It then logs `GPU_GUARD_STOPPED <instance count>`.
 - **Reads our database, not the backlog metric** that the scale-in alarm uses, so one broken signal cannot blind both.
 - A job created in the last 30 minutes blocks it, because `reserve` sets `updated_at`. So it never stops a GPU that a fresh upload is waiting for.
+- **Any other status blocks it** (`Updating` while an instance is added or removed, `Creating`, `Failed`): a slow start-up can pass 30 minutes (provisioning up to 10, model loading up to 30) while a queued job waits for it, and stopping it then would only make SageMaker start it again. The guard acts only on an instance that is up and getting no work.
 - **Alarms:**
   - a log metric filter on `GPU_GUARD_STOPPED` feeds the alarm `neurolens-gpu-guard-stopped`, which emails the alerts topic (the normal scale-in failed, so a person should look);
   - the guard's own failures use the existing per-Lambda error alarm;
@@ -261,6 +262,7 @@ The same rules as the old `verify` (length limit first, then record the duration
 - **Error handler:** done result → settled; queued or stale → refunded and files deleted; fresh claim → raises; already terminal → no-op; garbage → logged and dropped.
 - **Guard:**
   - stops only when all four conditions hold;
+  - an endpoint that is not `InService` (an instance still starting) blocks it, even with an old queued job;
   - each condition alone blocks it;
   - it logs the marker;
   - a keep-warm (min ≥ 1) blocks it.
