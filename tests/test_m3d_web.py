@@ -60,16 +60,21 @@ class NoCallS3:
         return call
 
 
-def reserved_job(db, *, user_id=WEB_USER_ID):
+def reserved_job(db, *, user_id=WEB_USER_ID, content_type="video/mp4", research_consent=False):
     billing.ensure_user(db, user_id, f"{user_id}@example.com", STARTER_CENTS)
     job_id = str(uuid.uuid4())
-    key = storage.object_key(user_id, job_id, "video/mp4")
-    billing.reserve(db, user_id, job_id, key, "ad.mp4", 27_400)
+    key = storage.object_key(user_id, job_id, content_type)
+    billing.reserve(db, user_id, job_id, key, "ad.mp4", 27_400, research_consent=research_consent)
     return job_id
 
 
-def done_job(db, *, user_id=WEB_USER_ID):
-    job_id = reserved_job(db, user_id=user_id)
+def done_job(db, *, user_id=WEB_USER_ID, content_type="video/mp4", research_consent=False):
+    job_id = reserved_job(
+        db,
+        user_id=user_id,
+        content_type=content_type,
+        research_consent=research_consent,
+    )
     assert billing.claim(db, job_id) == 1
     assert billing.settle_success(db, job_id) is True
     return job_id
@@ -131,7 +136,7 @@ def test_result_is_the_stored_result_plus_the_summary(client, aws, db):
     }
 
 
-@pytest.mark.parametrize("route", ["result", "result.csv", "brain"])
+@pytest.mark.parametrize("route", ["result", "result.csv", "brain", "video"])
 def test_an_old_result_is_410_old_result_everywhere(client, aws, db, route):
     job_id = done_job(db)
     store_result(aws, job_id, old_result(job_id))
@@ -194,3 +199,90 @@ def test_the_brain_route_redirects_to_a_five_minute_presigned_url(client, aws, d
     query = parse_qs(parsed.query)
     assert query["X-Amz-Signature"]
     assert query["X-Amz-Expires"] == ["300"]
+
+
+def test_the_video_route_owns_the_job_before_any_s3_call(app_for, aws, db):
+    job_id = done_job(db, user_id="someone-else")
+    store_result(aws, job_id, result_for(job_id))
+    key = storage.object_key("someone-else", job_id, "video/mp4")
+    aws.s3.put_object(Bucket=aws.bucket, Key=key, Body=b"the video")
+    s3 = NoCallS3()
+
+    resp = app_for(s3_client=s3).get(f"/api/jobs/{job_id}/video")
+
+    assert resp.status_code == 404
+    assert resp.get_json()["error"] == "not_found"
+    assert s3.calls == []
+
+
+def test_the_video_route_is_404_for_a_refunded_job(app_for, aws, db):
+    job_id = refunded_job(db)
+    store_result(aws, job_id, result_for(job_id))
+    key = storage.object_key(WEB_USER_ID, job_id, "video/mp4")
+    aws.s3.put_object(Bucket=aws.bucket, Key=key, Body=b"the video")
+    s3 = NoCallS3()
+
+    resp = app_for(s3_client=s3).get(f"/api/jobs/{job_id}/video")
+
+    assert resp.status_code == 404
+    assert resp.get_json()["error"] == "not_found"
+    assert s3.calls == []
+
+
+def test_the_video_route_presigns_the_upload_for_an_hour(client, aws, db):
+    job_id = done_job(db)
+    store_result(aws, job_id, result_for(job_id))
+    key = storage.object_key(WEB_USER_ID, job_id, "video/mp4")
+    aws.s3.put_object(Bucket=aws.bucket, Key=key, Body=b"the video")
+
+    resp = client.get(f"/api/jobs/{job_id}/video")
+
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["expires_in"] == 3600
+    parsed = urlparse(data["url"])
+    assert unquote(parsed.path).endswith(key)
+    query = parse_qs(parsed.query)
+    assert query["X-Amz-Signature"]
+    assert query["X-Amz-Expires"] == ["3600"]
+
+
+def test_a_consented_lost_upload_presigns_the_dataset_copy_keeping_its_extension(client, aws, db):
+    job_id = done_job(db, content_type="video/quicktime", research_consent=True)
+    store_result(aws, job_id, result_for(job_id))
+    key = f"dataset/{job_id}/video.mov"
+    aws.s3.put_object(Bucket=aws.bucket, Key=key, Body=b"the video")
+
+    resp = client.get(f"/api/jobs/{job_id}/video")
+
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["expires_in"] == 3600
+    parsed = urlparse(data["url"])
+    assert unquote(parsed.path).endswith(key)
+    query = parse_qs(parsed.query)
+    assert query["X-Amz-Signature"]
+    assert query["X-Amz-Expires"] == ["3600"]
+
+
+def test_a_lost_unconsented_upload_is_404_video_deleted_even_with_a_stray_dataset_copy(
+    client, aws, db
+):
+    job_id = done_job(db, research_consent=False)
+    store_result(aws, job_id, result_for(job_id))
+    aws.s3.put_object(Bucket=aws.bucket, Key=f"dataset/{job_id}/video.mp4", Body=b"the video")
+
+    resp = client.get(f"/api/jobs/{job_id}/video")
+
+    assert resp.status_code == 404
+    assert resp.get_json()["error"] == "video_deleted"
+
+
+def test_a_lost_upload_with_nothing_kept_is_404_video_deleted(client, aws, db):
+    job_id = done_job(db)
+    store_result(aws, job_id, result_for(job_id))
+
+    resp = client.get(f"/api/jobs/{job_id}/video")
+
+    assert resp.status_code == 404
+    assert resp.get_json()["error"] == "video_deleted"
