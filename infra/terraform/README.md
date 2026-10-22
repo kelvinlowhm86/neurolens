@@ -8,8 +8,8 @@ it created. The region is one setting (`region` in `terraform.tfvars`, default `
 **What it creates**
 
 - One S3 bucket: public access blocked, encrypted, HTTPS-only, ACLs disabled, browser upload (CORS)
-  allowed from `allowed_origins`, and prefix-scoped expiry (`uploads/` after 2 days, rounded to midnight UTC,
-  `results/` after 30 days, `dataset/` after 365, `code/`, `models/` and `experiments/` never).
+  allowed from `allowed_origins`, and prefix-scoped expiry (`uploads/` and `results/` after 30 days,
+  rounded to midnight UTC, `dataset/` after 365, `code/`, `models/` and `experiments/` never).
 - One SQS queue (visibility timeout 120 s, kept extended by the worker's heartbeat) and the wiring that sends a message to it whenever a file
   lands under `uploads/`. A second queue (`neurolens-jobs-dlq`) receives a job that failed twice.
 - A network (VPC): public subnets (one holds the NAT Gateway, the others only host image builds) and
@@ -198,7 +198,7 @@ rm tfplan                         # delete the plan file afterwards
 ## 3. Check it
 
 ```bash
-aws s3api get-bucket-lifecycle-configuration --bucket <bucket_name>   # 2 days, 2 days, 30 days
+aws s3api get-bucket-lifecycle-configuration --bucket <bucket_name>   # 30 days, 30 days, 365 days
 aws s3api get-bucket-cors --bucket <bucket_name>
 aws s3 cp some.mp4 s3://<bucket_name>/uploads/test.mp4
 aws sqs receive-message --queue-url <queue_url>                       # one message within seconds

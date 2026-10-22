@@ -192,6 +192,11 @@ def object_exists(s3, bucket, key):
     return True
 
 
+def delete_object(s3, bucket, key):
+    """Delete one object. S3 treats a key that is already gone as success."""
+    s3.delete_object(Bucket=bucket, Key=key)
+
+
 def result_exists(s3, bucket, job_id):
     return object_exists(s3, bucket, f"results/{job_id}.json")
 

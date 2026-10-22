@@ -322,6 +322,13 @@ def handle_record(bucket, key, *, s3, db, cfg, roi_masks, heartbeat):
         if attempt is None:
             state = billing.job_state(db, job_id)
             if state is None or state["status"] in billing.TERMINAL:
+                if state is not None and state["status"] == billing.FAILED:
+                    # A refund deleted the upload; this one landed afterwards (M3a §7b). A done
+                    # job keeps its upload as the replay copy.
+                    try:
+                        storage.delete_object(s3, bucket, key)
+                    except Exception:
+                        logger.exception(f"Could not delete the upload for refunded {job_id}")
                 logger.info(f"Skipped {job_id}: already finished")
                 return Outcome.SKIPPED
             # Never SKIPPED for a job in progress: deleting the message could lose the job if the

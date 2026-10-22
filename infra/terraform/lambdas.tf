@@ -1,9 +1,9 @@
 # ─── Dead-letter handler and reaper Lambdas (M3a §7) ───────────────────────
 #
 # Both settle or refund jobs: the dead-letter handler every job that failed twice, the reaper (every
-# hour, always on, M3b §6) any job left stuck. Not in the VPC: they reach Aurora
-# through the Data API and S3 through its public endpoint, both IAM-checked. One zip with only the
-# pure-Python modules they import (no numpy); it changes only when those files do.
+# 3 hours, always on, M3b §6) any job still open 24 hours after it was created. Not in the VPC: they
+# reach Aurora through the Data API and S3 through its public endpoint, both IAM-checked. One zip
+# with only the pure-Python modules they import (no numpy); it changes only when those files do.
 
 locals {
   repo_root = "${path.module}/../.."
@@ -67,6 +67,13 @@ resource "aws_iam_role_policy" "m3a_lambda" {
         Effect   = "Allow"
         Action   = "s3:GetObject"
         Resource = ["${aws_s3_bucket.main.arn}/results/*", "${aws_s3_bucket.main.arn}/uploads/*"]
+      },
+      {
+        # A refund deletes the job's upload (M3a §7b).
+        Sid      = "DeleteUploadsAfterRefund"
+        Effect   = "Allow"
+        Action   = "s3:DeleteObject"
+        Resource = "${aws_s3_bucket.main.arn}/uploads/*"
       },
       {
         # Without it S3 answers 403, not 404, for a missing object. No s3:prefix condition: a HEAD
@@ -135,8 +142,8 @@ resource "aws_lambda_event_source_mapping" "dlq" {
 
 # Always on, owned by Terraform alone (M3b §6). Each run wakes Aurora for about 11 minutes (measured;
 # it pauses 300 s after the last connection closes). Every 3 hours costs about $3 a month; hourly
-# measured about $15. A stuck job waits at most about 3 to 4 hours (its 10- or 60-minute threshold
-# plus the interval); the dead-letter handler still refunds the common failures in seconds.
+# measured about $15. A stuck job waits at most about 27 hours (the 24-hour deadline plus the
+# interval); the dead-letter handler still refunds the common failures in seconds.
 resource "aws_cloudwatch_event_rule" "reaper" {
   name                = "neurolens-reaper-schedule"
   description         = "Run the NeuroLens reaper (settles or refunds stuck jobs) every 3 hours."

@@ -34,8 +34,8 @@ VIDEO_LINK_SECONDS = 3600  # a video is streamed in pieces; one hour outlives a 
 HISTORY_LIMIT, HISTORY_MAX = 50, 100
 RETENTION_MAX_BYTES = 64 * 1024
 JOB_ACTIVE_MESSAGE = (
-    "This video is still being processed. If you closed the page before the upload finished, "
-    "it is released within about 4 hours; try again then."
+    "This video is still waiting or being processed. Cancel it first if it hasn't started, or "
+    "try again when it finishes."
 )
 
 
@@ -238,7 +238,7 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
             return _error("json_required", "The request body must be JSON.", status=415)
         return None
 
-    def signed_in_user():
+    def signed_in_user(create_user=True):
         """(user_id, email) of the caller. Dev mode creates its user with the starter credit on
         first sight; a Cognito user was created at sign-in."""
         user_id, email = auth.current_user()
@@ -246,7 +246,7 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
             return user_id, email
         with known_lock:
             known = user_id in known_users
-        if not known:
+        if not known and create_user:
             billing.ensure_user(db, user_id, email, starter_cents)
             with known_lock:
                 known_users.add(user_id)
@@ -451,7 +451,7 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
             ]
         )
 
-    def owned_job(job_id):
+    def owned_job(job_id, create_user=True):
         """(job, None) for the caller's own job, else (None, an error response). Checked in the
         database before any S3 request, so a job's existence never leaks to another user."""
         try:
@@ -460,7 +460,7 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
             return None, _error("bad_job_id", "The job id is not valid.")
         if db is None:
             return None, _not_configured()
-        user_id, _ = signed_in_user()
+        user_id, _ = signed_in_user(create_user=create_user)
         with db.transaction() as tx:
             rows = tx.execute(
                 "SELECT job_id, object_key, status, stage, stages, attempt, updated_at, "
@@ -572,6 +572,28 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
                 "expires_in": VIDEO_LINK_SECONDS,
             }
         )
+
+    @app.route("/api/jobs/<job_id>/cancel", methods=["POST"])
+    def cancel_job(job_id):
+        """Refund and delete a queued job the caller owns (M3d §7)."""
+        job, error = owned_job(job_id, create_user=False)
+        if error:
+            return error
+        if job["status"] != billing.QUEUED:
+            return _error(
+                "not_cancellable", "This job has already started or finished.", status=409
+            )
+        if s3 is None or not bucket:
+            return _not_configured()
+        if not billing.issue_refund(db, job["job_id"], "cancelled", queued_before_s=0):
+            return _error(
+                "not_cancellable", "This job has already started or finished.", status=409
+            )
+        try:
+            storage.delete_object(s3, bucket, job["object_key"])
+        except Exception:
+            logger.exception(f"Could not delete the upload for cancelled {job['job_id']}")
+        return jsonify({"cancelled": True})
 
     @app.route("/api/jobs/<job_id>/retention", methods=["POST"])
     def job_retention(job_id):

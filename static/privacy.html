@@ -45,9 +45,9 @@
 
   <h2>How long we keep it</h2>
   <ul>
-    <li>Uploaded videos that are not kept for research are deleted automatically within 3 days
-    (the 2-day rule, rounded to midnight UTC). This includes an upload that arrives after its job
-    was refunded: it is removed only by that 2-day rule.</li>
+    <li>Uploaded videos that are not kept for research are deleted automatically after 30 days
+    (S3 rounds to midnight UTC, so up to 31 days). They are deleted at once when the job is
+    cancelled or refunded.</li>
     <li>Results are deleted automatically after 30 days.</li>
     <li>A video you consented to keep, its analysis and any real audience-retention report you add
     are kept for up to 12 months, then deleted automatically. They are used only to help build a
