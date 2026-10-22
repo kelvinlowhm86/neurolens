@@ -2,8 +2,8 @@
 
 Written first from docs/M3d_spec.md §7 and §10 ("Cancel route (full: money)") and
 docs/M3a_spec.md §7b and §10 ("A refund deletes the upload"). The route is exercised through
-Flask's test client on the test PostgreSQL schema and moto S3; the worker is called directly
-through `worker.handle_record`, as tests/test_m3a_worker.py does.
+Flask's test client on the test PostgreSQL schema and moto S3; the container is called directly
+through `worker.handle_job`, as tests/test_m3e_container.py does.
 """
 
 import contextlib
@@ -258,37 +258,43 @@ def test_cancel_still_answers_200_with_the_credit_back_when_s3_reports_a_failed_
 # ---------------------------------------------------------------- worker: refund deletes upload
 
 
-def run_record(aws, db, key, cfg):
-    return worker.handle_record(
-        aws.bucket,
-        key,
+def run_job(aws, db, job_id, clip_path, cfg, masks):
+    return worker.handle_job(
+        job_id,
+        str(clip_path),
         s3=aws.s3,
         db=db,
         cfg=cfg,
-        roi_masks=None,
-        heartbeat=lambda on_beat: contextlib.nullcontext(),
+        roi_masks=masks,
+        keep_alive=lambda on_beat: contextlib.nullcontext(),
     )
 
 
 def test_worker_receiving_an_upload_for_a_refunded_job_deletes_it_and_skips(
-    aws, db, pg, make_cfg, new_job
+    aws, db, pg, make_cfg, roi_masks_small, new_job, clip_path
 ):
     job_id, key = new_job()
     upload(aws, key)
     assert billing.issue_refund(db, job_id, "cancelled", queued_before_s=0) is True
     before = pg.snapshot()
 
-    assert run_record(aws, db, key, make_cfg()) is worker.Outcome.SKIPPED
+    assert (
+        run_job(aws, db, job_id, clip_path, make_cfg(), roi_masks_small) is worker.Outcome.SKIPPED
+    )
     assert not object_exists(aws, key)
     assert pg.snapshot() == before
 
 
-def test_worker_keeps_the_upload_of_a_done_job(aws, db, pg, make_cfg, new_job):
+def test_worker_keeps_the_upload_of_a_done_job(
+    aws, db, pg, make_cfg, roi_masks_small, new_job, clip_path
+):
     job_id, key = new_job()
     upload(aws, key)
     assert billing.settle_success(db, job_id) is True
     before = pg.snapshot()
 
-    assert run_record(aws, db, key, make_cfg()) is worker.Outcome.SKIPPED
+    assert (
+        run_job(aws, db, job_id, clip_path, make_cfg(), roi_masks_small) is worker.Outcome.SKIPPED
+    )
     assert object_exists(aws, key)
     assert pg.snapshot() == before

@@ -1,28 +1,28 @@
-"""The unreadable-video rule. Written from docs/M1_spec.md sections 1, 5 and 6a.
+"""The unreadable-video rule (docs/M1_spec.md §1, §5, §6a; M3e §3, §4b).
 
-ffprobe cannot measure a file that is not a video, so probe_duration raises UnreadableVideo
-and the worker rejects the upload (deletes it and its message) instead of retrying forever.
-Calls use the M3a §5 signatures (db, heartbeat(on_beat)), with each record's job seeded in
-PostgreSQL first; the behaviour checked is unchanged (M3a also refunds it: `unreadable_video`).
+ffprobe cannot measure a file that is not a video, so `media.probe_duration` raises
+`UnreadableVideo`. The dispatcher refuses such an upload before any GPU runs (covered by
+tests/test_m3e_dispatcher.py); the container also refuses one it is handed, refunding it as
+`unreadable_video` and deleting its files. Audio-only files count as unreadable too.
 """
 
 import contextlib
-import json
 import os
+import subprocess
 
 import pytest
-from botocore.exceptions import ClientError
-from neurolens import inference, worker
-from neurolens.worker import Outcome, handle_record, process_message
+from conftest import STARTER_CENTS
+from neurolens import billing, settings, worker
+from neurolens.worker import Outcome
 
 MODULES = ("neurolens.inference", "neurolens.worker")
 NOT_A_VIDEO = b"this is not a video"
-MAX_RECEIVES = 2  # the job queue's maxReceiveCount (M2a §4h); every message here is receive 1
 
 
-def no_heartbeat(on_beat=None):
-    """handle_record's heartbeat factory (M3a §5: heartbeat(on_beat)). Not exercised here."""
-    return contextlib.nullcontext()
+def media_module():
+    from neurolens import media
+
+    return media
 
 
 @pytest.fixture(autouse=True)
@@ -52,30 +52,51 @@ def inference_calls(patch_everywhere):
     return log
 
 
-def s3_event(*pairs):
-    return json.dumps(
-        {
-            "Records": [
-                {"s3": {"bucket": {"name": b}, "object": {"key": k, "size": 1}}} for b, k in pairs
-            ]
-        }
+@pytest.fixture(scope="session")
+def audio_only_path(tmp_path_factory):
+    """An mp4 with an audio stream and no video stream."""
+    path = tmp_path_factory.mktemp("audio_only") / "audio_only.mp4"
+    cmd = [
+        "ffmpeg",
+        "-y",
+        "-loglevel",
+        "error",
+        "-f",
+        "lavfi",
+        "-i",
+        "sine=frequency=440:duration=3",
+    ]
+    subprocess.run(cmd + [str(path)], check=True, capture_output=True)
+    return path
+
+
+def verify(db, job_id):
+    assert billing.verify_queued(db, job_id, 3000, settings.max_duration(None)) == "ok"
+
+
+def run_job(aws, db, job_id, video_path, cfg, masks):
+    return worker.handle_job(
+        job_id,
+        str(video_path),
+        s3=aws.s3,
+        db=db,
+        cfg=cfg,
+        roi_masks=masks,
+        keep_alive=lambda on_beat: contextlib.nullcontext(),
     )
 
 
 def object_exists(aws, key):
-    try:
-        aws.s3.head_object(Bucket=aws.bucket, Key=key)
-    except ClientError as err:
-        assert err.response["Error"]["Code"] in ("404", "NoSuchKey", "NotFound")
-        return False
-    return True
+    from neurolens import storage
+
+    return storage.object_exists(aws.s3, aws.bucket, key)
 
 
 # ---------------------------------------------------------------- probe_duration
 
 
 def test_unreadable_video_is_a_value_error_subclass():
-    assert issubclass(inference.UnreadableVideo, ValueError)
+    assert issubclass(media_module().UnreadableVideo, ValueError)
 
 
 @pytest.mark.parametrize(
@@ -86,127 +107,120 @@ def test_unreadable_video_is_a_value_error_subclass():
 def test_probe_duration_raises_unreadable_video(tmp_path, content):
     path = tmp_path / "bad.mp4"
     path.write_bytes(content)
-    with pytest.raises(inference.UnreadableVideo):
-        inference.probe_duration(path)
+    media = media_module()
+    with pytest.raises(media.UnreadableVideo):
+        media.probe_duration(path)
 
 
 def test_probe_duration_still_measures_a_real_clip(clip_path):
-    duration = inference.probe_duration(clip_path)
+    duration = media_module().probe_duration(clip_path)
     assert isinstance(duration, float)
     assert duration == pytest.approx(3.0, abs=0.5)
 
 
-# ---------------------------------------------------------------- handle_record
+def test_probe_duration_raises_for_an_audio_only_file(audio_only_path):
+    media = media_module()
+    with pytest.raises(media.UnreadableVideo):
+        media.probe_duration(audio_only_path)
 
 
-def test_unreadable_upload_is_rejected_deleted_and_not_inferred(
-    aws, make_cfg, roi_masks_small, db, new_job, inference_calls
+def test_probe_duration_runs_ffprobe_with_a_30_second_default_timeout(clip_path, monkeypatch):
+    seen = []
+    real = subprocess.run
+
+    def spy(*args, **kwargs):
+        seen.append(kwargs.get("timeout"))
+        return real(*args, **kwargs)
+
+    media = media_module()
+    monkeypatch.setattr(media.subprocess, "run", spy)
+    media.probe_duration(clip_path)
+    assert seen and all(timeout == 30 for timeout in seen)
+
+
+def test_probe_duration_takes_the_dispatchers_longer_timeout(clip_path, monkeypatch):
+    seen = []
+    real = subprocess.run
+
+    def spy(*args, **kwargs):
+        seen.append(kwargs.get("timeout"))
+        return real(*args, **kwargs)
+
+    media = media_module()
+    monkeypatch.setattr(media.subprocess, "run", spy)
+    media.probe_duration(clip_path, timeout_s=90)
+    assert seen and all(timeout == 90 for timeout in seen)
+
+
+# ---------------------------------------------------------------- handle_job
+
+
+def test_unreadable_upload_is_rejected_refunded_and_deleted(
+    aws, db, pg, make_cfg, roi_masks_small, new_job, inference_calls, tmp_path
 ):
-    cfg = make_cfg()
     job_id, key = new_job()
     aws.s3.put_object(Bucket=aws.bucket, Key=key, Body=NOT_A_VIDEO)
+    verify(db, job_id)
+    # SageMaker streams the same bytes to disk; hand handle_job a local copy.
+    garbage = tmp_path / "bad.mp4"
+    garbage.write_bytes(NOT_A_VIDEO)
 
-    outcome = handle_record(
-        aws.bucket,
-        key,
-        s3=aws.s3,
-        db=db,
-        cfg=cfg,
-        roi_masks=roi_masks_small,
-        heartbeat=no_heartbeat,
-    )
+    outcome = run_job(aws, db, job_id, garbage, make_cfg(), roi_masks_small)
 
     assert outcome is Outcome.REJECTED
     assert not object_exists(aws, key)
+    assert pg.refund_reason(job_id) == "unreadable_video"
+    assert pg.balance() == (STARTER_CENTS, 0)
     assert inference_calls == {"build_events": [], "without_audio": [], "predict": []}
 
 
-def test_empty_object_passing_size_check_is_also_rejected(
-    aws, make_cfg, roi_masks_small, db, new_job, inference_calls
+def test_empty_file_is_also_rejected(
+    aws, db, pg, make_cfg, roi_masks_small, new_job, inference_calls, tmp_path
 ):
-    _, key = new_job()
+    job_id, key = new_job()
     aws.s3.put_object(Bucket=aws.bucket, Key=key, Body=b"")
-    outcome = handle_record(
-        aws.bucket,
-        key,
-        s3=aws.s3,
-        db=db,
-        cfg=make_cfg(),
-        roi_masks=roi_masks_small,
-        heartbeat=no_heartbeat,
-    )
+    verify(db, job_id)
+    empty = tmp_path / "empty.mp4"
+    empty.write_bytes(b"")
+
+    outcome = run_job(aws, db, job_id, empty, make_cfg(), roi_masks_small)
+
     assert outcome is Outcome.REJECTED
     assert not object_exists(aws, key)
+    assert pg.refund_reason(job_id) == "unreadable_video"
     assert inference_calls == {"build_events": [], "without_audio": [], "predict": []}
 
 
-# ---------------------------------------------------------------- process_message
-
-
-def test_unreadable_upload_end_to_end_deletes_object_and_message(
-    aws, make_cfg, roi_masks_small, db, new_job, queue_message, remaining, inference_calls
+def test_audio_only_upload_is_rejected_and_deleted_without_inference(
+    aws, db, pg, make_cfg, roi_masks_small, new_job, audio_only_path, inference_calls
 ):
-    cfg = make_cfg()
     job_id, key = new_job()
-    aws.s3.put_object(Bucket=aws.bucket, Key=key, Body=NOT_A_VIDEO)
+    aws.s3.upload_file(str(audio_only_path), aws.bucket, key)
+    verify(db, job_id)
 
-    process_message(
-        queue_message(s3_event((aws.bucket, key))),
-        s3=aws.s3,
-        db=db,
-        sqs=aws.sqs,
-        cfg=cfg,
-        roi_masks=roi_masks_small,
-        shutdown=worker.ShutdownSignal(),
-        max_receives=MAX_RECEIVES,
-    )
+    outcome = run_job(aws, db, job_id, audio_only_path, make_cfg(), roi_masks_small)
 
-    assert remaining() == []
+    assert outcome is Outcome.REJECTED
     assert not object_exists(aws, key)
+    assert pg.job(job_id)["error_code"] == "unreadable_video"
     assert inference_calls == {"build_events": [], "without_audio": [], "predict": []}
 
 
-def test_a_genuine_inference_failure_is_still_not_a_rejection(
-    aws,
-    make_cfg,
-    roi_masks_small,
-    db,
-    new_job,
-    clip_path,
-    queue_message,
-    remaining,
-    patch_everywhere,
+def test_a_genuine_inference_failure_is_failed_not_a_rejection(
+    aws, db, pg, make_cfg, roi_masks_small, new_job, clip_path, patch_everywhere
 ):
-    """Only unreadable uploads are rejected; a real failure raises and keeps the message."""
+    """Only unreadable uploads are rejections; a real failure refunds as processing_failed."""
 
     def boom(*a, **kw):
         raise RuntimeError("model crashed")
 
     patch_everywhere("predict", boom, *MODULES)
-    _, key = new_job()
+    job_id, key = new_job()
     aws.s3.upload_file(str(clip_path), aws.bucket, key)
+    verify(db, job_id)
 
-    with pytest.raises(RuntimeError, match="model crashed"):
-        handle_record(
-            aws.bucket,
-            key,
-            s3=aws.s3,
-            db=db,
-            cfg=make_cfg(),
-            roi_masks=roi_masks_small,
-            heartbeat=no_heartbeat,
-        )
-    assert object_exists(aws, key)
+    outcome = run_job(aws, db, job_id, clip_path, make_cfg(), roi_masks_small)
 
-    process_message(
-        queue_message(s3_event((aws.bucket, key))),
-        s3=aws.s3,
-        db=db,
-        sqs=aws.sqs,
-        cfg=make_cfg(),
-        roi_masks=roi_masks_small,
-        shutdown=worker.ShutdownSignal(),
-        max_receives=MAX_RECEIVES,
-    )
-    assert len(remaining()) == 1
-    assert object_exists(aws, key)
+    assert outcome is Outcome.FAILED
+    assert pg.job(job_id)["error_code"] == "processing_failed"
+    assert not object_exists(aws, key)

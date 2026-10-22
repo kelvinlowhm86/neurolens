@@ -14,7 +14,7 @@ import pytest
 from botocore.client import BaseClient
 from botocore.exceptions import ClientError
 from conftest import STARTER_CENTS, USER_ID, WEB_USER_ID, sign_in
-from neurolens import billing, inference, response, storage, worker
+from neurolens import billing, inference, response, settings, storage, worker
 from neurolens.web.app import create_app
 
 MODULES = ("neurolens.inference", "neurolens.worker")
@@ -46,15 +46,19 @@ def make_job(db, *, consent=False, user_id=USER_ID):
     return job_id, key
 
 
-def run_record(aws, db, key, cfg, masks):
-    return worker.handle_record(
-        aws.bucket,
-        key,
+def verify(db, job_id):
+    assert billing.verify_queued(db, job_id, 3000, settings.max_duration(None)) == "ok"
+
+
+def run_job(aws, db, job_id, clip_path, cfg, masks):
+    return worker.handle_job(
+        job_id,
+        str(clip_path),
         s3=aws.s3,
         db=db,
         cfg=cfg,
         roi_masks=masks,
-        heartbeat=lambda on_beat=None: contextlib.nullcontext(),
+        keep_alive=lambda on_beat: contextlib.nullcontext(),
     )
 
 
@@ -114,8 +118,9 @@ def test_make_thumbnail_raises_on_a_non_video(tmp_path):
 def test_a_done_job_writes_a_jpeg_thumbnail(aws, db, make_cfg, roi_masks_small, clip_path):
     job_id, key = make_job(db)
     aws.s3.upload_file(str(clip_path), aws.bucket, key)
+    verify(db, job_id)
 
-    assert run_record(aws, db, key, make_cfg(), roi_masks_small) is worker.Outcome.DONE
+    assert run_job(aws, db, job_id, clip_path, make_cfg(), roi_masks_small) is worker.Outcome.DONE
 
     obj = aws.s3.get_object(Bucket=aws.bucket, Key=f"results/{job_id}.jpg")
     assert obj["ContentType"] == "image/jpeg"
@@ -132,8 +137,9 @@ def test_a_consented_job_writes_no_thumbnail_into_the_dataset(
 ):
     job_id, key = make_job(db, consent=True)
     aws.s3.upload_file(str(clip_path), aws.bucket, key)
+    verify(db, job_id)
 
-    assert run_record(aws, db, key, make_cfg(), roi_masks_small) is worker.Outcome.DONE
+    assert run_job(aws, db, job_id, clip_path, make_cfg(), roi_masks_small) is worker.Outcome.DONE
 
     assert object_exists(aws, f"results/{job_id}.jpg")
     assert not any(name.endswith(".jpg") for name in dataset_keys(aws, job_id))
@@ -144,11 +150,13 @@ def test_a_job_refunded_before_saving_result_gets_no_thumbnail(
 ):
     done_id, done_key = make_job(db)
     aws.s3.upload_file(str(clip_path), aws.bucket, done_key)
-    assert run_record(aws, db, done_key, make_cfg(), roi_masks_small) is worker.Outcome.DONE
+    verify(db, done_id)
+    assert run_job(aws, db, done_id, clip_path, make_cfg(), roi_masks_small) is worker.Outcome.DONE
     assert object_exists(aws, f"results/{done_id}.jpg")  # the control: a finished job has one
 
     job_id, key = make_job(db)
     aws.s3.upload_file(str(clip_path), aws.bucket, key)
+    verify(db, job_id)
     real_extract = response.extract_response
 
     def extract_then_refund(*args, **kwargs):
@@ -160,7 +168,10 @@ def test_a_job_refunded_before_saving_result_gets_no_thumbnail(
         "extract_response", extract_then_refund, "neurolens.response", "neurolens.worker"
     )
 
-    assert run_record(aws, db, key, make_cfg(), roi_masks_small) is worker.Outcome.LOST_CLAIM
+    assert (
+        run_job(aws, db, job_id, clip_path, make_cfg(), roi_masks_small)
+        is worker.Outcome.LOST_CLAIM
+    )
     assert not object_exists(aws, f"results/{job_id}.jpg")
 
 
@@ -169,6 +180,7 @@ def test_a_failed_thumbnail_does_not_fail_the_job(
 ):
     job_id, key = make_job(db)
     aws.s3.upload_file(str(clip_path), aws.bucket, key)
+    verify(db, job_id)
     failure = inference.ThumbnailFailed
 
     def fail(*args, **kwargs):
@@ -176,7 +188,7 @@ def test_a_failed_thumbnail_does_not_fail_the_job(
 
     patch_everywhere("make_thumbnail", fail, *MODULES)
 
-    assert run_record(aws, db, key, make_cfg(), roi_masks_small) is worker.Outcome.DONE
+    assert run_job(aws, db, job_id, clip_path, make_cfg(), roi_masks_small) is worker.Outcome.DONE
 
     assert not object_exists(aws, f"results/{job_id}.jpg")
     assert pg.job(job_id)["status"] == "done"

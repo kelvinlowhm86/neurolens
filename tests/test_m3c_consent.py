@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 from botocore.exceptions import ClientError
 from conftest import MIGRATIONS, STARTER_CENTS, USER_ID
-from neurolens import billing, storage, worker
+from neurolens import billing, settings, storage, worker
 from neurolens.web.app import create_app
 
 MODULES = ("neurolens.inference", "neurolens.worker")
@@ -87,15 +87,19 @@ def object_exists(aws, key):
     return True
 
 
-def run_record(aws, db, key, cfg, masks, *, s3=None):
-    return worker.handle_record(
-        aws.bucket,
-        key,
+def verify(db, job_id):
+    assert billing.verify_queued(db, job_id, 3000, settings.max_duration(None)) == "ok"
+
+
+def run_job(aws, db, job_id, clip_path, cfg, masks, *, s3=None):
+    return worker.handle_job(
+        job_id,
+        str(clip_path),
         s3=s3 or aws.s3,
         db=db,
         cfg=cfg,
         roi_masks=masks,
-        heartbeat=lambda on_beat=None: contextlib.nullcontext(),
+        keep_alive=lambda on_beat: contextlib.nullcontext(),
     )
 
 
@@ -191,7 +195,8 @@ def test_a_consented_job_is_copied_to_the_dataset(
 ):
     job_id, key = make_job(db, consent=True)
     aws.s3.upload_file(str(clip_path), aws.bucket, key)
-    outcome = run_record(aws, db, key, make_cfg(), roi_masks_small)
+    verify(db, job_id)
+    outcome = run_job(aws, db, job_id, clip_path, make_cfg(), roi_masks_small)
     assert outcome is worker.Outcome.DONE
     video = f"dataset/{job_id}/video.mp4"
     result_key = f"dataset/{job_id}/result.json"
@@ -208,16 +213,18 @@ def test_an_unconsented_job_writes_nothing_under_dataset(
 ):
     job_id, key = make_job(db, consent=False)
     aws.s3.upload_file(str(clip_path), aws.bucket, key)
-    assert run_record(aws, db, key, make_cfg(), roi_masks_small) is worker.Outcome.DONE
+    verify(db, job_id)
+    assert run_job(aws, db, job_id, clip_path, make_cfg(), roi_masks_small) is worker.Outcome.DONE
     assert dataset_keys(aws, job_id) == []
     assert object_exists(aws, f"results/{job_id}.json")
 
 
-def test_a_failed_dataset_copy_fails_the_job_without_settling_it(
+def test_a_failed_dataset_copy_fails_and_refunds_the_job(
     aws, db, pg, make_cfg, roi_masks_small, clip_path
 ):
     job_id, key = make_job(db, consent=True)
     aws.s3.upload_file(str(clip_path), aws.bucket, key)
+    verify(db, job_id)
 
     class CopyFails:
         def __init__(self, inner):
@@ -231,11 +238,12 @@ def test_a_failed_dataset_copy_fails_the_job_without_settling_it(
         def __getattr__(self, name):
             return getattr(self._inner, name)
 
-    with pytest.raises(ClientError):
-        run_record(aws, db, key, make_cfg(), roi_masks_small, s3=CopyFails(aws.s3))
+    outcome = run_job(aws, db, job_id, clip_path, make_cfg(), roi_masks_small, s3=CopyFails(aws.s3))
+    assert outcome is worker.Outcome.FAILED
     job = pg.job(job_id)
-    assert job["status"] == "queued" and job["captured_cents"] is None
-    assert pg.balance() == (STARTER_CENTS - 90, 90)
+    assert job["status"] == "failed" and job["captured_cents"] is None
+    assert job["error_code"] == "processing_failed"
+    assert pg.balance() == (STARTER_CENTS, 0)
     assert not object_exists(aws, f"results/{job_id}.json")
 
 
@@ -244,8 +252,12 @@ def test_the_dataset_is_written_before_put_result(
 ):
     job_id, key = make_job(db, consent=True)
     aws.s3.upload_file(str(clip_path), aws.bucket, key)
+    verify(db, job_id)
     s3 = spy_s3()
-    assert run_record(aws, db, key, make_cfg(), roi_masks_small, s3=s3) is worker.Outcome.DONE
+    assert (
+        run_job(aws, db, job_id, clip_path, make_cfg(), roi_masks_small, s3=s3)
+        is worker.Outcome.DONE
+    )
 
     def written_key(call):
         name, args, kwargs = call
@@ -265,6 +277,7 @@ def test_a_worker_that_lost_its_claim_before_saving_writes_nothing_to_the_datase
 ):
     job_id, key = make_job(db, consent=True)
     aws.s3.upload_file(str(clip_path), aws.bucket, key)
+    verify(db, job_id)
     from neurolens import response
 
     real_extract = response.extract_response
@@ -278,7 +291,10 @@ def test_a_worker_that_lost_its_claim_before_saving_writes_nothing_to_the_datase
     patch_everywhere(
         "extract_response", extract_then_lose, "neurolens.response", "neurolens.worker"
     )
-    assert run_record(aws, db, key, make_cfg(), roi_masks_small) is worker.Outcome.LOST_CLAIM
+    assert (
+        run_job(aws, db, job_id, clip_path, make_cfg(), roi_masks_small)
+        is worker.Outcome.LOST_CLAIM
+    )
     assert dataset_keys(aws, job_id) == []
     assert not object_exists(aws, f"results/{job_id}.json")
     job = pg.job(job_id)
@@ -290,6 +306,7 @@ def test_an_unconsented_worker_that_lost_its_claim_writes_nothing(
 ):
     job_id, key = make_job(db, consent=False)
     aws.s3.upload_file(str(clip_path), aws.bucket, key)
+    verify(db, job_id)
     from neurolens import response
 
     real_extract = response.extract_response
@@ -303,7 +320,10 @@ def test_an_unconsented_worker_that_lost_its_claim_writes_nothing(
     patch_everywhere(
         "extract_response", extract_then_lose, "neurolens.response", "neurolens.worker"
     )
-    assert run_record(aws, db, key, make_cfg(), roi_masks_small) is worker.Outcome.LOST_CLAIM
+    assert (
+        run_job(aws, db, job_id, clip_path, make_cfg(), roi_masks_small)
+        is worker.Outcome.LOST_CLAIM
+    )
     assert dataset_keys(aws, job_id) == []
     assert not object_exists(aws, f"results/{job_id}.json")
     job = pg.job(job_id)

@@ -12,7 +12,7 @@ import numpy as np
 import pytest
 from botocore.exceptions import ClientError
 from conftest import STARTER_CENTS, USER_ID
-from neurolens import billing, storage, worker
+from neurolens import billing, settings, storage, worker
 
 MODULES = ("neurolens.inference", "neurolens.worker")
 
@@ -43,15 +43,19 @@ def make_job(db, *, consent=False):
     return job_id, key
 
 
-def run_record(aws, db, key, cfg, masks, *, s3=None):
-    return worker.handle_record(
-        aws.bucket,
-        key,
+def verify(db, job_id):
+    assert billing.verify_queued(db, job_id, 3000, settings.max_duration(None)) == "ok"
+
+
+def run_job(aws, db, job_id, clip_path, cfg, masks, *, s3=None):
+    return worker.handle_job(
+        job_id,
+        str(clip_path),
         s3=s3 or aws.s3,
         db=db,
         cfg=cfg,
         roi_masks=masks,
-        heartbeat=lambda on_beat=None: contextlib.nullcontext(),
+        keep_alive=lambda on_beat: contextlib.nullcontext(),
     )
 
 
@@ -136,9 +140,13 @@ def test_the_brain_is_written_before_the_result(
 ):
     job_id, key = make_job(db)
     aws.s3.upload_file(str(clip_path), aws.bucket, key)
+    verify(db, job_id)
     s3 = spy_s3()
 
-    assert run_record(aws, db, key, make_cfg(), roi_masks_small, s3=s3) is worker.Outcome.DONE
+    assert (
+        run_job(aws, db, job_id, clip_path, make_cfg(), roi_masks_small, s3=s3)
+        is worker.Outcome.DONE
+    )
 
     keys = written_keys(s3)
     brain = keys.index(f"results/{job_id}.brain")
@@ -162,20 +170,23 @@ class BrainWriteFails:
         return getattr(self._inner, name)
 
 
-def test_a_failed_brain_write_publishes_no_result_and_takes_the_failure_path(
+def test_a_failed_brain_write_publishes_no_result_and_refunds(
     aws, db, pg, make_cfg, roi_masks_small, clip_path
 ):
     job_id, key = make_job(db)
     aws.s3.upload_file(str(clip_path), aws.bucket, key)
+    verify(db, job_id)
 
-    with pytest.raises(ClientError):
-        run_record(aws, db, key, make_cfg(), roi_masks_small, s3=BrainWriteFails(aws.s3))
+    outcome = run_job(
+        aws, db, job_id, clip_path, make_cfg(), roi_masks_small, s3=BrainWriteFails(aws.s3)
+    )
 
+    assert outcome is worker.Outcome.FAILED
     assert not object_exists(aws, f"results/{job_id}.json")
     assert not object_exists(aws, f"results/{job_id}.brain")
     job = pg.job(job_id)
-    assert job["status"] == "queued"
-    assert pg.balance() == (STARTER_CENTS - 90, 90)
+    assert job["status"] == "failed" and job["error_code"] == "processing_failed"
+    assert pg.balance() == (STARTER_CENTS, 0)
 
 
 def test_a_float16_overflow_fails_the_job_before_any_result_is_published(
@@ -183,18 +194,18 @@ def test_a_float16_overflow_fails_the_job_before_any_result_is_published(
 ):
     job_id, key = make_job(db)
     aws.s3.upload_file(str(clip_path), aws.bucket, key)
+    verify(db, job_id)
 
     def overflowing(events, duration):
         return np.full((3, 20484), 1e6)
 
     patch_everywhere("predict", overflowing, *MODULES)
 
-    with pytest.raises(ValueError):
-        run_record(aws, db, key, make_cfg(), roi_masks_small)
+    assert run_job(aws, db, job_id, clip_path, make_cfg(), roi_masks_small) is worker.Outcome.FAILED
 
     assert not object_exists(aws, f"results/{job_id}.brain")
     assert not object_exists(aws, f"results/{job_id}.json")
-    assert pg.job(job_id)["status"] == "queued"
+    assert pg.job(job_id)["status"] == "failed"
 
 
 def test_a_consented_job_writes_the_same_brain_bytes_to_the_dataset(
@@ -202,8 +213,9 @@ def test_a_consented_job_writes_the_same_brain_bytes_to_the_dataset(
 ):
     job_id, key = make_job(db, consent=True)
     aws.s3.upload_file(str(clip_path), aws.bucket, key)
+    verify(db, job_id)
 
-    assert run_record(aws, db, key, make_cfg(), roi_masks_small) is worker.Outcome.DONE
+    assert run_job(aws, db, job_id, clip_path, make_cfg(), roi_masks_small) is worker.Outcome.DONE
 
     brain = object_bytes(aws, f"results/{job_id}.brain")
     assert object_bytes(aws, f"dataset/{job_id}/brain") == brain

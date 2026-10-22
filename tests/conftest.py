@@ -68,8 +68,8 @@ ENV_SETTING_VARS = [
     "NEUROLENS_AWS_REGION",
     "NEUROLENS_S3_BUCKET",
     "NEUROLENS_SQS_QUEUE_URL",
-    "NEUROLENS_WORKER_GROUP",  # M2b: aws.worker_group
-    "NEUROLENS_DEPLOYED",  # M2b: makes validate_config require aws.worker_group
+    "NEUROLENS_GPU_ENDPOINT",  # M3e: aws.gpu_endpoint
+    "NEUROLENS_DEPLOYED",  # M3e: marks a deployed (Cognito) web app
     "NEUROLENS_DB_CLUSTER_ARN",  # M3a §3a: aws.db_cluster_arn
     "NEUROLENS_DB_SECRET_ARN",  # M3a §3a: aws.db_secret_arn
     "NEUROLENS_DB_NAME",  # M3a §3a: aws.db_name
@@ -94,17 +94,6 @@ def isolate_env_settings(monkeypatch):
     for name in ENV_SETTING_VARS:
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setattr(settings, "load_dotenv", lambda *a, **kw: None, raising=False)
-
-
-@pytest.fixture(autouse=True)
-def restore_sigterm_handler():
-    """M2b: worker.run() installs a SIGTERM handler. Whatever a test does, the next test starts
-    with the handler pytest had."""
-    import signal
-
-    previous = signal.getsignal(signal.SIGTERM)
-    yield
-    signal.signal(signal.SIGTERM, previous)
 
 
 @pytest.fixture
@@ -150,7 +139,7 @@ def make_cfg(aws, tmp_path):
             # M2b §1a: the heartbeat settings config.json gains (same values).
             "worker": {"heartbeat_seconds": 50, "max_job_minutes": 75},
             # M3a §9: the development identity, starter credit and the address the app binds to.
-            # No `db` block: tests hand the database in (create_app(db=...), handle_record(db=...)).
+            # No `db` block: tests hand the database in (create_app(db=...), handle_job(db=...)).
             "auth": {"mode": "dev", "dev_user_id": WEB_USER_ID, "dev_email": WEB_USER_EMAIL},
             "billing": {"starter_cents": STARTER_CENTS},
             "server": {"host": "127.0.0.1", "port": 5003},
@@ -539,46 +528,13 @@ def spy_s3(aws):
     return make
 
 
-@pytest.fixture
-def queue_message(aws):
-    """Put a body on the queue and receive it, like the worker would.
-
-    VisibilityTimeout=0 makes an undeleted message visible again at once, so
-    `remaining()` can tell whether process_message deleted it. The message carries its
-    ApproximateReceiveCount (M2b §1a: process_message reads it; this is its first receive, "1").
-    """
-
-    def put(body):
-        aws.sqs.send_message(QueueUrl=aws.queue_url, MessageBody=body)
-        resp = aws.sqs.receive_message(
-            QueueUrl=aws.queue_url,
-            MaxNumberOfMessages=1,
-            VisibilityTimeout=0,
-            MessageSystemAttributeNames=["ApproximateReceiveCount"],
-        )
-        return resp["Messages"][0]
-
-    return put
-
-
-@pytest.fixture
-def remaining(aws):
-    def look():
-        resp = aws.sqs.receive_message(
-            QueueUrl=aws.queue_url, MaxNumberOfMessages=10, VisibilityTimeout=0
-        )
-        return resp.get("Messages", [])
-
-    return look
-
-
 # ---------------------------------------------------------------- M3b (docs/M3b_spec.md)
 
 ISSUER = "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_TestPool"
 CLIENT_ID = "test-client-id"
 COGNITO_DOMAIN = "neurolens-test.auth.us-east-1.amazoncognito.com"
 PUBLIC_BASE_URL = "https://d111111abcdef8.cloudfront.net"
-WORKER_GROUP = "neurolens-workers"
+GPU_ENDPOINT = "neurolens-gpu-test"
 # §8's sign-in seam: fake URLs that only `responses` answers.
 SERVER_METADATA = {
     "issuer": ISSUER,
@@ -624,7 +580,7 @@ def cognito_cfg(make_cfg):
         settings_.update(overrides)
         cfg = make_cfg(**settings_)
         cfg["aws"].update(
-            worker_group=WORKER_GROUP,
+            gpu_endpoint=GPU_ENDPOINT,
             db_cluster_arn="arn:aws:rds:us-east-1:000000000000:cluster:neurolens-db",
             db_secret_arn="arn:aws:secretsmanager:us-east-1:000000000000:secret:rds!cluster-x",
             db_name="neurolens",
@@ -899,7 +855,7 @@ def lambda_env(aws, ssm, make_cfg, tmp_path, monkeypatch):
         "NEUROLENS_COGNITO_CLIENT_ID": CLIENT_ID,
         "NEUROLENS_COGNITO_DOMAIN": COGNITO_DOMAIN,
         "NEUROLENS_PUBLIC_BASE_URL": PUBLIC_BASE_URL,
-        "NEUROLENS_WORKER_GROUP": WORKER_GROUP,
+        "NEUROLENS_GPU_ENDPOINT": GPU_ENDPOINT,
         "NEUROLENS_S3_BUCKET": aws.bucket,
         "NEUROLENS_AWS_REGION": "us-east-1",
         "NEUROLENS_DB_CLUSTER_ARN": "arn:aws:rds:us-east-1:000000000000:cluster:neurolens-db",

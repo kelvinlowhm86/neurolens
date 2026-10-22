@@ -180,7 +180,7 @@ def test_claim_staleness_30s_cannot_120s_can(db, pg):
 
 def test_each_attempt_starts_with_empty_stages(db, pg):
     job_id = claimed(db)
-    assert billing.set_stage(db, job_id, 1, "downloading") is True
+    assert billing.set_stage(db, job_id, 1, "transcribing") is True
     assert billing.release_for_retry(db, job_id, 1, "RuntimeError: boom") is True
     assert billing.claim(db, job_id) == 2
     job = pg.job(job_id)
@@ -201,7 +201,14 @@ def test_job_state_reports_status_updated_at_and_attempt(db):
     assert billing.job_state(db, str(uuid.uuid4())) is None
     job_id = claimed(db)
     state = billing.job_state(db, job_id)
-    assert set(state) == {"status", "updated_at", "attempt", "research_consent"}
+    assert set(state) == {
+        "status",
+        "updated_at",
+        "attempt",
+        "research_consent",
+        "object_key",
+        "verified_duration_ms",
+    }
     assert state["status"] == "processing" and state["attempt"] == 1
     assert state["updated_at"].utcoffset() == timedelta(0)
     assert abs(datetime.now(UTC) - state["updated_at"]) < timedelta(minutes=1)
@@ -220,19 +227,19 @@ def test_set_stage_appends_stage_and_utc_time_in_the_status_format(db, pg):
     job_id = claimed(db)
     t0 = datetime(2026, 10, 14, 3, 22, 10, tzinfo=UTC)
     t1 = datetime(2026, 10, 14, 3, 22, 41, tzinfo=UTC)
-    assert billing.set_stage(db, job_id, 1, "downloading", now=t0) is True
+    assert billing.set_stage(db, job_id, 1, "transcribing", now=t0) is True
     assert billing.set_stage(db, job_id, 1, "transcribing", now=t1) is True
     job = pg.job(job_id)
     assert job["stage"] == "transcribing"
     assert job["stages"] == [
-        {"stage": "downloading", "at": "2026-10-14T03:22:10Z"},
+        {"stage": "transcribing", "at": "2026-10-14T03:22:10Z"},
         {"stage": "transcribing", "at": "2026-10-14T03:22:41Z"},
     ]
 
 
 def test_set_stage_without_now_uses_the_current_time(db, pg):
     job_id = claimed(db)
-    billing.set_stage(db, job_id, 1, "downloading")
+    billing.set_stage(db, job_id, 1, "transcribing")
     at = datetime.strptime(pg.job(job_id)["stages"][0]["at"], "%Y-%m-%dT%H:%M:%SZ")
     assert abs(datetime.now(UTC) - at.replace(tzinfo=UTC)) < timedelta(minutes=1)
 
@@ -252,86 +259,15 @@ def test_release_for_retry_requeues_records_the_message_and_moves_no_money(db, p
     assert billing.claim(db, job_id) == 2  # the next worker can claim it at once
 
 
-# ---------------------------------------------------------------- Stage 2: verify
-
-
-def test_verify_equal_price_changes_no_money(db, pg):
-    job_id = claimed(db, 27400)  # 90
-    assert billing.verify(db, job_id, 1, 28000, MAX_S) == "ok"
-    assert money(pg) == (410, 90)
-    assert pg.kinds() == ["starter", "reserve"]
-    job = pg.job(job_id)
-    assert job["verified_duration_ms"] == 28000 and job["reserved_cents"] == 90
-
-
-def test_verify_higher_and_covered_reserves_the_difference(db, pg):
-    job_id = claimed(db, 27400)  # 90 reserved
-    assert billing.verify(db, job_id, 1, 61000, MAX_S) == "ok"  # 270
-    assert money(pg) == (230, 270)
-    adjust = pg.ledger()[-1]
-    assert adjust["kind"] == "adjust" and adjust["job_id"] == job_id
-    assert (adjust["available_delta_cents"], adjust["reserved_delta_cents"]) == (-180, 180)
-    assert pg.job(job_id)["reserved_cents"] == 270
-
-
-def test_verify_higher_with_exactly_enough_credit_is_covered(db, pg):
-    job_id = claimed(db, 27400, starter_cents=270)  # 180 left, the difference is 180
-    assert billing.verify(db, job_id, 1, 61000, MAX_S) == "ok"
-    assert money(pg) == (0, 270)
-
-
-def test_verify_higher_and_not_covered_refunds_in_full(db, pg):
-    job_id = claimed(db, 27400, starter_cents=200)  # 90 reserved, 110 left; 120 s costs 360
-    result = billing.verify(db, job_id, 1, 120000, MAX_S)
-    assert result == "insufficient_credit_for_actual_duration"
-    assert money(pg) == (200, 0)
-    job = pg.job(job_id)
-    assert job["status"] == "failed"
-    assert job["error_code"] == "insufficient_credit_for_actual_duration"
-    assert pg.refund_reason(job_id) == "insufficient_credit_for_actual_duration"
-    assert "adjust" not in pg.kinds()
-
-
-def test_verify_lower_returns_the_difference_at_once(db, pg):
-    job_id = claimed(db, 61000)  # 270 reserved
-    assert billing.verify(db, job_id, 1, 20000, MAX_S) == "ok"  # 90
-    assert money(pg) == (410, 90)
-    adjust = pg.ledger()[-1]
-    assert adjust["kind"] == "adjust"
-    assert (adjust["available_delta_cents"], adjust["reserved_delta_cents"]) == (180, -180)
-    assert pg.job(job_id)["reserved_cents"] == 90
-
-
-@pytest.mark.parametrize("starter", [500, 1_000_000], ids=["normal_balance", "large_balance"])
-def test_verify_over_the_maximum_refunds_before_any_adjustment(db, pg, starter):
-    """§4a step 1: the duration check comes before any credit logic, whatever the balance."""
-    job_id = claimed(db, 27400, starter_cents=starter)
-    result = billing.verify(db, job_id, 1, 121000, MAX_S)
-    assert result == "duration_exceeds_max_verified"
-    assert money(pg) == (starter, 0)
-    assert pg.kinds() == ["starter", "reserve", "refund"]  # no adjust row first
-    assert pg.job(job_id)["error_code"] == "duration_exceeds_max_verified"
-    assert pg.refund_reason(job_id) == "duration_exceeds_max_verified"
-
-
-def test_verify_exactly_at_the_maximum_is_accepted(db, pg):
-    job_id = claimed(db, 120000)
-    assert billing.verify(db, job_id, 1, 120000, MAX_S) == "ok"
-    assert pg.job(job_id)["status"] == "processing"
-
-
-def test_verify_uses_the_given_maximum(db):
-    job_id = claimed(db, 27400)
-    assert billing.verify(db, job_id, 1, 46000, 45) == "duration_exceeds_max_verified"
-
-
 # ---------------------------------------------------------------- Stage 3: settle_success
 
 
 def test_settle_success_captures_exactly_the_verified_price(db, pg):
-    job_id = claimed(db, 27400)
-    billing.verify(db, job_id, 1, 61000, MAX_S)  # 270
-    billing.set_stage(db, job_id, 1, "downloading")
+    make_user(db)
+    job_id, _ = reserve(db)  # 90 reserved
+    assert billing.verify_queued(db, job_id, 61000, MAX_S) == "ok"  # 270
+    assert billing.claim(db, job_id) == 1
+    billing.set_stage(db, job_id, 1, "transcribing")
     assert billing.settle_success(db, job_id) is True
     assert money(pg) == (230, 0)
     capture = pg.ledger()[-1]
@@ -433,9 +369,7 @@ def test_after_a_reclaim_every_attempt_1_call_reports_a_lost_claim_and_moves_no_
     job_id = reclaimed(db, pg)
     before = pg.snapshot()
     assert billing.touch(db, job_id, 1) is False
-    assert billing.set_stage(db, job_id, 1, "downloading") is False
-    assert billing.verify(db, job_id, 1, 61000, MAX_S) == "lost_claim"
-    assert billing.verify(db, job_id, 1, 500000, MAX_S) == "lost_claim"
+    assert billing.set_stage(db, job_id, 1, "transcribing") is False
     assert billing.release_for_retry(db, job_id, 1, "late error") is False
     assert billing.issue_refund(db, job_id, "unreadable_video", attempt=1) is False
     assert pg.snapshot() == before
@@ -444,16 +378,14 @@ def test_after_a_reclaim_every_attempt_1_call_reports_a_lost_claim_and_moves_no_
 def test_after_a_reclaim_attempt_2_still_works(db, pg):
     job_id = reclaimed(db, pg)
     assert billing.touch(db, job_id, 2) is True
-    assert billing.set_stage(db, job_id, 2, "downloading") is True
-    assert billing.verify(db, job_id, 2, 28000, MAX_S) == "ok"
+    assert billing.set_stage(db, job_id, 2, "transcribing") is True
 
 
-def test_after_a_reaper_refund_verify_with_the_old_attempt_is_a_lost_claim(db, pg):
+def test_after_a_reaper_refund_the_old_attempt_is_a_lost_claim(db, pg):
     job_id = claimed(db)
     pg.age(job_id, updated_s=700)
     assert billing.issue_refund(db, job_id, "stalled", processing_stale_s=600) is True
     before = pg.snapshot()
-    assert billing.verify(db, job_id, 1, 61000, MAX_S) == "lost_claim"
     assert billing.touch(db, job_id, 1) is False
     assert billing.set_stage(db, job_id, 1, "transcribing") is False
     assert billing.release_for_retry(db, job_id, 1, "x") is False

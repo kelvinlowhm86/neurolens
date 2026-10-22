@@ -1,8 +1,15 @@
-"""Tests for neurolens.worker (moto, fake inference). Written from docs/M1_spec.md 1, 4a, 5, 6a
-and docs/M2a_spec.md 7a, 8. Calls use the M3a §5 signatures (db, heartbeat(on_beat), shutdown,
-max_receives), and each record's job is seeded in PostgreSQL first (conftest `new_job`); the
-behaviour checked is unchanged except where M3a §5 changes it (a missing upload is refunded and
-REJECTED, no longer GONE)."""
+"""The GPU container's job logic (`worker.handle_job`), from the merged M1, M2b, M3a and M3d
+worker tests (docs/M3e_spec.md §4b, §4c, §11 "Container").
+
+SageMaker has already downloaded the upload, so handle_job gets a local path and takes the object
+key and verified duration from the job row. A test that runs the pipeline therefore verifies the
+job first, exactly as the dispatcher does. Fake inference, moto S3 and PostgreSQL; money and job
+state are read directly through `pg`.
+
+Checks that moved to the dispatcher (size, duration, credit) or that no longer exist (SQS polling,
+release for retry, a missing upload) are gone; the SageMaker server's HTTP contract lives in
+tests/test_m3e_container.py.
+"""
 
 import contextlib
 import inspect
@@ -13,8 +20,9 @@ from pathlib import Path
 
 import pytest
 from botocore.exceptions import ClientError
-from neurolens import inference, worker
-from neurolens.worker import Outcome, handle_record, process_message
+from conftest import STARTER_CENTS
+from neurolens import billing, inference, settings, storage, worker
+from neurolens.worker import Outcome
 
 SERIES = [
     "faces",
@@ -38,16 +46,15 @@ SECTION_1_KEYS = {
     "processing_time_seconds",
     "fake_inference",
 }
+STAGES = [
+    "transcribing",
+    "inference_full",
+    "inference_noaudio",
+    "extracting_roi",
+    "saving_result",
+]
 MODULES = ("neurolens.inference", "neurolens.worker")
-MAX_RECEIVES = 2  # the job queue's maxReceiveCount (M2a §4h); every message here is receive 1
-
-
-def no_heartbeat(on_beat=None):
-    """handle_record's heartbeat factory (M3a §5: heartbeat(on_beat)). Not exercised here."""
-    return contextlib.nullcontext()
-
-
-NO_DB = object()  # process_message only hands the database on to (a scripted) handle_record
+PROBE_MODULES = ("neurolens.inference", "neurolens.media", "neurolens.worker")
 
 
 @pytest.fixture(autouse=True)
@@ -61,13 +68,29 @@ def no_gpu(patch_everywhere):
     patch_everywhere("gpu_info", lambda: None, *MODULES)
 
 
-def s3_event(*pairs):
-    return json.dumps(
-        {
-            "Records": [
-                {"s3": {"bucket": {"name": b}, "object": {"key": k, "size": 1}}} for b, k in pairs
-            ]
-        }
+def probe_duration(path, *args, **kwargs):
+    from neurolens import media
+
+    return media.probe_duration(path, *args, **kwargs)
+
+
+def no_keep_alive(on_beat):
+    return contextlib.nullcontext()
+
+
+def verify(db, job_id, duration_ms=3000):
+    assert billing.verify_queued(db, job_id, duration_ms, settings.max_duration(None)) == "ok"
+
+
+def run_job(aws, db, job_id, clip_path, make_cfg, roi_masks, keep_alive=no_keep_alive):
+    return worker.handle_job(
+        job_id,
+        str(clip_path),
+        s3=aws.s3,
+        db=db,
+        cfg=make_cfg(),
+        roi_masks=roi_masks,
+        keep_alive=keep_alive,
     )
 
 
@@ -100,7 +123,7 @@ def calls(patch_everywhere):
     real_build = inference.build_events
     real_without = inference.without_audio
     real_predict = inference.predict
-    real_probe = inference.probe_duration
+    real_probe = probe_duration
     from neurolens import response
 
     real_extract = response.extract_response
@@ -141,7 +164,7 @@ def calls(patch_everywhere):
     patch_everywhere("build_events", build, *MODULES)
     patch_everywhere("without_audio", without, *MODULES)
     patch_everywhere("predict", predict, *MODULES)
-    patch_everywhere("probe_duration", probe, *MODULES)
+    patch_everywhere("probe_duration", probe, *PROBE_MODULES)
     patch_everywhere("extract_response", extract, "neurolens.response", "neurolens.worker")
     return log
 
@@ -179,7 +202,7 @@ def object_exists(aws, key):
 
 
 def read_result(aws, job_id):
-    """The result as published to S3 (M2a: results/{job_id}.json, not the local folder)."""
+    """The result as published to S3 (results/{job_id}.json, not the local folder)."""
     try:
         body = aws.s3.get_object(Bucket=aws.bucket, Key=f"results/{job_id}.json")["Body"]
     except ClientError as err:
@@ -196,33 +219,27 @@ def never_inference(patch_everywhere):
     patch_everywhere("predict", boom, *MODULES)
 
 
-# ---------------------------------------------------------------- Outcome
+def source_arc(db, job_id):
+    """(status, stage) as the row reads while a pipeline step runs."""
+    with db.transaction() as tx:
+        [job] = tx.execute(
+            "SELECT status, stage FROM jobs WHERE job_id = CAST(:job_id AS uuid)",
+            {"job_id": job_id},
+        )
+    return job["status"], job["stage"]
 
 
-def test_outcome_has_done_and_rejected():
-    assert Outcome.DONE is not Outcome.REJECTED
-    assert {"DONE", "REJECTED"} <= set(Outcome.__members__)
-
-
-# ---------------------------------------------------------------- handle_record: DONE
+# ---------------------------------------------------------------- DONE
 
 
 def test_valid_video_is_done_and_writes_result_json(
     aws, make_cfg, roi_masks_small, db, new_job, clip_path, calls
 ):
-    cfg = make_cfg()
     job_id, key = new_job()
     upload_clip(aws, key, clip_path)
+    verify(db, job_id)
 
-    outcome = handle_record(
-        aws.bucket,
-        key,
-        s3=aws.s3,
-        db=db,
-        cfg=cfg,
-        roi_masks=roi_masks_small,
-        heartbeat=no_heartbeat,
-    )
+    outcome = run_job(aws, db, job_id, clip_path, make_cfg, roi_masks_small)
 
     assert outcome is Outcome.DONE
     result = read_result(aws, job_id)
@@ -231,7 +248,7 @@ def test_valid_video_is_done_and_writes_result_json(
     assert result["fake_inference"] is True
     assert isinstance(result["processing_time_seconds"], int | float)
     assert result["processing_time_seconds"] >= 0
-    expected_seconds = math.ceil(inference.probe_duration(clip_path))
+    expected_seconds = math.ceil(probe_duration(clip_path))
     assert result["format"] == 2
     assert result["duration_seconds"] == expected_seconds
     assert list(result["signals"]) == SERIES
@@ -242,18 +259,11 @@ def test_valid_video_is_done_and_writes_result_json(
 def test_duration_and_signals_are_exactly_what_extract_response_returned(
     aws, make_cfg, roi_masks_small, db, new_job, clip_path, calls
 ):
-    cfg = make_cfg()
     job_id, key = new_job()
     upload_clip(aws, key, clip_path)
-    handle_record(
-        aws.bucket,
-        key,
-        s3=aws.s3,
-        db=db,
-        cfg=cfg,
-        roi_masks=roi_masks_small,
-        heartbeat=no_heartbeat,
-    )
+    verify(db, job_id)
+    run_job(aws, db, job_id, clip_path, make_cfg, roi_masks_small)
+
     result = read_result(aws, job_id)
     assert len(calls["extract"]) == 1
     expected = json.loads(json.dumps(calls["extract"][0]))
@@ -265,36 +275,23 @@ def test_duration_and_signals_are_exactly_what_extract_response_returned(
 def test_result_goes_to_s3_as_results_job_id_json(
     aws, make_cfg, roi_masks_small, db, new_job, clip_path
 ):
-    cfg = make_cfg()
     job_id, key = new_job(".mov")
     upload_clip(aws, key, clip_path)
-    handle_record(
-        aws.bucket,
-        key,
-        s3=aws.s3,
-        db=db,
-        cfg=cfg,
-        roi_masks=roi_masks_small,
-        heartbeat=no_heartbeat,
-    )
+    verify(db, job_id)
+
+    run_job(aws, db, job_id, clip_path, make_cfg, roi_masks_small)
+
     assert object_exists(aws, f"results/{job_id}.json")
 
 
 def test_pipeline_runs_build_events_predict_without_audio_predict_extract_in_order(
     aws, make_cfg, roi_masks_small, db, new_job, clip_path, calls
 ):
-    cfg = make_cfg()
-    _, key = new_job()
+    job_id, key = new_job()
     upload_clip(aws, key, clip_path)
-    handle_record(
-        aws.bucket,
-        key,
-        s3=aws.s3,
-        db=db,
-        cfg=cfg,
-        roi_masks=roi_masks_small,
-        heartbeat=no_heartbeat,
-    )
+    verify(db, job_id)
+    run_job(aws, db, job_id, clip_path, make_cfg, roi_masks_small)
+
     assert calls["order"] == [
         "build_events",
         "predict",
@@ -307,24 +304,16 @@ def test_pipeline_runs_build_events_predict_without_audio_predict_extract_in_ord
 def test_pipeline_passes_events_and_predictions_along(
     aws, make_cfg, roi_masks_small, db, new_job, clip_path, calls
 ):
-    """build_events gets the downloaded video (with its audio); the first predict gets those
-    events, without_audio gets them too, the second predict gets what without_audio returned,
-    both get the measured duration, and extract_response gets (with-audio, no-audio, masks)."""
-    cfg = make_cfg()
-    _, key = new_job()
+    """build_events gets the local video (with its audio); the first predict gets those events,
+    without_audio gets them too, the second predict gets what without_audio returned, both get
+    the measured duration, and extract_response gets (with-audio, no-audio, masks)."""
+    job_id, key = new_job()
     upload_clip(aws, key, clip_path)
-    handle_record(
-        aws.bucket,
-        key,
-        s3=aws.s3,
-        db=db,
-        cfg=cfg,
-        roi_masks=roi_masks_small,
-        heartbeat=no_heartbeat,
-    )
+    verify(db, job_id)
+    run_job(aws, db, job_id, clip_path, make_cfg, roi_masks_small)
 
     [(_, audio, content, events)] = calls["build_events"]
-    assert audio is True  # the downloaded video itself, with its soundtrack
+    assert audio is True  # the video itself, with its soundtrack
     assert content == clip_path.read_bytes()
     [(given, stripped)] = calls["without_audio"]
     assert given is events
@@ -333,7 +322,7 @@ def test_pipeline_passes_events_and_predictions_along(
     ]
     assert first_events is events
     assert second_events is stripped
-    expected_duration = inference.probe_duration(clip_path)
+    expected_duration = probe_duration(clip_path)
     assert first_duration == pytest.approx(expected_duration)
     assert second_duration == pytest.approx(expected_duration)
     [args] = calls["extract_args"]
@@ -346,19 +335,11 @@ def test_pipeline_writes_no_noaudio_file_and_runs_no_ffmpeg(
     aws, make_cfg, roi_masks_small, db, new_job, clip_path, calls, ffmpeg_runs
 ):
     """The no-audio pass reuses the same video file: no audio-free copy is made. The one ffmpeg
-    run, the thumbnail (M3d §5b), writes to a pipe, never to a file."""
-    cfg = make_cfg()
-    _, key = new_job()
+    run, the thumbnail, writes to a pipe, never to a file."""
+    job_id, key = new_job()
     upload_clip(aws, key, clip_path)
-    outcome = handle_record(
-        aws.bucket,
-        key,
-        s3=aws.s3,
-        db=db,
-        cfg=cfg,
-        roi_masks=roi_masks_small,
-        heartbeat=no_heartbeat,
-    )
+    verify(db, job_id)
+    outcome = run_job(aws, db, job_id, clip_path, make_cfg, roi_masks_small)
 
     assert outcome is Outcome.DONE
     seen_files = calls["files_at_extract"]
@@ -367,121 +348,16 @@ def test_pipeline_writes_no_noaudio_file_and_runs_no_ffmpeg(
     assert all(cmd[-1] == "-" for cmd in ffmpeg_runs)
 
 
-def test_a_timeline_error_from_predict_is_a_failure_not_an_outcome(
-    aws, make_cfg, roi_masks_small, db, new_job, clip_path, patch_everywhere
-):
-    def misaligned(*a, **kw):
-        raise inference.TimelineError("starts are not 0, 1, 2, ...")
-
-    patch_everywhere("predict", misaligned, *MODULES)
-    cfg = make_cfg()
-    job_id, key = new_job()
-    upload_clip(aws, key, clip_path)
-    with pytest.raises(inference.TimelineError):
-        handle_record(
-            aws.bucket,
-            key,
-            s3=aws.s3,
-            db=db,
-            cfg=cfg,
-            roi_masks=roi_masks_small,
-            heartbeat=no_heartbeat,
-        )
-    assert object_exists(aws, key)  # a failure is not a rejection: nothing is deleted
-    assert not object_exists(aws, f"results/{job_id}.json")
-
-
-def test_a_timeline_error_end_to_end_leaves_the_message_for_retry(
-    aws,
-    make_cfg,
-    roi_masks_small,
-    db,
-    new_job,
-    clip_path,
-    queue_message,
-    remaining,
-    patch_everywhere,
-):
-    """An ordinary failure: the message stays, so SQS retries it and later dead-letters it."""
-
-    def misaligned(*a, **kw):
-        raise inference.TimelineError("starts are not 0, 1, 2, ...")
-
-    patch_everywhere("predict", misaligned, *MODULES)
-    job_id, key = new_job()
-    upload_clip(aws, key, clip_path)
-    process_message(
-        queue_message(s3_event((aws.bucket, key))),
-        s3=aws.s3,
-        sqs=aws.sqs,
-        db=db,
-        cfg=make_cfg(),
-        roi_masks=roi_masks_small,
-        shutdown=worker.ShutdownSignal(),
-        max_receives=MAX_RECEIVES,
-    )
-    assert len(remaining()) == 1
-    assert object_exists(aws, key)
-    assert not object_exists(aws, f"results/{job_id}.json")
-
-
-def test_size_check_uses_head_object_before_download_file(
-    aws, make_cfg, roi_masks_small, db, new_job, clip_path, spy_s3
-):
-    cfg = make_cfg()
-    _, key = new_job()
-    upload_clip(aws, key, clip_path)
-    s3 = spy_s3()
-    handle_record(
-        aws.bucket, key, s3=s3, db=db, cfg=cfg, roi_masks=roi_masks_small, heartbeat=no_heartbeat
-    )
-    names = s3.names()
-    assert "head_object" in names and "download_file" in names
-    assert names.index("head_object") < names.index("download_file")
-    # M2b: result_exists may also call head_object (on results/), so look for the upload's own.
-    heads = [i for i, c in enumerate(s3.calls) if c[0] == "head_object" and c[2].get("Key") == key]
-    assert heads, "no head_object on the uploaded object"
-    assert s3.calls[heads[0]][2] == {"Bucket": aws.bucket, "Key": key}
-    assert heads[0] < names.index("download_file")
-    download = next(c for c in s3.calls if c[0] == "download_file")
-    assert download[1][:2] == (aws.bucket, key)
-
-
-def test_object_exactly_at_the_cap_is_accepted(
-    aws, make_cfg, roi_masks_small, db, new_job, clip_path
-):
-    cfg = make_cfg(max_upload_bytes=clip_path.stat().st_size)
-    _, key = new_job()
-    upload_clip(aws, key, clip_path)
-    outcome = handle_record(
-        aws.bucket,
-        key,
-        s3=aws.s3,
-        db=db,
-        cfg=cfg,
-        roi_masks=roi_masks_small,
-        heartbeat=no_heartbeat,
-    )
-    assert outcome is Outcome.DONE
-
-
 def test_result_has_gpu_only_when_gpu_info_returns_a_value(
     aws, make_cfg, roi_masks_small, db, new_job, clip_path, patch_everywhere
 ):
     gpu = {"device": "Fake GPU 48GB", "peak_vram_gb": 12.34}
     patch_everywhere("gpu_info", lambda: gpu, *MODULES)
-    cfg = make_cfg()
     job_id, key = new_job()
     upload_clip(aws, key, clip_path)
-    handle_record(
-        aws.bucket,
-        key,
-        s3=aws.s3,
-        db=db,
-        cfg=cfg,
-        roi_masks=roi_masks_small,
-        heartbeat=no_heartbeat,
-    )
+    verify(db, job_id)
+    run_job(aws, db, job_id, clip_path, make_cfg, roi_masks_small)
+
     result = read_result(aws, job_id)
     assert set(result) == SECTION_1_KEYS | {"gpu"}
     assert result["gpu"] == gpu
@@ -508,367 +384,310 @@ def test_fake_inference_key_is_absent_when_fake_mode_is_off(
     patch_everywhere("without_audio", without_stand_in, *MODULES)
     patch_everywhere("predict", predict_stand_in, *MODULES)
     monkeypatch.delenv("FAKE_INFERENCE")
-    cfg = make_cfg()
     job_id, key = new_job()
     upload_clip(aws, key, clip_path)
-    outcome = handle_record(
-        aws.bucket,
-        key,
-        s3=aws.s3,
-        db=db,
-        cfg=cfg,
-        roi_masks=roi_masks_small,
-        heartbeat=no_heartbeat,
-    )
+    verify(db, job_id)
+    outcome = run_job(aws, db, job_id, clip_path, make_cfg, roi_masks_small)
+
     assert outcome is Outcome.DONE
     result = read_result(aws, job_id)
     assert "fake_inference" not in result
     assert set(result) == SECTION_1_KEYS - {"fake_inference"}
 
 
-# ---------------------------------------------------------------- handle_record: REJECTED
-
-
-def test_oversize_object_is_rejected_deleted_and_never_downloaded(
-    aws, make_cfg, roi_masks_small, db, new_job, spy_s3, patch_everywhere, calls
+def test_result_is_written_before_the_job_is_settled(
+    aws, db, pg, make_cfg, roi_masks_small, new_job, clip_path, monkeypatch
 ):
-    cfg = make_cfg(max_upload_bytes=1000)
-    job_id, key = new_job()
-    upload(aws, key, b"x" * 1001)
-    never_inference(patch_everywhere)
-    s3 = spy_s3(forbid=("download_file", "download_fileobj"), forbid_on_uploads=("get_object",))
-
-    outcome = handle_record(
-        aws.bucket, key, s3=s3, db=db, cfg=cfg, roi_masks=roi_masks_small, heartbeat=no_heartbeat
-    )
-
-    assert outcome is Outcome.REJECTED
-    assert "head_object" in s3.names()
-    assert "download_file" not in s3.names()
-    assert not object_exists(aws, key)
-
-
-def test_oversize_rejection_never_runs_ffprobe_or_inference(
-    aws, make_cfg, roi_masks_small, db, new_job, calls
-):
-    cfg = make_cfg(max_upload_bytes=1000)
-    _, key = new_job()
-    upload(aws, key, b"x" * 5000)
-    outcome = handle_record(
-        aws.bucket,
-        key,
-        s3=aws.s3,
-        db=db,
-        cfg=cfg,
-        roi_masks=roi_masks_small,
-        heartbeat=no_heartbeat,
-    )
-    assert outcome is Outcome.REJECTED
-    assert calls["probe_duration"] == []
-    assert calls["build_events"] == []
-    assert calls["without_audio"] == []
-    assert calls["predict"] == []
-
-
-def test_over_long_video_is_rejected_without_inference(
-    aws, make_cfg, roi_masks_small, db, new_job, clip_path, calls
-):
-    cfg = make_cfg(max_video_duration_seconds=1)  # the clip is about 3 s
+    """put_result first, then settle_success (status done)."""
     job_id, key = new_job()
     upload_clip(aws, key, clip_path)
+    verify(db, job_id)
+    at_put_result = []
+    real = storage.put_result
 
-    outcome = handle_record(
-        aws.bucket,
-        key,
-        s3=aws.s3,
-        db=db,
-        cfg=cfg,
-        roi_masks=roi_masks_small,
-        heartbeat=no_heartbeat,
-    )
+    def spy(s3, bucket, jid, result):
+        at_put_result.append(pg.job(jid)["status"])
+        return real(s3, bucket, jid, result)
 
-    assert outcome is Outcome.REJECTED
-    assert calls["build_events"] == []
-    assert calls["without_audio"] == []
-    assert calls["predict"] == []
-    assert not object_exists(aws, key)
+    monkeypatch.setattr(storage, "put_result", spy)
+    if hasattr(worker, "put_result"):
+        monkeypatch.setattr(worker, "put_result", spy)
+    assert run_job(aws, db, job_id, clip_path, make_cfg, roi_masks_small) is Outcome.DONE
+    assert len(at_put_result) == 1
+    assert at_put_result[0] != "done"
+    assert pg.job(job_id)["status"] == "done"
 
 
-def test_duration_check_uses_probe_duration_of_the_downloaded_file(
-    aws, make_cfg, roi_masks_small, db, new_job, patch_everywhere
+class TrackingKeepAlive:
+    """Stands in for the keep-alive factory handle_job gets: records whether a block is active
+    and the on_beat it was given."""
+
+    def __init__(self):
+        self.active = False
+        self.entered = 0
+        self.on_beats = []
+
+    def __call__(self, on_beat=None):
+        self.on_beats.append(on_beat)
+        return self
+
+    def __enter__(self):
+        self.active = True
+        self.entered += 1
+        return self
+
+    def __exit__(self, *exc):
+        self.active = False
+        return False
+
+
+def test_record_work_runs_inside_the_keep_alive(
+    aws, db, make_cfg, roi_masks_small, new_job, clip_path, patch_everywhere
 ):
-    """The authoritative check is ffprobe on the worker, whatever the client claimed."""
-    seen = []
+    job_id, key = new_job()
+    upload_clip(aws, key, clip_path)
+    verify(db, job_id)
+    keep_alive = TrackingKeepAlive()
+    inside = []
+    real_build, real_predict = inference.build_events, inference.predict
 
-    def long(path):
-        seen.append(Path(path).read_bytes())
-        return 500.0
+    def build(path, *a, **kw):
+        inside.append(keep_alive.active)
+        return real_build(path, *a, **kw)
 
-    patch_everywhere("probe_duration", long, *MODULES)
-    never_inference(patch_everywhere)
-    cfg = make_cfg()  # max 120 s
-    _, key = new_job()
-    upload(aws, key, b"these bytes are the object")
-    outcome = handle_record(
-        aws.bucket,
-        key,
-        s3=aws.s3,
-        db=db,
-        cfg=cfg,
-        roi_masks=roi_masks_small,
-        heartbeat=no_heartbeat,
+    def predict(events, duration, *a, **kw):
+        inside.append(keep_alive.active)
+        return real_predict(events, duration, *a, **kw)
+
+    patch_everywhere("build_events", build, *MODULES)
+    patch_everywhere("predict", predict, *MODULES)
+    assert (
+        run_job(aws, db, job_id, clip_path, make_cfg, roi_masks_small, keep_alive) is Outcome.DONE
     )
-    assert outcome is Outcome.REJECTED
-    assert seen == [b"these bytes are the object"]
-    assert not object_exists(aws, key)
+    assert inside == [True, True, True]
+    assert keep_alive.active is False  # left before returning
+    assert len(keep_alive.on_beats) == 1 and callable(keep_alive.on_beats[0])
 
 
-# ---------------------------------------------------------------- handle_record: failures raise
-
-
-def test_a_failing_inference_raises_instead_of_returning_an_outcome(
-    aws, make_cfg, roi_masks_small, db, new_job, clip_path, patch_everywhere
+def test_the_keep_alive_touches_the_claimed_job(
+    aws, db, make_cfg, roi_masks_small, new_job, clip_path, patch_everywhere
 ):
+    job_id, key = new_job()
+    upload_clip(aws, key, clip_path)
+    verify(db, job_id)
+    touched = []
+    real_touch = billing.touch
+
+    def spy(db, job_id, attempt):
+        touched.append((job_id, attempt))
+        return real_touch(db, job_id, attempt)
+
+    patch_everywhere("touch", spy, "neurolens.billing", "neurolens.worker")
+    real_predict = inference.predict
+
+    def slow_predict(*a, **kw):
+        import time
+
+        time.sleep(0.3)
+        return real_predict(*a, **kw)
+
+    patch_everywhere("predict", slow_predict, *MODULES)
+
+    def keep_alive(on_beat):
+        return worker.ClaimKeepAlive(on_beat, 0.05, 60)
+
+    assert (
+        run_job(aws, db, job_id, clip_path, make_cfg, roi_masks_small, keep_alive) is Outcome.DONE
+    )
+    assert touched, "no beat touched the job"
+    assert set(touched) == {(job_id, 1)}
+
+
+# ---------------------------------------------------------------- stages
+
+
+def test_stages_are_recorded_in_order(aws, db, pg, make_cfg, roi_masks_small, new_job, clip_path):
+    job_id, key = new_job()
+    upload_clip(aws, key, clip_path)
+    verify(db, job_id)
+    assert run_job(aws, db, job_id, clip_path, make_cfg, roi_masks_small) is Outcome.DONE
+
+    job = pg.job(job_id)
+    assert [stage["stage"] for stage in job["stages"]] == STAGES
+    times = [stage["at"] for stage in job["stages"]]
+    assert times == sorted(times)
+
+
+def test_each_pipeline_step_runs_under_its_own_stage(
+    aws, db, make_cfg, roi_masks_small, new_job, clip_path, patch_everywhere
+):
+    job_id, key = new_job()
+    upload_clip(aws, key, clip_path)
+    verify(db, job_id)
+    seen = {}
+
+    real_build, real_predict = inference.build_events, inference.predict
+    from neurolens import response
+
+    real_extract = response.extract_response
+
+    def build(path, *a, **kw):
+        seen["build_events"] = source_arc(db, job_id)
+        return real_build(path, *a, **kw)
+
+    def predict(events, duration, *a, **kw):
+        seen.setdefault("predict", []).append(source_arc(db, job_id))
+        return real_predict(events, duration, *a, **kw)
+
+    def extract(*a, **kw):
+        seen["extract"] = source_arc(db, job_id)
+        return real_extract(*a, **kw)
+
+    patch_everywhere("build_events", build, *MODULES)
+    patch_everywhere("predict", predict, *MODULES)
+    patch_everywhere("extract_response", extract, "neurolens.response", "neurolens.worker")
+
+    outcome = run_job(aws, db, job_id, clip_path, make_cfg, roi_masks_small)
+    assert outcome is Outcome.DONE
+    assert seen["build_events"] == ("processing", "transcribing")
+    assert seen["predict"] == [
+        ("processing", "inference_full"),
+        ("processing", "inference_noaudio"),
+    ]
+    assert seen["extract"] == ("processing", "extracting_roi")
+
+
+def test_duplicate_is_charged_once_and_leaves_the_other_result(
+    aws, db, pg, make_cfg, roi_masks_small, new_job, clip_path, patch_everywhere
+):
+    """Another worker publishes first (its settlement never ran): this worker's put_result loses
+    the conditional write, and its settle_success makes sure the finished job is charged once."""
+    job_id, key = new_job()
+    upload_clip(aws, key, clip_path)
+    verify(db, job_id)
+    theirs = {"job_id": job_id, "marker": "the other worker"}
+    real_predict = inference.predict
+
+    def predict(events, duration, *a, **kw):
+        if not storage.result_exists(aws.s3, aws.bucket, job_id):
+            assert storage.put_result(aws.s3, aws.bucket, job_id, theirs) is True
+        return real_predict(events, duration, *a, **kw)
+
+    patch_everywhere("predict", predict, *MODULES)
+    assert run_job(aws, db, job_id, clip_path, make_cfg, roi_masks_small) is Outcome.DUPLICATE
+    body = aws.s3.get_object(Bucket=aws.bucket, Key=f"results/{job_id}.json")["Body"]
+    assert json.loads(body.read()) == theirs
+    job = pg.job(job_id)
+    assert job["status"] == "done" and job["captured_cents"] == 90
+    assert pg.kinds().count("capture") == 1
+    assert pg.balance() == (410, 0)
+
+
+# ---------------------------------------------------------------- failures and lost claims
+
+
+def test_a_pipeline_failure_returns_failed_with_a_short_error(
+    aws, db, pg, make_cfg, roi_masks_small, new_job, clip_path, patch_everywhere
+):
+    """The container refunds at once, deletes the files and answers FAILED (spec §4c). The
+    user-facing error is the first line, never a traceback and never over 200 characters."""
+    job_id, key = new_job()
+    upload_clip(aws, key, clip_path)
+    verify(db, job_id)
+    huge = "line one of a long error\n" + "x" * 5000
+
     def boom(*a, **kw):
-        raise RuntimeError("GPU exploded")
+        raise RuntimeError(huge)
 
     patch_everywhere("predict", boom, *MODULES)
-    cfg = make_cfg()
-    job_id, key = new_job()
-    upload_clip(aws, key, clip_path)
-    with pytest.raises(RuntimeError, match="GPU exploded"):
-        handle_record(
-            aws.bucket,
-            key,
-            s3=aws.s3,
-            db=db,
-            cfg=cfg,
-            roi_masks=roi_masks_small,
-            heartbeat=no_heartbeat,
-        )
-    assert object_exists(aws, key)  # a failure is not a rejection: nothing is deleted
+    assert run_job(aws, db, job_id, clip_path, make_cfg, roi_masks_small) is Outcome.FAILED
 
-
-def test_a_missing_object_is_refunded_not_an_error(aws, make_cfg, roi_masks_small, db, new_job, pg):
-    """Spec 1 and 6a: an object that no longer exists is not an error. M3a §5 step 5: the job
-    is refunded (`upload_missing`) and REJECTED (M2b's GONE is removed)."""
-    job_id, key = new_job()
-    outcome = handle_record(
-        aws.bucket,
-        key,
-        s3=aws.s3,
-        db=db,
-        cfg=make_cfg(),
-        roi_masks=roi_masks_small,
-        heartbeat=no_heartbeat,
-    )
-    assert outcome is Outcome.REJECTED
-    assert pg.job(job_id)["error_code"] == "upload_missing"
-
-
-# ---------------------------------------------------------------- process_message
-
-
-@pytest.fixture
-def fake_handle_record(monkeypatch):
-    """Replace handle_record with a scripted one. The signature is the spec's, keyword-only
-    (M2b §1a adds `heartbeat`, M3a §5 adds `db`)."""
-    seen = []
-
-    def install(script):
-        def fake(bucket, key, *, s3, db, cfg, roi_masks, heartbeat):
-            seen.append((bucket, key, s3, db, cfg, roi_masks))
-            result = script[key]
-            if isinstance(result, Exception):
-                raise result
-            return result
-
-        monkeypatch.setattr(worker, "handle_record", fake)
-        return seen
-
-    return install
-
-
-def test_zero_record_message_is_deleted_without_calling_handle_record(
-    aws, make_cfg, roi_masks_small, queue_message, remaining, fake_handle_record
-):
-    seen = fake_handle_record({})
-    body = json.dumps({"Service": "Amazon S3", "Event": "s3:TestEvent", "Bucket": aws.bucket})
-    message = queue_message(body)
-    process_message(
-        message,
-        s3=aws.s3,
-        sqs=aws.sqs,
-        db=NO_DB,
-        cfg=make_cfg(),
-        roi_masks=roi_masks_small,
-        shutdown=worker.ShutdownSignal(),
-        max_receives=MAX_RECEIVES,
-    )
-    assert seen == []
-    assert remaining() == []
-
-
-def test_message_with_only_non_upload_keys_is_deleted(
-    aws, make_cfg, roi_masks_small, queue_message, remaining, fake_handle_record
-):
-    seen = fake_handle_record({})
-    message = queue_message(s3_event((aws.bucket, "results/x.json"), (aws.bucket, "status/y")))
-    process_message(
-        message,
-        s3=aws.s3,
-        sqs=aws.sqs,
-        db=NO_DB,
-        cfg=make_cfg(),
-        roi_masks=roi_masks_small,
-        shutdown=worker.ShutdownSignal(),
-        max_receives=MAX_RECEIVES,
-    )
-    assert seen == []
-    assert remaining() == []
-
-
-def test_every_record_is_handled_and_message_deleted(
-    aws, make_cfg, roi_masks_small, queue_message, remaining, fake_handle_record
-):
-    k1, k2, k3 = (f"uploads/test-user/{n}.mp4" for n in ("a", "b", "c"))
-    seen = fake_handle_record({k1: Outcome.DONE, k2: Outcome.REJECTED, k3: Outcome.DONE})
-    cfg = make_cfg()
-    body = s3_event(
-        (aws.bucket, k1), (aws.bucket, k2), (aws.bucket, "results/z.json"), (aws.bucket, k3)
-    )
-    process_message(
-        queue_message(body),
-        s3=aws.s3,
-        sqs=aws.sqs,
-        db=NO_DB,
-        cfg=cfg,
-        roi_masks=roi_masks_small,
-        shutdown=worker.ShutdownSignal(),
-        max_receives=MAX_RECEIVES,
-    )
-    assert [(b, k) for b, k, *_ in seen] == [(aws.bucket, k1), (aws.bucket, k2), (aws.bucket, k3)]
-    for _, _, s3, got_db, got_cfg, masks in seen:
-        assert s3 is aws.s3 and got_db is NO_DB and got_cfg is cfg and masks is roi_masks_small
-    assert remaining() == []
-
-
-@pytest.mark.parametrize("raising_position", [0, 1, 2])
-def test_message_is_left_when_any_record_raises(
-    aws, make_cfg, roi_masks_small, queue_message, remaining, fake_handle_record, raising_position
-):
-    keys = [f"uploads/test-user/{n}.mp4" for n in ("a", "b", "c")]
-    script = {k: Outcome.DONE for k in keys}
-    script[keys[raising_position]] = RuntimeError("boom")
-    fake_handle_record(script)
-    body = s3_event(*[(aws.bucket, k) for k in keys])
-    # process_message logs the traceback; it does not let the exception escape
-    process_message(
-        queue_message(body),
-        s3=aws.s3,
-        sqs=aws.sqs,
-        db=NO_DB,
-        cfg=make_cfg(),
-        roi_masks=roi_masks_small,
-        shutdown=worker.ShutdownSignal(),
-        max_receives=MAX_RECEIVES,
-    )
-    assert len(remaining()) == 1
-
-
-def test_raising_record_is_logged_with_traceback(
-    aws, make_cfg, roi_masks_small, queue_message, fake_handle_record, caplog
-):
-    key = "uploads/test-user/a.mp4"
-    fake_handle_record({key: RuntimeError("distinctive failure text")})
-    with caplog.at_level("DEBUG"):
-        process_message(
-            queue_message(s3_event((aws.bucket, key))),
-            s3=aws.s3,
-            sqs=aws.sqs,
-            db=NO_DB,
-            cfg=make_cfg(),
-            roi_masks=roi_masks_small,
-            shutdown=worker.ShutdownSignal(),
-            max_receives=MAX_RECEIVES,
-        )
-    errors = [r for r in caplog.records if r.exc_info]
-    assert errors, "the traceback was not logged"
-    assert any("distinctive failure text" in str(r.exc_info[1]) for r in errors)
-
-
-# ---------------------------------------------------------------- process_message end to end
-
-
-def test_valid_upload_end_to_end_deletes_message_and_writes_result(
-    aws, make_cfg, roi_masks_small, db, new_job, clip_path, queue_message, remaining
-):
-    cfg = make_cfg()
-    job_id, key = new_job()
-    upload_clip(aws, key, clip_path)
-    process_message(
-        queue_message(s3_event((aws.bucket, key))),
-        s3=aws.s3,
-        sqs=aws.sqs,
-        db=db,
-        cfg=cfg,
-        roi_masks=roi_masks_small,
-        shutdown=worker.ShutdownSignal(),
-        max_receives=MAX_RECEIVES,
-    )
-    assert remaining() == []
-    assert read_result(aws, job_id)["job_id"] == job_id
-
-
-def test_oversize_upload_end_to_end_deletes_object_and_message(
-    aws, make_cfg, roi_masks_small, db, new_job, queue_message, remaining, spy_s3, patch_everywhere
-):
-    cfg = make_cfg(max_upload_bytes=1000)
-    _, key = new_job()
-    upload(aws, key, b"y" * 4000)
-    never_inference(patch_everywhere)
-    s3 = spy_s3(forbid=("download_file", "download_fileobj"), forbid_on_uploads=("get_object",))
-    process_message(
-        queue_message(s3_event((aws.bucket, key))),
-        s3=s3,
-        sqs=aws.sqs,
-        db=db,
-        cfg=cfg,
-        roi_masks=roi_masks_small,
-        shutdown=worker.ShutdownSignal(),
-        max_receives=MAX_RECEIVES,
-    )
+    job = pg.job(job_id)
+    assert job["status"] == "failed" and job["error_code"] == "processing_failed"
+    message = job["error_message"]
+    assert isinstance(message, str) and message
+    assert len(message) <= 200
+    assert "Traceback" not in message
+    assert pg.balance() == (STARTER_CENTS, 0)
     assert not object_exists(aws, key)
-    assert remaining() == []
-    assert "download_file" not in s3.names()
+    assert not object_exists(aws, f"results/{job_id}.json")
 
 
-def test_failing_upload_end_to_end_leaves_the_message(
-    aws,
-    make_cfg,
-    roi_masks_small,
-    db,
-    new_job,
-    clip_path,
-    queue_message,
-    remaining,
-    patch_everywhere,
+def test_a_claim_lost_mid_pipeline_stops_with_lost_claim_and_moves_no_money(
+    aws, db, pg, make_cfg, roi_masks_small, new_job, clip_path, patch_everywhere
 ):
-    def boom(*a, **kw):
-        raise RuntimeError("model crashed")
-
-    patch_everywhere("predict", boom, *MODULES)
-    _, key = new_job()
+    job_id, key = new_job()
     upload_clip(aws, key, clip_path)
-    process_message(
-        queue_message(s3_event((aws.bucket, key))),
-        s3=aws.s3,
-        sqs=aws.sqs,
-        db=db,
-        cfg=make_cfg(),
-        roi_masks=roi_masks_small,
-        shutdown=worker.ShutdownSignal(),
-        max_receives=MAX_RECEIVES,
+    verify(db, job_id)
+    from neurolens import response
+
+    real_extract = response.extract_response
+
+    def extract_then_lose(*args, **kwargs):
+        result = real_extract(*args, **kwargs)
+        pg.age(job_id, updated_s=120)  # this worker looked dead ...
+        assert billing.claim(db, job_id) == 2  # ... and another took the job over
+        return result
+
+    patch_everywhere(
+        "extract_response", extract_then_lose, "neurolens.response", "neurolens.worker"
     )
-    assert len(remaining()) == 1
-    assert object_exists(aws, key)
+    assert run_job(aws, db, job_id, clip_path, make_cfg, roi_masks_small) is Outcome.LOST_CLAIM
+    job = pg.job(job_id)
+    assert job["status"] == "processing" and job["attempt"] == 2
+    assert pg.balance() == (410, 90)
+    assert not object_exists(aws, f"results/{job_id}.json")
+
+
+def test_a_job_refunded_mid_pipeline_is_a_lost_claim(
+    aws, db, pg, make_cfg, roi_masks_small, new_job, clip_path, patch_everywhere
+):
+    job_id, key = new_job()
+    upload_clip(aws, key, clip_path)
+    verify(db, job_id)
+    real_probe = probe_duration
+
+    def probe_while_the_reaper_refunds(path, *a, **kw):
+        pg.age(job_id, updated_s=700)
+        assert billing.issue_refund(db, job_id, "stalled", processing_stale_s=600) is True
+        return real_probe(path, *a, **kw)
+
+    patch_everywhere("probe_duration", probe_while_the_reaper_refunds, *PROBE_MODULES)
+    never_inference(patch_everywhere)  # but probe already ran: keep its real call above
+    assert run_job(aws, db, job_id, clip_path, make_cfg, roi_masks_small) is Outcome.LOST_CLAIM
+    job = pg.job(job_id)
+    assert job["status"] == "failed" and job["error_code"] == "stalled"
+    assert pg.refund_reason(job_id) == "stalled"  # refunded once, by the reaper alone
+
+
+# ---------------------------------------------------------------- config
+
+
+MISSING_KEYS = [
+    ("aws", "region"),
+    ("aws", "s3_bucket"),
+    (None, "max_upload_bytes"),
+    ("worker", "heartbeat_seconds"),
+    ("worker", "max_job_minutes"),
+]
+
+
+@pytest.mark.parametrize("section, leaf", MISSING_KEYS, ids=[k[1] for k in MISSING_KEYS])
+def test_validate_config_names_each_missing_key(make_cfg, section, leaf):
+    cfg = make_cfg()
+    if section is None:
+        del cfg[leaf]
+    else:
+        del cfg[section][leaf]
+    with pytest.raises(ValueError, match=leaf):
+        worker.validate_config(cfg)
+
+
+def test_validate_config_accepts_a_complete_config(make_cfg):
+    worker.validate_config(make_cfg())
+
+
+def test_validate_config_refuses_a_heartbeat_over_50_seconds(make_cfg):
+    cfg = make_cfg(worker={"heartbeat_seconds": 75, "max_job_minutes": 55})
+    with pytest.raises(ValueError, match="heartbeat_seconds"):
+        worker.validate_config(cfg)

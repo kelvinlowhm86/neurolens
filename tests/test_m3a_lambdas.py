@@ -15,11 +15,9 @@ from botocore.exceptions import ClientError
 from conftest import STARTER_CENTS, USER_ID
 from neurolens import billing, storage
 
-LAMBDA_MODULES = ("neurolens.lambdas.dlq_handler", "neurolens.lambdas.reaper")
-
 
 @pytest.fixture
-def lambda_env(aws, db, monkeypatch, patch_everywhere):
+def lambda_env(aws, db, monkeypatch):
     monkeypatch.setenv(
         "NEUROLENS_DB_CLUSTER_ARN", "arn:aws:rds:us-east-1:000000000000:cluster:neurolens-db"
     )
@@ -30,14 +28,10 @@ def lambda_env(aws, db, monkeypatch, patch_everywhere):
     monkeypatch.setenv("NEUROLENS_DB_NAME", "neurolens")
     monkeypatch.setenv("NEUROLENS_S3_BUCKET", aws.bucket)
     monkeypatch.setenv("AWS_REGION", "us-east-1")
-    built = []
+    from neurolens import lambdas
 
-    def data_api_database(*args, **kwargs):
-        built.append((args, kwargs))
-        return db
-
-    patch_everywhere("DataApiDatabase", data_api_database, "neurolens.db", *LAMBDA_MODULES)
-    return built
+    monkeypatch.setattr(lambdas, "database", lambda: db)
+    monkeypatch.setattr(lambdas, "s3_client", lambda: aws.s3)
 
 
 def dlq_handler():
@@ -83,11 +77,12 @@ def upload(aws, key):
     aws.s3.put_object(Bucket=aws.bucket, Key=key, Body=b"an uploaded video")
 
 
-def failed_twice(db, pg, job_id):
-    """A job whose two attempts both failed and were released (status queued, last error)."""
-    for attempt in (1, 2):
-        assert billing.claim(db, job_id) == attempt
-        assert billing.release_for_retry(db, job_id, attempt, f"RuntimeError: crash {attempt}")
+def queued_with_last_error(pg, job_id):
+    """A queued job whose last GPU attempt left an error (what the dead-letter queue still sees)."""
+    pg.conn.execute(
+        "UPDATE jobs SET error_message = %s WHERE job_id = %s::uuid",
+        ("RuntimeError: crash 2", job_id),
+    )
 
 
 def consented_job(db, new_key, *, ext=".mp4", user_id=USER_ID):
@@ -131,7 +126,7 @@ def test_dead_lettered_job_without_a_result_is_refunded_with_its_last_error(
     aws, db, pg, lambda_env, new_job
 ):
     job_id, key = new_job()
-    failed_twice(db, pg, job_id)
+    queued_with_last_error(pg, job_id)
     dlq_handler()(sqs_event(key, bucket=aws.bucket), None)
     job = pg.job(job_id)
     assert job["status"] == "failed"
@@ -167,7 +162,7 @@ def test_running_the_dead_letter_handler_twice_changes_nothing_more(
     aws, db, pg, lambda_env, new_job
 ):
     refunded, refunded_key = new_job()
-    failed_twice(db, pg, refunded)
+    queued_with_last_error(pg, refunded)
     settled, settled_key = new_job()
     put_result(aws, settled)
     for key in (refunded_key, settled_key):
@@ -203,7 +198,7 @@ def test_dead_letter_handler_settles_every_job_in_a_multi_record_message(
 
 def test_a_dead_letter_refund_deletes_the_jobs_upload(aws, db, pg, lambda_env, new_job):
     job_id, key = new_job()
-    failed_twice(db, pg, job_id)
+    queued_with_last_error(pg, job_id)
     upload(aws, key)
     dlq_handler()(sqs_event(key, bucket=aws.bucket), None)
     assert pg.job(job_id)["status"] == "failed"
@@ -217,7 +212,7 @@ def test_a_dead_letter_refund_of_a_consented_job_deletes_its_research_copy(
     """A crash after the worker wrote the dataset copy but before the result (M3a §7b)."""
     job_id, key = consented_job(db, new_key)
     write_research_copy(aws, job_id, key)
-    failed_twice(db, pg, job_id)
+    queued_with_last_error(pg, job_id)
     assert not storage.result_exists(aws.s3, aws.bucket, job_id)
 
     dlq_handler()(sqs_event(key, bucket=aws.bucket), None)
@@ -231,7 +226,7 @@ def test_a_dead_letter_refund_of_a_consented_job_deletes_its_research_copy(
 
 # ---------------------------------------------------------------- reaper
 
-DEADLINE_S = 24 * 60 * 60
+DEADLINE_S = 4 * 60 * 60
 HEARTBEAT_STALE_S = 10 * 60
 
 
@@ -286,20 +281,6 @@ class DeleteReportsErrors:
         return getattr(self._inner, name)
 
 
-def test_reaper_refunds_a_queued_job_past_the_24_hour_deadline_and_deletes_its_upload(
-    aws, db, pg, lambda_env, new_job
-):
-    job_id, key = new_job()
-    upload(aws, key)
-    pg.age(job_id, updated_s=DEADLINE_S + 3600, created_s=DEADLINE_S + 3600)
-    run_reaper()
-    job = pg.job(job_id)
-    assert job["status"] == "failed" and job["error_code"] == "deadline_passed"
-    assert pg.refund_reason(job_id) == "deadline_passed"
-    assert pg.balance() == (500, 0)
-    assert not storage.object_exists(aws.s3, aws.bucket, key)
-
-
 def test_reaper_refunds_a_queued_job_past_the_deadline_even_without_an_upload(
     aws, db, pg, lambda_env, new_job
 ):
@@ -312,7 +293,7 @@ def test_reaper_refunds_a_queued_job_past_the_deadline_even_without_an_upload(
     assert pg.balance() == (500, 0)
 
 
-def test_reaper_leaves_a_queued_job_younger_than_24_hours_even_without_an_upload(
+def test_reaper_leaves_a_queued_job_younger_than_four_hours_even_without_an_upload(
     aws, db, pg, lambda_env, new_job
 ):
     job_id, _ = new_job()
@@ -397,10 +378,10 @@ def test_reaper_refunds_a_processing_job_past_the_deadline_with_no_heartbeat_for
     assert not storage.object_exists(aws.s3, aws.bucket, key)
 
 
-def test_reaper_leaves_a_processing_job_under_24_hours_old_although_its_heartbeat_stopped(
+def test_reaper_leaves_a_processing_job_under_four_hours_old_although_its_heartbeat_stopped(
     aws, db, pg, lambda_env, new_job
 ):
-    """The retry path owns a recent crash; the reaper is only the backstop."""
+    """A recent crash is the error handler's business; the reaper is only the backstop."""
     job_id, key = new_job()
     upload(aws, key)
     assert billing.claim(db, job_id) == 1

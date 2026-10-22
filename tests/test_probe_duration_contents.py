@@ -14,7 +14,13 @@ import struct
 import subprocess
 
 import pytest
-from neurolens import inference
+
+
+def media_module():
+    from neurolens import media
+
+    return media
+
 
 SECONDS = 4.0
 TOLERANCE = 0.15  # AAC priming and frame granularity, not product meaning
@@ -104,20 +110,20 @@ def test_a_clip_whose_header_understates_its_length_is_measured_by_its_contents(
     # Precondition: the header really lies, so this test cannot pass vacuously.
     declared = header_duration(understated_clip)
     assert declared <= SECONDS / 2, f"the patched header still declares {declared} s"
-    assert inference.probe_duration(understated_clip) == pytest.approx(SECONDS, abs=TOLERANCE)
+    assert media_module().probe_duration(understated_clip) == pytest.approx(SECONDS, abs=TOLERANCE)
 
 
 def test_a_clip_with_a_longer_audio_track_measures_to_the_later_end(tmp_path):
     """Streams of slightly different lengths: the result is the end of the longer one."""
     clip = tmp_path / "longer_audio.mp4"
     make_clip(clip, video_s=3.0, audio_s=3.5)
-    assert inference.probe_duration(clip) == pytest.approx(3.5, abs=TOLERANCE)
+    assert media_module().probe_duration(clip) == pytest.approx(3.5, abs=TOLERANCE)
 
 
 def test_a_clip_with_a_longer_video_track_measures_to_the_later_end(tmp_path):
     clip = tmp_path / "longer_video.mp4"
     make_clip(clip, video_s=3.5, audio_s=3.0)
-    assert inference.probe_duration(clip) == pytest.approx(3.5, abs=TOLERANCE)
+    assert media_module().probe_duration(clip) == pytest.approx(3.5, abs=TOLERANCE)
 
 
 def test_a_video_whose_packets_have_no_timestamps_is_unreadable(tmp_path):
@@ -138,5 +144,5 @@ def test_a_video_whose_packets_have_no_timestamps_is_unreadable(tmp_path):
     assert [s["codec_type"] for s in info["streams"]] == ["video"]
     assert info["packets"], "the raw stream should still have packets"
     assert all("pts_time" not in p for p in info["packets"])
-    with pytest.raises(inference.UnreadableVideo):
-        inference.probe_duration(raw)
+    with pytest.raises(media_module().UnreadableVideo):
+        media_module().probe_duration(raw)

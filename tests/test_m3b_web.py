@@ -2,7 +2,7 @@
 docs/M3b_spec.md §2c, §4a, §8 and §11: /api/me, job history with its `limit` rule and 30-day
 `result_available`, the CSV export and `neurolens.results.to_csv`, the result routes' exact
 not-available errors (ownership checked before any S3 call), the crash window, presign refused
-while GPU work is paused (reading the worker group, failing closed, reserving nothing), 503
+while GPU work is paused (reading the SageMaker scalable target, failing closed), 503
 `database_waking` within the web app's 45 s budget, and /api/samples gone.
 
 History, CSV and result tests run in dev mode, which is always signed in (§2b).
@@ -14,7 +14,8 @@ import json
 import uuid
 
 import pytest
-from conftest import STARTER_CENTS, WEB_USER_EMAIL, WEB_USER_ID, WORKER_GROUP, sign_in
+import boto3
+from conftest import GPU_ENDPOINT, STARTER_CENTS, WEB_USER_EMAIL, WEB_USER_ID, sign_in
 from neurolens import billing, storage
 from neurolens.web.app import create_app
 
@@ -391,6 +392,7 @@ def test_a_bad_job_id_is_400(client, route):
 
 # ---------------------------------------------------------------- presign while GPU work is paused
 
+
 PRESIGN = {
     "filename": "ad.mp4",
     "content_type": "video/mp4",
@@ -399,25 +401,16 @@ PRESIGN = {
 }
 
 
-def worker_group(max_size):
-    """The worker group in moto (M2b's shape), with the given maximum."""
-    import boto3
+class FakeAppScaling:
+    """The Application Auto Scaling API the pause check reads (M3e §8)."""
 
-    ec2 = boto3.client("ec2", region_name="us-east-1")
-    ec2.create_launch_template(
-        LaunchTemplateName="neurolens-worker-test",
-        LaunchTemplateData={"ImageId": "ami-12c6146b", "InstanceType": "t3.micro"},
-    )
-    autoscaling = boto3.client("autoscaling", region_name="us-east-1")
-    autoscaling.create_auto_scaling_group(
-        AutoScalingGroupName=WORKER_GROUP,
-        LaunchTemplate={"LaunchTemplateName": "neurolens-worker-test", "Version": "$Latest"},
-        MinSize=0,
-        MaxSize=max_size,
-        DesiredCapacity=0,
-        AvailabilityZones=["us-east-1a"],
-    )
-    return autoscaling
+    def __init__(self, max_capacity=1):
+        self.max_capacity = max_capacity
+        self.calls = []
+
+    def describe_scalable_targets(self, **kwargs):
+        self.calls.append(kwargs)
+        return {"ScalableTargets": [{"MinCapacity": 0, "MaxCapacity": self.max_capacity}]}
 
 
 @pytest.fixture
@@ -442,54 +435,40 @@ def aws_calls(monkeypatch):
 
 
 @pytest.fixture
-def signed_in(cognito_client, idp):
-    sign_in(cognito_client, idp, email="ann@example.com")
-    return cognito_client
+def signed_in_with(aws, db, cognito_cfg, cognito_app, idp, monkeypatch):
+    """A signed-in Cognito client whose Application Auto Scaling calls go to `appscaling`."""
+
+    def make(appscaling):
+        cfg = cognito_cfg()
+        cfg["aws"]["gpu_endpoint"] = GPU_ENDPOINT
+        real_client = boto3.client
+
+        def client(service_name, *args, **kwargs):
+            if service_name == "application-autoscaling":
+                return appscaling
+            return real_client(service_name, *args, **kwargs)
+
+        monkeypatch.setattr(boto3, "client", client)
+        test_client = cognito_app(cfg=cfg).test_client()
+        sign_in(test_client, idp, email="ann@example.com")
+        return test_client
+
+    return make
 
 
-def test_presign_with_the_worker_group_at_max_0_is_503_and_reserves_nothing(signed_in, pg):
-    worker_group(max_size=0)
-    before = pg.snapshot()
-    resp = signed_in.post("/api/uploads/presign", json=PRESIGN)
-    assert resp.status_code == 503
-    assert resp.get_json()["error"] == "processing_paused"
-    assert "fields" not in resp.get_json()
-    assert pg.snapshot() == before
+def test_presign_after_the_endpoint_is_restarted_proceeds(signed_in_with):
+    appscaling = FakeAppScaling(max_capacity=0)
+    client = signed_in_with(appscaling)
+    assert client.post("/api/uploads/presign", json=PRESIGN).status_code == 503
+    appscaling.max_capacity = 1
+    assert client.post("/api/uploads/presign", json=PRESIGN).status_code == 200
 
 
-def test_presign_with_the_worker_group_at_max_1_proceeds(signed_in, pg):
-    worker_group(max_size=1)
-    resp = signed_in.post("/api/uploads/presign", json=PRESIGN)
-    assert resp.status_code == 200
-    data = resp.get_json()
-    assert data["reserved_cents"] == 90
-    assert pg.job(data["job_id"])["status"] == "queued"
-
-
-def test_presign_after_the_group_is_restarted_proceeds(signed_in):
-    autoscaling = worker_group(max_size=0)
-    assert signed_in.post("/api/uploads/presign", json=PRESIGN).status_code == 503
-    autoscaling.update_auto_scaling_group(AutoScalingGroupName=WORKER_GROUP, MaxSize=1)
-    assert signed_in.post("/api/uploads/presign", json=PRESIGN).status_code == 200
-
-
-def test_presign_fails_closed_when_the_group_cannot_be_read(signed_in, pg, aws_calls):
-    worker_group(max_size=1)
-    aws_calls["fail"].add("DescribeAutoScalingGroups")
-    before = pg.snapshot()
-    resp = signed_in.post("/api/uploads/presign", json=PRESIGN)
-    assert resp.status_code >= 500
-    assert resp.get_json()["error"] == "presign_failed"
-    assert "fields" not in resp.get_json()
-    assert pg.snapshot() == before
-    assert "DescribeAutoScalingGroups" in aws_calls["names"]
-
-
-def test_presign_in_dev_mode_never_reads_a_worker_group(client, pg, aws_calls):
-    aws_calls["fail"].add("DescribeAutoScalingGroups")
+def test_presign_in_dev_mode_never_reads_a_scalable_target(client, pg, aws_calls):
+    aws_calls["fail"].add("DescribeScalableTargets")
     resp = client.post("/api/uploads/presign", json=PRESIGN)
     assert resp.status_code == 200
-    assert "DescribeAutoScalingGroups" not in aws_calls["names"]
+    assert "DescribeScalableTargets" not in aws_calls["names"]
 
 
 # ---------------------------------------------------------------- database waking

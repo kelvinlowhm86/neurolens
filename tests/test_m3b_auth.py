@@ -462,7 +462,7 @@ def test_cognito_mode_starts_with_every_setting_and_parameter(cognito_app):
         ("auth", "cognito_client_id"),
         ("auth", "cognito_domain"),
         ("public_base_url",),
-        ("aws", "worker_group"),
+        ("aws", "gpu_endpoint"),
     ],
     ids=lambda p: ".".join(p),
 )
@@ -518,7 +518,7 @@ def test_get_parameter_for_a_missing_name_raises(ssm):
         ("NEUROLENS_COGNITO_CLIENT_ID", ("auth", "cognito_client_id")),
         ("NEUROLENS_COGNITO_DOMAIN", ("auth", "cognito_domain")),
         ("NEUROLENS_PUBLIC_BASE_URL", ("public_base_url",)),
-        ("NEUROLENS_WORKER_GROUP", ("aws", "worker_group")),
+        ("NEUROLENS_GPU_ENDPOINT", ("aws", "gpu_endpoint")),
     ],
     ids=lambda x: x if isinstance(x, str) else ".".join(x),
 )

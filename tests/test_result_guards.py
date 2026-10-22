@@ -8,7 +8,7 @@ import subprocess
 
 import numpy as np
 import pytest
-from neurolens import inference, storage
+from neurolens import storage
 
 
 def masks(**sizes):
@@ -54,19 +54,23 @@ def test_put_result_refuses_infinity(aws):
 
 
 def fake_ffprobe(monkeypatch, stdout):
+    from neurolens import media
+
     def run(*args, **kwargs):
         return subprocess.CompletedProcess(args, 0, stdout=stdout, stderr="")
 
-    monkeypatch.setattr(inference.subprocess, "run", run)
+    monkeypatch.setattr(media.subprocess, "run", run)
 
 
 def test_probe_duration_timeout_is_an_unreadable_video(monkeypatch):
+    from neurolens import media
+
     def run(*args, **kwargs):
         raise subprocess.TimeoutExpired("ffprobe", 30)
 
-    monkeypatch.setattr(inference.subprocess, "run", run)
-    with pytest.raises(inference.UnreadableVideo):
-        inference.probe_duration("clip.mp4")
+    monkeypatch.setattr(media.subprocess, "run", run)
+    with pytest.raises(media.UnreadableVideo):
+        media.probe_duration("clip.mp4")
 
 
 def test_probe_duration_counts_a_negative_start_as_zero(monkeypatch):
@@ -79,7 +83,9 @@ def test_probe_duration_counts_a_negative_start_as_zero(monkeypatch):
     }
     fake_ffprobe(monkeypatch, json.dumps(info))
     # earliest start -0.5 counts as 0; latest end is 4.0
-    assert inference.probe_duration("clip.mp4") == pytest.approx(4.0)
+    from neurolens import media
+
+    assert media.probe_duration("clip.mp4") == pytest.approx(4.0)
 
 
 def test_probe_duration_ignores_packets_without_a_timestamp(monkeypatch):
@@ -88,10 +94,14 @@ def test_probe_duration_ignores_packets_without_a_timestamp(monkeypatch):
         "packets": [{"duration_time": "9"}, {"pts_time": "1.0", "duration_time": "2.0"}],
     }
     fake_ffprobe(monkeypatch, json.dumps(info))
-    assert inference.probe_duration("clip.mp4") == pytest.approx(2.0)
+    from neurolens import media
+
+    assert media.probe_duration("clip.mp4") == pytest.approx(2.0)
 
 
 def test_probe_duration_with_no_output_is_an_unreadable_video(monkeypatch):
+    from neurolens import media
+
     fake_ffprobe(monkeypatch, "")
-    with pytest.raises(inference.UnreadableVideo):
-        inference.probe_duration("clip.mp4")
+    with pytest.raises(media.UnreadableVideo):
+        media.probe_duration("clip.mp4")

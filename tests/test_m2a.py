@@ -13,16 +13,31 @@ from pathlib import Path
 
 import pytest
 from botocore.exceptions import ClientError
-from neurolens import settings, storage, worker
-from neurolens.worker import Outcome, handle_record, process_message
+from neurolens import billing, settings, storage, worker
+from neurolens.worker import Outcome
 
 MODULES = ("neurolens.inference", "neurolens.worker")
 MAX_RECEIVES = 2  # the job queue's maxReceiveCount (M2a §4h); every message here is receive 1
 
 
-def no_heartbeat(on_beat=None):
-    """handle_record's heartbeat factory (M3a §5: heartbeat(on_beat)). Not exercised here."""
+def no_keep_alive(on_beat):
     return contextlib.nullcontext()
+
+
+def verify(db, job_id):
+    assert billing.verify_queued(db, job_id, 3000, settings.max_duration(None)) == "ok"
+
+
+def run_job(aws, db, job_id, clip_path, cfg, masks):
+    return worker.handle_job(
+        job_id,
+        str(clip_path),
+        s3=aws.s3,
+        db=db,
+        cfg=cfg,
+        roi_masks=masks,
+        keep_alive=no_keep_alive,
+    )
 
 
 @pytest.fixture(autouse=True)
@@ -136,16 +151,9 @@ def test_worker_result_lands_in_s3(aws, make_cfg, roi_masks_small, db, new_job, 
     cfg = make_cfg()
     job_id, key = new_job()
     aws.s3.upload_file(str(clip_path), aws.bucket, key)
+    verify(db, job_id)
 
-    outcome = handle_record(
-        aws.bucket,
-        key,
-        s3=aws.s3,
-        db=db,
-        cfg=cfg,
-        roi_masks=roi_masks_small,
-        heartbeat=no_heartbeat,
-    )
+    outcome = run_job(aws, db, job_id, clip_path, cfg, roi_masks_small)
 
     assert outcome is Outcome.DONE
     assert stored(aws, job_id)["job_id"] == job_id
@@ -164,15 +172,8 @@ def test_worker_publishes_through_put_result(
     monkeypatch.setattr(storage, "put_result", spy)
     job_id, key = new_job()
     aws.s3.upload_file(str(clip_path), aws.bucket, key)
-    handle_record(
-        aws.bucket,
-        key,
-        s3=aws.s3,
-        db=db,
-        cfg=make_cfg(),
-        roi_masks=roi_masks_small,
-        heartbeat=no_heartbeat,
-    )
+    verify(db, job_id)
+    run_job(aws, db, job_id, clip_path, make_cfg(), roi_masks_small)
     assert seen == [(aws.bucket, job_id, job_id)]
 
 
@@ -186,15 +187,7 @@ def test_existing_result_gives_skipped_and_is_left_unchanged(
     earlier = {"job_id": job_id, "marker": "written by an earlier run"}
     assert storage.put_result(aws.s3, aws.bucket, job_id, earlier) is True
 
-    outcome = handle_record(
-        aws.bucket,
-        key,
-        s3=aws.s3,
-        db=db,
-        cfg=make_cfg(),
-        roi_masks=roi_masks_small,
-        heartbeat=no_heartbeat,
-    )
+    outcome = run_job(aws, db, job_id, clip_path, make_cfg(), roi_masks_small)
 
     assert outcome is Outcome.SKIPPED
     assert stored(aws, job_id) == earlier
@@ -206,70 +199,10 @@ def test_duplicate_when_put_result_returns_false(
     patch_everywhere("put_result", lambda *a, **kw: False, "neurolens.storage", "neurolens.worker")
     job_id, key = new_job()
     aws.s3.upload_file(str(clip_path), aws.bucket, key)
-    outcome = handle_record(
-        aws.bucket,
-        key,
-        s3=aws.s3,
-        db=db,
-        cfg=make_cfg(),
-        roi_masks=roi_masks_small,
-        heartbeat=no_heartbeat,
-    )
+    verify(db, job_id)
+    outcome = run_job(aws, db, job_id, clip_path, make_cfg(), roi_masks_small)
     assert outcome is Outcome.DUPLICATE
-    assert pg.job(job_id)["status"] == "done"  # M3a §5 step 8: settled all the same
-
-
-def test_duplicate_message_is_deleted(
-    aws, make_cfg, roi_masks_small, db, new_job, clip_path, queue_message, remaining
-):
-    """DUPLICATE is final: a redelivered notice for an already-finished job leaves the queue."""
-    job_id, key = new_job()
-    aws.s3.upload_file(str(clip_path), aws.bucket, key)
-    storage.put_result(aws.s3, aws.bucket, job_id, {"job_id": job_id, "marker": "first"})
-
-    process_message(
-        queue_message(s3_event((aws.bucket, key))),
-        s3=aws.s3,
-        db=db,
-        sqs=aws.sqs,
-        cfg=make_cfg(),
-        roi_masks=roi_masks_small,
-        shutdown=worker.ShutdownSignal(),
-        max_receives=MAX_RECEIVES,
-    )
-
-    assert remaining() == []
-    assert stored(aws, job_id)["marker"] == "first"
-
-
-def test_a_put_result_error_leaves_the_message_for_retry(
-    aws,
-    make_cfg,
-    roi_masks_small,
-    db,
-    new_job,
-    clip_path,
-    queue_message,
-    remaining,
-    patch_everywhere,
-):
-    def boom(*a, **kw):
-        raise client_error("ConditionalRequestConflict", 409)
-
-    patch_everywhere("put_result", boom, "neurolens.storage", "neurolens.worker")
-    _, key = new_job()
-    aws.s3.upload_file(str(clip_path), aws.bucket, key)
-    process_message(
-        queue_message(s3_event((aws.bucket, key))),
-        s3=aws.s3,
-        db=db,
-        sqs=aws.sqs,
-        cfg=make_cfg(),
-        roi_masks=roi_masks_small,
-        shutdown=worker.ShutdownSignal(),
-        max_receives=MAX_RECEIVES,
-    )
-    assert len(remaining()) == 1
+    assert pg.job(job_id)["status"] == "done"  # settled all the same
 
 
 # ---------------------------------------------------------------- resolve_paths

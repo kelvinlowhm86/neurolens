@@ -21,6 +21,7 @@ ENV_TO_KEY = {
     "NEUROLENS_AWS_REGION": ("aws", "region"),
     "NEUROLENS_S3_BUCKET": ("aws", "s3_bucket"),
     "NEUROLENS_SQS_QUEUE_URL": ("aws", "sqs_queue_url"),
+    "NEUROLENS_GPU_ENDPOINT": ("aws", "gpu_endpoint"),
     # M3a §3a / §9: the database's deployment-specific identifiers
     "NEUROLENS_DB_CLUSTER_ARN": ("aws", "db_cluster_arn"),
     "NEUROLENS_DB_SECRET_ARN": ("aws", "db_secret_arn"),
