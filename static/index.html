@@ -40,6 +40,9 @@
 
   .video-box { position: relative; background: #000; border-radius: 14px; overflow: hidden; aspect-ratio: 16 / 9; }
   .video-box video { width: 100%; height: 100%; display: block; object-fit: cover; cursor: pointer; }
+  .sound-toggle { position: absolute; right: 12px; bottom: 12px; width: 34px; height: 34px; border: 0; border-radius: 50%; background: #fff; color: var(--ink); display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 2px 8px rgba(0, 0, 0, .35); }
+  .sound-toggle:hover { background: #E7EAF0; }
+  .sound-toggle svg { width: 16px; height: 16px; display: block; }
   .brain-box { position: relative; background: radial-gradient(ellipse at 50% 45%, #1A2336 0%, #0A0F1A 70%); border-radius: 14px; overflow: hidden; min-height: 200px; }
   .brain-box canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
   .brain-message { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 20px; text-align: center; font-size: 13px; color: var(--stage-muted); }
@@ -94,6 +97,9 @@
     <div class="hero-player" id="heroPlayer">
       <div class="video-box" id="videoBox" hidden>
         <video id="heroVideo" muted loop playsinline aria-label="Sample video. Click to pause or resume."></video>
+        <button class="sound-toggle" id="soundToggle" type="button" aria-label="Turn sound on" aria-pressed="false">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M2.5 6h2.5l3.5-3v10L5 10H2.5z"/><path d="m11 6 4 4m0-4-4 4"/></svg>
+        </button>
       </div>
       <div class="brain-box" id="brainBox" hidden>
         <div class="brain-message" id="brainMessage" hidden></div>
@@ -148,6 +154,9 @@ const comingSoon = $('comingSoon');
 const heroCredit = $('heroCredit');
 const footerCredit = $('footerCredit');
 const heroVideo = $('heroVideo');
+const soundToggle = $('soundToggle');
+const SOUND_ON = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M2.5 6h2.5l3.5-3v10L5 10H2.5z"/><path d="M11 5.5a3.5 3.5 0 0 1 0 5M12.8 3.8a6 6 0 0 1 0 8.4"/></svg>';
+const SOUND_OFF = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M2.5 6h2.5l3.5-3v10L5 10H2.5z"/><path d="m11 6 4 4m0-4-4 4"/></svg>';
 const brainView = createBrainView(brainBox, $('brainMessage'));
 let brainShown = false;
 
@@ -252,10 +261,24 @@ async function loadHero() {
   loadBrain(sample);
 }
 
+function renderSoundToggle() {
+  const on = !heroVideo.muted;
+  soundToggle.innerHTML = on ? SOUND_ON : SOUND_OFF;
+  soundToggle.setAttribute('aria-label', on ? 'Turn sound off' : 'Turn sound on');
+  soundToggle.setAttribute('aria-pressed', String(on));
+}
+
+soundToggle.addEventListener('click', event => {
+  event.stopPropagation();
+  heroVideo.muted = !heroVideo.muted;
+  renderSoundToggle();
+});
+
 heroVideo.addEventListener('click', () => {
   if (heroVideo.paused) heroVideo.play().catch(() => {});
   else heroVideo.pause();
 });
+renderSoundToggle();
 
 function tick() {
   const t = Number.isFinite(heroVideo.currentTime) ? heroVideo.currentTime : 0;

@@ -30,6 +30,7 @@ MAX_FILENAME_CHARS = 255  # the filename is display only
 OPEN = (billing.QUEUED, billing.PROCESSING)
 WEB_RESUME_WAIT_S = 45  # under the Lambda's and CloudFront's 60 s timeouts (M3b §2c)
 RESULT_DAYS = 30  # the results/ lifecycle rule (Terraform)
+VIDEO_LINK_SECONDS = 3600  # a video is streamed in pieces; one hour outlives a paused viewer
 HISTORY_LIMIT, HISTORY_MAX = 50, 100
 RETENTION_MAX_BYTES = 64 * 1024
 JOB_ACTIVE_MESSAGE = (
@@ -473,27 +474,29 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
         return rows[0], None
 
     def owned_result(job_id):
-        """(result, None) for the caller's job, else (None, an error response). Served for a
-        done job and for an unfinished one whose result exists (M3a's crash window: the worker
-        wrote it, then died before settling). A refunded job never serves one, even one a late
-        worker wrote."""
+        """(result, job, None) for the caller's job, else (None, None, an error response). Served
+        for a done job and for an unfinished one whose result exists (M3a's crash window: the
+        worker wrote it, then died before settling). A refunded job never serves one, even one a
+        late worker wrote."""
         job, error = owned_job(job_id)
         if error:
-            return None, error
+            return None, None, error
         if job["status"] == billing.FAILED:
-            return None, _not_found()
+            return None, None, _not_found()
         if s3 is None or not bucket:
-            return None, _not_configured()
+            return None, None, _not_configured()
         result = storage.get_result(s3, bucket, job["job_id"])
         if result is not None:
             if result.get("format") != 2:
-                return None, _old_result()
-            return result, None
+                return None, None, _old_result()
+            return result, job, None
         if job["status"] == billing.DONE:
-            return None, _error(
-                "result_expired", f"Results are kept {RESULT_DAYS} days.", status=404
+            return (
+                None,
+                None,
+                _error("result_expired", f"Results are kept {RESULT_DAYS} days.", status=404),
             )
-        return None, _error("result_not_ready", "The result is not ready yet.", status=404)
+        return None, None, _error("result_not_ready", "The result is not ready yet.", status=404)
 
     @app.route("/api/jobs/<job_id>/status")
     def job_status(job_id):
@@ -520,14 +523,14 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
 
     @app.route("/api/jobs/<job_id>/result")
     def job_result(job_id):
-        result, error = owned_result(job_id)
+        result, _, error = owned_result(job_id)
         if error:
             return error
         return jsonify({**result, "summary": results.summarise(result)})
 
     @app.route("/api/jobs/<job_id>/result.csv")
     def job_result_csv(job_id):
-        result, error = owned_result(job_id)
+        result, _, error = owned_result(job_id)
         if error:
             return error
         name = f"neurolens-{uuid.UUID(job_id)}.csv"
@@ -543,13 +546,32 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
     @app.route("/api/jobs/<job_id>/brain")
     def job_brain(job_id):
         """Redirect to a five-minute presigned GET of the raw brain file (M3d §7)."""
-        _, error = owned_result(job_id)
+        _, _, error = owned_result(job_id)
         if error:
             return error
         key = f"results/{uuid.UUID(job_id)}.brain"
         if not storage.object_exists(s3, bucket, key):
             return _error("brain_missing", "The brain file for this result is missing.", status=404)
         return redirect(_presigned_get(s3, bucket, key, expires_in=300))
+
+    @app.route("/api/jobs/<job_id>/video")
+    def job_video(job_id):
+        """A one-hour presigned GET of the caller's own video (M3d §7)."""
+        _, job, error = owned_result(job_id)
+        if error:
+            return error
+        key = job["object_key"]
+        if not storage.object_exists(s3, bucket, key):
+            ext = PurePosixPath(key).suffix
+            key = f"dataset/{job['job_id']}/video{ext}"
+            if not (job["research_consent"] and storage.object_exists(s3, bucket, key)):
+                return _error("video_deleted", "This video has been deleted.", status=404)
+        return jsonify(
+            {
+                "url": _presigned_get(s3, bucket, key, expires_in=VIDEO_LINK_SECONDS),
+                "expires_in": VIDEO_LINK_SECONDS,
+            }
+        )
 
     @app.route("/api/jobs/<job_id>/retention", methods=["POST"])
     def job_retention(job_id):

@@ -339,7 +339,7 @@
       </div>
       <div class="video-box" id="videoBox">
         <video id="videoPlayer" playsinline muted></video>
-        <div class="video-missing" id="videoMissing" hidden>This video isn't replayed here. Uploads are deleted within 3 days (12 months if you agreed to keep it for research). Play moves the 3D brain through the seconds.</div>
+        <div class="video-missing" id="videoMissing" hidden></div>
       </div>
       <div class="brain-box" id="brainHost">
         <div class="brain-message" id="brainMessage">The 3D view is not available for this video.</div>
@@ -404,6 +404,8 @@
 const $ = id => document.getElementById(id);
 const video = $('videoPlayer');
 const BRAIN_UNAVAILABLE = 'The 3D view is not available for this video.';
+const VIDEO_DELETED = 'This video has been deleted. Uploads are kept for 3 days (12 months if you agreed to keep it for research).';
+const VIDEO_UNPLAYABLE = "This video can't be played here.";
 const GROUPS = {
   see: { label: 'Seeing', signals: ['faces', 'bodies', 'scenes', 'visual'] },
   hear: { label: 'Hearing', signals: ['sound'] },
@@ -418,6 +420,7 @@ let comparison = null, mutedOn = false, resultSeq = 0, compareRequest = 0;
 let signedIn = false, me = null, limits = null;
 let activeTab = 'analyses', playerOriginTab = 'analyses';
 let videoObjectUrl = null, virtualTime = 0, virtualPlaying = false, virtualAnchor = 0, virtualRaf = 0, videoRaf = 0;
+let videoJob = null, videoRetried = false, videoRequest = 0, videoPlaying = false;
 let playheads = [];
 
 function fmt(s) {
@@ -1112,6 +1115,7 @@ async function pollJob(jobId, file) {
 
 function clearVideoSource() {
   stopVirtual();
+  videoJob = null; videoRetried = false; videoRequest += 1; videoPlaying = false;
   if (videoObjectUrl) { URL.revokeObjectURL(videoObjectUrl); videoObjectUrl = null; }
   video.pause();
   video.removeAttribute('src');
@@ -1122,6 +1126,45 @@ function clearVideoSource() {
 function showVideo(has) {
   video.hidden = !has;
   $('videoMissing').hidden = has;
+}
+
+function showVideoMessage(message) {
+  $('videoMissing').textContent = message;
+  showVideo(false);
+}
+
+function showVideoCredit(jobId) {
+  if (!currentResult || !currentContext || currentContext.jobId !== jobId) return;
+  const analysed = currentResult.processing_time_seconds ? ` · analysed in ${Math.round(currentResult.processing_time_seconds)}s` : '';
+  $('clipCredit').textContent = `${currentResult.duration_seconds}s${analysed}`;
+}
+
+async function loadJobVideo(jobId, seq, resume) {
+  const request = ++videoRequest;
+  let res, data = {};
+  try {
+    res = await fetch(`/api/jobs/${jobId}/video`);
+    data = await res.json().catch(() => ({}));
+  } catch (e) {
+    return request === videoRequest && seq === resultSeq ? { ok: false, deleted: false } : null;
+  }
+  if (request !== videoRequest || seq !== resultSeq) return null;
+  if (!res.ok) return { ok: false, deleted: res.status === 404 && data.error === 'video_deleted' };
+  videoJob = jobId;
+  videoRetried = !!(resume && resume.retried);
+  video.muted = false;
+  video.src = data.url;
+  if (resume) {
+    video.addEventListener('loadedmetadata', () => {
+      if (videoJob !== jobId) return;
+      try { video.currentTime = resume.time; } catch (e) { /* keep the video anyway */ }
+      if (resume.playing) video.play().catch(() => {});
+    }, { once: true });
+  }
+  showVideo(true);
+  showVideoCredit(jobId);
+  updateTransport();
+  return { ok: true };
 }
 
 function setVideoFile(file, seconds) {
@@ -1158,7 +1201,7 @@ function showResultUnavailable(message, file) {
   showRetention(null);
   setViewName('player');
   if (file) setVideoFile(file, null);
-  else { $('clipTitle').textContent = ''; $('clipCredit').textContent = ''; }
+  else { $('videoMissing').textContent = ''; $('clipTitle').textContent = ''; $('clipCredit').textContent = ''; }
 }
 
 async function showResult(jobId, file, consented) {
@@ -1196,12 +1239,25 @@ async function showResult(jobId, file, consented) {
   const cached = jobsCache.find(j => j.job_id === jobId);
   const title = file ? file.name : (cached && cached.filename ? cached.filename : `Job ${jobId.slice(0, 8)}`);
   if (file) setVideoFile(file, result.duration_seconds);
-  else { clearVideoSource(); setViewName('player'); $('clipTitle').textContent = title; $('clipCredit').textContent = `${result.duration_seconds}s`; }
+  else {
+    clearVideoSource();
+    $('videoMissing').textContent = '';
+    setViewName('player');
+    $('clipTitle').textContent = title;
+    $('clipCredit').textContent = `${result.duration_seconds}s`;
+  }
   try {
     renderResult(result, result.summary || {}, { jobId, brainUrl: `/api/jobs/${jobId}/brain`, title, fileName: title });
   } catch (e) {
     showResultUnavailable('The result could not be drawn.');
     return true;
+  }
+  if (!file) {
+    const seq = resultSeq;
+    loadJobVideo(jobId, seq).then(outcome => {
+      if (!outcome || outcome.ok) return;
+      showVideoMessage(outcome.deleted ? VIDEO_DELETED : VIDEO_UNPLAYABLE);
+    });
   }
   requestAnimationFrame(() => requestAnimationFrame(() => {
     window.neurolensTimings.render_ms = Math.round(performance.now() - t0);
@@ -1862,16 +1918,41 @@ function videoLoop() {
   if (!video.paused) videoRaf = requestAnimationFrame(videoLoop);
 }
 video.addEventListener('play', () => {
+  videoPlaying = true;
   cancelAnimationFrame(videoRaf);
   videoRaf = requestAnimationFrame(videoLoop);
 });
 video.addEventListener('pause', () => {
+  if (!video.error) videoPlaying = false;
   cancelAnimationFrame(videoRaf);
   tick();
 });
 video.addEventListener('seeked', tick);
 video.addEventListener('timeupdate', () => { if (video.paused) tick(); });
 video.addEventListener('loadedmetadata', tick);
+video.addEventListener('error', async () => {
+  const jobId = videoJob;
+  if (!jobId || !currentContext || currentContext.jobId !== jobId) return;
+  const time = Number.isFinite(video.currentTime) ? video.currentTime : 0;
+  const playing = videoPlaying;
+  if (videoRetried) {
+    virtualTime = time;
+    clearVideoSource();
+    virtualTime = time;
+    showVideoMessage(VIDEO_UNPLAYABLE);
+    if (playing) startVirtual();
+    updateTransport();
+    return;
+  }
+  const outcome = await loadJobVideo(jobId, resultSeq, { time, playing, retried: true });
+  if (!outcome || outcome.ok) return;
+  virtualTime = time;
+  clearVideoSource();
+  virtualTime = time;
+  showVideoMessage(outcome.deleted ? VIDEO_DELETED : VIDEO_UNPLAYABLE);
+  if (playing) startVirtual();
+  updateTransport();
+});
 
 async function ensureColourRange() {
   if (!limits) await loadLimits();
@@ -1928,6 +2009,7 @@ function resetUI() {
   mutedOn = false; virtualTime = 0;
   clearAllCharts();
   clearVideoSource();
+  $('videoMissing').textContent = '';
   $('mutedToggle').checked = false;
   $('mutedToggle').disabled = false;
   $('resultMessage').hidden = true;

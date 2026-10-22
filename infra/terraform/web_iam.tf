@@ -39,6 +39,16 @@ locals {
         Resource = "${aws_s3_bucket.main.arn}/results/*"
       },
       {
+        # A presigned replay link works only if the signer may read the key too.
+        Sid    = "ReadVideos"
+        Effect = "Allow"
+        Action = "s3:GetObject"
+        Resource = [
+          "${aws_s3_bucket.main.arn}/uploads/*",
+          "${aws_s3_bucket.main.arn}/dataset/*",
+        ]
+      },
+      {
         # Without it S3 answers 403, not 404, for a result not written yet, and the page would get
         # a server error instead of "not ready". No s3:prefix condition: a GET carries none.
         Sid      = "ListBucketSoMissingObjectsGive404"
