@@ -10,9 +10,9 @@
 ## Decisions (20 Oct)
 - **Free allowance, granted only.** New accounts start at 0. `infra/grant_credit.py` adds credit for course members (M3b §7a; the amount is typed in dollars). This means a stranger who signs in with Google cannot spend GPU money.
 - **Stripe removed from the service.** Before the removal, the last commit with Stripe (the custom GPU workers, after one real GPU job) is tagged `custom-gpu-stripe`. The report cites the tag as the working prototype of the future paid phase. No code is kept behind a switch.
-- **Consent is opt-in, per upload.** The box is unticked by default, and analysis works the same either way. Only consented videos are kept beyond the normal 2 days.
+- **Consent is opt-in, per upload.** The box is unticked by default, and analysis works the same either way. Only consented videos are kept beyond the normal 30 days.
 - **Retention: 12 months**, enforced by an S3 lifecycle rule on `dataset/`, so nobody has to remember to delete anything. Teardown after the course deletes everything earlier.
-- **Deletion:** per video, and the whole account. Both are refused while one of the user's jobs is queued or processing. That is the only state in which the worker or reaper may still write to the job.
+- **Deletion:** per video, and the whole account. Both are refused while one of the user's jobs is queued or processing. A waiting job can be cancelled first (M3d §7). That is the only state in which the worker or reaper may still write to the job.
 
 ## 1. Scope
 ### In scope
@@ -62,7 +62,7 @@ Migration 003; consent at upload; the dataset copy in the worker; the retention-
 ## 4. Deleting a video: `DELETE /api/jobs/<job_id>`
 1. The job must be owned and not deleted (otherwise 404).
    - If it is `queued` or `processing` → 409 `job_active`: "This video is still being processed. If you closed the page before the upload finished, it is released within about 4 hours; try again then."
-   - Known limitation: a job whose upload never arrived stays `queued` until the reaper refunds it (60 minutes, with the reaper running every 3 hours).
+   - A job whose upload never arrived stays `queued` until the user cancels it or the 24-hour deadline refunds it (M3a §7).
 2. Delete from S3 with one `delete_objects` call: the upload key, `results/<job_id>.json`, and the three `dataset/<job_id>/` files (`video<ext>`, `result.json`, `retention.csv`). Missing keys are fine. Any reported error → 500 with nothing marked, so the user can try again.
 3. `billing.delete_job(db, user_id, job_id)` sets `deleted_at = now()` and `filename = NULL`.
    - No status re-check is needed: `done` and `failed` are final, and `claim`, `settle_success` and `issue_refund` all refuse final jobs.
@@ -104,7 +104,7 @@ S3 is deleted first, so a failure part-way leaves a job that still shows but who
   - the Stripe parts of the other tests (named in §8).
 - Terraform: delete the webhook function, its URL, role and alarm entry, the `stripe_webhook_url` output, and the webhook loop entry in `deploy_web.sh`.
 - Josh deletes by hand: the SSM parameters `/neurolens/web/stripe_secret_key`, `stripe_webhook_secret` and `topup_allowlist` (created by hand, not by Terraform), and the event destination in the Stripe test dashboard.
-- `static/privacy.html`: remove Stripe, and add consent, the dataset, 12-month retention and the delete options. It says uploads that are not kept are deleted within 3 days: an upload that arrives after its job was refunded is deleted only by the 2-day rule.
+- `static/privacy.html`: remove Stripe, and add consent, the dataset, 12-month retention and the delete options. It says uploads that are not kept for research are deleted after 30 days, and at once when the job is cancelled or refunded.
 
 ## 7. Permissions and storage (Terraform)
 - **Lifecycle rule `expire-dataset`:** prefix `dataset/`, 365 days. Each file expires 12 months after it was stored.
