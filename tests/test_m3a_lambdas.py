@@ -11,6 +11,7 @@ import json
 import uuid
 
 import pytest
+from botocore.exceptions import ClientError
 from conftest import USER_ID
 from neurolens import billing, storage
 
@@ -176,146 +177,215 @@ def test_dead_letter_handler_settles_every_job_in_a_multi_record_message(
     assert pg.job(b)["status"] == "failed"
 
 
+def test_a_dead_letter_refund_deletes_the_jobs_upload(aws, db, pg, lambda_env, new_job):
+    job_id, key = new_job()
+    failed_twice(db, pg, job_id)
+    upload(aws, key)
+    dlq_handler()(sqs_event(key, bucket=aws.bucket), None)
+    assert pg.job(job_id)["status"] == "failed"
+    assert pg.refund_reason(job_id) == "processing_failed"
+    assert not storage.object_exists(aws.s3, aws.bucket, key)
+
+
 # ---------------------------------------------------------------- reaper
+
+DEADLINE_S = 24 * 60 * 60
+HEARTBEAT_STALE_S = 10 * 60
 
 
 def run_reaper():
     reaper()({}, None)
 
 
-def test_reaper_refunds_a_processing_job_with_no_heartbeat_for_10_minutes(
+class DeleteFails:
+    """A boto3 S3 client whose delete calls for one key raise, as S3 may."""
+
+    def __init__(self, inner, key):
+        self._inner = inner
+        self.key = key
+
+    def _error(self, operation):
+        raise ClientError(
+            {"Error": {"Code": "InternalError", "Message": "delete failed"}}, operation
+        )
+
+    def delete_object(self, **kwargs):
+        if kwargs.get("Key") == self.key:
+            self._error("DeleteObject")
+        return self._inner.delete_object(**kwargs)
+
+    def delete_objects(self, **kwargs):
+        keys = [obj["Key"] for obj in kwargs.get("Delete", {}).get("Objects", [])]
+        if self.key in keys:
+            self._error("DeleteObjects")
+        return self._inner.delete_objects(**kwargs)
+
+    def __getattr__(self, name):
+        return getattr(self._inner, name)
+
+
+def test_reaper_refunds_a_queued_job_past_the_24_hour_deadline_and_deletes_its_upload(
     aws, db, pg, lambda_env, new_job
 ):
     job_id, key = new_job()
     upload(aws, key)
-    assert billing.claim(db, job_id) == 1
-    pg.age(job_id, updated_s=660)
+    pg.age(job_id, updated_s=DEADLINE_S + 3600, created_s=DEADLINE_S + 3600)
     run_reaper()
     job = pg.job(job_id)
-    assert job["status"] == "failed" and job["error_code"] == "stalled"
+    assert job["status"] == "failed" and job["error_code"] == "deadline_passed"
+    assert pg.refund_reason(job_id) == "deadline_passed"
     assert pg.balance() == (500, 0)
+    assert not storage.object_exists(aws.s3, aws.bucket, key)
 
 
-def test_reaper_settles_a_stalled_processing_job_whose_result_exists(
+def test_reaper_refunds_a_queued_job_past_the_deadline_even_without_an_upload(
     aws, db, pg, lambda_env, new_job
 ):
-    """The crash window: result written, settlement never ran. Charged, not refunded."""
-    job_id, _ = new_job()
-    assert billing.claim(db, job_id) == 1
-    put_result(aws, job_id)
-    pg.age(job_id, updated_s=660)
-    run_reaper()
-    assert pg.job(job_id)["status"] == "done"
-    assert pg.balance() == (410, 0)
-
-
-def test_reaper_leaves_a_processing_job_that_beat_recently(aws, db, pg, lambda_env, new_job):
-    job_id, key = new_job()
-    upload(aws, key)
-    assert billing.claim(db, job_id) == 1
-    pg.age(job_id, updated_s=300)
-    before = pg.snapshot()
-    run_reaper()
-    assert pg.snapshot() == before
-
-
-def test_reaper_refunds_a_queued_job_whose_upload_never_arrived(aws, db, pg, lambda_env, new_job):
     job_id, _ = new_job()  # presigned, never uploaded
-    pg.age(job_id, updated_s=3900, created_s=3900)
+    pg.age(job_id, updated_s=DEADLINE_S + 3600, created_s=DEADLINE_S + 3600)
     run_reaper()
     job = pg.job(job_id)
-    assert job["status"] == "failed" and job["error_code"] == "upload_not_received"
+    assert job["status"] == "failed" and job["error_code"] == "deadline_passed"
+    assert pg.refund_reason(job_id) == "deadline_passed"
     assert pg.balance() == (500, 0)
 
 
-def test_reaper_settles_an_old_queued_job_whose_result_exists(aws, db, pg, lambda_env, new_job):
+def test_reaper_leaves_a_queued_job_younger_than_24_hours_even_without_an_upload(
+    aws, db, pg, lambda_env, new_job
+):
     job_id, _ = new_job()
+    pg.age(job_id, updated_s=DEADLINE_S - 3600, created_s=DEADLINE_S - 3600)
+    before = pg.snapshot()
+    run_reaper()
+    assert pg.snapshot() == before
+
+
+def test_reaper_settles_a_job_past_the_deadline_whose_result_exists_and_keeps_the_upload(
+    aws, db, pg, lambda_env, new_job
+):
+    job_id, key = new_job()
+    upload(aws, key)
     put_result(aws, job_id)
-    pg.age(job_id, updated_s=3900, created_s=3900)
+    pg.age(job_id, updated_s=DEADLINE_S + 3600, created_s=DEADLINE_S + 3600)
     run_reaper()
-    assert pg.job(job_id)["status"] == "done"
+    job = pg.job(job_id)
+    assert job["status"] == "done" and job["captured_cents"] == 90
+    assert pg.balance() == (410, 0)
+    assert storage.object_exists(aws.s3, aws.bucket, key)
 
 
-def test_reaper_leaves_a_queued_job_2_hours_old_whose_upload_exists(
+def test_reaper_leaves_a_processing_job_past_the_deadline_that_beat_a_minute_ago(
     aws, db, pg, lambda_env, new_job
-):
-    """It is waiting for a worker, not stuck: refunding it would leave a paid-back job that
-    still runs later."""
-    job_id, key = new_job()
-    upload(aws, key)
-    pg.age(job_id, updated_s=7200, created_s=7200)
-    before = pg.snapshot()
-    run_reaper()
-    assert pg.snapshot() == before
-
-
-def test_reaper_leaves_a_job_released_5_minutes_ago_though_created_2_hours_ago(
-    aws, db, pg, lambda_env, new_job
-):
-    """Ages run from updated_at, which release_for_retry refreshes. No upload object either, so
-    only the age decides."""
-    job_id, _ = new_job()
-    assert billing.claim(db, job_id) == 1
-    assert billing.release_for_retry(db, job_id, 1, "RuntimeError: boom")
-    pg.age(job_id, updated_s=300, created_s=7200)
-    before = pg.snapshot()
-    run_reaper()
-    assert pg.snapshot() == before
-
-
-def test_reaper_leaves_a_queued_job_younger_than_60_minutes_without_an_upload(
-    aws, db, pg, lambda_env, new_job
-):
-    job_id, _ = new_job()
-    pg.age(job_id, updated_s=1800, created_s=1800)
-    before = pg.snapshot()
-    run_reaper()
-    assert pg.snapshot() == before
-
-
-@pytest.mark.parametrize(
-    "age_s, refunded",
-    [(590, False), (610, True)],
-    ids=["just_under_10_minutes", "just_over_10_minutes"],
-)
-def test_reaper_cuts_off_a_silent_processing_job_at_10_minutes(
-    aws, db, pg, lambda_env, new_job, age_s, refunded
 ):
     job_id, key = new_job()
     upload(aws, key)
     assert billing.claim(db, job_id) == 1
-    pg.age(job_id, updated_s=age_s)
+    pg.age(job_id, updated_s=60, created_s=DEADLINE_S + 3600)
+    before = pg.snapshot()
     run_reaper()
-    assert (pg.job(job_id)["status"] == "failed") is refunded
+    assert pg.snapshot() == before
+    assert storage.object_exists(aws.s3, aws.bucket, key)
 
 
-@pytest.mark.parametrize(
-    "age_s, refunded",
-    [(3590, False), (3610, True)],
-    ids=["just_under_60_minutes", "just_over_60_minutes"],
-)
-def test_reaper_cuts_off_a_queued_job_with_no_upload_at_60_minutes(
-    aws, db, pg, lambda_env, new_job, age_s, refunded
+def test_reaper_refunds_a_processing_job_past_the_deadline_with_no_heartbeat_for_11_minutes(
+    aws, db, pg, lambda_env, new_job
 ):
-    job_id, _ = new_job()
-    pg.age(job_id, updated_s=age_s, created_s=age_s)
+    job_id, key = new_job()
+    upload(aws, key)
+    assert billing.claim(db, job_id) == 1
+    pg.age(job_id, updated_s=HEARTBEAT_STALE_S + 60, created_s=DEADLINE_S + 3600)
     run_reaper()
-    assert (pg.job(job_id)["status"] == "failed") is refunded
+    job = pg.job(job_id)
+    assert job["status"] == "failed" and job["error_code"] == "deadline_passed"
+    assert pg.balance() == (500, 0)
+    assert not storage.object_exists(aws.s3, aws.bucket, key)
+
+
+def test_reaper_leaves_a_processing_job_under_24_hours_old_although_its_heartbeat_stopped(
+    aws, db, pg, lambda_env, new_job
+):
+    """The retry path owns a recent crash; the reaper is only the backstop."""
+    job_id, key = new_job()
+    upload(aws, key)
+    assert billing.claim(db, job_id) == 1
+    pg.age(job_id, updated_s=HEARTBEAT_STALE_S + 60, created_s=2 * 3600)
+    before = pg.snapshot()
+    run_reaper()
+    assert pg.snapshot() == before
+    assert storage.object_exists(aws.s3, aws.bucket, key)
+
+
+def test_reaper_leaves_a_job_claimed_between_its_query_and_the_refund(
+    aws, db, pg, lambda_env, new_job, patch_everywhere
+):
+    job_id, key = new_job()
+    upload(aws, key)
+    pg.age(job_id, updated_s=DEADLINE_S + 3600, created_s=DEADLINE_S + 3600)
+    real_issue_refund = billing.issue_refund
+    claimed = []
+
+    def refund_after_a_worker_claimed(*args, **kwargs):
+        if not claimed:
+            claimed.append(job_id)
+            assert billing.claim(db, job_id) == 1
+        return real_issue_refund(*args, **kwargs)
+
+    patch_everywhere(
+        "issue_refund",
+        refund_after_a_worker_claimed,
+        "neurolens.billing",
+        "neurolens.lambdas.reaper",
+    )
+    run_reaper()
+    assert claimed == [job_id]
+    assert pg.job(job_id)["status"] == "processing"
+    assert pg.balance() == (410, 90)
+    assert storage.object_exists(aws.s3, aws.bucket, key)
+
+
+def test_reaper_refunds_a_job_whose_upload_delete_fails_and_still_reaps_the_others(
+    aws, db, pg, lambda_env, new_job, monkeypatch
+):
+    first, first_key = new_job()
+    second, second_key = new_job()
+    upload(aws, first_key)
+    upload(aws, second_key)
+    for job_id in (first, second):
+        pg.age(job_id, updated_s=DEADLINE_S + 3600, created_s=DEADLINE_S + 3600)
+
+    import boto3
+
+    real_client = boto3.client
+
+    def client(service_name, *args, **kwargs):
+        inner = real_client(service_name, *args, **kwargs)
+        return DeleteFails(inner, first_key) if service_name == "s3" else inner
+
+    monkeypatch.setattr(boto3, "client", client)
+    with pytest.raises(Exception):  # noqa: B017 - the spec says the run raises
+        run_reaper()
+
+    for job_id in (first, second):
+        job = pg.job(job_id)
+        assert job["status"] == "failed" and job["error_code"] == "deadline_passed"
+        assert pg.refund_reason(job_id) == "deadline_passed"
+    assert pg.balance() == (500, 0)
+    assert not storage.object_exists(aws.s3, aws.bucket, second_key)
+    assert storage.object_exists(aws.s3, aws.bucket, first_key)
 
 
 def test_reaper_leaves_terminal_jobs_and_runs_twice_safely(aws, db, pg, lambda_env, new_job):
-    stalled, key = new_job()
-    upload(aws, key)
-    billing.claim(db, stalled)
-    pg.age(stalled, updated_s=660)
+    failed, _ = new_job()
+    billing.issue_refund(db, failed, "cancelled", queued_before_s=0)
+    pg.age(failed, updated_s=DEADLINE_S + 3600, created_s=DEADLINE_S + 3600)
     done_job, _ = new_job()
     billing.settle_success(db, done_job)
-    pg.age(done_job, updated_s=7200)
+    pg.age(done_job, updated_s=DEADLINE_S + 3600, created_s=DEADLINE_S + 3600)
     run_reaper()
     before = pg.snapshot()
     run_reaper()
     assert pg.snapshot() == before
-    assert pg.job(stalled)["status"] == "failed"
+    assert pg.job(failed)["status"] == "failed"
     assert pg.job(done_job)["status"] == "done"
 
 
@@ -323,7 +393,7 @@ def test_reaper_handles_jobs_of_several_users(aws, db, pg, lambda_env, new_job):
     mine, _ = new_job()
     theirs, _ = new_job(user_id="other-user")
     for job_id in (mine, theirs):
-        pg.age(job_id, updated_s=3900, created_s=3900)
+        pg.age(job_id, updated_s=DEADLINE_S + 3600, created_s=DEADLINE_S + 3600)
     run_reaper()
     assert pg.balance(USER_ID) == (500, 0)
     assert pg.balance("other-user") == (500, 0)
