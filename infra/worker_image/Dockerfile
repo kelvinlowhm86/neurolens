@@ -31,12 +31,14 @@ COPY neurolens ./neurolens
 # The warm-up clip (3 s of the Sintel trailer, data/videos/SOURCES.md).
 COPY data/warmup.mp4 ./data/warmup.mp4
 
-# config.json's ./models is the weights SageMaker copies to /opt/ml/model at instance start.
-# The area maps (data/hcp_mmp) travel in the same prefix and are read through ./data, so link
-# that one folder too; the warm-up clip stays in the image.
+# SageMaker copies s3://<bucket>/model-data/ to /opt/ml/model at instance start. That prefix
+# mirrors the repo: models/ (config.json's ./models: HuggingFace and torch weights) and data/
+# (the area maps hcp_mmp/ and nilearn's atlases nilearn/). Link those; the warm-up clip stays in
+# the image's own data/.
 RUN mkdir -p /opt/ml/model /opt/neurolens/data \
-    && ln -s /opt/ml/model /opt/neurolens/models \
-    && ln -s /opt/ml/model/data/hcp_mmp /opt/neurolens/data/hcp_mmp
+    && ln -s /opt/ml/model/models /opt/neurolens/models \
+    && ln -s /opt/ml/model/data/hcp_mmp /opt/neurolens/data/hcp_mmp \
+    && ln -s /opt/ml/model/data/nilearn /opt/neurolens/data/nilearn
 
 # The WhisperX environment tribev2 runs at run time (`uvx whisperx <wav> ...` in
 # tribev2/eventstransforms.py at the pinned commit). uvx keys its cached environment on the tool

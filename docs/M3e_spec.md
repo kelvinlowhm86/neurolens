@@ -96,7 +96,7 @@ The same rules as the old `verify` (length limit first, then record the duration
   - `requirements/worker.txt` and `requirements/model.txt`;
   - ffmpeg;
   - `data/warmup.mp4`;
-  - the committed `config.json`, with `NEUROLENS_ROOT=/opt/neurolens` and a symlink `/opt/neurolens/models` → `/opt/ml/model`, so the config's `./models` path is the weights SageMaker copies in (they include `data/hcp_mmp/`). The container's start-up fails loudly if `config.json` or the model folder is missing;
+  - the committed `config.json`, with `NEUROLENS_ROOT=/opt/neurolens` and symlinks `/opt/neurolens/models` → `/opt/ml/model/models` and `/opt/neurolens/data/{hcp_mmp,nilearn}` → `/opt/ml/model/data/…`, so the config's `./models` and `./data` paths reach what SageMaker copies in (`model-data/` mirrors the repo's `models/` and `data/`). The container's start-up fails loudly if `config.json` or the model folder is missing;
   - the WhisperX tool environment, created at build time with the exact `uvx` command tribev2 runs (so `UV_OFFLINE=1` works at run time).
 - **No weights, tokens or secrets** in the image.
 - **Environment at run time:** `HF_HUB_OFFLINE=1`, `UV_OFFLINE=1`, `NEUROLENS_DEPLOYED=1`, `NEUROLENS_ROOT=/opt/neurolens`, and the deployment values from the SageMaker model (§9).
