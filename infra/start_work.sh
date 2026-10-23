@@ -7,6 +7,7 @@ set -euo pipefail
 
 VARIANT_MAIN=main
 KEEP_WARM_END=neurolens-keep-warm-end
+ENDPOINT=neurolens
 DB=neurolens-db
 HOURS=3
 KEEP_WARM=0
@@ -35,32 +36,33 @@ done
 case "$HOURS" in 1|2|3|4) ;; *) echo "--hours must be 1, 2, 3 or 4 (got $HOURS)." >&2; exit 2 ;; esac
 
 source "$(dirname "$0")/aws_env.sh"
-ENDPOINT="${NEUROLENS_GPU_ENDPOINT:?set NEUROLENS_GPU_ENDPOINT (from terraform output)}"
 RESOURCE="endpoint/$ENDPOINT/variant/$VARIANT_MAIN"
 DIMENSION=sagemaker:variant:DesiredInstanceCount
 
-MIN=0
-[ "$KEEP_WARM" = 0 ] || MIN=1
-
-aws application-autoscaling register-scalable-target \
-  --service-namespace sagemaker \
-  --resource-id "$RESOURCE" \
-  --scalable-dimension "$DIMENSION" \
-  --min-capacity "$MIN" \
-  --max-capacity 1
-
 if [ "$KEEP_WARM" = 1 ]; then
-  END=$(date -u -v+"${HOURS}"H +%Y-%m-%dT%H:%M:%SZ 2>/dev/null \
-        || date -u -d "+${HOURS} hours" +%Y-%m-%dT%H:%M:%SZ)
+  END=$(date -u -v+"${HOURS}"H +%Y-%m-%dT%H:%M:%S 2>/dev/null \
+        || date -u -d "+${HOURS} hours" +%Y-%m-%dT%H:%M:%S)
   aws application-autoscaling put-scheduled-action \
     --service-namespace sagemaker \
     --scheduled-action-name "$KEEP_WARM_END" \
     --resource-id "$RESOURCE" \
     --scalable-dimension "$DIMENSION" \
-    --schedule-at "$END" \
+    --schedule "at($END)" \
     --scalable-target-action "MinCapacity=0,MaxCapacity=1"
+  aws application-autoscaling register-scalable-target \
+    --service-namespace sagemaker \
+    --resource-id "$RESOURCE" \
+    --scalable-dimension "$DIMENSION" \
+    --min-capacity 1 \
+    --max-capacity 1
   echo "GPU kept warm until $END UTC (min 1), then AWS ends it after 7 idle minutes."
 else
+  aws application-autoscaling register-scalable-target \
+    --service-namespace sagemaker \
+    --resource-id "$RESOURCE" \
+    --scalable-dimension "$DIMENSION" \
+    --min-capacity 0 \
+    --max-capacity 1
   echo "GPU endpoint $ENDPOINT: max 1. An upload starts a GPU by itself."
 fi
 

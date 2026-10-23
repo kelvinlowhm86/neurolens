@@ -5,6 +5,7 @@ set -uo pipefail
 
 VARIANT_MAIN=main
 KEEP_WARM_END=neurolens-keep-warm-end
+ENDPOINT=neurolens
 DB=neurolens-db
 PROBLEMS=""
 problem() {
@@ -13,7 +14,6 @@ problem() {
 }
 
 source "$(dirname "$0")/aws_env.sh"
-ENDPOINT="${NEUROLENS_GPU_ENDPOINT:?set NEUROLENS_GPU_ENDPOINT (from terraform output)}"
 RESOURCE="endpoint/$ENDPOINT/variant/$VARIANT_MAIN"
 DIMENSION=sagemaker:variant:DesiredInstanceCount
 
@@ -26,13 +26,17 @@ aws application-autoscaling register-scalable-target \
   || problem "could not set the scalable target to 0/0"
 
 # The keep-warm end timer is a fixed name. Delete it even when none is listed: a stale timer in
-# a later session must not raise the minimum behind our back.
-aws application-autoscaling delete-scheduled-action \
-  --service-namespace sagemaker \
-  --scheduled-action-name "$KEEP_WARM_END" \
-  --resource-id "$RESOURCE" \
-  --scalable-dimension "$DIMENSION" \
-  || problem "could not delete the keep-warm action ($KEEP_WARM_END)"
+# a later session must not raise the minimum behind our back. Nothing to delete is the normal case.
+if ! DELETE_ERR=$(aws application-autoscaling delete-scheduled-action \
+    --service-namespace sagemaker \
+    --scheduled-action-name "$KEEP_WARM_END" \
+    --resource-id "$RESOURCE" \
+    --scalable-dimension "$DIMENSION" 2>&1 1>/dev/null); then
+  case "$DELETE_ERR" in
+    *ObjectNotFoundException*) ;;
+    *) problem "could not delete the keep-warm action ($KEEP_WARM_END): $DELETE_ERR" ;;
+  esac
+fi
 
 aws sagemaker update-endpoint-weights-and-capacities \
   --endpoint-name "$ENDPOINT" \

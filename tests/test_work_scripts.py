@@ -11,8 +11,10 @@ sets the endpoint's desired count to 0, waits for DescribeEndpoint to show 0 and
 STOPPED. Uploads are refused while paused by the web app (tests/test_m3e_web.py).
 """
 
+import datetime
 import json
 import os
+import re
 import subprocess
 from pathlib import Path
 
@@ -22,7 +24,7 @@ REPO = Path(__file__).resolve().parent.parent
 INFRA = REPO / "infra"
 
 AWS_STUB = r"""#!/usr/bin/env python3
-import json, os, sys
+import json, os, re, sys
 args = sys.argv[1:]
 world_path = os.environ["FAKE_WORLD"]
 w = json.load(open(world_path))
@@ -58,16 +60,41 @@ if key == "application-autoscaling describe-scalable-targets":
         out("1")
     out(f'{target["min"]}\t{target["max"]}')
 if key == "application-autoscaling put-scheduled-action":
+    known = {
+        "--service-namespace", "--scheduled-action-name", "--resource-id",
+        "--scalable-dimension", "--schedule", "--scalable-target-action",
+        "--timezone", "--start-time", "--end-time", "--region", "--profile",
+        "--output", "--query", "--no-cli-pager", "--cli-input-json",
+    }
+    unknown = [a for a in args[2:] if a.startswith("--") and a not in known]
+    if unknown:
+        print("Unknown options: " + ", ".join(unknown), file=sys.stderr)
+        sys.exit(252)
+    schedule = opt("--schedule")
+    if not schedule or not re.fullmatch(r"at\(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\)", schedule):
+        print(
+            "An error occurred (ValidationException) when calling the "
+            "PutScheduledAction operation: Invalid schedule: " + repr(schedule),
+            file=sys.stderr,
+        )
+        sys.exit(254)
     w["scheduled"].append(
         {
             "name": opt("--scheduled-action-name"),
-            "at": opt("--schedule-at"),
+            "at": schedule,
             "action": opt("--scalable-target-action", ""),
         }
     )
     out()
 if key == "application-autoscaling delete-scheduled-action":
     name = opt("--scheduled-action-name")
+    if name not in [a["name"] for a in w["scheduled"]]:
+        print(
+            "An error occurred (ObjectNotFoundException) when calling the "
+            "DeleteScheduledAction operation: No scheduled action found",
+            file=sys.stderr,
+        )
+        sys.exit(254)
     w["scheduled"] = [a for a in w["scheduled"] if a["name"] != name]
     out()
 if key == "application-autoscaling describe-scheduled-actions":
@@ -151,7 +178,6 @@ def sandbox(tmp_path):
             "HOME": str(tmp_path),
             "FAKE_WORLD": str(world_file),
             "FAKE_LOG": str(log),
-            "NEUROLENS_GPU_ENDPOINT": "neurolens-gpu-test",
             "AWS_ACCESS_KEY_ID": "x",
             "AWS_SECRET_ACCESS_KEY": "x",
         }
@@ -181,6 +207,7 @@ def test_start_plain_sets_the_maximum_to_one(sandbox):
     r = sandbox("start_work.sh", healthy_world())
     assert r.code == 0, r.err
     call = r.only("application-autoscaling", "register-scalable-target")
+    assert option(call, "--resource-id") == "endpoint/neurolens/variant/main"
     assert option(call, "--max-capacity") == "1"
     assert option(call, "--min-capacity") in (None, "0")
     assert r.find("application-autoscaling", "put-scheduled-action") == []
@@ -188,14 +215,44 @@ def test_start_plain_sets_the_maximum_to_one(sandbox):
 
 
 def test_keep_warm_sets_min_one_and_a_one_time_action(sandbox):
+    before = datetime.datetime.now(datetime.timezone.utc)
     r = sandbox("start_work.sh", healthy_world(), "--keep-warm", "--hours", "2")
     assert r.code == 0, r.err
     target = r.only("application-autoscaling", "register-scalable-target")
     assert option(target, "--min-capacity") == "1"
     assert option(target, "--max-capacity") == "1"
     action = r.only("application-autoscaling", "put-scheduled-action")
-    assert option(action, "--schedule-at")
+    schedule = option(action, "--schedule")
+    match = re.fullmatch(r"at\((\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)\)", schedule or "")
+    assert match, schedule
+    ends = datetime.datetime.fromisoformat(match.group(1)).replace(tzinfo=datetime.timezone.utc)
+    expected = before + datetime.timedelta(hours=2)
+    assert abs((ends - expected).total_seconds()) <= 300, (schedule, before)
     assert "MinCapacity=0" in (option(action, "--scalable-target-action") or "")
+    put = r.find("application-autoscaling", "put-scheduled-action")
+    min_one = [
+        i
+        for i in r.find("application-autoscaling", "register-scalable-target")
+        if option(r.calls[i], "--min-capacity") == "1"
+    ]
+    assert min_one and put[0] < min_one[0]
+
+
+def test_keep_warm_failing_action_never_raises_the_minimum(sandbox):
+    r = sandbox(
+        "start_work.sh",
+        healthy_world(fail=["application-autoscaling put-scheduled-action"]),
+        "--keep-warm",
+        "--hours",
+        "2",
+    )
+    assert r.code != 0
+    assert not [
+        c
+        for c in r.calls
+        if c[:2] == ["application-autoscaling", "register-scalable-target"]
+        and option(c, "--min-capacity") == "1"
+    ]
 
 
 def test_keep_db_raises_aurora_without_holding_the_gpu(sandbox):
@@ -236,12 +293,23 @@ def test_stop_sets_the_target_and_endpoint_to_zero_and_prints_all_stopped(sandbo
     r = sandbox("stop_work.sh", healthy_world(instances=1))
     assert r.code == 0, r.err
     target = r.only("application-autoscaling", "register-scalable-target")
+    assert option(target, "--resource-id") == "endpoint/neurolens/variant/main"
     assert option(target, "--min-capacity") == "0"
     assert option(target, "--max-capacity") == "0"
     endpoint = r.only("sagemaker", "update-endpoint-weights-and-capacities")
+    assert option(endpoint, "--endpoint-name") == "neurolens"
     assert "DesiredInstanceCount=0" in (option(endpoint, "--desired-weights-and-capacities") or "")
     assert "ALL STOPPED" in r.out
     assert "NOT CONFIRMED" not in r.err
+
+
+def test_stop_without_a_keep_warm_action_still_stops(sandbox):
+    r = sandbox("stop_work.sh", healthy_world(instances=1))
+    assert r.code == 0, r.err
+    assert "ALL STOPPED" in r.out
+    assert "NOT CONFIRMED" not in r.err
+    assert "PROBLEM" not in r.err
+    r.only("application-autoscaling", "delete-scheduled-action")
 
 
 def test_stop_deletes_any_keep_warm_action(sandbox):
