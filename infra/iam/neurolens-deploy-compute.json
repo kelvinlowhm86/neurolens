@@ -209,6 +209,15 @@
       }
     },
     {
+      "Sid": "ScalingTargetCheckNeedsAlarmRightsOnAll",
+      "Effect": "Allow",
+      "Action": [
+        "cloudwatch:PutMetricAlarm",
+        "cloudwatch:DeleteAlarms"
+      ],
+      "Resource": "*"
+    },
+    {
       "Sid": "ScalingDescribeHasNoResource",
       "Effect": "Allow",
       "Action": [

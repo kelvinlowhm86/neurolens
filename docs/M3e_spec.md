@@ -334,6 +334,7 @@ Order, with no long gap between the steps:
 Measured figures replace these in the build log.
 
 ## 12a. Known limitations (accepted)
+- **The deploy user may create and delete any CloudWatch alarm.** `RegisterScalableTarget` refuses a caller without `cloudwatch:PutMetricAlarm` and `cloudwatch:DeleteAlarms` (day B: "User is missing the following permissions"), checked beyond our `neurolens-*` alarm names, so these two actions are on `*`. Misusing them needs a deliberate command by the key holder.
 - **Scaling permissions trust the `Project` tag.** `RegisterScalableTarget` with `Project=neurolens` in the request is allowed, so the deploy user could deliberately tag another project's scaling target and then change it. It needs a deliberate act by the account owner; scoping to the exact target would need its random-id ARN before it exists. `TagResource` is allowed only on targets already tagged `neurolens`.
 - **An invoke whose answer is lost, twice:** SageMaker accepted the request, the dispatcher saw an error both times, and the DLQ handler refunds the job. The request then finds a `failed` job and skips it. The user is refunded and uploads again; at most one start-up is wasted.
 - **Retention added in the same moment as the 60-day clean-up:** the clean-up checks `retention.csv` just before deleting, so the window is a fraction of a second, once per job.
