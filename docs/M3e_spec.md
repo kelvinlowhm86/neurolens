@@ -310,7 +310,7 @@ Order, with no long gap between the steps:
 1. Josh pastes the IAM changes.
 2. `make_model_data.sh`.
 3. Build the ffprobe layer and the image.
-4. `terraform apply` with the image digest (the GPU pools and the real model; SageMaker refuses a CUDA image on a CPU type, so there is no CPU rehearsal), then at once `infra/deploy_web.sh` (the apply changes the web function's settings but never its code, and the old code refuses the new settings at start-up). Run one real job (it is the first time the real model loads in the container: watch for any write into `/opt/ml/model`), and per-video delete it. Then check that:
+4. `terraform apply` with the image digest (the GPU pools and the real model; SageMaker refuses a CUDA image on a CPU type, so there is no CPU rehearsal), then at once `python infra/apply_schema.py --backend data_api` (migration 005) and `infra/deploy_web.sh` (the apply changes the web function's settings but never its code, and the old code refuses the new settings at start-up). Run one real job (it is the first time the real model loads in the container: watch for any write into `/opt/ml/model`), and per-video delete it. Then check that:
    - an unreadable file is refused without any instance starting;
    - a request with `RequestTTLSeconds` 60 against a paused endpoint produces an error notification and a refund;
    - the endpoint scales to 0 after 7 idle minutes;
