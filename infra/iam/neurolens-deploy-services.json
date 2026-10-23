@@ -261,7 +261,9 @@
         "logs:DeleteLogGroup",
         "logs:PutRetentionPolicy",
         "logs:TagResource",
-        "logs:UntagResource"
+        "logs:UntagResource",
+        "logs:ListTagsForResource",
+        "logs:ListTagsLogGroup"
       ],
       "Resource": "arn:aws:logs:us-east-1:*:log-group:/aws/codebuild/neurolens-*"
     },

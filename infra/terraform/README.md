@@ -86,6 +86,7 @@ Copy `backend.hcl.example` to `backend.hcl` and put that bucket name in it.
 cd infra/terraform
 cp terraform.tfvars.example terraform.tfvars    # bucket_name, region, zones, alert_email, auth, google
 ../build_web_lambda.sh                          # the web function's zip: the first apply needs it
+../build_ffprobe_layer.sh                       # the dispatcher's ffprobe layer: so does it
 terraform init -backend-config=backend.hcl
 terraform plan                                  # read it: only creates on an empty account
 terraform apply
@@ -125,7 +126,6 @@ Then, from the repo root:
 
 ```bash
 infra/make_model_data.sh        # once: copies models/ to model-data/ without blobs/, checks counts
-infra/build_ffprobe_layer.sh    # builds infra/terraform/.build/ffprobe_layer.zip
 infra/build_image.sh            # zips HEAD, builds in CodeBuild, prints the image digest
 # put the digest in terraform.tfvars as worker_image = "sha256:..."
 terraform -chdir=infra/terraform apply
