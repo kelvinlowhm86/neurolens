@@ -12,12 +12,6 @@ if [ -n "$(git status --porcelain)" ]; then
   exit 1
 fi
 
-if grep -q 'REPLACE_BEFORE_BUILD' infra/worker_image/Dockerfile; then
-  echo "The base image digest is still @sha256:REPLACE_BEFORE_BUILD in infra/worker_image/Dockerfile." >&2
-  echo "Put the digest for the pinned tag there first." >&2
-  exit 1
-fi
-
 # shellcheck disable=SC1091
 source "$ROOT/infra/aws_env.sh"
 

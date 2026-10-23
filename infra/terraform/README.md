@@ -112,13 +112,12 @@ After the first apply:
 
 ## 2b. The GPU image and endpoint (M3e)
 
-One placeholder stands between the repository and a built image. Fill it once:
-`infra/worker_image/Dockerfile`'s `@sha256:REPLACE_BEFORE_BUILD` becomes the digest of the pinned
-AWS PyTorch base image, which the deploy user may read:
+`infra/worker_image/Dockerfile` pins AWS's PyTorch base image by digest. To move to a newer one,
+look up its digest (the deploy user may read that repository) and replace tag and digest there:
 
 ```bash
 aws ecr batch-get-image --region us-east-1 --registry-id 763104351884 \
-  --repository-name pytorch-inference --image-ids imageTag=2.6.0-gpu-py312-cu124-ubuntu22.04 \
+  --repository-name pytorch-inference --image-ids imageTag=2.6.0-gpu-py312-cu124-ubuntu22.04-sagemaker \
   --query 'images[0].imageId.imageDigest' --output text
 ```
 

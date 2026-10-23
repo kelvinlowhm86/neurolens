@@ -1,9 +1,8 @@
 # NeuroLens SageMaker container (docs/M3e_spec.md §4d).
 #
-# The base is AWS's PyTorch 2.6.0 GPU inference image (Python 3.12, CUDA 12.4). It is pinned by
-# digest: replace REPLACE_BEFORE_BUILD with the digest for this exact tag before building.
-# infra/build_image.sh refuses to run while the placeholder is here.
-ARG BASE_IMAGE=763104351884.dkr.ecr.us-east-1.amazonaws.com/pytorch-inference:2.6.0-gpu-py312-cu124-ubuntu22.04@sha256:REPLACE_BEFORE_BUILD
+# The base is AWS's PyTorch 2.6.0 GPU inference image for SageMaker (Python 3.12, CUDA 12.4),
+# pinned by digest (looked up 23 Oct 2026; infra/terraform/README.md §2b has the command).
+ARG BASE_IMAGE=763104351884.dkr.ecr.us-east-1.amazonaws.com/pytorch-inference:2.6.0-gpu-py312-cu124-ubuntu22.04-sagemaker@sha256:f5c4556668fe14fb9b7f97db0dd54cca324736c6ecd9cfa390b08c5c5aab0172
 FROM ${BASE_IMAGE}
 
 # Runtime settings (M3e §4d). UV_OFFLINE is off during the build so uv can fill its cache, then on
