@@ -241,7 +241,7 @@ The same rules as the old `verify` (length limit first, then record the duration
 - `infra/iam/neurolens-deploy-*.json` gain SageMaker, ECR, CodeBuild and Application Auto Scaling actions scoped to `neurolens*`, and lose EC2/Auto Scaling launch rights;
 - **Application Auto Scaling cannot be scoped by name** (a scalable target's ARN ends in a random id, and policies and scheduled actions have no ARN of their own). The scalable target is tagged `Project=neurolens`; changing actions are allowed on `*` only with `aws:ResourceTag/Project=neurolens` (`aws:RequestTag/Project=neurolens` when registering a new one), checked against the AWS Service Authorization Reference; describes are on `*`;
 - the service-linked role allowed for scaling is `sagemaker.application-autoscaling.amazonaws.com` (`AWSServiceRoleForApplicationAutoScaling_SageMakerEndpoint`);
-- **removal rights for the one apply that deletes the EC2 worker**, in their own statement `RemoveTheEc2Worker`, scoped to `neurolens` like the old ones: `ec2:DetachInternetGateway`, `ec2:DisassociateAddress`, `ec2:ReleaseAddress`, `ec2:DeregisterImage`, and the Auto Scaling group's describe and delete actions. A second paste after day B removes that statement (§12 step 9);
+- **removal rights for the one apply that deletes the EC2 worker**, in their own statements (Sids starting `RemoveTheEc2Worker`), scoped to `neurolens` like the old ones: `ec2:DetachInternetGateway`, `ec2:DisassociateAddress`, `ec2:ReleaseAddress`, `ec2:DeregisterImage`, and the Auto Scaling group's describe, update, instance-protection and delete actions (Terraform sets the group to 0 before deleting it), the group scoped by its `neurolens-*` name as before. A second paste after day B removes those statements (§12 step 9);
 - the role boundary gains the SageMaker execution role's, the guard's and CodeBuild's actions (including the base-image pull).
 
 ## 10. Scripts, experiments and records
@@ -325,7 +325,7 @@ Order, with no long gap between the steps:
    - that `ApproximateBacklogSize` has a point every minute while a job runs;
    - that the endpoint accepted both instance pools (`DescribeEndpointConfig`).
 8. Fallback: not forced. Record which type ran.
-9. Finish: confirm `ALL STOPPED`. Nothing stays running: there is no NAT to switch off. Josh pastes the deploy policy without `RemoveTheEc2Worker`.
+9. Finish: confirm `ALL STOPPED`. Nothing stays running: there is no NAT to switch off. Josh pastes the deploy policy without the `RemoveTheEc2Worker*` statements.
 
 **Costs (estimates, from the AWS price list, us-east-1):**
 - `ml.g6e.xlarge` $2.61/h; `ml.g6.2xlarge` $1.22/h; `ml.m5.xlarge` $0.23/h;
@@ -336,6 +336,7 @@ Order, with no long gap between the steps:
 Measured figures replace these in the build log.
 
 ## 12a. Known limitations (accepted)
+- **Scaling permissions trust the `Project` tag.** `RegisterScalableTarget` with `Project=neurolens` in the request is allowed, so the deploy user could deliberately tag another project's scaling target and then change it. It needs a deliberate act by the account owner; scoping to the exact target would need its random-id ARN before it exists. `TagResource` is allowed only on targets already tagged `neurolens`.
 - **An invoke whose answer is lost, twice:** SageMaker accepted the request, the dispatcher saw an error both times, and the DLQ handler refunds the job. The request then finds a `failed` job and skips it. The user is refunded and uploads again; at most one start-up is wasted.
 - **Retention added in the same moment as the 60-day clean-up:** the clean-up checks `retention.csv` just before deleting, so the window is a fraction of a second, once per job.
 - **A new upload between the guard's check and its stop:** SageMaker starts the GPU again for it; one start-up is wasted.

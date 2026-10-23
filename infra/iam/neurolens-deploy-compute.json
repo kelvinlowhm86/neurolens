@@ -84,11 +84,8 @@
       "Effect": "Allow",
       "Action": [
         "ec2:DetachInternetGateway",
-        "ec2:DisassociateAddress",
         "ec2:ReleaseAddress",
-        "ec2:DeregisterImage",
-        "autoscaling:DeleteAutoScalingGroup",
-        "autoscaling:DeletePolicy"
+        "ec2:DeregisterImage"
       ],
       "Resource": "*",
       "Condition": {
@@ -98,13 +95,36 @@
       }
     },
     {
+      "Sid": "RemoveTheEc2WorkerGroup",
+      "Effect": "Allow",
+      "Action": [
+        "autoscaling:DeleteAutoScalingGroup",
+        "autoscaling:UpdateAutoScalingGroup",
+        "autoscaling:SetInstanceProtection",
+        "autoscaling:DeletePolicy"
+      ],
+      "Resource": "arn:aws:autoscaling:us-east-1:*:autoScalingGroup:*:autoScalingGroupName/neurolens-*"
+    },
+    {
       "Sid": "RemoveTheEc2WorkerDescribes",
       "Effect": "Allow",
       "Action": [
         "autoscaling:DescribeAutoScalingGroups",
-        "autoscaling:DescribePolicies"
+        "autoscaling:DescribePolicies",
+        "autoscaling:DescribeScalingActivities"
       ],
       "Resource": "*"
+    },
+    {
+      "Sid": "RemoveTheEc2WorkerAddressUnlink",
+      "Effect": "Allow",
+      "Action": "ec2:DisassociateAddress",
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "aws:RequestedRegion": "us-east-1"
+        }
+      }
     },
     {
       "Sid": "ExplainOwnDenialsReadOnly",
@@ -202,6 +222,49 @@
           ]
         }
       }
+    },
+    {
+      "Sid": "ScalingOnlyTaggedNeurolensEndpoint",
+      "Effect": "Allow",
+      "Action": [
+        "application-autoscaling:RegisterScalableTarget",
+        "application-autoscaling:DeregisterScalableTarget",
+        "application-autoscaling:PutScalingPolicy",
+        "application-autoscaling:DeleteScalingPolicy",
+        "application-autoscaling:PutScheduledAction",
+        "application-autoscaling:DeleteScheduledAction",
+        "application-autoscaling:TagResource",
+        "application-autoscaling:UntagResource",
+        "application-autoscaling:ListTagsForResource"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "aws:ResourceTag/Project": "neurolens"
+        }
+      }
+    },
+    {
+      "Sid": "CreateScalingTargetOnlyIfTaggedNeurolens",
+      "Effect": "Allow",
+      "Action": "application-autoscaling:RegisterScalableTarget",
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "aws:RequestTag/Project": "neurolens"
+        }
+      }
+    },
+    {
+      "Sid": "ScalingDescribeHasNoResource",
+      "Effect": "Allow",
+      "Action": [
+        "application-autoscaling:DescribeScalableTargets",
+        "application-autoscaling:DescribeScalingPolicies",
+        "application-autoscaling:DescribeScheduledActions",
+        "application-autoscaling:DescribeScalingActivities"
+      ],
+      "Resource": "*"
     }
   ]
 }

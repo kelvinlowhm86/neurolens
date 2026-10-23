@@ -229,52 +229,6 @@
       "Resource": "arn:aws:codebuild:us-east-1:*:project/neurolens*"
     },
     {
-      "Sid": "ScalingOnlyTaggedNeurolensEndpoint",
-      "Effect": "Allow",
-      "Action": [
-        "application-autoscaling:RegisterScalableTarget",
-        "application-autoscaling:DeregisterScalableTarget",
-        "application-autoscaling:PutScalingPolicy",
-        "application-autoscaling:DeleteScalingPolicy",
-        "application-autoscaling:PutScheduledAction",
-        "application-autoscaling:DeleteScheduledAction",
-        "application-autoscaling:TagResource",
-        "application-autoscaling:UntagResource",
-        "application-autoscaling:ListTagsForResource"
-      ],
-      "Resource": "*",
-      "Condition": {
-        "StringEquals": {
-          "aws:ResourceTag/Project": "neurolens"
-        }
-      }
-    },
-    {
-      "Sid": "CreateScalingTargetOnlyIfTaggedNeurolens",
-      "Effect": "Allow",
-      "Action": [
-        "application-autoscaling:RegisterScalableTarget",
-        "application-autoscaling:TagResource"
-      ],
-      "Resource": "*",
-      "Condition": {
-        "StringEquals": {
-          "aws:RequestTag/Project": "neurolens"
-        }
-      }
-    },
-    {
-      "Sid": "ScalingDescribeHasNoResource",
-      "Effect": "Allow",
-      "Action": [
-        "application-autoscaling:DescribeScalableTargets",
-        "application-autoscaling:DescribeScalingPolicies",
-        "application-autoscaling:DescribeScheduledActions",
-        "application-autoscaling:DescribeScalingActivities"
-      ],
-      "Resource": "*"
-    },
-    {
       "Sid": "CloudControlHasNoResourceScoping",
       "Effect": "Allow",
       "Action": [
