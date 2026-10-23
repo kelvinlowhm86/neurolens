@@ -187,11 +187,13 @@ resource "awscc_sagemaker_endpoint_config" "main" {
   endpoint_config_name = local.endpoint_config_name
 
   production_variants = [{
-    variant_name                                      = local.variant_name
-    model_name                                        = aws_sagemaker_model.main[0].name
-    initial_instance_count                            = 1
-    instance_pools                                    = local.instance_pools
-    variant_instance_provision_timeout_in_seconds     = 600
+    variant_name           = local.variant_name
+    model_name             = aws_sagemaker_model.main[0].name
+    initial_instance_count = 1
+    # SageMaker takes pools only when there are at least two; one type is a plain instance_type.
+    instance_type                                     = length(local.instance_pools) == 1 ? local.instance_pools[0].instance_type : null
+    instance_pools                                    = length(local.instance_pools) > 1 ? local.instance_pools : null
+    variant_instance_provision_timeout_in_seconds     = length(local.instance_pools) > 1 ? 600 : null
     container_startup_health_check_timeout_in_seconds = 1800
     model_data_download_timeout_in_seconds            = 1800
   }]

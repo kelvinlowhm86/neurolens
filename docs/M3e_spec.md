@@ -225,7 +225,7 @@ The same rules as the old `verify` (length limit first, then record the duration
   - `gpu_failed`: the M3a Lambda role (the DLQ handler's rights, same work);
   - `gpu_guard`: §6c's permissions, the Data API and the database secret, its logs;
 - the lifecycle rules: `sagemaker-output/` 1 day, `build/` 7 days;
-- `var.fake_inference` (default false): when true, the pools are one `ml.m5.xlarge` (a CPU rehearsal at about $0.23/h, real price list) and `FAKE_INFERENCE=1`.
+- `var.fake_inference` (default false): when true, the variant is one plain `ml.m5.xlarge` instead of pools (SageMaker takes pools only when there are at least two; a CPU rehearsal at about $0.23/h, real price list) and `FAKE_INFERENCE=1`.
 
 **Deleted:**
 - the launch template, Auto Scaling group, scale-out/in alarms and policies, `workers_to_zero`, the idle and 3-hour alarms;
