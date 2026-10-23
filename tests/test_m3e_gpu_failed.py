@@ -149,6 +149,18 @@ def test_an_unparseable_notification_is_logged_and_dropped(aws, db, pg, gpu_env,
     assert pg.snapshot() == before
 
 
+def test_sagemakers_test_notification_is_ignored_without_a_warning(aws, db, pg, gpu_env, caplog):
+    before = pg.snapshot()
+    message = json.dumps({"eventName": "TestNotification"})
+    event = {"Records": [{"Sns": {"Message": message, "MessageId": "m1"}}]}
+
+    with caplog.at_level(logging.DEBUG):
+        gpu_failed()(event, None)
+
+    assert not [r for r in caplog.records if r.levelno >= logging.WARNING]
+    assert pg.snapshot() == before
+
+
 @pytest.mark.parametrize(
     "message",
     [

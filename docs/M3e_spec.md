@@ -116,13 +116,14 @@ The same rules as the old `verify` (length limit first, then record the duration
 | Dispatcher keeps failing | `dlq_handler` (unchanged) | refund after `maxReceiveCount` deliveries |
 | Analysis raises | container | refund at once (§4c) |
 | Container crash, SIGTERM, hang, 60-min timeout | error handler | SageMaker error notification (below) |
-| Request waits 2 hours (no GPU capacity) | error handler | the expired request's error notification |
+| Request waits 2 hours (no GPU capacity) | error handler, else reaper | the expired request's error notification, sent only when an instance next takes it from the queue; while none runs, the reaper (4 h deadline, every 3 h) |
 | A notification is lost | reaper | any open job 4 h after creation |
 
 - **Error handler (`neurolens/lambdas/gpu_failed.py`):** subscribed to the SNS topic `neurolens-gpu-errors`, which is the endpoint's `ErrorTopic` (there is no success topic: the container settles itself).
   - It takes `inferenceId` (the job id) from the notification. It reuses `dlq_handler.settle_or_refund`, moved to `neurolens/lambdas/__init__.py` as `finish_job`: settle if a result exists, else refund `processing_failed` if queued or stale for 90 s, and delete the job's files.
   - While the claim is fresh it raises. Lambda's asynchronous retries (2, over about 3 minutes) then try again, and the reaper is the backstop after that.
-  - An unparseable notification (not JSON, not a JSON object, or no string `inferenceId`) is logged and dropped.
+  - SageMaker's `{"eventName": "TestNotification"}`, sent when an instance starts or stops (day B), is logged as info and ignored.
+  - An unparseable notification (not JSON, not a JSON object, or no string `inferenceId`) is logged as a warning, with its raw text, and dropped.
 - **Reaper:**
   - It stays **every 3 hours**: each run wakes Aurora for about 11 minutes, and hourly measured about $15 a month against $3 (`infra/terraform/lambdas.tf`). It is the backstop for a lost notification, so speed matters less than cost.
   - `DEADLINE_S` becomes **4 hours** after `created_at` (was 24): the dispatcher never gives a request more than 3 hours from creation (§3 step 7), plus 60 minutes of invocation timeout. A lost notification is therefore refunded within about 7 hours.
@@ -338,6 +339,7 @@ Measured figures replace these in the build log.
 - **Scaling permissions trust the `Project` tag.** `RegisterScalableTarget` with `Project=neurolens` in the request is allowed, so the deploy user could deliberately tag another project's scaling target and then change it. It needs a deliberate act by the account owner; scoping to the exact target would need its random-id ARN before it exists. `TagResource` is allowed only on targets already tagged `neurolens`.
 - **An invoke whose answer is lost, twice:** SageMaker accepted the request, the dispatcher saw an error both times, and the DLQ handler refunds the job. The request then finds a `failed` job and skips it. The user is refunded and uploads again; at most one start-up is wasted.
 - **Retention added in the same moment as the 60-day clean-up:** the clean-up checks `retention.csv` just before deleting, so the window is a fraction of a second, once per job.
+- **An expired request is reported late.** SageMaker reports a request whose 2-hour wait ran out only when an instance next takes it from the queue (day B: no notice in 18 minutes with no instance; the notice came the moment one started). While the GPU cannot start, the reaper refunds the job instead, 4 to 7 hours after upload. The user waits longer for the refund; no credit is lost. When capacity returns, the expired request still counts as backlog and starts the GPU once, about $0.70 (estimate: cold start plus 7 idle minutes).
 - **A new upload between the guard's check and its stop:** SageMaker starts the GPU again for it; one start-up is wasted.
 - **The scale-in alarm reads missing backlog data as empty.** If AWS ever stopped publishing it during a running job for 7 minutes, the job would be cut off and refunded. Day B checks the data is continuous during a job (§12 step 6).
 
