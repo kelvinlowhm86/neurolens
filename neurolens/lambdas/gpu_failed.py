@@ -35,7 +35,8 @@ def handler(event, context):
     for record in event.get("Records", []):
         job_id = _job_id(record)
         if job_id is None:
-            logger.warning("Dropped an unparseable SageMaker notification")
+            raw = str((record.get("Sns") or {}).get("Message"))[:2000]
+            logger.warning(f"Dropped an unparseable SageMaker notification: {raw}")
             continue
         if not lambdas.finish_job(db, s3, bucket, job_id):
             waiting.append(job_id)
