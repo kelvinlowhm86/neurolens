@@ -58,12 +58,6 @@ variable "worker_image" {
   }
 }
 
-variable "fake_inference" {
-  description = "True only for the CPU rehearsal: one ml.m5.xlarge pool and FAKE_INFERENCE=1."
-  type        = bool
-  default     = false
-}
-
 variable "max_instances" {
   description = "Most GPUs the endpoint may run. Stays 1; the account's GPU quota is 2 (M3e §1)."
   type        = number

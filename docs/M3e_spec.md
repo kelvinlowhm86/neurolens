@@ -211,7 +211,7 @@ The same rules as the old `verify` (length limit first, then record the duration
   - ECR pull on our repository;
   - its logs;
   - `sns:Publish` on the error topic;
-- `aws_sagemaker_model` `neurolens-<image digest prefix>`, with environment: bucket, region, database trio, `NEUROLENS_DEPLOYED=1` and `FAKE_INFERENCE` from `var.fake_inference`;
+- `aws_sagemaker_model` `neurolens-<image digest prefix>`, with environment: bucket, region, database trio, and `NEUROLENS_DEPLOYED=1`;
 - `aws_sagemaker_endpoint_configuration`:
   - the instance pools of §6a;
   - `ContainerStartupHealthCheckTimeoutInSeconds` 1800 and `ModelDataDownloadTimeoutInSeconds` 1800;
@@ -225,7 +225,6 @@ The same rules as the old `verify` (length limit first, then record the duration
   - `gpu_failed`: the M3a Lambda role (the DLQ handler's rights, same work);
   - `gpu_guard`: §6c's permissions, the Data API and the database secret, its logs;
 - the lifecycle rules: `sagemaker-output/` 1 day, `build/` 7 days;
-- `var.fake_inference` (default false): when true, the variant is one plain `ml.m5.xlarge` instead of pools (SageMaker takes pools only when there are at least two; a CPU rehearsal at about $0.23/h, real price list) and `FAKE_INFERENCE=1`.
 
 **Deleted:**
 - the launch template, Auto Scaling group, scale-out/in alarms and policies, `workers_to_zero`, the idle and 3-hour alarms;
@@ -309,25 +308,23 @@ Order, with no long gap between the steps:
 1. Josh pastes the IAM changes.
 2. `make_model_data.sh`.
 3. Build the ffprobe layer and the image.
-4. **CPU rehearsal:** `terraform apply` with `fake_inference = true`. Check that:
-   - a fake job runs end to end through the dispatcher;
+4. `terraform apply` with the image digest (the GPU pools and the real model; SageMaker refuses a CUDA image on a CPU type, so there is no CPU rehearsal). Run one real job (it is the first time the real model loads in the container: watch for any write into `/opt/ml/model`), and per-video delete it. Then check that:
    - an unreadable file is refused without any instance starting;
    - a request with `RequestTTLSeconds` 60 against a paused endpoint produces an error notification and a refund;
    - the endpoint scales to 0 after 7 idle minutes;
    - the guard stops an instance kept up by hand (with min reset to 0 and no jobs) and emails.
-5. Apply with the GPU. AWS refuses an instance-type change on a variant registered for scaling, so first `terraform apply -destroy -target=aws_appautoscaling_target.endpoint` (its policies go with it), then the full apply with `fake_inference = false`. A shortcut for a one-time switch: done by hand once, not built into Terraform. Run one real job (it is the first time the real model loads in the container: watch for any write into `/opt/ml/model`), and per-video delete it.
-6. A consented job: check the dataset copy, then delete it.
-7. Measure:
+5. A consented job: check the dataset copy, then delete it.
+6. Measure:
    - cold start (upload to `transcribing`), split by the boot record;
    - the first job's `transcribing` against a later job's (the warm-up must make them alike);
    - cost per video;
    - that `ApproximateBacklogSize` has a point every minute while a job runs;
    - that the endpoint accepted both instance pools (`DescribeEndpointConfig`).
-8. Fallback: not forced. Record which type ran.
-9. Finish: confirm `ALL STOPPED`. Nothing stays running: there is no NAT to switch off.
+7. Fallback: not forced. Record which type ran.
+8. Finish: confirm `ALL STOPPED`. Nothing stays running: there is no NAT to switch off.
 
 **Costs (estimates, from the AWS price list, us-east-1):**
-- `ml.g6e.xlarge` $2.61/h; `ml.g6.2xlarge` $1.22/h; `ml.m5.xlarge` $0.23/h;
+- `ml.g6e.xlarge` $2.61/h; `ml.g6.2xlarge` $1.22/h;
 - CodeBuild about $0.40 a build;
 - ECR storage about $1/month for 3 images;
 - the day itself about $3–5.
@@ -339,7 +336,7 @@ Measured figures replace these in the build log.
 - **An invoke whose answer is lost, twice:** SageMaker accepted the request, the dispatcher saw an error both times, and the DLQ handler refunds the job. The request then finds a `failed` job and skips it. The user is refunded and uploads again; at most one start-up is wasted.
 - **Retention added in the same moment as the 60-day clean-up:** the clean-up checks `retention.csv` just before deleting, so the window is a fraction of a second, once per job.
 - **A new upload between the guard's check and its stop:** SageMaker starts the GPU again for it; one start-up is wasted.
-- **The scale-in alarm reads missing backlog data as empty.** If AWS ever stopped publishing it during a running job for 7 minutes, the job would be cut off and refunded. Day B checks the data is continuous during a job (§12 step 7).
+- **The scale-in alarm reads missing backlog data as empty.** If AWS ever stopped publishing it during a running job for 7 minutes, the job would be cut off and refunded. Day B checks the data is continuous during a job (§12 step 6).
 
 ## 13. Acceptance criteria
 1. The full suite passes with PostgreSQL, and `ruff` is clean.

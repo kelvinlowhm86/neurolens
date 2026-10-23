@@ -16,7 +16,6 @@ alert_email = "you@example.com"
 # From M3e the GPU is a SageMaker endpoint. Build the image first (infra/build_image.sh prints
 # its digest), then put the digest here and apply again. Empty: no endpoint is created.
 # worker_image   = "sha256:REPLACE-WITH-THE-BUILT-IMAGE-DIGEST"
-# fake_inference = false      # true only for the CPU wiring rehearsal (one ml.m5.xlarge)
 # max_instances  = 1          # stays 1; the account's GPU quota is 2
 
 # M3b sign-in (§2a). The Cognito page prefix (unique in the region, lowercase, no "aws",

@@ -131,8 +131,8 @@ infra/build_image.sh            # zips HEAD, builds in CodeBuild, prints the ima
 terraform -chdir=infra/terraform apply
 ```
 
-`fake_inference = true` is the cheap CPU rehearsal: one `ml.m5.xlarge` pool (about $0.23/h) and
-`FAKE_INFERENCE=1`. `max_instances` stays 1.
+`max_instances` stays 1. There is no CPU rehearsal: SageMaker refuses a CUDA image on a CPU
+instance type, so the first checks run on the GPU with the real model.
 
 The container's logs are in CloudWatch at `/aws/sagemaker/Endpoints/neurolens`; the build's at
 `/aws/codebuild/neurolens-worker-image`.
