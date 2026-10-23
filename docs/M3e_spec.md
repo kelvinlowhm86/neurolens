@@ -241,7 +241,6 @@ The same rules as the old `verify` (length limit first, then record the duration
 - `infra/iam/neurolens-deploy-*.json` gain SageMaker, ECR, CodeBuild and Application Auto Scaling actions scoped to `neurolens*`, and lose EC2/Auto Scaling launch rights;
 - **Application Auto Scaling cannot be scoped by name** (a scalable target's ARN ends in a random id, and policies and scheduled actions have no ARN of their own). The scalable target is tagged `Project=neurolens`; changing actions are allowed on `*` only with `aws:ResourceTag/Project=neurolens` (`aws:RequestTag/Project=neurolens` when registering a new one), checked against the AWS Service Authorization Reference; describes are on `*`;
 - the service-linked role allowed for scaling is `sagemaker.application-autoscaling.amazonaws.com` (`AWSServiceRoleForApplicationAutoScaling_SageMakerEndpoint`);
-- **removal rights for the one apply that deletes the EC2 worker**, in their own statements (Sids starting `RemoveTheEc2Worker`), scoped to `neurolens` like the old ones: `ec2:DetachInternetGateway`, `ec2:DisassociateAddress`, `ec2:ReleaseAddress`, `ec2:DeregisterImage`, and the Auto Scaling group's describe, update, instance-protection and delete actions (Terraform sets the group to 0 before deleting it), the group scoped by its `neurolens-*` name as before. A second paste after day B removes those statements (§12 step 9);
 - the role boundary gains the SageMaker execution role's, the guard's and CodeBuild's actions (including the base-image pull).
 
 ## 10. Scripts, experiments and records
@@ -325,7 +324,7 @@ Order, with no long gap between the steps:
    - that `ApproximateBacklogSize` has a point every minute while a job runs;
    - that the endpoint accepted both instance pools (`DescribeEndpointConfig`).
 8. Fallback: not forced. Record which type ran.
-9. Finish: confirm `ALL STOPPED`. Nothing stays running: there is no NAT to switch off. Josh pastes the deploy policy without the `RemoveTheEc2Worker*` statements.
+9. Finish: confirm `ALL STOPPED`. Nothing stays running: there is no NAT to switch off.
 
 **Costs (estimates, from the AWS price list, us-east-1):**
 - `ml.g6e.xlarge` $2.61/h; `ml.g6.2xlarge` $1.22/h; `ml.m5.xlarge` $0.23/h;
