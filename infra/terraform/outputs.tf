@@ -1,5 +1,6 @@
 # Put these in the git-ignored .env at the repo root (bucket_name -> NEUROLENS_S3_BUCKET,
-# queue_url -> NEUROLENS_SQS_QUEUE_URL, db_cluster_arn / db_secret_arn / db_name ->
+# queue_url -> NEUROLENS_SQS_QUEUE_URL, gpu_endpoint -> NEUROLENS_GPU_ENDPOINT,
+# db_cluster_arn / db_secret_arn / db_name ->
 # NEUROLENS_DB_CLUSTER_ARN / NEUROLENS_DB_SECRET_ARN / NEUROLENS_DB_NAME).
 
 output "bucket_name" {
@@ -18,26 +19,19 @@ output "dlq_url" {
   value = aws_sqs_queue.jobs_dlq.url
 }
 
-output "public_subnet_id" {
-  value = aws_subnet.public.id
+output "gpu_endpoint" {
+  description = "The SageMaker endpoint's name (the web app and the GPU scripts use it)."
+  value       = local.endpoint_name
 }
 
-output "build_subnet_ids" {
-  description = "Public subnets infra/build_ami.sh tries in order, one per zone (space-separated)."
-  value       = join(" ", concat([aws_subnet.public.id], aws_subnet.public_build[*].id))
+output "worker_ecr_repository" {
+  description = "Where infra/build_image.sh pushes the SageMaker image."
+  value       = aws_ecr_repository.worker.repository_url
 }
 
-output "no_inbound_security_group_id" {
-  value = aws_security_group.no_inbound.id
-}
-
-output "build_instance_profile" {
-  value = aws_iam_instance_profile.build.name
-}
-
-output "nat_gateway_id" {
-  description = "The NAT Gateway, or empty while nat_gateway is false (start_work.sh and stop_work.sh check it)."
-  value       = join("", aws_nat_gateway.main[*].id)
+output "worker_image_build_project" {
+  description = "The CodeBuild project infra/build_image.sh starts."
+  value       = aws_codebuild_project.worker_image.name
 }
 
 output "db_cluster_arn" {

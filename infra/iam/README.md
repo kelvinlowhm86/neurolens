@@ -1,25 +1,27 @@
 # Permissions for the `neurolens-deploy` IAM user
 
-The deploy user can only touch NeuroLens resources, so it cannot see or change anything else in the AWS
-account (other projects' buckets or machines, for example). Four policy files:
+The deploy user can only touch NeuroLens resources, so it cannot see or change anything else in the
+AWS account (other projects' buckets or machines, for example). Four policy files:
 
 | File | Attached to | What it allows |
 |---|---|---|
-| `neurolens-deploy-services.json` | the deploy user | S3 buckets and SQS queues named `neurolens-*`; Auto Scaling groups, alarms (and their history) and email topics named `neurolens-*`; reading the account's recent API call history (CloudTrail event history, free; shows what a worker group asked EC2 for when a launch fails; AWS cannot limit it by name, so it is account-wide and read-only, and queries filter by `neurolens-*` names, Josh approved 22 Oct); Lambda functions, EventBridge rules and Lambda log groups named `neurolens-*` (M2b circuit breaker; M3a's functions reuse them) and the queue trigger of a `neurolens-*` function; the `neurolens-*` Aurora database, its RDS-created password secret and the Data API on it (M3a); Parameter Store under `/neurolens/`; remote commands and sessions only on machines tagged `Project=neurolens`; creating, once, the AWS-owned role that lets an alarm terminate a machine (the image build's hang guard) |
-| `neurolens-deploy-compute.json` | the deploy user | EC2 and networking: anything may be *read*; new things may be created only if tagged `Project=neurolens`; only things already tagged `Project=neurolens` may be changed, stopped or deleted. Machines only of the types the project uses (`g6e.xlarge`, `g6e.2xlarge`, `t3.large`). NAT Gateways and Elastic IPs (M3b's NAT Gateway switch) only tagged `Project=neurolens`, in a `neurolens` subnet; unlinking an Elastic IP is allowed on any address in us-east-1, because when the NAT Gateway is deleted Terraform unlinks a link that is already gone, which AWS checks against no resource (no tags to match). Unlinking can be undone; releasing an address stays limited to `Project=neurolens`. Roles and instance profiles named `neurolens-*`, handed only to EC2 and Lambda. Decoding the encoded message of an access-denied error (read-only: it explains what AWS checked) |
+| `neurolens-deploy-services.json` | the deploy user | S3 buckets and SQS queues named `neurolens-*`; alarms (and their history) and email topics named `neurolens-*`; Lambda functions, EventBridge rules and Lambda log groups named `neurolens-*` and the queue trigger of a `neurolens-*` function; the SageMaker endpoint, endpoint configurations and models named `neurolens-*`; the `neurolens-*` ECR repository and CodeBuild project; Application Auto Scaling only on the `neurolens` endpoint; the Cloud Control actions the awscc provider uses for the endpoint configuration; the `neurolens-*` Aurora database, its RDS-created password secret and the Data API; Parameter Store under `/neurolens/` |
+| `neurolens-deploy-compute.json` | the deploy user | VPC, subnets, route tables and security groups, all tagged `Project=neurolens`; roles and instance profiles named `neurolens-*`; handing roles only to SageMaker, CodeBuild, Lambda (and only inside the boundary, below); service-linked roles for SageMaker, CodeBuild, Application Auto Scaling and RDS. It no longer launches EC2 instances or changes Auto Scaling groups. Decoding an access-denied error (read-only). |
 | `neurolens-deploy-web.json` | the deploy user | M3b's website: Cognito user pools and CloudFront distributions may be created only tagged `Project=neurolens` and changed only when so tagged; CloudFront's origin signing settings and AWS's managed cache policies (untaggable, harmless alone); reading the account's Lambda limits |
 | `neurolens-role-boundary.json` | nobody directly (a *permissions boundary*) | The most any `neurolens-*` role may ever do, whatever is written into it |
 
-**Why the boundary.** The deploy user creates the roles that machines use. Without a limit, someone holding
-the deploy user's keys could create a `neurolens-` role with full account access, start a machine with it,
-and so escape every other restriction here. A permissions boundary is a ceiling AWS checks on top of a role's
-own policy: the compute policy only lets the deploy user create or edit roles that carry this boundary, and
-the deploy user cannot edit the boundary itself. So a role can never do more than read and write NeuroLens
-storage and queues, use the NeuroLens database through the Data API (M3a), read `/neurolens/` parameters, resize `neurolens-*` worker groups and set their machines' scale-in protection (the circuit
-breaker; a worker only for its own machine while busy),
-write its own Lambda logs, and talk to Session Manager. Since M2b no role may end a machine: only AWS decides
-how many workers run.
-Terraform must set `permissions_boundary` on every role it creates, or AWS refuses the call.
+**Why the boundary.** The deploy user creates the roles that machines and Lambdas use. Without a
+limit, someone holding the deploy user's keys could create a `neurolens-` role with full account
+access, start a machine with it, and escape every other restriction here. A permissions boundary is
+a ceiling AWS checks on top of a role's own policy: the compute policy only lets the deploy user
+create or edit roles that carry this boundary, and the deploy user cannot edit the boundary itself.
+So a role can never do more than read and write NeuroLens storage and queues, use the NeuroLens
+database through the Data API, read `/neurolens/` parameters, pull and push the worker image,
+resize only the NeuroLens endpoint, publish to NeuroLens SNS topics, write its own Lambda,
+SageMaker and CodeBuild logs, and delete logins from our Cognito pool. Since M3e no role may end a
+machine or change an Auto Scaling group.
+
+Terraform sets `permissions_boundary` on every role it creates, or AWS refuses the call.
 
 ## Apply (by hand in the console; the deploy user has no rights on its own permissions, on purpose)
 
@@ -27,31 +29,29 @@ Terraform must set `permissions_boundary` on every role it creates, or AWS refus
    `neurolens-role-boundary`. Do not attach it to anything.
 2. Same again for `neurolens-deploy-services.json` (name `neurolens-deploy-services`),
    `neurolens-deploy-compute.json` (name `neurolens-deploy-compute`) and `neurolens-deploy-web.json`
-   (name `neurolens-deploy-web`, M3b).
+   (name `neurolens-deploy-web`).
 3. IAM, Users, `neurolens-deploy`, Permissions, Add permissions, Attach policies directly: tick
    `neurolens-deploy-services`, `neurolens-deploy-compute` and `neurolens-deploy-web`.
-4. Only then remove the old inline policy `neurolens-deploy-scoped` (its two statements are now in
-   `neurolens-deploy-services`). Inline policies are capped at 2,048 characters per user, which is why these
-   are managed policies now.
+4. Only then remove any old inline policy on the user (`neurolens-deploy-scoped`).
 
 Edits later: open the policy, Edit, paste the new file. AWS keeps up to five versions.
 
 ## Check (with the `neurolens` profile)
 
-- `aws s3api head-bucket --bucket neurolens-tfstate-<account-id>` works, and `aws s3api list-buckets` is refused.
+- `aws s3api head-bucket --bucket neurolens-tfstate-<account-id>` works, and
+  `aws s3api list-buckets` is refused.
 - `aws ec2 describe-vpcs --query 'Vpcs[].VpcId'` works (reading is allowed everywhere).
 - `aws iam get-role --role-name neurolens-does-not-exist` says `NoSuchEntity`, not `AccessDenied`.
-- The real check is `terraform plan` and `apply` in the next step running without `AccessDenied`.
+- The real check is `terraform plan` and `apply` running without `AccessDenied`.
 
 ## Known limitations (accepted)
 
-- Machines launched by the Auto Scaling group are started by AWS's own Auto Scaling role, so the instance-type
-  list above does not apply to them; the Launch Template (in Terraform) fixes their type instead. Someone with
-  the deploy keys could still run up a bill this way; the budget alerts and the GPU quota are the backstop.
-- A `neurolens-` machine's type can be changed while it is stopped. Same backstop.
-- Later milestones need more (M2b metrics, M3 database and secrets): widen the boundary and the deploy
-  policies then, by the same steps.
-- The boundary names our Cognito user pool by its ID (`DeleteCognitoLoginsInOurPool`), so deleting an
-  account can never remove logins from another project's pool in this account. If the pool is ever
-  recreated (teardown, a new account), put the new ID there and re-apply; until then account deletion
-  fails to remove logins and the `COGNITO_DELETE_FAILED` alarm emails.
+- Application Auto Scaling's `DescribeScalableTargets` and Cloud Control's operations cannot be
+  limited to one resource, so those read/Cloud-Control actions are account-wide. The write actions
+  (registering targets, policies, scheduled actions) are limited to the `neurolens` endpoint.
+- The boundary names our Cognito user pool by its ID (`DeleteCognitoLoginsInOurPool`), so deleting
+  an account can never remove logins from another project's pool. If the pool is ever recreated,
+  put the new ID there and re-apply; until then account deletion fails to remove logins and the
+  `COGNITO_DELETE_FAILED` alarm emails.
+- The policies are managed policies: each stays under IAM's 6,144-character limit (without
+  whitespace). Adding many more actions needs another policy file.

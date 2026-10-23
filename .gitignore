@@ -86,5 +86,5 @@ build/
 terraform.tfvars
 *.tfplan
 backend.hcl
-# Lambda zips Terraform builds from infra/lambda/ (M2b breaker)
+# Lambda zips and the ffprobe layer Terraform uploads
 infra/terraform/.build/

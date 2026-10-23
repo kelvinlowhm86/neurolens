@@ -57,10 +57,10 @@ locals {
         Resource = aws_s3_bucket.main.arn
       },
       {
-        # Is processing paused (worker group max 0)? Read-only; AWS offers no narrower resource.
-        Sid      = "ReadWorkerGroup"
+        # Is processing paused (endpoint scaling max 0)? Read-only; AWS offers no narrower resource.
+        Sid      = "ReadScalingTargets"
         Effect   = "Allow"
-        Action   = "autoscaling:DescribeAutoScalingGroups"
+        Action   = "application-autoscaling:DescribeScalableTargets"
         Resource = "*"
       },
       {

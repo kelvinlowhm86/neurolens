@@ -1,5 +1,5 @@
 variable "bucket_name" {
-  description = "Name of the S3 bucket for uploads, results and code. Must be globally unique."
+  description = "Name of the S3 bucket for uploads, results and model data. Must be globally unique."
   type        = string
 }
 
@@ -27,66 +27,52 @@ variable "region" {
 
 variable "zones" {
   description = <<-EOT
-    Availability zones that offer g6e.xlarge (check with `aws ec2 describe-instance-type-offerings
-    --location-type availability-zone --filters Name=instance-type,Values=g6e.xlarge`), one private
-    worker subnet each: more zones give the worker group more places to find a GPU. The first also
-    holds the public subnet (NAT Gateway).
+    Availability zones for Aurora's private subnets. Aurora's subnet group needs at least two.
+    The database is reached only through the Data API, so no zone needs a route to the internet.
   EOT
   type        = list(string)
 
   validation {
-    condition     = length(var.zones) > 0 && alltrue([for z in var.zones : startswith(z, var.region)])
-    error_message = "zones must be non-empty and all in var.region (set them in terraform.tfvars)."
-  }
-}
-
-variable "build_extra_zones" {
-  description = "Further zones offering g6e.xlarge, each with a public subnet the image build can fall back to when the first zone has no capacity."
-  type        = list(string)
-
-  validation {
-    condition     = alltrue([for z in var.build_extra_zones : startswith(z, var.region)])
-    error_message = "build_extra_zones must all be in var.region (set them in terraform.tfvars)."
+    condition     = length(var.zones) >= 2 && alltrue([for z in var.zones : startswith(z, var.region)])
+    error_message = "zones must name at least two zones and all be in var.region (set them in terraform.tfvars)."
   }
 }
 
 variable "alert_email" {
-  description = "Where the 3-hour GPU alarm is emailed. Set in terraform.tfvars (git-ignored)."
+  description = "Where the GPU and Lambda alarms are emailed. Set in terraform.tfvars."
   type        = string
 }
 
-variable "worker_ami_id" {
-  description = "The software-only image from infra/build_ami.sh. Empty: no Launch Template or Auto Scaling group yet."
+variable "worker_image" {
+  description = <<-EOT
+    The digest of the image infra/build_image.sh built and pushed to ECR, e.g.
+    "sha256:0123...". Empty until the first build; no endpoint exists then. A new digest creates a
+    new SageMaker model and endpoint configuration and swaps the endpoint to them.
+  EOT
   type        = string
   default     = ""
+
+  validation {
+    condition     = var.worker_image == "" || can(regex("^(sha256:)?[0-9a-f]{64}$", var.worker_image))
+    error_message = "worker_image must be empty or a sha256 digest (optionally prefixed with sha256:)."
+  }
 }
 
-variable "worker_instance_types" {
-  description = "On-demand worker types in order of preference: the next is tried when the one before is sold out in every zone. [\"t3.large\"] for the wiring rehearsal."
-  type        = list(string)
-  default     = ["g6e.xlarge", "g6e.2xlarge", "g6.2xlarge"]
-}
-
-variable "scale_out_warmup_seconds" {
-  description = <<-EOT
-    How long a newly launched worker counts as "still starting" for the scale-out policy (M2b §2a).
-    A GPU boot takes about 6.5 minutes and the SQS metric lags 1-3 minutes, so 900 s keeps one
-    waiting job from launching a second worker while the first boots.
-  EOT
-  type        = number
-  default     = 900
-}
-
-variable "worker_fake_job_seconds" {
-  description = "CPU rehearsal only (with worker_fake_inference): each fake predict call sleeps this long, so a job is long enough to interrupt (FAKE_INFERENCE_SECONDS, M2b §1a). 0 = off."
-  type        = number
-  default     = 0
-}
-
-variable "worker_fake_inference" {
-  description = "True only for the wiring rehearsal on a CPU instance: FAKE_INFERENCE=1 in env.conf."
+variable "fake_inference" {
+  description = "True only for the CPU rehearsal: one ml.m5.xlarge pool and FAKE_INFERENCE=1."
   type        = bool
   default     = false
+}
+
+variable "max_instances" {
+  description = "Most GPUs the endpoint may run. Stays 1; the account's GPU quota is 2 (M3e §1)."
+  type        = number
+  default     = 1
+
+  validation {
+    condition     = var.max_instances >= 1 && var.max_instances <= 2
+    error_message = "max_instances must be 1 (the normal state) or 2 (only if the quota allows it)."
+  }
 }
 
 variable "auth_domain_prefix" {
@@ -101,15 +87,4 @@ variable "auth_domain_prefix" {
 variable "google_client_id" {
   description = "The Google OAuth client's ID (not secret). Set in terraform.tfvars."
   type        = string
-}
-
-variable "nat_gateway" {
-  description = <<-EOT
-    The workers' way out to the internet (SQS, the Data API, HuggingFace), M3b §5. true on days with
-    GPU work and for the deployed window (about $1.20 a day while it exists), false otherwise. The
-    website never needs it. Terraform refuses false while the worker group may start workers or one is running: run
-    infra/stop_work.sh first.
-  EOT
-  type        = bool
-  default     = false
 }

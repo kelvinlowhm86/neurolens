@@ -26,7 +26,7 @@ The model outputs one row per second of video over 20,484 points of the cortex (
 
 Each signal is the mean over its area's points; each group is the mean of its signals, and **overall** is the mean of the three groups. The worker also runs the video with its sound removed and computes the same 11 series from that pass (**muted**), cut to the shared length of the two passes.
 
-**Brain-area map.** The areas come from the Glasser HCP-MMP1 parcellation (360 areas; Glasser et al. 2016, *Nature*). The worker downloads its two map files once on first start into `data/hcp_mmp/` (git-ignored; the worker image build does this, so the files are baked into the image) and checks their SHA-256, so it never runs on a changed map. The map is Human Connectome Project data under the WU-Minn HCP Open Access Data Use Terms (see License).
+**Brain-area map.** The areas come from the Glasser HCP-MMP1 parcellation (360 areas; Glasser et al. 2016, *Nature*). The two map files live in the weights prefix (`model-data/data/hcp_mmp/`, uploaded once by `infra/make_model_data.sh`); the container checks their SHA-256, so it never runs on a changed map. The map is Human Connectome Project data under the WU-Minn HCP Open Access Data Use Terms (see License).
 
 **Result format 2** (`results/<job_id>.json`):
 
@@ -325,7 +325,7 @@ jupyter notebook notebooks/explore.ipynb
 
 ```bash
 python app.py                                   # web app on http://127.0.0.1:5003 (reads config.json and .env, incl. AWS_PROFILE; it never runs the model)
-FAKE_INFERENCE=1 python worker.py               # the worker: analyses uploads (fake model on a laptop; real model needs a GPU)
+FAKE_INFERENCE=1 python worker.py serve         # the SageMaker container on a laptop (fake model; real model needs a GPU)
 pip install -e . -r requirements/dev.txt        # laptop: tests and lint only, no GPU or model needed
 pytest && ruff check . && ruff format --check .
 ```
@@ -635,6 +635,14 @@ The `modality dropout (p=0.3)` during training means any modality can be zeroed 
 ---
 
 ## Deploying on AWS
+
+The GPU runs in a SageMaker asynchronous endpoint, not a worker group. A deploy is three steps:
+
+```bash
+infra/build_image.sh                 # builds the image in CodeBuild and prints its digest
+# put the digest in infra/terraform/terraform.tfvars as worker_image = "sha256:..."
+terraform -chdir=infra/terraform apply
+```
 
 See `infra/terraform/README.md`: setup from an empty account, work sessions and teardown.
 

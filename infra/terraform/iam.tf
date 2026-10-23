@@ -1,239 +1,178 @@
-# ─── Roles for machines (M2a §2, §4b) ──────────────────────────────────────
+# ─── Roles for the GPU container and the image build (M3e §9) ─────────────
 #
-# Every role carries the permissions boundary from infra/iam/neurolens-role-boundary.json (created by
-# hand in the console). The deploy user may only create roles that carry it, so AWS refuses any role
-# here without it.
+# Every role carries the permissions boundary from infra/iam/neurolens-role-boundary.json
+# (created by hand in the console). The deploy user may only create roles that carry it, so AWS
+# refuses any role here without it.
 
 locals {
   account_id   = data.aws_caller_identity.current.account_id
   boundary_arn = "arn:aws:iam::${local.account_id}:policy/neurolens-role-boundary"
-  ssm_core_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
-  worker_asg   = "neurolens-workers"
   # IAM names are global (shared by every region): a deployment in another region (M2a §4i) adds
   # its region to them. us-east-1 keeps the original names, so its live roles are not replaced.
-  iam_suffix     = var.region == "us-east-1" ? "" : "-${var.region}"
-  worker_asg_arn = "arn:aws:autoscaling:${var.region}:${local.account_id}:autoScalingGroup:*:autoScalingGroupName/${local.worker_asg}"
-
-  # Only the image build needs the HuggingFace token. The AWS-managed SSM core policy allows reading
-  # every parameter and the boundary allows /neurolens/*, so the worker and NAT roles deny it
-  # explicitly (a Deny always wins over an Allow). M2a §4b.
-  deny_neurolens_parameters = {
-    Sid      = "NoNeurolensParameters"
-    Effect   = "Deny"
-    Action   = ["ssm:GetParameter", "ssm:GetParameters", "ssm:GetParametersByPath", "ssm:GetParameterHistory"]
-    Resource = "arn:aws:ssm:${var.region}:${local.account_id}:parameter/neurolens/*"
-  }
+  iam_suffix = var.region == "us-east-1" ? "" : "-${var.region}"
 }
 
-data "aws_iam_policy_document" "ec2_assume" {
-  statement {
-    actions = ["sts:AssumeRole"]
-    principals {
-      type        = "Service"
-      identifiers = ["ec2.amazonaws.com"]
-    }
-  }
-}
+# ─── SageMaker execution role (the GPU container) ─────────────────────────
 
-# ─── Image-build instance ──────────────────────────────────────────────────
-
-resource "aws_iam_role" "build" {
-  name                 = "neurolens-build${local.iam_suffix}"
-  assume_role_policy   = data.aws_iam_policy_document.ec2_assume.json
-  permissions_boundary = local.boundary_arn
-}
-
-resource "aws_iam_role_policy" "build" {
-  name = "neurolens-build"
-  role = aws_iam_role.build.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Sid      = "ReadHuggingFaceToken"
-        Effect   = "Allow"
-        Action   = "ssm:GetParameter"
-        Resource = "arn:aws:ssm:${var.region}:${local.account_id}:parameter/neurolens/hf_token"
-      },
-      {
-        Sid      = "DecryptItThroughParameterStore"
-        Effect   = "Allow"
-        Action   = "kms:Decrypt"
-        Resource = "*"
-        Condition = {
-          StringEquals = { "kms:ViaService" = "ssm.${var.region}.amazonaws.com" }
-        }
-      },
-      {
-        Sid    = "ReadCodeAndTestClip"
-        Effect = "Allow"
-        Action = "s3:GetObject"
-        Resource = [
-          "${aws_s3_bucket.main.arn}/code/*",
-          "${aws_s3_bucket.main.arn}/smoke/*",
-        ]
-      },
-      {
-        Sid      = "ReadWriteWeights"
-        Effect   = "Allow"
-        Action   = ["s3:GetObject", "s3:PutObject"]
-        Resource = "${aws_s3_bucket.main.arn}/models/*"
-      },
-      {
-        Sid       = "ListWeights"
-        Effect    = "Allow"
-        Action    = "s3:ListBucket"
-        Resource  = aws_s3_bucket.main.arn
-        Condition = { StringLike = { "s3:prefix" = ["models/", "models/*"] } }
-      },
-    ]
-  })
-}
-
-resource "aws_iam_role_policy_attachment" "build_ssm" {
-  role       = aws_iam_role.build.name
-  policy_arn = local.ssm_core_arn
-}
-
-resource "aws_iam_instance_profile" "build" {
-  name = "neurolens-build${local.iam_suffix}"
-  role = aws_iam_role.build.name
-}
-
-# ─── GPU workers ───────────────────────────────────────────────────────────
-
-resource "aws_iam_role" "worker" {
-  name                 = "neurolens-worker${local.iam_suffix}"
-  assume_role_policy   = data.aws_iam_policy_document.ec2_assume.json
-  permissions_boundary = local.boundary_arn
-}
-
-resource "aws_iam_role_policy" "worker" {
-  name = "neurolens-worker"
-  role = aws_iam_role.worker.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = concat(local.db_access_statements, [
-      {
-        Sid    = "ReadInputsCodeWeightsResults"
-        Effect = "Allow"
-        Action = "s3:GetObject"
-        Resource = [for p in ["uploads", "code", "models", "results"] :
-        "${aws_s3_bucket.main.arn}/${p}/*"]
-      },
-      {
-        # Without ListBucket, S3 answers a request for a missing object with 403 instead of 404,
-        # which the worker would treat as a failure, not a missing upload. No s3:prefix condition: a HEAD or GET
-        # carries no prefix, so the condition would fail and bring the 403 back.
-        Sid      = "ListBucketSoMissingObjectsGive404"
-        Effect   = "Allow"
-        Action   = "s3:ListBucket"
-        Resource = aws_s3_bucket.main.arn
-      },
-      {
-        Sid      = "WriteResults"
-        Effect   = "Allow"
-        Action   = "s3:PutObject"
-        Resource = "${aws_s3_bucket.main.arn}/results/*"
-      },
-      {
-        # Consented videos and their analysis for future research (M3c §3b). The copy is a put.
-        Sid      = "WriteDataset"
-        Effect   = "Allow"
-        Action   = "s3:PutObject"
-        Resource = "${aws_s3_bucket.main.arn}/dataset/*"
-      },
-      {
-        # Boot records for the cold-start table (M2b §10). Write only.
-        Sid      = "WriteBootRecords"
-        Effect   = "Allow"
-        Action   = "s3:PutObject"
-        Resource = "${aws_s3_bucket.main.arn}/experiments/*"
-      },
-      {
-        Sid      = "DeleteRejectedUploads"
-        Effect   = "Allow"
-        Action   = "s3:DeleteObject"
-        Resource = "${aws_s3_bucket.main.arn}/uploads/*"
-      },
-      {
-        Sid    = "ReadJobQueue"
-        Effect = "Allow"
-        # ChangeMessageVisibility: the heartbeat and the fast release (M2b §6). GetQueueAttributes:
-        # the worker reads maxReceiveCount from the queue's redrive policy at start.
-        Action = [
-          "sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:GetQueueAttributes",
-          "sqs:ChangeMessageVisibility",
-        ]
-        Resource = aws_sqs_queue.jobs.arn
-      },
-      {
-        # Only "not me, not now" while it holds a job (M2b §1a): it can never change how many
-        # workers run. AWS's documented pattern for long-running queue workers.
-        Sid      = "ProtectOwnMachineWhileBusy"
-        Effect   = "Allow"
-        Action   = "autoscaling:SetInstanceProtection"
-        Resource = local.worker_asg_arn
-      },
-      local.deny_neurolens_parameters,
-    ])
-  })
-}
-
-resource "aws_iam_role_policy_attachment" "worker_ssm" {
-  role       = aws_iam_role.worker.name
-  policy_arn = local.ssm_core_arn
-}
-
-resource "aws_iam_instance_profile" "worker" {
-  name = "neurolens-worker${local.iam_suffix}"
-  role = aws_iam_role.worker.name
-}
-
-# ─── Circuit breaker Lambda (M2b §2c) ──────────────────────────────────────
-
-resource "aws_iam_role" "breaker" {
-  name                 = "neurolens-breaker${local.iam_suffix}"
+resource "aws_iam_role" "sagemaker" {
+  name                 = "neurolens-sagemaker${local.iam_suffix}"
   permissions_boundary = local.boundary_arn
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
       Effect    = "Allow"
       Action    = "sts:AssumeRole"
-      Principal = { Service = "lambda.amazonaws.com" }
+      Principal = { Service = "sagemaker.amazonaws.com" }
     }]
   })
-  tags = { Milestone = "M2b" }
+  tags = { Milestone = "M3e" }
 }
 
-resource "aws_iam_role_policy" "breaker" {
-  name = "neurolens-breaker"
-  role = aws_iam_role.breaker.id
+resource "aws_iam_role_policy" "sagemaker" {
+  name = "neurolens-sagemaker"
+  role = aws_iam_role.sagemaker.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = concat(local.db_access_statements, [
+      {
+        # SageMaker copies model-data/ into /opt/ml/model and the container reads the upload.
+        # results/ is read for the "already has a result" check before a claim.
+        Sid      = "ReadModelDataUploadsAndResults"
+        Effect   = "Allow"
+        Action   = "s3:GetObject"
+        Resource = [for p in ["model-data", "uploads", "results"] : "${aws_s3_bucket.main.arn}/${p}/*"]
+      },
+      {
+        # Without ListBucket, S3 answers a missing result with 403 instead of 404, which
+        # object_exists treats as a failure. Model download also lists model-data/.
+        # No s3:prefix condition: a HEAD or GET carries no prefix.
+        Sid      = "ListBucketSoMissingObjectsGive404"
+        Effect   = "Allow"
+        Action   = "s3:ListBucket"
+        Resource = aws_s3_bucket.main.arn
+      },
+      {
+        # The result, the consented dataset copy and the boot record (M3e §4).
+        Sid    = "WriteResultsDatasetAndBootRecords"
+        Effect = "Allow"
+        Action = "s3:PutObject"
+        Resource = [
+          "${aws_s3_bucket.main.arn}/results/*",
+          "${aws_s3_bucket.main.arn}/dataset/*",
+          "${aws_s3_bucket.main.arn}/experiments/boots/*",
+          "${aws_s3_bucket.main.arn}/sagemaker-output/*",
+        ]
+      },
+      {
+        # A refund deletes every file the job has (M3e §4c).
+        Sid    = "DeleteAJobsFilesAfterRefund"
+        Effect = "Allow"
+        Action = "s3:DeleteObject"
+        Resource = [
+          "${aws_s3_bucket.main.arn}/uploads/*",
+          "${aws_s3_bucket.main.arn}/results/*",
+          "${aws_s3_bucket.main.arn}/dataset/*",
+        ]
+      },
+      {
+        # The image lives in our ECR repository. GetAuthorizationToken has no resource to scope.
+        Sid      = "GetEcrAuthorizationToken"
+        Effect   = "Allow"
+        Action   = "ecr:GetAuthorizationToken"
+        Resource = "*"
+      },
+      {
+        Sid      = "PullTheWorkerImage"
+        Effect   = "Allow"
+        Action   = ["ecr:BatchCheckLayerAvailability", "ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer"]
+        Resource = aws_ecr_repository.worker.arn
+      },
+      {
+        # SageMaker writes the container's log here (/aws/sagemaker/Endpoints/neurolens).
+        Sid    = "OwnContainerLogs"
+        Effect = "Allow"
+        Action = ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"]
+        Resource = [
+          "arn:aws:logs:${var.region}:${local.account_id}:log-group:/aws/sagemaker/Endpoints/${local.endpoint_name}*",
+          "arn:aws:logs:${var.region}:${local.account_id}:log-group:/aws/sagemaker/Endpoints/${local.endpoint_name}*:*",
+        ]
+      },
+      {
+        # The endpoint's ErrorTopic (M3e §5).
+        Sid      = "PublishGpuErrors"
+        Effect   = "Allow"
+        Action   = "sns:Publish"
+        Resource = aws_sns_topic.gpu_errors.arn
+      },
+    ])
+  })
+}
+
+# ─── CodeBuild role (builds and pushes the image) ─────────────────────────
+
+resource "aws_iam_role" "codebuild" {
+  name                 = "neurolens-codebuild${local.iam_suffix}"
+  permissions_boundary = local.boundary_arn
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Action    = "sts:AssumeRole"
+      Principal = { Service = "codebuild.amazonaws.com" }
+    }]
+  })
+  tags = { Milestone = "M3e" }
+}
+
+resource "aws_iam_role_policy" "codebuild" {
+  name = "neurolens-codebuild"
+  role = aws_iam_role.codebuild.id
 
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
       {
-        # Describe calls cannot be limited to one group or alarm (AWS needs "*"). Read only.
-        Sid      = "ReadGroupsAndIdleAlarm"
+        # The source zip infra/build_image.sh uploads. Nothing else in the bucket.
+        Sid      = "ReadTheBuildSource"
         Effect   = "Allow"
-        Action   = ["autoscaling:DescribeAutoScalingGroups", "cloudwatch:DescribeAlarms"]
+        Action   = ["s3:GetObject", "s3:GetObjectVersion"]
+        Resource = "${aws_s3_bucket.main.arn}/build/source.zip"
+      },
+      {
+        Sid       = "ListTheBuildPrefix"
+        Effect    = "Allow"
+        Action    = "s3:ListBucket"
+        Resource  = aws_s3_bucket.main.arn
+        Condition = { StringLike = { "s3:prefix" = ["build/", "build/*"] } }
+      },
+      {
+        Sid      = "LocateTheBucket"
+        Effect   = "Allow"
+        Action   = "s3:GetBucketLocation"
+        Resource = aws_s3_bucket.main.arn
+      },
+      {
+        # GetAuthorizationToken has no resource to scope.
+        Sid      = "GetEcrAuthorizationToken"
+        Effect   = "Allow"
+        Action   = "ecr:GetAuthorizationToken"
         Resource = "*"
       },
       {
-        # Remove the workers' scale-in protection, then set the group to zero.
-        Sid      = "StopWorkerGroup"
-        Effect   = "Allow"
-        Action   = ["autoscaling:SetInstanceProtection", "autoscaling:UpdateAutoScalingGroup"]
-        Resource = local.worker_asg_arn
+        Sid    = "PushTheWorkerImage"
+        Effect = "Allow"
+        Action = [
+          "ecr:BatchCheckLayerAvailability", "ecr:InitiateLayerUpload", "ecr:UploadLayerPart",
+          "ecr:CompleteLayerUpload", "ecr:PutImage",
+        ]
+        Resource = aws_ecr_repository.worker.arn
       },
       {
-        Sid      = "OwnLogs"
+        Sid      = "OwnBuildLogs"
         Effect   = "Allow"
         Action   = ["logs:CreateLogStream", "logs:PutLogEvents"]
-        Resource = "arn:aws:logs:${var.region}:${local.account_id}:log-group:/aws/lambda/neurolens-breaker:*"
+        Resource = "${aws_cloudwatch_log_group.codebuild.arn}:*"
       },
     ]
   })

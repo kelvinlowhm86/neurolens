@@ -4,117 +4,80 @@
     {
       "Sid": "Ec2ReadAnything",
       "Effect": "Allow",
-      "Action": ["ec2:Describe*", "ec2:GetLaunchTemplateData", "ec2:GetConsoleOutput"],
+      "Action": [
+        "ec2:Describe*",
+        "ec2:GetLaunchTemplateData",
+        "ec2:GetConsoleOutput"
+      ],
       "Resource": "*"
     },
     {
       "Sid": "Ec2CreateOnlyIfTaggedNeurolens",
       "Effect": "Allow",
       "Action": [
-        "ec2:CreateVpc", "ec2:CreateSubnet", "ec2:CreateInternetGateway", "ec2:CreateRouteTable",
-        "ec2:CreateSecurityGroup", "ec2:CreateVpcEndpoint", "ec2:CreateLaunchTemplate"
+        "ec2:CreateVpc",
+        "ec2:CreateSubnet",
+        "ec2:CreateRouteTable",
+        "ec2:CreateSecurityGroup"
       ],
       "Resource": "*",
-      "Condition": {"StringEquals": {"aws:RequestTag/Project": "neurolens"}}
-    },
-    {
-      "Sid": "Ec2CreateOnlyInsideNeurolensNetwork",
-      "Effect": "Allow",
-      "Action": ["ec2:CreateSubnet", "ec2:CreateRouteTable", "ec2:CreateSecurityGroup", "ec2:CreateVpcEndpoint"],
-      "Resource": ["arn:aws:ec2:us-east-1:*:vpc/*", "arn:aws:ec2:us-east-1:*:route-table/*"],
-      "Condition": {"StringEquals": {"ec2:ResourceTag/Project": "neurolens"}}
-    },
-    {
-      "Sid": "Ec2LaunchOnlyAllowedTypesTaggedNeurolens",
-      "Effect": "Allow",
-      "Action": "ec2:RunInstances",
-      "Resource": "arn:aws:ec2:us-east-1:*:instance/*",
       "Condition": {
         "StringEquals": {
-          "aws:RequestTag/Project": "neurolens",
-          "ec2:InstanceType": ["g6e.xlarge", "g6e.2xlarge", "g6.2xlarge", "t3.large"]
+          "aws:RequestTag/Project": "neurolens"
         }
       }
     },
     {
-      "Sid": "Ec2LaunchUsesTheseResources",
+      "Sid": "Ec2CreateOnlyInsideNeurolensNetwork",
       "Effect": "Allow",
-      "Action": "ec2:RunInstances",
+      "Action": [
+        "ec2:CreateSubnet",
+        "ec2:CreateRouteTable",
+        "ec2:CreateSecurityGroup"
+      ],
       "Resource": [
-        "arn:aws:ec2:us-east-1::image/*",
-        "arn:aws:ec2:us-east-1:*:subnet/*",
-        "arn:aws:ec2:us-east-1:*:security-group/*",
-        "arn:aws:ec2:us-east-1:*:network-interface/*",
-        "arn:aws:ec2:us-east-1:*:volume/*",
-        "arn:aws:ec2:us-east-1:*:launch-template/*",
-        "arn:aws:ec2:us-east-1:*:spot-instances-request/*"
-      ]
-    },
-    {
-      "Sid": "Ec2ImageFromOwnInstance",
-      "Effect": "Allow",
-      "Action": "ec2:CreateImage",
-      "Resource": "arn:aws:ec2:us-east-1:*:instance/*",
-      "Condition": {"StringEquals": {"ec2:ResourceTag/Project": "neurolens"}}
-    },
-    {
-      "Sid": "Ec2ImageOutputsTaggedNeurolens",
-      "Effect": "Allow",
-      "Action": "ec2:CreateImage",
-      "Resource": ["arn:aws:ec2:us-east-1::image/*", "arn:aws:ec2:us-east-1:*:snapshot/*"],
-      "Condition": {"StringEquals": {"aws:RequestTag/Project": "neurolens"}}
+        "arn:aws:ec2:us-east-1:*:vpc/*",
+        "arn:aws:ec2:us-east-1:*:route-table/*"
+      ],
+      "Condition": {
+        "StringEquals": {
+          "ec2:ResourceTag/Project": "neurolens"
+        }
+      }
     },
     {
       "Sid": "Ec2TagWhileCreating",
       "Effect": "Allow",
       "Action": "ec2:CreateTags",
       "Resource": "*",
-      "Condition": {"Null": {"ec2:CreateAction": "false"}}
+      "Condition": {
+        "Null": {
+          "ec2:CreateAction": "false"
+        }
+      }
     },
     {
       "Sid": "Ec2ChangeOrDeleteOnlyNeurolens",
       "Effect": "Allow",
       "Action": [
-        "ec2:Delete*", "ec2:Modify*", "ec2:CreateTags",
-        "ec2:CreateRoute", "ec2:ReplaceRoute",
-        "ec2:AssociateRouteTable", "ec2:DisassociateRouteTable",
-        "ec2:AttachInternetGateway", "ec2:DetachInternetGateway",
-        "ec2:AuthorizeSecurityGroupIngress", "ec2:AuthorizeSecurityGroupEgress",
-        "ec2:RevokeSecurityGroupIngress", "ec2:RevokeSecurityGroupEgress",
-        "ec2:CreateLaunchTemplateVersion",
-        "ec2:StartInstances", "ec2:StopInstances", "ec2:RebootInstances", "ec2:TerminateInstances",
-        "ec2:DeregisterImage"
+        "ec2:Delete*",
+        "ec2:Modify*",
+        "ec2:CreateTags",
+        "ec2:CreateRoute",
+        "ec2:ReplaceRoute",
+        "ec2:AssociateRouteTable",
+        "ec2:DisassociateRouteTable",
+        "ec2:AuthorizeSecurityGroupIngress",
+        "ec2:AuthorizeSecurityGroupEgress",
+        "ec2:RevokeSecurityGroupIngress",
+        "ec2:RevokeSecurityGroupEgress"
       ],
       "Resource": "*",
-      "Condition": {"StringEquals": {"ec2:ResourceTag/Project": "neurolens"}}
-    },
-    {
-      "Sid": "NatGatewayAndAddressCreateOnlyIfTaggedNeurolens",
-      "Effect": "Allow",
-      "Action": ["ec2:CreateNatGateway", "ec2:AllocateAddress"],
-      "Resource": ["arn:aws:ec2:us-east-1:*:natgateway/*", "arn:aws:ec2:us-east-1:*:elastic-ip/*"],
-      "Condition": {"StringEquals": {"aws:RequestTag/Project": "neurolens"}}
-    },
-    {
-      "Sid": "NatGatewayOnlyInNeurolensSubnetWithNeurolensAddress",
-      "Effect": "Allow",
-      "Action": "ec2:CreateNatGateway",
-      "Resource": ["arn:aws:ec2:us-east-1:*:subnet/*", "arn:aws:ec2:us-east-1:*:elastic-ip/*"],
-      "Condition": {"StringEquals": {"ec2:ResourceTag/Project": "neurolens"}}
-    },
-    {
-      "Sid": "ReleaseOnlyNeurolensAddresses",
-      "Effect": "Allow",
-      "Action": "ec2:ReleaseAddress",
-      "Resource": "arn:aws:ec2:us-east-1:*:elastic-ip/*",
-      "Condition": {"StringEquals": {"ec2:ResourceTag/Project": "neurolens"}}
-    },
-    {
-      "Sid": "UnlinkAddressHasNoTaggedResource",
-      "Effect": "Allow",
-      "Action": "ec2:DisassociateAddress",
-      "Resource": "*",
-      "Condition": {"StringEquals": {"aws:RequestedRegion": "us-east-1"}}
+      "Condition": {
+        "StringEquals": {
+          "ec2:ResourceTag/Project": "neurolens"
+        }
+      }
     },
     {
       "Sid": "ExplainOwnDenialsReadOnly",
@@ -126,8 +89,11 @@
       "Sid": "RolesOnlyNeurolensAndOnlyInsideTheBoundary",
       "Effect": "Allow",
       "Action": [
-        "iam:CreateRole", "iam:PutRolePolicy", "iam:DeleteRolePolicy",
-        "iam:AttachRolePolicy", "iam:DetachRolePolicy"
+        "iam:CreateRole",
+        "iam:PutRolePolicy",
+        "iam:DeleteRolePolicy",
+        "iam:AttachRolePolicy",
+        "iam:DetachRolePolicy"
       ],
       "Resource": "arn:aws:iam::*:role/neurolens-*",
       "Condition": {
@@ -140,35 +106,74 @@
       "Sid": "RolesAndProfilesOnlyNeurolens",
       "Effect": "Allow",
       "Action": [
-        "iam:GetRole", "iam:DeleteRole", "iam:TagRole", "iam:UntagRole", "iam:UpdateAssumeRolePolicy",
-        "iam:GetRolePolicy", "iam:ListRolePolicies", "iam:ListAttachedRolePolicies",
+        "iam:GetRole",
+        "iam:DeleteRole",
+        "iam:TagRole",
+        "iam:UntagRole",
+        "iam:UpdateAssumeRolePolicy",
+        "iam:GetRolePolicy",
+        "iam:ListRolePolicies",
+        "iam:ListAttachedRolePolicies",
         "iam:ListInstanceProfilesForRole",
-        "iam:CreateInstanceProfile", "iam:DeleteInstanceProfile", "iam:GetInstanceProfile",
-        "iam:TagInstanceProfile", "iam:AddRoleToInstanceProfile", "iam:RemoveRoleFromInstanceProfile"
+        "iam:CreateInstanceProfile",
+        "iam:DeleteInstanceProfile",
+        "iam:GetInstanceProfile",
+        "iam:TagInstanceProfile",
+        "iam:AddRoleToInstanceProfile",
+        "iam:RemoveRoleFromInstanceProfile"
       ],
-      "Resource": ["arn:aws:iam::*:role/neurolens-*", "arn:aws:iam::*:instance-profile/neurolens-*"]
+      "Resource": [
+        "arn:aws:iam::*:role/neurolens-*",
+        "arn:aws:iam::*:instance-profile/neurolens-*"
+      ]
     },
     {
-      "Sid": "HandRolesOnlyToEc2",
+      "Sid": "HandRolesOnlyToSageMaker",
       "Effect": "Allow",
       "Action": "iam:PassRole",
       "Resource": "arn:aws:iam::*:role/neurolens-*",
-      "Condition": {"StringEquals": {"iam:PassedToService": "ec2.amazonaws.com"}}
+      "Condition": {
+        "StringEquals": {
+          "iam:PassedToService": "sagemaker.amazonaws.com"
+        }
+      }
     },
     {
       "Sid": "HandRolesOnlyToLambda",
       "Effect": "Allow",
       "Action": "iam:PassRole",
       "Resource": "arn:aws:iam::*:role/neurolens-*",
-      "Condition": {"StringEquals": {"iam:PassedToService": "lambda.amazonaws.com"}}
+      "Condition": {
+        "StringEquals": {
+          "iam:PassedToService": "lambda.amazonaws.com"
+        }
+      }
     },
     {
-      "Sid": "AwsHelperRolesForAutoScalingSpotAndRds",
+      "Sid": "HandRolesOnlyToCodeBuild",
+      "Effect": "Allow",
+      "Action": "iam:PassRole",
+      "Resource": "arn:aws:iam::*:role/neurolens-*",
+      "Condition": {
+        "StringEquals": {
+          "iam:PassedToService": "codebuild.amazonaws.com"
+        }
+      }
+    },
+    {
+      "Sid": "AwsHelperRolesForSageMakerCodeBuildAppScalingAndRds",
       "Effect": "Allow",
       "Action": "iam:CreateServiceLinkedRole",
       "Resource": "arn:aws:iam::*:role/aws-service-role/*",
       "Condition": {
-        "StringEquals": {"iam:AWSServiceName": ["autoscaling.amazonaws.com", "spot.amazonaws.com", "rds.amazonaws.com"]}
+        "StringEquals": {
+          "iam:AWSServiceName": [
+            "application-autoscaling.amazonaws.com",
+            "sagemaker.amazonaws.com",
+            "codebuild.amazonaws.com",
+            "rds.amazonaws.com"
+          ]
+        }
       }
     }
   ]

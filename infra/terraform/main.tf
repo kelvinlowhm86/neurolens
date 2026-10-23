@@ -78,8 +78,9 @@ resource "aws_s3_bucket_policy" "main" {
 #   uploads/              30 d   (S3 rounds to midnight UTC: 30-31 days) the input videos (job status lives in Aurora)
 #   results/              30 d   how long a result stays viewable / downloadable (product decision)
 #   dataset/              365 d  consented videos and their analysis, kept for future research (M3c §3b)
-#   code/ and experiments/ never expire: M2a's boot pulls code/latest.zip on every GPU launch
-#   (a 404 would stop the worker coming up) and M4 reads experiments/* for the final report.
+#   sagemaker-output/     1 d    SageMaker's async answers; the job row and results/ are the record
+#   build/                7 d    source.zip for the image build; one build needs it only that day
+#   experiments/ never expire: M4 reads experiments/* for the final report.
 resource "aws_s3_bucket_lifecycle_configuration" "main" {
   bucket = aws_s3_bucket.main.id
 
@@ -115,6 +116,28 @@ resource "aws_s3_bucket_lifecycle_configuration" "main" {
       days = 365
     }
   }
+
+  rule {
+    id     = "expire-sagemaker-output"
+    status = "Enabled"
+    filter {
+      prefix = "sagemaker-output/"
+    }
+    expiration {
+      days = 1
+    }
+  }
+
+  rule {
+    id     = "expire-build"
+    status = "Enabled"
+    filter {
+      prefix = "build/"
+    }
+    expiration {
+      days = 7
+    }
+  }
 }
 
 # Lets the browser POST a file straight to the bucket from these origins. S3 applies CORS per
@@ -136,15 +159,15 @@ resource "aws_s3_bucket_cors_configuration" "main" {
 resource "aws_sqs_queue" "jobs" {
   name = var.queue_name
 
-  # The worker's heartbeat (M2b §6) extends a running job's message every 50 s, so this only
-  # decides how soon a dead worker's job is retried: about two minutes.
-  visibility_timeout_seconds = 120
+  # The dispatcher gets at most 120 s per message (AWS asks for six times the function
+  # timeout), so a slow dispatch is not redelivered while it is still invoking (M3e §3).
+  visibility_timeout_seconds = 720
 
   sqs_managed_sse_enabled = true
 
-  # Retry cap (M2a §4h): a message received twice without being deleted is parked in the
-  # dead-letter queue instead of rerunning paid GPU inference forever. The worker reads
-  # maxReceiveCount from here at start (M2b §1a), so this is the one place to change it.
+  # A message that fails twice goes to the dead-letter queue, whose handler refunds the job
+  # (M3a §7). No automatic retry on the GPU: the container and the error handler settle a
+  # failed request (M3e §5).
   redrive_policy = jsonencode({
     deadLetterTargetArn = aws_sqs_queue.jobs_dlq.arn
     maxReceiveCount     = 2
@@ -152,8 +175,8 @@ resource "aws_sqs_queue" "jobs" {
 }
 
 # Jobs that failed twice. From M3a the dead-letter handler Lambda (lambdas.tf) settles or refunds
-# each one; SQS moves messages here itself, so the worker needs no access. A message the handler
-# cannot finish yet (a worker still holds the job) is tried again after the visibility timeout,
+# each one; SQS moves messages here itself, so no container needs queue access. A message the
+# handler cannot finish yet (a container still holds the job) is tried again after the visibility timeout,
 # which must be at least the Lambda's 120 s timeout (AWS recommends 6 times it); messages are kept
 # 14 days, the reaper being the backstop.
 resource "aws_sqs_queue" "jobs_dlq" {
@@ -185,7 +208,7 @@ resource "aws_sqs_queue_policy" "allow_s3" {
 }
 
 # Tell the queue about new uploads. Filtered to uploads/ only: the app also writes
-# results/, code/ and experiments/ objects to the same bucket, and an unfiltered notification
+# results/, dataset/ and experiments/ objects to the same bucket, and an unfiltered notification
 # would enqueue them as spurious jobs.
 resource "aws_s3_bucket_notification" "uploads" {
   bucket = aws_s3_bucket.main.id

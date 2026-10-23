@@ -1,0 +1,17 @@
+version: 0.2
+
+# Runs in CodeBuild from s3://<bucket>/build/source.zip (the repository at HEAD).
+# infra/build_image.sh supplies IMAGE_TAG and AWS_ACCOUNT_ID; the project supplies REPOSITORY_NAME.
+
+phases:
+  pre_build:
+    commands:
+      - if grep -q REPLACE_BEFORE_BUILD infra/worker_image/Dockerfile; then echo "Base image digest is still a placeholder"; exit 1; fi
+      - REPO_URI="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com/${REPOSITORY_NAME}"
+      - aws ecr get-login-password --region "$AWS_DEFAULT_REGION" | docker login --username AWS --password-stdin "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com"
+  build:
+    commands:
+      - REPO_URI="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com/${REPOSITORY_NAME}"
+      - docker build --pull -f infra/worker_image/Dockerfile -t "${REPO_URI}:${IMAGE_TAG}" .
+      - docker push "${REPO_URI}:${IMAGE_TAG}"
+      - docker inspect --format='{{index .RepoDigests 0}}' "${REPO_URI}:${IMAGE_TAG}"

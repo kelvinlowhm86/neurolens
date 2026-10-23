@@ -7,15 +7,16 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 6.28"
     }
-    # Zips the circuit breaker's code for Lambda (M2b §2c).
+    # SageMaker instance pools cannot be expressed by the aws provider; the endpoint
+    # configuration alone uses Cloud Control (docs/M3e_spec.md §6a).
+    awscc = {
+      source  = "hashicorp/awscc"
+      version = "~> 1.107"
+    }
+    # Zips the Lambdas' code (the one M3a/M3e zip).
     archive = {
       source  = "hashicorp/archive"
       version = "~> 2.0"
-    }
-    # The pause between deleting the NAT Gateway and releasing its Elastic IP (network.tf).
-    time = {
-      source  = "hashicorp/time"
-      version = "~> 0.13"
     }
   }
 
@@ -39,7 +40,13 @@ provider "aws" {
   default_tags {
     tags = {
       Project   = "neurolens"
-      Milestone = "M2a"
+      Milestone = "M3e"
     }
   }
+}
+
+# Cloud Control manages the endpoint configuration only (docs/M3e_spec.md §6a). It uses the
+# same credentials and region as the aws provider.
+provider "awscc" {
+  region = var.region
 }

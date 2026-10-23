@@ -5,7 +5,10 @@
       "Sid": "NeurolensBucketsOnly",
       "Effect": "Allow",
       "Action": "s3:*",
-      "Resource": ["arn:aws:s3:::neurolens-*", "arn:aws:s3:::neurolens-*/*"]
+      "Resource": [
+        "arn:aws:s3:::neurolens-*",
+        "arn:aws:s3:::neurolens-*/*"
+      ]
     },
     {
       "Sid": "NeurolensQueuesOnly",
@@ -14,46 +17,29 @@
       "Resource": "arn:aws:sqs:us-east-1:*:neurolens-*"
     },
     {
-      "Sid": "AutoScalingRead",
-      "Effect": "Allow",
-      "Action": "autoscaling:Describe*",
-      "Resource": "*"
-    },
-    {
-      "Sid": "AutoScalingGroupsOnlyNeurolens",
-      "Effect": "Allow",
-      "Action": "autoscaling:*",
-      "Resource": "arn:aws:autoscaling:us-east-1:*:autoScalingGroup:*:autoScalingGroupName/neurolens-*"
-    },
-    {
       "Sid": "AlarmsRead",
       "Effect": "Allow",
-      "Action": ["cloudwatch:DescribeAlarms", "cloudwatch:GetMetricData", "cloudwatch:ListMetrics"],
-      "Resource": "*"
-    },
-    {
-      "Sid": "ApiCallHistoryRead",
-      "Effect": "Allow",
-      "Action": "cloudtrail:LookupEvents",
+      "Action": [
+        "cloudwatch:DescribeAlarms",
+        "cloudwatch:GetMetricData",
+        "cloudwatch:ListMetrics"
+      ],
       "Resource": "*"
     },
     {
       "Sid": "AlarmsOnlyNeurolens",
       "Effect": "Allow",
       "Action": [
-        "cloudwatch:PutMetricAlarm", "cloudwatch:DeleteAlarms",
-        "cloudwatch:EnableAlarmActions", "cloudwatch:DisableAlarmActions",
-        "cloudwatch:TagResource", "cloudwatch:UntagResource", "cloudwatch:ListTagsForResource",
+        "cloudwatch:PutMetricAlarm",
+        "cloudwatch:DeleteAlarms",
+        "cloudwatch:EnableAlarmActions",
+        "cloudwatch:DisableAlarmActions",
+        "cloudwatch:TagResource",
+        "cloudwatch:UntagResource",
+        "cloudwatch:ListTagsForResource",
         "cloudwatch:DescribeAlarmHistory"
       ],
       "Resource": "arn:aws:cloudwatch:us-east-1:*:alarm:neurolens-*"
-    },
-    {
-      "Sid": "AlarmEc2ActionsServiceRole",
-      "Effect": "Allow",
-      "Action": "iam:CreateServiceLinkedRole",
-      "Resource": "arn:aws:iam::*:role/aws-service-role/events.amazonaws.com/AWSServiceRoleForCloudWatchEvents",
-      "Condition": {"StringEquals": {"iam:AWSServiceName": "events.amazonaws.com"}}
     },
     {
       "Sid": "EmailTopicsOnlyNeurolens",
@@ -65,47 +51,15 @@
       "Sid": "ParametersOnlyUnderNeurolens",
       "Effect": "Allow",
       "Action": [
-        "ssm:PutParameter", "ssm:GetParameter", "ssm:GetParameters", "ssm:DeleteParameter",
-        "ssm:AddTagsToResource", "ssm:RemoveTagsFromResource", "ssm:ListTagsForResource"
+        "ssm:PutParameter",
+        "ssm:GetParameter",
+        "ssm:GetParameters",
+        "ssm:DeleteParameter",
+        "ssm:AddTagsToResource",
+        "ssm:RemoveTagsFromResource",
+        "ssm:ListTagsForResource"
       ],
       "Resource": "arn:aws:ssm:us-east-1:*:parameter/neurolens/*"
-    },
-    {
-      "Sid": "PublicAwsParametersLikeLatestImageIds",
-      "Effect": "Allow",
-      "Action": ["ssm:GetParameter", "ssm:GetParameters"],
-      "Resource": "arn:aws:ssm:us-east-1::parameter/aws/service/*"
-    },
-    {
-      "Sid": "RemoteCommandsAndSessionsOnlyOnNeurolensMachines",
-      "Effect": "Allow",
-      "Action": ["ssm:SendCommand", "ssm:StartSession"],
-      "Resource": "arn:aws:ec2:us-east-1:*:instance/*",
-      "Condition": {"StringEquals": {"ssm:resourceTag/Project": "neurolens"}}
-    },
-    {
-      "Sid": "OnlyTheShellDocuments",
-      "Effect": "Allow",
-      "Action": ["ssm:SendCommand", "ssm:StartSession"],
-      "Resource": [
-        "arn:aws:ssm:us-east-1::document/AWS-RunShellScript",
-        "arn:aws:ssm:us-east-1:*:document/SSM-SessionManagerRunShell"
-      ]
-    },
-    {
-      "Sid": "OwnSessions",
-      "Effect": "Allow",
-      "Action": ["ssm:TerminateSession", "ssm:ResumeSession"],
-      "Resource": "arn:aws:ssm:*:*:session/${aws:username}-*"
-    },
-    {
-      "Sid": "CommandResultsAndParameterList",
-      "Effect": "Allow",
-      "Action": [
-        "ssm:GetCommandInvocation", "ssm:ListCommands", "ssm:ListCommandInvocations",
-        "ssm:DescribeInstanceInformation", "ssm:DescribeParameters"
-      ],
-      "Resource": "*"
     },
     {
       "Sid": "FunctionsOnlyNeurolens",
@@ -137,7 +91,10 @@
     {
       "Sid": "DatabaseRead",
       "Effect": "Allow",
-      "Action": ["rds:Describe*", "rds:ListTagsForResource"],
+      "Action": [
+        "rds:Describe*",
+        "rds:ListTagsForResource"
+      ],
       "Resource": "*"
     },
     {
@@ -154,7 +111,10 @@
     {
       "Sid": "DatabaseCreateUsesTheDefaultGroups",
       "Effect": "Allow",
-      "Action": ["rds:CreateDBCluster", "rds:CreateDBInstance"],
+      "Action": [
+        "rds:CreateDBCluster",
+        "rds:CreateDBInstance"
+      ],
       "Resource": [
         "arn:aws:rds:us-east-1:*:cluster-pg:default.*",
         "arn:aws:rds:us-east-1:*:pg:default.*",
@@ -164,18 +124,28 @@
     {
       "Sid": "RdsCreatesTheDatabasePasswordSecret",
       "Effect": "Allow",
-      "Action": ["secretsmanager:CreateSecret", "secretsmanager:TagResource"],
+      "Action": [
+        "secretsmanager:CreateSecret",
+        "secretsmanager:TagResource"
+      ],
       "Resource": "arn:aws:secretsmanager:us-east-1:*:secret:rds!*"
     },
     {
       "Sid": "OnlyTheNeurolensDatabaseSecret",
       "Effect": "Allow",
       "Action": [
-        "secretsmanager:GetSecretValue", "secretsmanager:DescribeSecret", "secretsmanager:RotateSecret",
-        "secretsmanager:DeleteSecret", "secretsmanager:UntagResource"
+        "secretsmanager:GetSecretValue",
+        "secretsmanager:DescribeSecret",
+        "secretsmanager:RotateSecret",
+        "secretsmanager:DeleteSecret",
+        "secretsmanager:UntagResource"
       ],
       "Resource": "arn:aws:secretsmanager:us-east-1:*:secret:rds!*",
-      "Condition": {"StringLike": {"secretsmanager:ResourceTag/aws:rds:primaryDBClusterArn": "arn:aws:rds:us-east-1:*:cluster:neurolens-*"}}
+      "Condition": {
+        "StringLike": {
+          "secretsmanager:ResourceTag/aws:rds:primaryDBClusterArn": "arn:aws:rds:us-east-1:*:cluster:neurolens-*"
+        }
+      }
     },
     {
       "Sid": "KeyInfoForTheEncryptedDatabase",
@@ -187,8 +157,10 @@
       "Sid": "DataApiOnlyNeurolensDatabase",
       "Effect": "Allow",
       "Action": [
-        "rds-data:ExecuteStatement", "rds-data:BeginTransaction",
-        "rds-data:CommitTransaction", "rds-data:RollbackTransaction"
+        "rds-data:ExecuteStatement",
+        "rds-data:BeginTransaction",
+        "rds-data:CommitTransaction",
+        "rds-data:RollbackTransaction"
       ],
       "Resource": "arn:aws:rds:us-east-1:*:cluster:neurolens-*"
     },
@@ -197,20 +169,111 @@
       "Effect": "Allow",
       "Action": "lambda:CreateEventSourceMapping",
       "Resource": "*",
-      "Condition": {"ArnLike": {"lambda:FunctionArn": "arn:aws:lambda:us-east-1:*:function:neurolens-*"}}
+      "Condition": {
+        "ArnLike": {
+          "lambda:FunctionArn": "arn:aws:lambda:us-east-1:*:function:neurolens-*"
+        }
+      }
     },
     {
       "Sid": "ChangeQueueTriggersOnlyForNeurolensFunctions",
       "Effect": "Allow",
-      "Action": ["lambda:UpdateEventSourceMapping", "lambda:DeleteEventSourceMapping"],
+      "Action": [
+        "lambda:UpdateEventSourceMapping",
+        "lambda:DeleteEventSourceMapping"
+      ],
       "Resource": "arn:aws:lambda:us-east-1:*:event-source-mapping:*",
-      "Condition": {"ArnLike": {"lambda:FunctionArn": "arn:aws:lambda:us-east-1:*:function:neurolens-*"}}
+      "Condition": {
+        "ArnLike": {
+          "lambda:FunctionArn": "arn:aws:lambda:us-east-1:*:function:neurolens-*"
+        }
+      }
     },
     {
       "Sid": "ReadAndTagQueueTriggers",
       "Effect": "Allow",
-      "Action": ["lambda:GetEventSourceMapping", "lambda:TagResource", "lambda:UntagResource", "lambda:ListTags"],
+      "Action": [
+        "lambda:GetEventSourceMapping",
+        "lambda:TagResource",
+        "lambda:UntagResource",
+        "lambda:ListTags"
+      ],
       "Resource": "arn:aws:lambda:us-east-1:*:event-source-mapping:*"
+    },
+    {
+      "Sid": "SageMakerOnlyNeurolens",
+      "Effect": "Allow",
+      "Action": "sagemaker:*",
+      "Resource": [
+        "arn:aws:sagemaker:us-east-1:*:endpoint/neurolens*",
+        "arn:aws:sagemaker:us-east-1:*:endpoint-config/neurolens*",
+        "arn:aws:sagemaker:us-east-1:*:model/neurolens*"
+      ]
+    },
+    {
+      "Sid": "WorkerRepositoryOnlyNeurolens",
+      "Effect": "Allow",
+      "Action": "ecr:*",
+      "Resource": "arn:aws:ecr:us-east-1:*:repository/neurolens*"
+    },
+    {
+      "Sid": "EcrLoginTokenHasNoResource",
+      "Effect": "Allow",
+      "Action": "ecr:GetAuthorizationToken",
+      "Resource": "*"
+    },
+    {
+      "Sid": "WorkerBuildOnlyNeurolens",
+      "Effect": "Allow",
+      "Action": "codebuild:*",
+      "Resource": "arn:aws:codebuild:us-east-1:*:project/neurolens*"
+    },
+    {
+      "Sid": "ScalingOnlyNeurolensEndpoint",
+      "Effect": "Allow",
+      "Action": "application-autoscaling:*",
+      "Resource": [
+        "arn:aws:application-autoscaling:us-east-1:*:scalable-target/endpoint/neurolens*",
+        "arn:aws:application-autoscaling:us-east-1:*:scaling-policy/endpoint/neurolens*",
+        "arn:aws:application-autoscaling:us-east-1:*:scheduled-action/endpoint/neurolens*"
+      ]
+    },
+    {
+      "Sid": "ScalingDescribeHasNoResource",
+      "Effect": "Allow",
+      "Action": "application-autoscaling:DescribeScalableTargets",
+      "Resource": "*"
+    },
+    {
+      "Sid": "CloudControlHasNoResourceScoping",
+      "Effect": "Allow",
+      "Action": [
+        "cloudformation:CreateResource",
+        "cloudformation:GetResource",
+        "cloudformation:UpdateResource",
+        "cloudformation:DeleteResource",
+        "cloudformation:GetResourceRequestStatus",
+        "cloudformation:ListResources"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "BuildLogsOnlyNeurolens",
+      "Effect": "Allow",
+      "Action": [
+        "logs:CreateLogGroup",
+        "logs:DeleteLogGroup",
+        "logs:PutRetentionPolicy",
+        "logs:TagResource",
+        "logs:UntagResource"
+      ],
+      "Resource": "arn:aws:logs:us-east-1:*:log-group:/aws/codebuild/neurolens-*"
+    },
+    {
+      "Sid": "LayersOnlyNeurolens",
+      "Effect": "Allow",
+      "Action": "lambda:*",
+      "Resource": "arn:aws:lambda:us-east-1:*:layer:neurolens-*"
     }
   ]
 }

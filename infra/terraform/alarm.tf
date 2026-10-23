@@ -1,15 +1,9 @@
-# ─── GPU alarms (M2a §4f) ───────────────────────────────────────────────────
-# Alarms on one email topic (confirm the subscription email once after the first apply):
-# - idle worker: detects and emails (M3b §6b). A worker in service while the job queue sees no
-#   message received and none deleted for 90 minutes; the circuit breaker (scaling.tf), on its
-#   5-minute schedule, then removes protection and sets the group to 0/0/0 unless a warm hold is on.
-# - long-running: email only, after 3 hours with a worker in service.
+# ─── GPU and Lambda alarms (M3e §6c, §9) ──────────────────────────────────
+# One email topic (confirm the subscription email once after the first apply):
+# - the GPU guard stopped a GPU that scale-in should have stopped: a person should look;
+# - the GPU guard has not run for 30 minutes (EventBridge switched off or removed);
+# - Aurora has been awake for much of 6 hours;
 # - one error alarm per Lambda: email on any failed run.
-
-locals {
-  # Named here: the breaker reads the alarm by this name.
-  idle_alarm = "neurolens-worker-idle"
-}
 
 resource "aws_sns_topic" "alerts" {
   name = "neurolens-alerts"
@@ -21,116 +15,82 @@ resource "aws_sns_topic_subscription" "alerts_email" {
   endpoint  = var.alert_email
 }
 
-resource "aws_cloudwatch_metric_alarm" "worker_running_long" {
-  alarm_name        = "neurolens-worker-running-3h"
-  alarm_description = "A NeuroLens GPU worker has been running for 3 hours (warning only; the idle alarm ends idle workers). Check it, or run infra/stop_work.sh."
+# Forgotten-database alarm (M3b §6): awake in more than 30% of the minutes of each of 6 hours in a
+# row means something keeps it awake (a forgotten stop_work.sh, an open tab, a retrying Lambda):
+# about $1.40 a day at 0.5 ACU. The metric reads 0 while paused, so the hourly 70th percentile of
+# its per-minute values is above 0 exactly when it was awake for over 30% of the hour, whatever
+# capacity it ran at. A reaper wake (about 11 minutes, measured) stays below that; a caller every
+# 12 minutes (about 45%) and a held minimum (100%) are above it.
+# ─── GPU guard alarms (M3e §6c) ───────────────────────────────────────────
 
-  namespace   = "AWS/AutoScaling"
-  metric_name = "GroupInServiceInstances"
-  dimensions  = { AutoScalingGroupName = local.worker_asg }
-  statistic   = "Maximum"
+# The guard logs GPU_GUARD_STOPPED only when scale-in did not stop the GPU. The alarm emails so a
+# person can look at the other signal (scale-in) while the guard keeps the spend bounded.
+resource "aws_cloudwatch_log_metric_filter" "gpu_guard_stopped" {
+  name           = "neurolens-gpu-guard-stopped"
+  log_group_name = aws_cloudwatch_log_group.gpu_guard.name
+  pattern        = "GPU_GUARD_STOPPED"
 
-  # A worker in service in at least 34 of the last 36 five-minute slices: about 3 hours of GPU time
-  # (170 of 180 minutes). A short gap does not make those hours cheaper, so it must not reset the
-  # warning; with 36 of 36, a gap near 5 minutes made the alarm flip every 5 minutes (the alarm
-  # re-checks every minute and the slices are cut at a different minute each time), one email per
-  # flip (M2b CPU rehearsal, build log).
-  period              = 300
-  evaluation_periods  = 36
-  datapoints_to_alarm = 34
-  comparison_operator = "GreaterThanThreshold"
-  threshold           = 0
-  treat_missing_data  = "notBreaching" # no group yet, or metrics off: no alarm
-
-  alarm_actions = [aws_sns_topic.alerts.arn]
-  ok_actions    = [aws_sns_topic.alerts.arn]
+  metric_transformation {
+    name      = "GpuGuardStopped"
+    namespace = "NeuroLens"
+    value     = "1"
+  }
 }
 
-# A worker always picks up or finishes a job within 90 minutes when healthy (longest job about
-# 55 minutes; scale-in ends an idle worker after 7). So no queue activity for 90 minutes with a
-# worker in service means a crash loop, broken code, a frozen job, no NAT Gateway or a warm hold
-# (M2b §2d; the hold keeps its worker and the breaker skips it).
-# Missing SQS data (queues stop publishing after ~6 idle hours) counts as no activity; missing
-# group data never fires it. Manual work needs a warm hold (start_work.sh --keep-worker), not a pause:
-# scale-in would end the worker 7 minutes after the queue empties anyway.
-# workers_to_zero is scale-in's action (scaling.tf); the idle alarm no longer uses it.
-resource "aws_autoscaling_policy" "workers_to_zero" {
-  count = local.workers_enabled ? 1 : 0
+resource "aws_cloudwatch_metric_alarm" "gpu_guard_stopped" {
+  alarm_name        = "neurolens-gpu-guard-stopped"
+  alarm_description = "The NeuroLens GPU guard stopped a GPU (scale-in did not). Look for why the backlog metric stayed above zero; the guard keeps the spend bounded."
 
-  name                   = "neurolens-workers-to-zero"
-  autoscaling_group_name = aws_autoscaling_group.workers[0].name
-  policy_type            = "SimpleScaling"
-  adjustment_type        = "ExactCapacity"
-  scaling_adjustment     = 0
-}
+  namespace   = "NeuroLens"
+  metric_name = "GpuGuardStopped"
+  statistic   = "Sum"
 
-resource "aws_cloudwatch_metric_alarm" "worker_idle" {
-  count = local.workers_enabled ? 1 : 0
-
-  alarm_name = local.idle_alarm
-  # The email text. Causes: a crash loop, broken code, a frozen job, no NAT Gateway, or a warm hold
-  # with no jobs (then the breaker leaves it alone).
-  alarm_description = "A NeuroLens worker has been in service for 90 minutes without queue activity. Unless a warm hold is on, the circuit breaker stops all workers (max 0) within 5 minutes. Run infra/start_work.sh to start again."
-
+  period              = 600
+  evaluation_periods  = 1
   comparison_operator = "GreaterThanOrEqualToThreshold"
   threshold           = 1
-  evaluation_periods  = 18 # 18 x 5 min = 90 minutes
-  datapoints_to_alarm = 18
   treat_missing_data  = "notBreaching"
-
-  metric_query {
-    id          = "idle"
-    expression  = "IF(insvc > 0 AND FILL(recv, 0) + FILL(del, 0) == 0, 1, 0)"
-    label       = "Worker in service with no queue activity"
-    return_data = true
-  }
-  metric_query {
-    id = "insvc"
-    metric {
-      namespace   = "AWS/AutoScaling"
-      metric_name = "GroupInServiceInstances"
-      dimensions  = { AutoScalingGroupName = local.worker_asg }
-      period      = 300
-      stat        = "Maximum"
-    }
-  }
-  metric_query {
-    id = "recv"
-    metric {
-      namespace   = "AWS/SQS"
-      metric_name = "NumberOfMessagesReceived"
-      dimensions  = { QueueName = aws_sqs_queue.jobs.name }
-      period      = 300
-      stat        = "Sum"
-    }
-  }
-  metric_query {
-    id = "del"
-    metric {
-      namespace   = "AWS/SQS"
-      metric_name = "NumberOfMessagesDeleted"
-      dimensions  = { QueueName = aws_sqs_queue.jobs.name }
-      period      = 300
-      stat        = "Sum"
-    }
-  }
 
   alarm_actions = [aws_sns_topic.alerts.arn]
   ok_actions    = [aws_sns_topic.alerts.arn]
+  tags          = { Milestone = "M3e" }
+}
+
+# The error alarm above catches a run that fails, not one that never happens. Lambda publishes no
+# Invocations datapoint in a period with none, so missing data counts as breaching.
+resource "aws_cloudwatch_metric_alarm" "gpu_guard_not_running" {
+  alarm_name        = "neurolens-gpu-guard-not-running"
+  alarm_description = "The NeuroLens GPU guard has not run for 30 minutes (it should run every 10). Nothing would stop a GPU left on with nothing to do. Check the neurolens-gpu-guard-every-10-min rule is ENABLED; run infra/stop_work.sh if in doubt."
+
+  namespace   = "AWS/Lambda"
+  metric_name = "Invocations"
+  dimensions  = { FunctionName = aws_lambda_function.gpu_guard.function_name }
+  statistic   = "Sum"
+
+  period              = 1800
+  evaluation_periods  = 1
+  comparison_operator = "LessThanThreshold"
+  threshold           = 1
+  treat_missing_data  = "breaching"
+
+  alarm_actions = [aws_sns_topic.alerts.arn]
+  ok_actions    = [aws_sns_topic.alerts.arn]
+  tags          = { Milestone = "M3e" }
 }
 
 # ─── One error alarm per Lambda (M3b §6b) ──────────────────────────────────
-# Catches a function that runs and fails, not one that never runs. The dead-letter handler also errors,
-# by design, when a worker still holds a job (a rare duplicate message): one such email is expected;
-# repeated ones are not.
+# Catches a function that runs and fails, not one that never runs. The dead-letter handler and
+# the error handler also error, by design, while a container still holds a job (a rare duplicate
+# message): one such email is expected; repeated ones are not.
 
 locals {
   lambda_error_alarms = merge(
-    local.workers_enabled ? {
-      "neurolens-breaker" = "Until it works, only the 3-hour email covers a broken worker. Run infra/stop_work.sh if in doubt."
-    } : {},
     { for k, v in local.m3a_lambdas : v.name => "Jobs may be left unsettled." },
-    { (local.web_lambdas.web.name) = "The website may be failing for users." },
+    {
+      (aws_lambda_function.dispatcher.function_name) = "Uploads may wait and never reach the GPU."
+      (aws_lambda_function.gpu_guard.function_name)  = "A GPU left on would only be stopped by scale-in."
+      (local.web_lambdas.web.name)                   = "The website may be failing for users."
+    },
   )
 }
 
@@ -187,45 +147,4 @@ resource "aws_cloudwatch_metric_alarm" "cognito_delete_failed" {
   alarm_actions = [aws_sns_topic.alerts.arn]
   ok_actions    = [aws_sns_topic.alerts.arn]
   tags          = { Milestone = "M3c" }
-}
-
-# The breaker's own heartbeat: the error alarm above catches a run that fails, not one that never
-# happens (its 5-minute schedule switched off or removed). Lambda publishes no Invocations datapoint
-# in a period with none, so missing data counts as breaching.
-resource "aws_cloudwatch_metric_alarm" "breaker_not_running" {
-  count = local.workers_enabled ? 1 : 0
-
-  alarm_name        = "neurolens-breaker-not-running"
-  alarm_description = "The NeuroLens circuit breaker has not run for 15 minutes (it should run every 5). Nothing would stop a stuck GPU worker. Check the neurolens-breaker-every-5-min rule is ENABLED; run infra/stop_work.sh if in doubt."
-
-  namespace   = "AWS/Lambda"
-  metric_name = "Invocations"
-  dimensions  = { FunctionName = aws_lambda_function.breaker[0].function_name }
-  statistic   = "Sum"
-
-  period              = 900
-  evaluation_periods  = 1
-  comparison_operator = "LessThanThreshold"
-  threshold           = 1
-  treat_missing_data  = "breaching"
-
-  alarm_actions = [aws_sns_topic.alerts.arn]
-  ok_actions    = [aws_sns_topic.alerts.arn]
-  tags          = { Milestone = "M3b" }
-}
-
-# The breaker's and M3a's alarms keep their names and move into the block above.
-moved {
-  from = aws_cloudwatch_metric_alarm.breaker_errors[0]
-  to   = aws_cloudwatch_metric_alarm.lambda_errors["neurolens-breaker"]
-}
-
-moved {
-  from = aws_cloudwatch_metric_alarm.m3a_lambda_errors["dlq"]
-  to   = aws_cloudwatch_metric_alarm.lambda_errors["neurolens-dlq-handler"]
-}
-
-moved {
-  from = aws_cloudwatch_metric_alarm.m3a_lambda_errors["reaper"]
-  to   = aws_cloudwatch_metric_alarm.lambda_errors["neurolens-reaper"]
 }

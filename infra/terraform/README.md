@@ -1,196 +1,162 @@
 # NeuroLens: AWS resources (Terraform)
 
-Creates everything NeuroLens needs on AWS: the S3 bucket and SQS queue (M1), and the network, roles,
-GPU worker group and alarms (M2a), and the website, sign-in and NAT Gateway switch (M3b). Terraform keeps a record of what it created, so
-running `apply` twice is safe (the second run reports no changes) and `destroy` removes everything
-it created. The region is one setting (`region` in `terraform.tfvars`, default `us-east-1`).
+Creates everything NeuroLens needs on AWS: the S3 bucket and SQS queue (M1), the network and
+database (M2a/M3a), the website and sign-in (M3b), and from M3e a SageMaker asynchronous GPU
+endpoint, its image repository and build, the job Lambdas and their alarms. Terraform keeps a
+record of what it created, so running `apply` twice is safe (the second run reports no changes)
+and `destroy` removes everything it created. The region is one setting (`region` in
+`terraform.tfvars`, default `us-east-1`).
 
 **What it creates**
 
-- One S3 bucket: public access blocked, encrypted, HTTPS-only, ACLs disabled, browser upload (CORS)
-  allowed from `allowed_origins`, and prefix-scoped expiry (`uploads/` and `results/` after 30 days,
-  rounded to midnight UTC, `dataset/` after 365, `code/`, `models/` and `experiments/` never).
-- One SQS queue (visibility timeout 120 s, kept extended by the worker's heartbeat) and the wiring that sends a message to it whenever a file
-  lands under `uploads/`. A second queue (`neurolens-jobs-dlq`) receives a job that failed twice.
-- A network (VPC): public subnets (one holds the NAT Gateway, the others only host image builds) and
-  private subnets for the GPU workers, which have no inbound access from the internet. A free S3
-  gateway endpoint keeps S3 traffic off the NAT Gateway.
-- A **NAT Gateway** (`nat_gateway` in `terraform.tfvars`, default `false`): the workers' only way out to
-  the internet (HuggingFace, SQS, the database). It exists only while the variable is `true`, which
-  costs about $1.20 a day: set it for days with GPU work and the deployed window, then back. Terraform
-  refuses to switch it off while the worker group may start workers or one is running (run `infra/stop_work.sh` first).
-  The website never needs it.
-- Roles (image build, worker, circuit breaker, web, dead-letter handler, reaper), each
+- One S3 bucket: public access blocked, encrypted, HTTPS-only, ACLs disabled, browser upload
+  (CORS) from `allowed_origins`, and prefix-scoped expiry (`uploads/` and `results/` after 30 days,
+  `dataset/` after 365, `sagemaker-output/` after 1, `build/` after 7, `experiments/` never).
+- One SQS queue (visibility 720 s) and the wiring that sends a message whenever a file lands under
+  `uploads/`. A second queue (`neurolens-jobs-dlq`) receives a job that failed twice.
+- A VPC with private subnets for Aurora only. No NAT Gateway, no internet gateway, no S3 endpoint:
+  Aurora is reached through the Data API, and S3 through its public HTTPS endpoint.
+- Roles: the SageMaker execution role, the CodeBuild role, the dispatcher, the SageMaker error
+  handler, the GPU guard, the reaper, the dead-letter handler and the web function. Each is
   limited to what it needs and capped by a permission boundary.
-- A launch template and Auto Scaling group `neurolens-workers` (0 machines until you start a
-  session), created only once `worker_ami_id` is set.
-- Alarms on one SNS email topic: the **idle alarm** emails when a worker has been in service for 90
-  minutes with no job picked up or finished (the circuit breaker then stops the group, below); one
-  emails when a worker has been running for 3 hours; one emails when Aurora has been awake for over
-  30% of each of 6 hours; and one emails when any Lambda run fails.
+- The ECR repository `neurolens-worker` (last 3 images) and the CodeBuild project
+  `neurolens-worker-image` (privileged Docker, 60-minute timeout).
+- The SageMaker model, endpoint configuration (instance pools `ml.g6e.xlarge` then
+  `ml.g6.2xlarge`) and the endpoint `neurolens`; its async error topic `neurolens-gpu-errors`.
+- Application Auto Scaling: min 0, max `max_instances`; a waiting request starts a GPU, seven
+  idle minutes stop it.
+- Lambda functions: the dispatcher (jobs queue, with the ffprobe layer), the SageMaker error
+  handler (error topic), the GPU guard (every 10 minutes), the dead-letter handler and the reaper
+  (every 3 hours).
+- Alarms on one SNS email topic: the GPU guard stopped a GPU, the GPU guard has not run, Aurora has
+  been awake for much of 6 hours, and one error alarm per Lambda.
 
-**Cost:** with everything stopped, the running cost is the stored image and disks and the S3 files,
-roughly $3 a month (plus about $3 for the reaper waking Aurora every 3 hours). Machines bill only while a session is open: the NAT Gateway about $1.20 a day while `nat_gateway` is true, a
-GPU worker $1.86 an hour (g6e.xlarge; $2.24 for the g6e.2xlarge fallback). AWS ends a worker 7
-minutes after the job queue empties, but always end a session with `infra/stop_work.sh` (section 5).
+The endpoint only exists once `worker_image` is set: build the image first (§2b).
 
-**From an empty account, in this order:** §0, §1, §2, §2f, §2e, §2b; then §5 for each work session
-and §6 to tear down. Code changes later: `infra/deploy_code.sh` (worker), `infra/deploy_web.sh` (site).
+**Cost:** with everything stopped, the running cost is the stored image, the ECR repository,
+Aurora storage and the S3 files, a few dollars a month (the reaper waking Aurora every 3 hours is
+about $3). A GPU bills only while it runs: about $1.86/h for `g6e.xlarge` ($2.24/h for the
+`g6.2xlarge` fallback), and it stops itself 7 idle minutes after the last job. A deploy starts one
+instance for about 7 minutes (roughly $0.50–0.80).
+
+**From an empty account:** §0, §1, §2, §2f, §2b; then §5 for each work session and §6 to tear
+down.
 
 ## 0. Before you start (once)
 
-1. Terraform 1.10 or newer. Homebrew's plain `terraform` formula is gone, so use HashiCorp's tap:
-   `brew tap hashicorp/tap && brew install hashicorp/tap/terraform`, then `terraform version`.
+1. Terraform 1.10 or newer: `brew tap hashicorp/tap && brew install hashicorp/tap/terraform`.
 2. The AWS command-line tool (`aws --version`).
-3. An AWS profile called `neurolens` (a named set of login keys on your Mac, in `~/.aws`). Run
-   `aws configure --profile neurolens` in your own terminal and paste the keys there. **Never paste
-   keys into chat, git or a Docker image.**
-4. Python 3.12 environment for the repo (see the root `AGENTS.md`) and `git` (the scripts in `infra/`
-   find the repo from it).
-5. Accounts and quotas (console; quota requests can take days):
-   - EC2 quota "Running On-Demand G and VT instances": at least 4 vCPUs (one `g6e.xlarge`), 8 for two.
-   - Lambda concurrency: if the account's limit is well below 1,000, request 1,000 (Service Quotas, free).
-   - A HuggingFace account that accepted the LLaMA 3.2-3B licence (root README, *Gated Model Access*) and a read token.
-   - A Google OAuth client (Google Cloud console, type "Web application"); its redirect URI comes in §2f.
-6. Secrets in Parameter Store, created by hand (`SecureString`, so they never pass through git or
-   Terraform files): `/neurolens/hf_token` (the HuggingFace token, read only by the image build),
-   `/neurolens/terraform/google_client_secret` and `/neurolens/web/flask_secret_key` (at least 32
-   random bytes, e.g. `python -c "import secrets; print(secrets.token_hex(32))"`, never
-   regenerated). The Cognito client secret comes in §2f.
-7. Confirm the account-wide $40/month AWS Budget (alerts at 50%, 80%, 100%) still exists: AWS console,
-   Billing, Budgets.
+3. A named AWS profile `neurolens` in `~/.aws` (`aws configure --profile neurolens`). **Never
+   paste keys into chat, git or a Docker image.**
+4. Python 3.12 for the repo (`AGENTS.md`) and `git`.
+5. Quotas and accounts (console; quota requests can take days):
+   - SageMaker endpoint quota for `ml.g6e.xlarge` (one instance is enough; the account's GPU quota
+     is 2).
+   - Lambda concurrency: if the account's limit is well below 1,000, request 1,000 (free).
+   - A HuggingFace read token for the model weights and a Google OAuth client for sign-in.
+6. Secrets in Parameter Store (`SecureString`, never in git or Terraform files):
+   `/neurolens/hf_token`, `/neurolens/terraform/google_client_secret` and
+   `/neurolens/web/flask_secret_key` (at least 32 random bytes).
+7. Confirm the $40/month AWS Budget alerts still exist (Billing, Budgets).
 
-Every command below runs with the project's profile, never another project's:
+Every command runs with this profile:
 
 ```bash
 export AWS_PROFILE=neurolens
-aws sts get-caller-identity      # check the account ID is the one you expect BEFORE anything else
+aws sts get-caller-identity      # check the account ID before anything else
 ```
 
 ## 1. Create the state bucket (once, by hand)
 
-Terraform's record of what exists must not live on one laptop, or teammates will clash. It lives in a
-small separate bucket with versioning. `terraform destroy` never touches it.
-
 ```bash
 ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 STATE_BUCKET=neurolens-tfstate-$ACCOUNT_ID
-
 aws s3api create-bucket --bucket "$STATE_BUCKET" --region us-east-1
-aws s3api put-bucket-versioning --bucket "$STATE_BUCKET" \
-  --versioning-configuration Status=Enabled
+aws s3api put-bucket-versioning --bucket "$STATE_BUCKET" --versioning-configuration Status=Enabled
 aws s3api put-public-access-block --bucket "$STATE_BUCKET" \
   --public-access-block-configuration \
   BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
 ```
 
-Then copy `backend.hcl.example` to `backend.hcl` and put that bucket name in it.
+Copy `backend.hcl.example` to `backend.hcl` and put that bucket name in it.
 
 ## 2. Create the resources
 
 ```bash
 cd infra/terraform
-cp terraform.tfvars.example terraform.tfvars    # bucket_name, region and zones, alert_email, auth_domain_prefix, google_client_id
-../build_web_lambda.sh                          # the web functions' zip: the first apply needs it
+cp terraform.tfvars.example terraform.tfvars    # bucket_name, region, zones, alert_email, auth, google
+../build_web_lambda.sh                          # the web function's zip: the first apply needs it
 terraform init -backend-config=backend.hcl
-terraform plan                                  # read it: only creates, nothing destroyed
+terraform plan                                  # read it: only creates on an empty account
 terraform apply
 terraform apply                                 # again: should report "No changes"
 ```
 
-In `terraform.tfvars`, `zones` must be zones of `region` that offer `g6e.xlarge` (the example file
-shows the command that lists them), and `alert_email` is where both alarms write. AWS then
-sends a confirmation email: click its link or the alarm cannot reach you.
+`zones` are the private subnets for Aurora (at least two). `alert_email` receives the alarms;
+click the confirmation email AWS sends or no alarm can reach you.
 
-`terraform output` prints `region`, `bucket_name` and `queue_url`. Put them in the gitignored `.env`
-at the repo root as `NEUROLENS_AWS_REGION`, `NEUROLENS_S3_BUCKET` and `NEUROLENS_SQS_QUEUE_URL`
-(see `.env.example`). The committed
-`config.json` holds no account-specific values, and access keys never go in the project at all.
+`terraform output` prints `region`, `bucket_name`, `queue_url`, `gpu_endpoint` and the database
+values. Put them in the git-ignored `.env` at the repo root as `NEUROLENS_AWS_REGION`,
+`NEUROLENS_S3_BUCKET`, `NEUROLENS_SQS_QUEUE_URL`, `NEUROLENS_GPU_ENDPOINT`,
+`NEUROLENS_DB_CLUSTER_ARN`, `NEUROLENS_DB_SECRET_ARN` and `NEUROLENS_DB_NAME`
+(see `.env.example`).
 
 ## 2f. Sign-in (M3b)
 
-After the first apply (values from `terraform output`):
+After the first apply:
 
-1. Google OAuth client: add `google_redirect_uri` as an authorised redirect URI.
-2. Copy the Cognito app client's secret (Cognito console, the app client) into
-   `/neurolens/web/cognito_client_secret`.
-3. `infra/deploy_web.sh` publishes the site, then open `sign_in_test_url` and sign in once with Google
-   and once with email.
+1. Add `google_redirect_uri` as an authorised redirect URI in the Google OAuth client.
+2. Copy the Cognito app client's secret into `/neurolens/web/cognito_client_secret`.
+3. `infra/deploy_web.sh` publishes the site; open `sign_in_test_url` and sign in once with Google
+   and once with email and password.
 
-## 2b. The GPU worker group (M2a)
+## 2b. The GPU image and endpoint (M3e)
 
-The worker group needs the software image, which is built after the first apply:
+Two placeholders stand between the repository and a built image. Fill them once:
 
-1. Run `infra/deploy_code.sh` (ships the last commit to S3 as `code/latest.zip`).
-2. Run `infra/build_ami.sh <clip.mp4>` (about an hour on a GPU, so run it in your own Terminal app, not
-   in a chat tool that kills long commands). It prints the image ID (`ami-...`). It always terminates its
-   machine when it ends, and shuts itself down after 4 hours at the latest.
-3. Put the ID in `terraform.tfvars` as `worker_ami_id` and apply again. This creates the launch
-   template and the Auto Scaling group, at zero machines.
+- `infra/worker_image/Dockerfile`: the digest for the pinned AWS PyTorch base image
+  (`pytorch-inference:2.6.0-gpu-py312-cu124-ubuntu22.04`), replacing
+  `@sha256:REPLACE_BEFORE_BUILD`.
+- `infra/build_ffprobe_layer.sh`: the SHA-256 of the pinned ffprobe release.
 
-`worker_instance_types` lists the GPU types in order of preference (default `g6e.xlarge`, then
-`g6e.2xlarge` when the first is sold out in every zone). `worker_fake_inference = true` with
-`["t3.large"]` is the cheap CPU rehearsal that tests the wiring without a GPU (no weight sync);
-`worker_fake_job_seconds` then makes each fake job take that long, so it can be interrupted.
+Then, from the repo root:
 
-The worker's `config.json` is the committed one with the machine's paths filled in: change the root
-`config.json` and apply, and new workers get it (running ones keep theirs).
+```bash
+infra/make_model_data.sh        # once: copies models/ to model-data/ without blobs/, checks counts
+infra/build_ffprobe_layer.sh    # builds infra/terraform/.build/ffprobe_layer.zip
+infra/build_image.sh            # zips HEAD, builds in CodeBuild, prints the image digest
+# put the digest in terraform.tfvars as worker_image = "sha256:..."
+terraform -chdir=infra/terraform apply
+```
 
-## 2d. How many workers run (M2b)
+`fake_inference = true` is the cheap CPU rehearsal: one `ml.m5.xlarge` pool (about $0.23/h) and
+`FAKE_INFERENCE=1`. `max_instances` stays 1.
 
-Only AWS decides; the worker never ends its own machine.
+The container's logs are in CloudWatch at `/aws/sagemaker/Endpoints/neurolens`; the build's at
+`/aws/codebuild/neurolens-worker-image`.
 
-- **Scale out:** a job waiting in the queue for a minute adds a worker (two when two or more wait),
-  up to the group's max. A new worker counts as "starting" for 15 minutes
-  (`scale_out_warmup_seconds`), so one waiting job never launches a second worker while the first boots.
-- **Scale in:** when the queue has had no waiting or running job for 7 minutes, the group goes to 0.
-  A worker holding a job protects its own machine from scale-in until the job ends, because the
-  queue's numbers reach CloudWatch a few minutes late.
-- **Circuit breaker:** if a worker is in service but nothing has moved in the queue for 90 minutes
-  (the idle alarm), you get an email. A small Lambda (`infra/lambda/breaker.py`)
-  runs every 5 minutes: while that alarm is on and no warm hold is running, it removes the
-  workers' protection and sets the group's max to 0, so a broken worker is not replaced over and
-  over. Nothing launches again until the next `start_work.sh`. This caps a failure at about
-  1.5-2 hours of GPU (about $3-4). If the Lambda itself fails, a second alarm emails you.
-- **Warm hold:** `start_work.sh --keep-worker --hours N` keeps one worker for N hours (1 to 4) even with no
-  jobs: the group's minimum is 1, which scale-in, the idle alarm and the breaker all respect. An
-  AWS-side timer (`neurolens-warm-hold-end`) sets the minimum back to 0 at the end, even if your
-  laptop is off; then the worker goes once the queue has been empty for 7 minutes.
+## 2e. The database
 
-To change the region: edit `region`, `zones` and `build_extra_zones` together, make sure GPU quota
-exists in the new region, then rebuild the image there. Every script in `infra/` reads the region
-from `aws_env.sh`, which asks Terraform only (never a copy such as `.env`). Region-move checklist: M4 §1.
+`database.tf` creates Aurora PostgreSQL (Serverless v2, 0–1 ACU): users, credit and job state. It
+pauses 5 minutes after its last use and wakes in about 15 s on the next call. Everything reaches it
+through the RDS Data API; the password lives in Secrets Manager.
 
-## 2e. The database and the settlement Lambdas (M3a)
-
-`database.tf` creates Aurora PostgreSQL (Serverless v2, 0-1 ACU): users, credit and job state. It
-pauses 5 minutes after its last use (0 ACU, storage only) and wakes in about 15 s on the next call. Nothing
-connects to it over the network: the app, the worker and the Lambdas use the RDS Data API (HTTPS,
-checked by IAM), and the password lives only in Secrets Manager, created and rotated by RDS.
-`lambdas.tf` adds two Lambdas: the **dead-letter handler** settles or refunds every job that failed
-twice, and the **reaper** settles or refunds stuck jobs every 3 hours, always on; each run wakes
-Aurora for about 11 minutes. Alarms email you if Aurora stays awake for much of 6 hours or a Lambda fails.
-
-After the first apply (from the repo root):
+After the first apply:
 
 ```bash
 terraform -chdir=infra/terraform output db_cluster_arn db_secret_arn db_name
 # copy the three into .env as NEUROLENS_DB_CLUSTER_ARN, NEUROLENS_DB_SECRET_ARN, NEUROLENS_DB_NAME
-python infra/apply_schema.py --backend data_api    # creates the tables; a second run changes nothing
-python infra/check_aurora.py --backend data_api    # throwaway jobs and sign-ins on Aurora: PASS expected
+python infra/apply_schema.py --backend data_api
+python infra/check_aurora.py --backend data_api     # PASS expected
 ```
 
-Cost: about 6 cents an hour while awake (0.5 ACU), $0.40 a month for the secret, storage cents.
-
-## 2c. Applying a saved plan (when you want to review exactly what will change)
-
-Some tools refuse to let an assistant run `terraform apply`. The safe pattern is: write the plan to
-a file, read it, then apply that exact file yourself.
+## 2c. Applying a saved plan
 
 ```bash
-terraform plan -out=tfplan        # read the output: what is created, changed, destroyed
-terraform apply tfplan            # in Claude Code, type:  ! terraform apply tfplan   (from infra/terraform)
-rm tfplan                         # delete the plan file afterwards
+cd infra/terraform
+terraform plan -out=tfplan
+terraform apply tfplan
+rm tfplan
 ```
 
 `terraform validate` checks the files are well formed and costs nothing.
@@ -198,83 +164,51 @@ rm tfplan                         # delete the plan file afterwards
 ## 3. Check it
 
 ```bash
-aws s3api get-bucket-lifecycle-configuration --bucket <bucket_name>   # 30 days, 30 days, 365 days
+aws s3api get-bucket-lifecycle-configuration --bucket <bucket_name>
 aws s3api get-bucket-cors --bucket <bucket_name>
-aws s3 cp some.mp4 s3://<bucket_name>/uploads/test.mp4
-aws sqs receive-message --queue-url <queue_url>                       # one message within seconds
-# From M3a a worker skips such a hand upload (no job in the database): real jobs come from the page.
+aws sagemaker describe-endpoint --endpoint-name neurolens
+aws application-autoscaling describe-scalable-targets --service-namespace sagemaker \
+  --resource-ids endpoint/neurolens/variant/main
 ```
 
-## 4. Add a browser address later (M3)
+## 4. Add a browser address later
 
-Add it to `allowed_origins` in `terraform.tfvars` and run `terraform apply`. Terraform owns the whole
-CORS document, so the list is the single place.
+Add it to `allowed_origins` in `terraform.tfvars` and `terraform apply`.
 
-## 5. A work session: start and stop (M2a)
+## 5. A work session: start and stop
 
-Nothing runs between sessions. From the repo root:
+Nothing runs between sessions. The endpoint's normal state is max 1; an upload starts a GPU by
+itself and it stops 7 idle minutes after the last job.
 
 ```bash
-infra/start_work.sh                     # needs the NAT Gateway (nat_gateway = true, applied); an upload now
-                                        # starts a worker by itself (refuses unless every alarm and the breaker are on)
-infra/start_work.sh --max 2             # the same with up to two workers (Experiment 2 only)
-infra/start_work.sh --keep-worker --hours 3
-                                        # warm hold: one GPU worker now, kept 3 hours (billed from now)
-infra/start_work.sh --keep-worker-and-db --hours 3
-                                        # the same, and Aurora kept awake (for demos and study sessions)
-infra/deploy_code.sh                    # after a commit: ship new code and restart idle workers
-                                        # (a worker with a job is named and left alone; --now restarts it too)
-infra/debug_worker.sh                   # open a shell on the worker (Session Manager); needs a warm hold
-infra/stop_work.sh                      # END EVERY SESSION WITH THIS
+infra/start_work.sh                     # normal state: max 1, scale out on demand
+infra/start_work.sh --keep-warm --hours 3   # one GPU now, kept 3 hours (AWS ends it)
+infra/start_work.sh --keep-db --hours 3     # keep Aurora awake too
+infra/stop_work.sh                      # emergency pause; prints ALL STOPPED only when proven
 ```
 
-A new worker takes about 6.5 minutes to be ready (software sync, then the model loads), plus 1-3
-minutes for the queue's metric to start it after an upload. Restarting the worker service hands a
-running job back to the queue at once; another attempt finishes it.
+`stop_work.sh` sets the endpoint's scaling maximum and minimum to 0, deletes any keep-warm action,
+sets the desired count to 0, waits until the endpoint shows 0 and puts Aurora's minimum back to 0.
+A running job dies and is refunded. `start_work.sh` puts the maximum back to 1.
 
-`stop_work.sh` ends a warm hold, removes the workers' scale-in protection (a running job is handed
-back and runs next session), sets the worker group to zero (even while it is still waiting for a
-GPU and has no machine yet), waits for the workers to go, puts Aurora's minimum back to 0 and then
-checks (including that the dead-letter queue is empty, a message left there keeps waking Aurora,
-and that no NAT Gateway or Elastic IP is left: if one is, set `nat_gateway = false` and apply). It prints
-**ALL STOPPED** only when every check succeeded. Anything it could not prove prints
-**NOT CONFIRMED** with the reason: read it and act on it. It needs the region from Terraform; if
-Terraform cannot answer, it stops nothing and prints the `terraform init` command to fix it. An
-image-build machine is listed, not stopped, with the command to end it if no build is running.
+## 5b. Demo routine
 
-**Manual work on a worker.** Scale-in ends a worker 7 minutes after the queue empties, and none of
-the rules can see work done by hand (Session Manager). Start a warm hold first
-(`start_work.sh --keep-worker --hours N`); run it again to extend. During a hold of more than 90 minutes
-without jobs, the idle alarm still emails, but changes nothing.
-
-**After a breaker email.** The group is at max 0. Look at the worker's log first (the email names no
-cause: a crash loop, broken code, a frozen job or a missing NAT Gateway), fix it, then
-`start_work.sh` again.
-
-## 5b. Demo routine (M2b)
-
-1. The day before (the week before for the TA demo): one full dry run of steps 2-5.
-2. 45-60 minutes before: `infra/start_work.sh --keep-worker-and-db --hours 3` (demo length, early start and a
-   margin). Starting early leaves time to fall back to the no-AWS backup (M4) if no GPU is free.
-3. Wait for "Worker ready" (`infra/debug_worker.sh`, or the result of step 4).
-4. One warm-up job: upload a short sample clip, so the first-job costs are paid before the audience
-   arrives and the whole chain is proven that day.
-5. Demo. If it overruns the hold, run step 2 again (it moves the end).
-6. Straight after: `infra/stop_work.sh`, and wait for **ALL STOPPED**.
-
-Cost: about 1.5-2 hours of GPU, roughly $3-4.
+1. The day before (a week before for the TA demo): one full dry run.
+2. 45–60 minutes before: `infra/start_work.sh --keep-warm --keep-db --hours 3`.
+3. One short warm-up job, so the first-job costs are paid before the audience arrives.
+4. Demo. If it overruns, run step 2 again (it moves the end).
+5. Straight after: `infra/stop_work.sh`, and wait for **ALL STOPPED**.
 
 ## 6. Tear down
 
-Stop the session first (section 5). `terraform destroy` also deletes the database, its backups and
-its secret, with no final snapshot: export anything you need first. The worker image and its disk snapshot are not Terraform's: deregister the
-image and delete its snapshot by hand. S3 refuses to delete a non-empty bucket, so empty it first, once results and experiment files are no
-longer needed:
+`terraform destroy` deletes the database, its backups, its secret, the endpoint, the Lambdas and
+the queue. Empty the bucket first (S3 refuses to delete a non-empty bucket), and delete the images
+in ECR by hand:
 
 ```bash
 aws s3 rm s3://<bucket_name> --recursive
 terraform destroy
 ```
 
-The state bucket stays (a few kilobytes). Remove it by hand at the very end of the project if you want,
-with the Parameter Store secrets (§0) and the Google OAuth client.
+The state bucket stays (a few kilobytes). Remove it by hand at the very end, with the Parameter
+Store secrets and the Google OAuth client.

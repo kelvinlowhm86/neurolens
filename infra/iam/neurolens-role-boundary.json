@@ -5,7 +5,10 @@
       "Sid": "NeurolensBucketsOnly",
       "Effect": "Allow",
       "Action": "s3:*",
-      "Resource": ["arn:aws:s3:::neurolens-*", "arn:aws:s3:::neurolens-*/*"]
+      "Resource": [
+        "arn:aws:s3:::neurolens-*",
+        "arn:aws:s3:::neurolens-*/*"
+      ]
     },
     {
       "Sid": "NeurolensQueuesOnly",
@@ -16,7 +19,10 @@
     {
       "Sid": "NeurolensParametersOnly",
       "Effect": "Allow",
-      "Action": ["ssm:GetParameter", "ssm:GetParameters"],
+      "Action": [
+        "ssm:GetParameter",
+        "ssm:GetParameters"
+      ],
       "Resource": "arn:aws:ssm:us-east-1:*:parameter/neurolens/*"
     },
     {
@@ -24,49 +30,38 @@
       "Effect": "Allow",
       "Action": "kms:Decrypt",
       "Resource": "*",
-      "Condition": {"StringEquals": {"kms:ViaService": "ssm.us-east-1.amazonaws.com"}}
+      "Condition": {
+        "StringEquals": {
+          "kms:ViaService": "ssm.us-east-1.amazonaws.com"
+        }
+      }
     },
     {
       "Sid": "DeleteCognitoLoginsInOurPool",
       "Effect": "Allow",
-      "Action": ["cognito-idp:ListUsers", "cognito-idp:AdminDeleteUser"],
+      "Action": [
+        "cognito-idp:ListUsers",
+        "cognito-idp:AdminDeleteUser"
+      ],
       "Resource": "arn:aws:cognito-idp:us-east-1:*:userpool/us-east-1_aW04PyNvi"
-    },
-    {
-      "Sid": "ReadGroupsAndAlarms",
-      "Effect": "Allow",
-      "Action": ["autoscaling:DescribeAutoScalingGroups", "cloudwatch:DescribeAlarms"],
-      "Resource": "*"
-    },
-    {
-      "Sid": "ResizeAndProtectOnlyNeurolensGroups",
-      "Effect": "Allow",
-      "Action": ["autoscaling:UpdateAutoScalingGroup", "autoscaling:SetInstanceProtection"],
-      "Resource": "arn:aws:autoscaling:us-east-1:*:autoScalingGroup:*:autoScalingGroupName/neurolens-*"
     },
     {
       "Sid": "LogsOnlyNeurolensFunctions",
       "Effect": "Allow",
-      "Action": ["logs:CreateLogStream", "logs:PutLogEvents"],
-      "Resource": "arn:aws:logs:us-east-1:*:log-group:/aws/lambda/neurolens-*:*"
-    },
-    {
-      "Sid": "SessionManagerAgent",
-      "Effect": "Allow",
       "Action": [
-        "ssm:UpdateInstanceInformation", "ssm:UpdateInstanceAssociationStatus",
-        "ssm:ListInstanceAssociations", "ssm:ListAssociations", "ssm:DescribeAssociation",
-        "ssm:GetDocument", "ssm:DescribeDocument", "ssm:PutInventory",
-        "ssmmessages:*", "ec2messages:*"
+        "logs:CreateLogStream",
+        "logs:PutLogEvents"
       ],
-      "Resource": "*"
+      "Resource": "arn:aws:logs:us-east-1:*:log-group:/aws/lambda/neurolens-*:*"
     },
     {
       "Sid": "DataApiOnlyNeurolensDatabase",
       "Effect": "Allow",
       "Action": [
-        "rds-data:ExecuteStatement", "rds-data:BeginTransaction",
-        "rds-data:CommitTransaction", "rds-data:RollbackTransaction"
+        "rds-data:ExecuteStatement",
+        "rds-data:BeginTransaction",
+        "rds-data:CommitTransaction",
+        "rds-data:RollbackTransaction"
       ],
       "Resource": "arn:aws:rds:us-east-1:*:cluster:neurolens-*"
     },
@@ -75,7 +70,68 @@
       "Effect": "Allow",
       "Action": "secretsmanager:GetSecretValue",
       "Resource": "arn:aws:secretsmanager:us-east-1:*:secret:rds!*",
-      "Condition": {"StringLike": {"secretsmanager:ResourceTag/aws:rds:primaryDBClusterArn": "arn:aws:rds:us-east-1:*:cluster:neurolens-*"}}
+      "Condition": {
+        "StringLike": {
+          "secretsmanager:ResourceTag/aws:rds:primaryDBClusterArn": "arn:aws:rds:us-east-1:*:cluster:neurolens-*"
+        }
+      }
+    },
+    {
+      "Sid": "SageMakerEndpointOnlyNeurolens",
+      "Effect": "Allow",
+      "Action": [
+        "sagemaker:DescribeEndpoint",
+        "sagemaker:UpdateEndpointWeightsAndCapacities",
+        "sagemaker:InvokeEndpointAsync"
+      ],
+      "Resource": "arn:aws:sagemaker:us-east-1:*:endpoint/neurolens*"
+    },
+    {
+      "Sid": "ReadScalingTargetsHasNoResource",
+      "Effect": "Allow",
+      "Action": "application-autoscaling:DescribeScalableTargets",
+      "Resource": "*"
+    },
+    {
+      "Sid": "EcrLoginTokenHasNoResource",
+      "Effect": "Allow",
+      "Action": "ecr:GetAuthorizationToken",
+      "Resource": "*"
+    },
+    {
+      "Sid": "PullAndPushTheWorkerImage",
+      "Effect": "Allow",
+      "Action": [
+        "ecr:BatchCheckLayerAvailability",
+        "ecr:BatchGetImage",
+        "ecr:GetDownloadUrlForLayer",
+        "ecr:InitiateLayerUpload",
+        "ecr:UploadLayerPart",
+        "ecr:CompleteLayerUpload",
+        "ecr:PutImage"
+      ],
+      "Resource": "arn:aws:ecr:us-east-1:*:repository/neurolens*"
+    },
+    {
+      "Sid": "PublishGpuErrorsOnlyNeurolens",
+      "Effect": "Allow",
+      "Action": "sns:Publish",
+      "Resource": "arn:aws:sns:us-east-1:*:neurolens-*"
+    },
+    {
+      "Sid": "ContainerAndBuildLogsOnlyNeurolens",
+      "Effect": "Allow",
+      "Action": [
+        "logs:CreateLogGroup",
+        "logs:CreateLogStream",
+        "logs:PutLogEvents"
+      ],
+      "Resource": [
+        "arn:aws:logs:us-east-1:*:log-group:/aws/sagemaker/Endpoints/neurolens*",
+        "arn:aws:logs:us-east-1:*:log-group:/aws/sagemaker/Endpoints/neurolens*:*",
+        "arn:aws:logs:us-east-1:*:log-group:/aws/codebuild/neurolens-*",
+        "arn:aws:logs:us-east-1:*:log-group:/aws/codebuild/neurolens-*:*"
+      ]
     }
   ]
 }

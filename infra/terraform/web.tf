@@ -223,7 +223,7 @@ locals {
         NEUROLENS_AUTH_MODE      = "cognito"
         NEUROLENS_COGNITO_ISSUER = local.cognito_issuer
         NEUROLENS_COGNITO_DOMAIN = local.cognito_domain
-        NEUROLENS_WORKER_GROUP   = local.worker_asg
+        NEUROLENS_GPU_ENDPOINT   = local.endpoint_name
       }
     }
   }
