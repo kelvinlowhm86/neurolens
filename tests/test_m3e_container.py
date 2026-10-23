@@ -12,6 +12,8 @@ before SageMaker's 60-minute timeout.
 
 import contextlib
 import json
+import os
+import socket
 import threading
 import time
 import urllib.error
@@ -267,6 +269,41 @@ def test_an_unreadable_video_is_refunded_and_its_upload_deleted(
     assert not object_exists(aws, key)
 
 
+def test_a_video_longer_than_it_was_checked_is_refunded_video_changed(
+    aws, db, pg, make_cfg, roi_masks_small, new_job, clip_path
+):
+    job_id, key = new_job()
+    upload(aws, key, clip_path)
+    verify(db, job_id, duration_ms=1000)  # the 3-second clip is now over the checked length + 1 s
+
+    assert run_job(aws, db, job_id, clip_path, make_cfg, roi_masks_small) is worker.Outcome.REJECTED
+
+    assert_refunded(pg, job_id, "video_changed")
+    assert not object_exists(aws, key)
+    for absent in (
+        f"results/{job_id}.json",
+        f"results/{job_id}.brain",
+        f"results/{job_id}.jpg",
+    ):
+        assert not object_exists(aws, absent)
+
+
+def test_a_video_within_a_second_of_the_checked_length_runs_normally(
+    aws, db, pg, make_cfg, roi_masks_small, new_job, clip_path
+):
+    job_id, key = new_job()
+    upload(aws, key, clip_path)
+    verify(db, job_id, duration_ms=2100)  # 900 ms shorter than the clip, within the allowance
+
+    assert run_job(aws, db, job_id, clip_path, make_cfg, roi_masks_small) is worker.Outcome.DONE
+
+    job = pg.job(job_id)
+    assert job["status"] == "done" and job["captured_cents"] == 90
+    assert pg.balance() == (410, 0)
+    assert object_exists(aws, key)
+    assert object_exists(aws, f"results/{job_id}.json")
+
+
 def test_a_failed_delete_after_a_refund_never_undoes_the_refund(
     aws, db, pg, make_cfg, roi_masks_small, new_job, clip_path, patch_everywhere
 ):
@@ -410,6 +447,69 @@ def test_claim_keep_alive_stops_at_max_seconds():
     assert max(beats) - started < 0.5
 
 
+def test_claim_keep_alive_calls_on_overrun_once_at_max_seconds():
+    beats = []
+    overruns = []
+    started = time.monotonic()
+
+    with worker.ClaimKeepAlive(
+        lambda: beats.append(time.monotonic()),
+        0.02,
+        0.1,
+        lambda: overruns.append(time.monotonic()),
+    ):
+        time.sleep(0.25)
+
+    count = len(beats)
+    time.sleep(0.15)
+    assert len(overruns) == 1
+    assert count >= 1
+    assert len(beats) == count
+    assert max(beats) - started < 0.5
+
+
+def test_a_job_over_the_limit_ends_the_process(
+    aws, db, pg, make_cfg, roi_masks_small, new_job, clip_path, monkeypatch
+):
+    job_id, key = new_job()
+    upload(aws, key, clip_path)
+    verify(db, job_id)
+
+    exits = []
+    monkeypatch.setattr(os, "_exit", lambda code: exits.append(code))
+    captured = {}
+
+    class CapturingKeepAlive:
+        def __init__(self, on_beat, interval_seconds, max_seconds, on_overrun=None):
+            captured["on_beat"] = on_beat
+            captured["on_overrun"] = on_overrun
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+    monkeypatch.setattr(worker, "ClaimKeepAlive", CapturingKeepAlive)
+
+    assert (
+        worker.handle_job(
+            job_id,
+            str(clip_path),
+            s3=aws.s3,
+            db=db,
+            cfg=make_cfg(),
+            roi_masks=roi_masks_small,
+            keep_alive=None,
+        )
+        is worker.Outcome.DONE
+    )
+
+    assert captured["on_overrun"] is not None
+    captured["on_overrun"]()
+    assert exits == [1]
+
+
 def test_max_job_minutes_finishes_before_the_invocation_timeout():
     cfg = settings.load_config()
     assert cfg["worker"]["max_job_minutes"] * 60 < 3600
@@ -428,6 +528,18 @@ def http(server, method, path, *, body=None, headers=None, timeout=5):
             return response.status, response.read()
     except urllib.error.HTTPError as err:
         return err.code, err.read()
+
+
+def raw_invocation(server, request, *, timeout=5):
+    host, port = server.server_address[:2]
+    with socket.create_connection((host, port), timeout=timeout) as connection:
+        connection.sendall(request)
+        connection.shutdown(socket.SHUT_WR)
+        chunks = []
+        while chunk := connection.recv(64 * 1024):
+            chunks.append(chunk)
+    response = b"".join(chunks)
+    return int(response.split(b" ", 2)[1]), response
 
 
 @pytest.fixture
@@ -494,6 +606,40 @@ def test_the_body_is_streamed_to_a_file_and_answered_with_json(server, fake_hand
     assert json.loads(body) == {"job_id": job_id, "outcome": "done"}
     assert fake_handle.calls == [job_id]
     assert fake_handle.existed and fake_handle.body == b"the video bytes"
+
+
+def test_a_request_without_a_content_length_is_a_500_and_never_claims(server, fake_handle):
+    job_id = str(uuid.uuid4())
+    request = (
+        b"POST /invocations HTTP/1.0\r\n"
+        b"Host: localhost\r\n"
+        + f"{JOB_HEADER}: {job_id}\r\n".encode()
+        + b"\r\n"
+        + b"the video bytes"
+    )
+
+    status, _ = raw_invocation(server, request)
+
+    assert status == 500
+    assert fake_handle.calls == []
+
+
+def test_a_body_shorter_than_its_content_length_is_a_500_and_never_claims(server, fake_handle):
+    job_id = str(uuid.uuid4())
+    body = b"short"
+    request = (
+        b"POST /invocations HTTP/1.0\r\n"
+        b"Host: localhost\r\n"
+        + f"{JOB_HEADER}: {job_id}\r\n".encode()
+        + f"Content-Length: {len(body) + 100}\r\n".encode()
+        + b"\r\n"
+        + body
+    )
+
+    status, _ = raw_invocation(server, request)
+
+    assert status == 500
+    assert fake_handle.calls == []
 
 
 @pytest.mark.parametrize("bad_id", [None, "", "not-a-uuid"])

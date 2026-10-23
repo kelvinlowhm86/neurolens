@@ -147,3 +147,44 @@ def test_an_unparseable_notification_is_logged_and_dropped(aws, db, pg, gpu_env,
 
     assert caplog.records
     assert pg.snapshot() == before
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        json.dumps([]),
+        json.dumps("a JSON string"),
+        json.dumps(123),
+        json.dumps(None),
+    ],
+)
+def test_a_non_object_notification_is_logged_and_dropped(aws, db, pg, gpu_env, caplog, message):
+    before = pg.snapshot()
+    event = {"Records": [{"Sns": {"Message": message, "MessageId": "m1"}}]}
+
+    with caplog.at_level(logging.DEBUG):
+        gpu_failed()(event, None)
+
+    assert caplog.records
+    assert pg.snapshot() == before
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        json.dumps({}),
+        json.dumps({"inferenceId": None}),
+        json.dumps({"inferenceId": 123}),
+    ],
+)
+def test_a_notification_without_a_string_inference_id_is_logged_and_dropped(
+    aws, db, pg, gpu_env, caplog, message
+):
+    before = pg.snapshot()
+    event = {"Records": [{"Sns": {"Message": message, "MessageId": "m1"}}]}
+
+    with caplog.at_level(logging.DEBUG):
+        gpu_failed()(event, None)
+
+    assert caplog.records
+    assert pg.snapshot() == before
