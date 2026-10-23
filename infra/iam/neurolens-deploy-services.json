@@ -62,6 +62,12 @@
       "Resource": "arn:aws:ssm:us-east-1:*:parameter/neurolens/*"
     },
     {
+      "Sid": "ParameterListHasNoResource",
+      "Effect": "Allow",
+      "Action": "ssm:DescribeParameters",
+      "Resource": "*"
+    },
+    {
       "Sid": "FunctionsOnlyNeurolens",
       "Effect": "Allow",
       "Action": "lambda:*",
