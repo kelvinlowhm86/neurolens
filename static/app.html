@@ -1061,6 +1061,7 @@ function knownFailure(code, message) {
     case 'duration_exceeds_max_verified': return `This video is longer than the ${maxSeconds}-second maximum.`;
     case 'file_too_large': return 'This file is larger than the upload limit.';
     case 'unreadable_video': return 'This file is not a readable video.';
+    case 'video_changed': return 'The video was replaced after it was checked. Please upload it again.';
     case 'processing_failed':
     case 'stalled': return 'Processing failed after retrying.' + (message ? ` ${message}` : '');
     case 'cancelled': return 'Cancelled.';

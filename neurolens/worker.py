@@ -8,6 +8,7 @@ the analysis, writes the result and charges or refunds it. `/ping` answers while
 import enum
 import json
 import logging
+import os
 import socket
 import tempfile
 import threading
@@ -32,6 +33,7 @@ REQUIRED_CONFIG = [
 ]
 MAX_ERROR_CHARS = 200  # the job's error_message is shown to the user as is
 MAX_HEARTBEAT_SECONDS = 50
+VIDEO_CHANGED_ALLOWANCE_MS = 1000  # slack between the dispatcher's and the local duration reading
 JOB_HEADER = "X-Amzn-SageMaker-Custom-Attributes"
 PORT = 8080
 
@@ -55,13 +57,16 @@ class ClaimKeepAlive:
     """Calls `on_beat` every interval, and stops after max_seconds (logged as an error).
 
     SageMaker's 60-minute invocation timeout is longer than the configured job limit, so a hung
-    job's claim goes stale before the error handler refunds it.
+    job's claim goes stale before the error handler refunds it. `on_overrun` runs once at the
+    limit, after the error log: the container uses it to end the process so SageMaker replaces
+    the stuck instance.
     """
 
-    def __init__(self, on_beat, interval_seconds, max_seconds):
+    def __init__(self, on_beat, interval_seconds, max_seconds, on_overrun=None):
         self._on_beat = on_beat
         self._interval = interval_seconds
         self._max_seconds = max_seconds
+        self._on_overrun = on_overrun
         self._stopped = threading.Event()
         self._thread = None
         self._entered = None
@@ -83,6 +88,8 @@ class ClaimKeepAlive:
                     f"Job still running after {self._max_seconds:.0f}s: no longer extending its "
                     "claim, so the error handler can refund it"
                 )
+                if self._on_overrun is not None:
+                    self._on_overrun()
                 return
             try:
                 self._on_beat()
@@ -198,10 +205,18 @@ def handle_job(job_id, video_path, *, s3, db, cfg, roi_masks, keep_alive=None):
         if keep_alive is None:
 
             def keep_alive(on_beat):
+                def overran():
+                    logger.error(
+                        f"Job {job_id} overran {cfg['worker']['max_job_minutes']} minutes: "
+                        "ending the process so SageMaker replaces this container"
+                    )
+                    os._exit(1)
+
                 return ClaimKeepAlive(
                     on_beat,
                     cfg["worker"]["heartbeat_seconds"],
                     60 * cfg["worker"]["max_job_minutes"],
+                    on_overrun=overran,
                 )
 
         with keep_alive(lambda: billing.touch(db, job_id, attempt)):
@@ -215,6 +230,7 @@ def handle_job(job_id, video_path, *, s3, db, cfg, roi_masks, keep_alive=None):
                 db=db,
                 roi_masks=roi_masks,
                 research_consent=research_consent,
+                verified_duration_ms=state["verified_duration_ms"],
             )
     except _ClaimLost:
         logger.warning(f"Lost the claim on {job_id} (attempt {attempt}): money untouched")
@@ -234,6 +250,7 @@ def _analyse(
     db,
     roi_masks,
     research_consent,
+    verified_duration_ms,
 ):
     def stage(name):
         if not billing.set_stage(db, job_id, attempt, name):
@@ -251,6 +268,18 @@ def _analyse(
             attempt,
             "unreadable_video",
             "The file is not a readable video.",
+        )
+
+    if duration * 1000 > verified_duration_ms + VIDEO_CHANGED_ALLOWANCE_MS:
+        return _reject(
+            s3,
+            db,
+            bucket,
+            object_key,
+            job_id,
+            attempt,
+            "video_changed",
+            "The video was replaced after it was checked.",
         )
 
     try:
@@ -356,8 +385,7 @@ class _Handler(BaseHTTPRequestHandler):
             return
         self.send_error(404)
 
-    def _stream_body(self, path):
-        length = int(self.headers.get("Content-Length") or 0)
+    def _stream_body(self, path, length):
         remaining = length
         with open(path, "wb") as handle:
             while remaining > 0:
@@ -389,10 +417,21 @@ class _Handler(BaseHTTPRequestHandler):
             return
         path = None
         try:
+            try:
+                length = int(self.headers.get("Content-Length", ""))
+            except ValueError:
+                length = None
+            if length is None:
+                logger.warning(f"Invocation for {job_id} has no usable Content-Length")
+                self._json(500, {"job_id": job_id, "outcome": Outcome.FAILED.value})
+                return
             handle = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
             path = handle.name
             handle.close()
-            self._stream_body(path)
+            if self._stream_body(path, length) < length:
+                logger.warning(f"Invocation for {job_id} ended before its Content-Length")
+                self._json(500, {"job_id": job_id, "outcome": Outcome.FAILED.value})
+                return
             outcome = handle_job(
                 job_id,
                 path,

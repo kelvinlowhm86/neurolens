@@ -21,6 +21,8 @@ def _job_id(record):
         message = json.loads(record["Sns"]["Message"])
     except (KeyError, TypeError, ValueError):
         return None
+    if not isinstance(message, dict):
+        return None
     job_id = message.get("inferenceId")
     return job_id if isinstance(job_id, str) and job_id else None
 
