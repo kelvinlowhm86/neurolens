@@ -138,7 +138,7 @@ The same rules as the old `verify` (length limit first, then record the duration
   - **Missing data counts as breaching:** AWS may stop publishing the backlog when idle, and an alarm without data must not keep a GPU on.
 - No target-tracking policy: with one instance it adds nothing, and AWS warns that several policies conflict.
 - **Instance types:** an instance pool list, `ml.g6e.xlarge` first, then `ml.g6.2xlarge` (SageMaker tries the next pool when the first has no capacity; `VariantInstanceProvisionTimeoutInSeconds` 600).
-  - If the Terraform provider cannot express instance pools, the build stops and reports. No hand-made endpoint config.
+  - The `hashicorp/aws` provider cannot express instance pools (checked up to 6.70, Oct 2026), so the endpoint configuration alone uses `awscc_sagemaker_endpoint_config` from the `hashicorp/awscc` provider (AWS Cloud Control), which can. Everything else stays on `hashicorp/aws`. No hand-made endpoint config.
 - **Creating or updating the endpoint** always starts one instance (`InitialInstanceCount` ≥ 1, AWS API), which scales in after 7 idle minutes. A deploy therefore costs one cold start plus about 7 minutes of GPU time (an estimate: $0.50–0.80 on `g6e`).
 
 ### 6b. Pause and keep-warm (`infra/stop_work.sh`, `infra/start_work.sh`)
