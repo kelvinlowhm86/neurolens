@@ -36,36 +36,18 @@ def s3_client():
     return boto3.client("s3")
 
 
-class SageMaker:
-    """The two SageMaker boto3 services behind one name.
+def sagemaker_runtime_client():
+    """Sends requests to the endpoint (InvokeEndpointAsync): the dispatcher."""
+    import boto3
 
-    InvokeEndpointAsync is on ``sagemaker-runtime`` while DescribeEndpoint and the capacity call
-    are on ``sagemaker``; the dispatcher and the guard each use their half.
-    """
-
-    def __init__(self):
-        self._runtime = None
-        self._control = None
-
-    def invoke_endpoint_async(self, **kwargs):
-        if self._runtime is None:
-            import boto3
-
-            self._runtime = boto3.client("sagemaker-runtime")
-        return self._runtime.invoke_endpoint_async(**kwargs)
-
-    def __getattr__(self, name):
-        if name.startswith("_"):
-            raise AttributeError(name)
-        if self._control is None:
-            import boto3
-
-            self._control = boto3.client("sagemaker")
-        return getattr(self._control, name)
+    return boto3.client("sagemaker-runtime")
 
 
 def sagemaker_client():
-    return SageMaker()
+    """Reads and resizes the endpoint (DescribeEndpoint, capacity): the GPU guard."""
+    import boto3
+
+    return boto3.client("sagemaker")
 
 
 def appscaling_client():

@@ -136,7 +136,8 @@ def dispatch(
 
 def handler(event, context):
     lambdas.setup_logging()
-    s3, sagemaker, db = lambdas.s3_client(), lambdas.sagemaker_client(), lambdas.database()
+    s3, db = lambdas.s3_client(), lambdas.database()
+    sagemaker = lambdas.sagemaker_runtime_client()
     endpoint = os.environ["NEUROLENS_GPU_ENDPOINT"]
     max_upload_bytes = int(os.environ["NEUROLENS_MAX_UPLOAD_BYTES"])
     max_duration_s = int(os.environ["NEUROLENS_MAX_DURATION_SECONDS"])

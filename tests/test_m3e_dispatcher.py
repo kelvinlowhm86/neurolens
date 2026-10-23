@@ -339,7 +339,7 @@ def run_handler(aws, db, monkeypatch, key, sagemaker, *, max_upload_bytes=MAX_UP
 
     monkeypatch.setattr(lambdas, "database", lambda: db)
     monkeypatch.setattr(lambdas, "s3_client", lambda: aws.s3)
-    monkeypatch.setattr(lambdas, "sagemaker_client", lambda: sagemaker)
+    monkeypatch.setattr(lambdas, "sagemaker_runtime_client", lambda: sagemaker)
     monkeypatch.setenv("NEUROLENS_S3_BUCKET", aws.bucket)
     monkeypatch.setenv("NEUROLENS_GPU_ENDPOINT", ENDPOINT)
     monkeypatch.setenv("NEUROLENS_MAX_UPLOAD_BYTES", str(max_upload_bytes))
