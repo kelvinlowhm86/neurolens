@@ -700,3 +700,53 @@ def test_a_busy_container_refuses_a_second_job_but_still_answers_ping(server, fa
 
     assert first and first[0][0] == 200
     assert fake_handle.calls == [first_job]
+
+
+@pytest.mark.parametrize(
+    "outcome,status",
+    [(worker.Outcome.DONE, 200), (worker.Outcome.FAILED, 500)],
+)
+def test_the_feature_cache_is_emptied_after_an_invocation(
+    aws, db, make_cfg, roi_masks_small, monkeypatch, tmp_path, outcome, status
+):
+    cache = tmp_path / "features"
+    cache.mkdir()
+    instance = worker.make_server(
+        "127.0.0.1",
+        0,
+        s3=aws.s3,
+        db=db,
+        cfg=make_cfg(),
+        roi_masks=roi_masks_small,
+        feature_cache=str(cache),
+    )
+
+    def fake(job_id, video_path, *, s3, db, cfg, roi_masks, keep_alive=None):
+        (cache / "nested").mkdir()
+        (cache / "nested" / "features.npy").write_bytes(b"features")
+        (cache / "video-features.npz").write_bytes(b"features")
+        return outcome
+
+    monkeypatch.setattr(worker, "handle_job", fake)
+    thread = threading.Thread(target=instance.serve_forever, daemon=True)
+    thread.start()
+    try:
+        code, _ = http(
+            instance,
+            "POST",
+            "/invocations",
+            body=b"video",
+            headers={JOB_HEADER: str(uuid.uuid4())},
+        )
+        assert code == status
+
+        deadline = time.monotonic() + 2
+        while list(cache.iterdir()) and time.monotonic() < deadline:
+            time.sleep(0.01)
+
+        assert cache.is_dir()
+        assert list(cache.iterdir()) == []
+    finally:
+        instance.shutdown()
+        instance.server_close()
+        thread.join(timeout=5)

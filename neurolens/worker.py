@@ -9,6 +9,7 @@ import enum
 import json
 import logging
 import os
+import shutil
 import socket
 import tempfile
 import threading
@@ -362,6 +363,20 @@ def _record_boot(s3, bucket, times):
     _put_boot_json(s3, bucket, f"{socket.gethostname()}-{stamp}", record)
 
 
+def _empty_feature_cache(folder):
+    """Empty the feature cache folder, keeping the folder itself. Never raises."""
+    if folder is None:
+        return
+    try:
+        for entry in Path(folder).iterdir():
+            if entry.is_dir() and not entry.is_symlink():
+                shutil.rmtree(entry)
+            else:
+                entry.unlink(missing_ok=True)
+    except Exception:
+        logger.exception(f"Could not empty the feature cache {folder}")
+
+
 class _Handler(BaseHTTPRequestHandler):
     server_version = "NeuroLensWorker/1"
 
@@ -446,6 +461,7 @@ class _Handler(BaseHTTPRequestHandler):
             logger.exception(f"Invocation for {job_id} failed")
             self._json(500, {"job_id": job_id, "outcome": Outcome.FAILED.value})
         finally:
+            _empty_feature_cache(server.feature_cache)
             server.busy.release()
             if path is not None:
                 Path(path).unlink(missing_ok=True)
@@ -458,18 +474,21 @@ class _Server(ThreadingHTTPServer):
     daemon_threads = True
     allow_reuse_address = True
 
-    def __init__(self, address, *, s3, db, cfg, roi_masks):
+    def __init__(self, address, *, s3, db, cfg, roi_masks, feature_cache=None):
         self.s3 = s3
         self.db = db
         self.cfg = cfg
         self.roi_masks = roi_masks
+        self.feature_cache = feature_cache
         self.busy = threading.Lock()
         super().__init__(address, _Handler)
 
 
-def make_server(host, port, *, s3, db, cfg, roi_masks):
+def make_server(host, port, *, s3, db, cfg, roi_masks, feature_cache=None):
     """The HTTP server SageMaker talks to (port 8080 in production)."""
-    return _Server((host, port), s3=s3, db=db, cfg=cfg, roi_masks=roi_masks)
+    return _Server(
+        (host, port), s3=s3, db=db, cfg=cfg, roi_masks=roi_masks, feature_cache=feature_cache
+    )
 
 
 def serve():
@@ -481,7 +500,11 @@ def serve():
     validate_config(cfg)
     aws = cfg["aws"]
     db = dbmod.from_config(cfg)
-    inference.load_model(cfg)
+    # tribev2 writes each job's extracted features here. In the container ./models is the copy of
+    # the weights SageMaker downloads, which must stay untouched, so use /tmp and empty it per
+    # invocation (the temporary video names never repeat, so nothing in it is reused).
+    feature_cache = tempfile.mkdtemp(prefix="neurolens-features-")
+    inference.load_model(cfg, feature_cache=feature_cache)
     model_loaded = datetime.now(UTC)
     roi_masks = inference.roi_masks()
 
@@ -492,7 +515,15 @@ def serve():
     warmup_done = datetime.now(UTC)
 
     s3 = boto3.client("s3", region_name=aws["region"])
-    server = make_server("0.0.0.0", PORT, s3=s3, db=db, cfg=cfg, roi_masks=roi_masks)
+    server = make_server(
+        "0.0.0.0",
+        PORT,
+        s3=s3,
+        db=db,
+        cfg=cfg,
+        roi_masks=roi_masks,
+        feature_cache=feature_cache,
+    )
     ready = datetime.now(UTC)
     _record_boot(s3, aws["s3_bucket"], (container_start, model_loaded, warmup_done, ready))
     logger.info(f"Worker ready on port {PORT}")

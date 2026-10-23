@@ -160,6 +160,13 @@ resource "aws_iam_role_policy" "codebuild" {
         Resource = "*"
       },
       {
+        # The Dockerfile's base is AWS's PyTorch inference image in account 763104351884 (M3e §4d).
+        Sid      = "PullTheAwsBaseImage"
+        Effect   = "Allow"
+        Action   = ["ecr:BatchCheckLayerAvailability", "ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer"]
+        Resource = "arn:aws:ecr:us-east-1:763104351884:repository/pytorch-inference"
+      },
+      {
         Sid    = "PushTheWorkerImage"
         Effect = "Allow"
         Action = [

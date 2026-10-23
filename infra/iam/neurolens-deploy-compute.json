@@ -80,6 +80,33 @@
       }
     },
     {
+      "Sid": "RemoveTheEc2Worker",
+      "Effect": "Allow",
+      "Action": [
+        "ec2:DetachInternetGateway",
+        "ec2:DisassociateAddress",
+        "ec2:ReleaseAddress",
+        "ec2:DeregisterImage",
+        "autoscaling:DeleteAutoScalingGroup",
+        "autoscaling:DeletePolicy"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "aws:ResourceTag/Project": "neurolens"
+        }
+      }
+    },
+    {
+      "Sid": "RemoveTheEc2WorkerDescribes",
+      "Effect": "Allow",
+      "Action": [
+        "autoscaling:DescribeAutoScalingGroups",
+        "autoscaling:DescribePolicies"
+      ],
+      "Resource": "*"
+    },
+    {
       "Sid": "ExplainOwnDenialsReadOnly",
       "Effect": "Allow",
       "Action": "sts:DecodeAuthorizationMessage",
@@ -161,14 +188,14 @@
       }
     },
     {
-      "Sid": "AwsHelperRolesForSageMakerCodeBuildAppScalingAndRds",
+      "Sid": "AwsHelperRolesForAppScalingSageMakerCodeBuildAndRds",
       "Effect": "Allow",
       "Action": "iam:CreateServiceLinkedRole",
       "Resource": "arn:aws:iam::*:role/aws-service-role/*",
       "Condition": {
         "StringEquals": {
           "iam:AWSServiceName": [
-            "application-autoscaling.amazonaws.com",
+            "sagemaker.application-autoscaling.amazonaws.com",
             "sagemaker.amazonaws.com",
             "codebuild.amazonaws.com",
             "rds.amazonaws.com"

@@ -55,8 +55,12 @@ def read_hcp_annot(path):
     return labels, names
 
 
-def load_model(cfg=None):
-    """Load the TRIBE v2 model (skipped in fake mode) and the Glasser HCP-MMP1 maps, build masks."""
+def load_model(cfg=None, feature_cache=None):
+    """Load the TRIBE v2 model (skipped in fake mode) and the Glasser HCP-MMP1 maps, build masks.
+
+    `feature_cache` is where tribev2 writes each job's extracted features. It defaults to the
+    models folder; the container passes a temporary folder so the downloaded weights stay untouched.
+    """
     global model, _roi_masks
 
     root = settings.get_root()
@@ -75,7 +79,7 @@ def load_model(cfg=None):
 
         model = TribeModel.from_pretrained(
             cfg["model"]["repo_id"],
-            cache_folder=str(paths["models"]),
+            cache_folder=str(feature_cache if feature_cache is not None else paths["models"]),
         )
         logger.info("TRIBE v2 loaded.")
 

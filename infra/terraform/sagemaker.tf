@@ -57,21 +57,37 @@ resource "aws_ecr_repository" "worker" {
   tags = { Milestone = "M3e" }
 }
 
-# The last three commits are enough to roll back an image without a rebuild.
+# The image the endpoint runs carries the tag `live` and must never expire (SageMaker pulls it
+# again at every start from zero). ECR never expires an image matched by a higher-priority rule,
+# so the `live` rule above protects it from the keep-last-3 rule below. Of the rest, the last
+# three commits are enough to roll back without a rebuild.
 resource "aws_ecr_lifecycle_policy" "worker" {
   repository = aws_ecr_repository.worker.name
 
   policy = jsonencode({
-    rules = [{
-      rulePriority = 1
-      description  = "Keep the last 3 images"
-      selection = {
-        tagStatus   = "any"
-        countType   = "imageCountMoreThan"
-        countNumber = 3
-      }
-      action = { type = "expire" }
-    }]
+    rules = [
+      {
+        rulePriority = 1
+        description  = "Never expire the live image"
+        selection = {
+          tagStatus     = "tagged"
+          tagPrefixList = ["live"]
+          countType     = "imageCountMoreThan"
+          countNumber   = 1000
+        }
+        action = { type = "expire" }
+      },
+      {
+        rulePriority = 2
+        description  = "Keep the last 3 images"
+        selection = {
+          tagStatus   = "any"
+          countType   = "imageCountMoreThan"
+          countNumber = 3
+        }
+        action = { type = "expire" }
+      },
+    ]
   })
 }
 
@@ -198,6 +214,41 @@ resource "aws_sagemaker_endpoint" "main" {
   endpoint_config_name = awscc_sagemaker_endpoint_config.main[0].endpoint_config_name
 
   tags = { Milestone = "M3e" }
+}
+
+# The lifecycle policy's first rule protects the `live` tag. Move it to the deployed digest
+# whenever worker_image changes; `--image-tag` with a manifest moves an existing tag.
+resource "terraform_data" "live_image" {
+  count = local.image_ready ? 1 : 0
+
+  triggers_replace = local.image_digest
+
+  depends_on = [aws_sagemaker_endpoint.main]
+
+  provisioner "local-exec" {
+    command = <<-EOT
+      set -eu
+      manifest=$(aws ecr batch-get-image \
+        --repository-name ${aws_ecr_repository.worker.name} \
+        --image-ids imageDigest=${local.image_digest} \
+        --region ${var.region} \
+        --query 'images[0].imageManifest' --output text)
+      if ! aws ecr put-image \
+        --repository-name ${aws_ecr_repository.worker.name} \
+        --image-tag live \
+        --image-manifest "$manifest" \
+        --region ${var.region}; then
+        # A re-run after a partial apply finds the same digest already tagged: ECR reports
+        # ImageAlreadyExistsException. Any other failure stays fatal.
+        current=$(aws ecr batch-get-image \
+          --repository-name ${aws_ecr_repository.worker.name} \
+          --image-ids imageTag=live \
+          --region ${var.region} \
+          --query 'images[0].imageDigest' --output text 2>/dev/null || true)
+        test "$current" = "${local.image_digest}"
+      fi
+    EOT
+  }
 }
 
 # The endpoint's error notifications (no success topic: the container settles a success itself).
