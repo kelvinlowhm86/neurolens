@@ -46,4 +46,6 @@ RUN uvx whisperx --help
 
 ENV UV_OFFLINE=1
 
-ENTRYPOINT ["python", "/opt/neurolens/worker.py", "serve"]
+# SageMaker starts the container as `docker run <image> serve`, which replaces CMD.
+ENTRYPOINT ["python", "/opt/neurolens/worker.py"]
+CMD ["serve"]

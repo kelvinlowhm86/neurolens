@@ -90,7 +90,7 @@ The same rules as the old `verify` (length limit first, then record the duration
 - A SIGTERM (SageMaker removing the instance) is not handled. The process ends, the claim goes stale within 90 s, and §5 refunds.
 
 ### 4d. Image (`infra/worker_image/Dockerfile`, `infra/worker_image/buildspec.yml`, `infra/build_image.sh`)
-- **Base:** AWS's PyTorch inference GPU image for torch 2.6.0, CUDA 12.4, Python 3.12, pinned by digest in the Dockerfile. Our own `ENTRYPOINT ["python", "/opt/neurolens/worker.py", "serve"]` replaces its server.
+- **Base:** AWS's PyTorch inference GPU image for torch 2.6.0, CUDA 12.4, Python 3.12, pinned by digest in the Dockerfile. Our own `ENTRYPOINT ["python", "/opt/neurolens/worker.py"]` with `CMD ["serve"]` replaces its server (SageMaker runs `docker run <image> serve`, which replaces CMD; `serve` in the entry point too would pass it twice).
 - **Contents:**
   - the `neurolens` package;
   - `requirements/worker.txt` and `requirements/model.txt`;
