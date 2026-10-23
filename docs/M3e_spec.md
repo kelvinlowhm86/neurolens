@@ -64,7 +64,7 @@ The same rules as the old `verify` (length limit first, then record the duration
 - **Start-up**, in order:
   1. `validate_config`;
   2. the Data API client;
-  3. `inference.load_model`, then `roi_masks`;
+  3. `inference.load_model(cfg, feature_cache=<a new temporary folder>)`, then `roi_masks`. `feature_cache` is where tribev2 writes each job's extracted features (`TribeModel`'s `cache_folder`). It defaults to the models folder (laptop and notebooks, unchanged), but in the container that is the weights SageMaker copied in, which must stay untouched, so the container passes a folder under `/tmp` and empties it after every invocation (the temporary video names never repeat, so nothing in it is reused);
   4. a warm-up: `inference.build_events` on the bundled 3-second clip with speech (`data/warmup.mp4`), so the first real job pays no WhisperX set-up;
   5. the boot record (§10);
   6. listen.
@@ -142,15 +142,16 @@ The same rules as the old `verify` (length limit first, then record the duration
 - **Creating or updating the endpoint** always starts one instance (`InitialInstanceCount` ≥ 1, AWS API), which scales in after 7 idle minutes. A deploy therefore costs one cold start plus about 7 minutes of GPU time (an estimate: $0.50–0.80 on `g6e`).
 
 ### 6b. Pause and keep-warm (`infra/stop_work.sh`, `infra/start_work.sh`)
+- Both scripts use the fixed endpoint name `neurolens` (as they use `neurolens-db`), so an emergency pause never depends on an exported variable.
 - **`stop_work.sh`** (emergency pause):
   - sets the scalable target's max and min to 0;
-  - deletes any keep-warm scheduled actions;
+  - deletes any keep-warm scheduled action; none existing (`ObjectNotFoundException`, the normal case) is not a problem;
   - calls `UpdateEndpointWeightsAndCapacities(DesiredInstanceCount=0)`;
   - waits until `DescribeEndpoint` shows 0 instances and prints `ALL STOPPED`.
 
   A running job dies and is refunded (§5). Uploads are refused while paused (§8).
 - **`start_work.sh`** sets max 1 (the normal state; also what Terraform applies).
-  - `--keep-warm --hours N` (1–4): min 1 now, plus a one-time scheduled action that sets min back to 0 at the end. AWS ends a keep-warm without anyone remembering. Running it again moves the end.
+  - `--keep-warm --hours N` (1–4): first a one-time scheduled action that sets min back to 0 at the end (`--schedule "at(YYYY-MM-DDThh:mm:ss)"`, UTC), then min 1. In that order, a failure never leaves min 1 without an end. AWS ends a keep-warm without anyone remembering. Running it again moves the end.
   - `--keep-db` keeps its current meaning (Aurora minimum 0.5 ACU for the same hours).
 - `debug_worker.sh` is deleted. Container logs are in CloudWatch (`/aws/sagemaker/Endpoints/neurolens`).
 
@@ -200,8 +201,8 @@ The same rules as the old `verify` (length limit first, then record the duration
 
 ## 9. Terraform and IAM
 **Added:**
-- the ECR repository `neurolens-worker` (keep the last 3 images);
-- the CodeBuild project `neurolens-worker-image` (Linux x86-64, privileged for Docker, 60-minute timeout) and its role, which may only read `build/source.zip`, push to the repository and write its log group;
+- the ECR repository `neurolens-worker`: the image the model uses carries the tag `live` (a `terraform_data` step tags the digest with `aws ecr put-image` whenever `worker_image` changes) and is never expired; of the rest, the last 3 are kept. SageMaker pulls the image again at every start from zero, so an expired live image would stop every job;
+- the CodeBuild project `neurolens-worker-image` (Linux x86-64, privileged for Docker, 60-minute timeout) and its role, which may only read `build/source.zip`, pull the base image from AWS's `pytorch-inference` repository (account 763104351884: `BatchGetImage`, `GetDownloadUrlForLayer`, `BatchCheckLayerAvailability`; the buildspec logs in to that registry as well as ours), push to our repository and write its log group;
 - the SageMaker execution role:
   - read on `model-data/*`, `uploads/*` and `results/*` (the container checks for an existing result before it claims), and `s3:ListBucket` on the bucket (SageMaker lists `model-data/`, and without it a missing result answers 403 instead of 404, which `object_exists` raises on);
   - put on `results/*`, `dataset/*`, `experiments/boots/*` and `sagemaker-output/*`;
@@ -238,7 +239,10 @@ The same rules as the old `verify` (length limit first, then record the duration
 
 **IAM paste by Josh** (one batch):
 - `infra/iam/neurolens-deploy-*.json` gain SageMaker, ECR, CodeBuild and Application Auto Scaling actions scoped to `neurolens*`, and lose EC2/Auto Scaling launch rights;
-- the role boundary gains the SageMaker execution role's and the guard's actions.
+- **Application Auto Scaling cannot be scoped by name** (a scalable target's ARN ends in a random id, and policies and scheduled actions have no ARN of their own). The scalable target is tagged `Project=neurolens`; changing actions are allowed on `*` only with `aws:ResourceTag/Project=neurolens` (`aws:RequestTag/Project=neurolens` when registering a new one), checked against the AWS Service Authorization Reference; describes are on `*`;
+- the service-linked role allowed for scaling is `sagemaker.application-autoscaling.amazonaws.com` (`AWSServiceRoleForApplicationAutoScaling_SageMakerEndpoint`);
+- **removal rights for the one apply that deletes the EC2 worker**, in their own statement `RemoveTheEc2Worker`, scoped to `neurolens` like the old ones: `ec2:DetachInternetGateway`, `ec2:DisassociateAddress`, `ec2:ReleaseAddress`, `ec2:DeregisterImage`, and the Auto Scaling group's describe and delete actions. A second paste after day B removes that statement (§12 step 9);
+- the role boundary gains the SageMaker execution role's, the guard's and CodeBuild's actions (including the base-image pull).
 
 ## 10. Scripts, experiments and records
 - **Deleted:** `infra/build_ami.sh`, `infra/pull_code.sh`, `infra/deploy_code.sh`, `infra/neurolens-worker.service`, `infra/terraform/worker_userdata.sh.tftpl`, `infra/debug_worker.sh`, `infra/lambda/breaker.py`.
@@ -276,6 +280,7 @@ The same rules as the old `verify` (length limit first, then record the duration
   - a missing job-id header → 400;
   - `/ping` answers 200 while `/invocations` is busy;
   - a second concurrent invocation → 503;
+  - the feature cache folder passed to `load_model` is emptied after an invocation, whatever its outcome;
   - `ClaimKeepAlive` stops at `max_seconds` and calls `on_overrun` once; `handle_job`'s default keep-alive ends the process on overrun.
 - **Error handler:** done result → settled; queued or stale → refunded and files deleted; fresh claim → raises; already terminal → no-op; garbage (not JSON, a JSON list or string, no `inferenceId`) → logged and dropped.
 - **Guard:**
@@ -311,7 +316,7 @@ Order, with no long gap between the steps:
    - a request with `RequestTTLSeconds` 60 against a paused endpoint produces an error notification and a refund;
    - the endpoint scales to 0 after 7 idle minutes;
    - the guard stops an instance kept up by hand (with min reset to 0 and no jobs) and emails.
-5. Apply with the GPU. Run one real job, and per-video delete it.
+5. Apply with the GPU. AWS refuses an instance-type change on a variant registered for scaling, so first `terraform apply -destroy -target=aws_appautoscaling_target.endpoint` (its policies go with it), then the full apply with `fake_inference = false`. A shortcut for a one-time switch: done by hand once, not built into Terraform. Run one real job (it is the first time the real model loads in the container: watch for any write into `/opt/ml/model`), and per-video delete it.
 6. A consented job: check the dataset copy, then delete it.
 7. Measure:
    - cold start (upload to `transcribing`), split by the boot record;
@@ -320,7 +325,7 @@ Order, with no long gap between the steps:
    - that `ApproximateBacklogSize` has a point every minute while a job runs;
    - that the endpoint accepted both instance pools (`DescribeEndpointConfig`).
 8. Fallback: not forced. Record which type ran.
-9. Finish: confirm `ALL STOPPED`. Nothing stays running: there is no NAT to switch off.
+9. Finish: confirm `ALL STOPPED`. Nothing stays running: there is no NAT to switch off. Josh pastes the deploy policy without `RemoveTheEc2Worker`.
 
 **Costs (estimates, from the AWS price list, us-east-1):**
 - `ml.g6e.xlarge` $2.61/h; `ml.g6.2xlarge` $1.22/h; `ml.m5.xlarge` $0.23/h;
