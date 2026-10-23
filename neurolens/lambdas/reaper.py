@@ -1,25 +1,23 @@
-"""Reaper (docs/M3a_spec.md §7), every 3 hours, always on: settles or refunds any job still
-open 24 hours after it was created, unless a worker is running it.
+"""Reaper (docs/M3a §7, M3e §5, §7), every 3 hours.
 
-One rule: a job not done or failed 24 hours after `created_at`, and that no worker is running
-(it is `queued`, or `processing` with no heartbeat for 10 minutes), is settled if its result
-exists, else refunded as `deadline_passed` and every file of the job deleted (M3a §7b).
-
-Every refund re-checks its condition under the job's row lock, so a job claimed between this
-query and its refund is left alone. One job's error, including a failed file delete after a
-refund, does not stop the others; the run then raises, so the failure shows in the Lambda's
-error metric.
+Backstop for a lost GPU notification: a job still open four hours after creation is settled if
+its result exists, else refunded ``deadline_passed``. Every run also retries the file deletes of
+recently failed jobs and removes consented dataset copies that have no retention curve after
+sixty days.
 """
 
 import logging
 import os
+from pathlib import PurePosixPath
 
 from neurolens import billing, lambdas, storage
 
 logger = logging.getLogger(__name__)
 
-DEADLINE_S = 24 * 60 * 60
+DEADLINE_S = 4 * 60 * 60
 HEARTBEAT_STALE_S = 10 * 60
+FAILED_RETRY_S = 2 * 24 * 60 * 60
+DATASET_WITHOUT_RETENTION_DAYS = 60
 
 
 def stuck_jobs(db):
@@ -38,6 +36,31 @@ def stuck_jobs(db):
         )
 
 
+def recent_failed_jobs(db):
+    with db.transaction() as tx:
+        return tx.execute(
+            "SELECT job_id, object_key FROM jobs WHERE status = :failed "
+            "AND updated_at > now() - make_interval(secs => :window)",
+            {"failed": billing.FAILED, "window": FAILED_RETRY_S},
+        )
+
+
+def expired_dataset_jobs(db):
+    with db.transaction() as tx:
+        return tx.execute(
+            "SELECT job_id, object_key FROM jobs WHERE status = :done "
+            "AND research_consent AND retention_added_at IS NULL "
+            "AND dataset_removed_at IS NULL AND deleted_at IS NULL "
+            "AND created_at < now() - make_interval(secs => :cutoff)",
+            {"done": billing.DONE, "cutoff": DATASET_WITHOUT_RETENTION_DAYS * 86400},
+        )
+
+
+def _delete(s3, bucket, keys):
+    if not storage.delete_keys(s3, bucket, keys):
+        raise RuntimeError("S3 reported a failed delete")
+
+
 def reap(db, s3, bucket, job):
     job_id = job["job_id"]
     if storage.result_exists(s3, bucket, job_id):
@@ -51,15 +74,43 @@ def reap(db, s3, bucket, job):
         queued_before_s=0,
         processing_stale_s=HEARTBEAT_STALE_S,
     ):
-        logger.warning(f"{job_id}: past the 24-hour deadline, refunded")
+        logger.warning(f"{job_id}: past the 4-hour deadline, refunded")
         # A failed delete raises after the refund, never undoing it; the run then fails loudly.
-        if not storage.delete_keys(s3, bucket, storage.job_keys(job_id, job["object_key"])):
-            raise RuntimeError(f"{job_id}: refunded, but S3 could not delete all of its files")
+        _delete(s3, bucket, storage.job_keys(job_id, job["object_key"]))
+
+
+def _mark(db, job_id, column):
+    with db.transaction() as tx:
+        tx.execute(
+            f"UPDATE jobs SET {column} = now() WHERE job_id = CAST(:job_id AS uuid)",
+            {"job_id": job_id},
+        )
+
+
+def clean_dataset(db, s3, bucket, job):
+    """Delete one expired consented copy, or record a retention curve that is already there."""
+    job_id = job["job_id"]
+    retention = f"dataset/{job_id}/retention.csv"
+    if storage.object_exists(s3, bucket, retention):
+        _mark(db, job_id, "retention_added_at")
+        logger.info(f"{job_id}: retention curve found, kept")
+        return
+    ext = PurePosixPath(job["object_key"]).suffix
+    keys = [
+        f"dataset/{job_id}/video{ext}",
+        f"dataset/{job_id}/result.json",
+        f"dataset/{job_id}/brain",
+    ]
+    _delete(s3, bucket, keys)
+    _mark(db, job_id, "dataset_removed_at")
+    logger.warning(f"{job_id}: dataset copy deleted after {DATASET_WITHOUT_RETENTION_DAYS} days")
 
 
 def handler(event, context):
     lambdas.setup_logging()
-    db, s3 = lambdas.database(), lambdas.s3_client()
+    import boto3
+
+    db, s3 = lambdas.database(), boto3.client("s3")
     bucket = os.environ["NEUROLENS_S3_BUCKET"]
     failed = []
     for job in stuck_jobs(db):
@@ -68,5 +119,17 @@ def handler(event, context):
         except Exception:
             logger.exception(f"{job['job_id']}: could not reap")
             failed.append(job["job_id"])
+    for job in recent_failed_jobs(db):
+        try:
+            _delete(s3, bucket, storage.job_keys(job["job_id"], job["object_key"]))
+        except Exception:
+            logger.exception(f"{job['job_id']}: could not delete a failed job's files")
+            failed.append(job["job_id"])
+    for job in expired_dataset_jobs(db):
+        try:
+            clean_dataset(db, s3, bucket, job)
+        except Exception:
+            logger.exception(f"{job['job_id']}: could not clean its dataset copy")
+            failed.append(job["job_id"])
     if failed:
-        raise RuntimeError(f"could not reap {failed}")
+        raise RuntimeError(f"could not finish {failed}")

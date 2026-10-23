@@ -2,7 +2,7 @@
 
     python experiments/finish_run.py experiment-1 <run_id> --series exp1-final \
         --started 2026-10-14T03:00:00Z --finished 2026-10-14T04:30:00Z \
-        --instance-type g6e.xlarge --ami-id ami-...
+        --instance-type ml.g6e.xlarge --image-digest sha256:...
 
 Refuses if a file the experiment needs is missing, so a half-finished run never looks complete.
 Records the deployed code revision: run it before deploying anything newer.
@@ -21,7 +21,7 @@ def main():
     parser.add_argument("--started", required=True, help="UTC, e.g. 2026-10-14T03:00:00Z")
     parser.add_argument("--finished", required=True)
     parser.add_argument("--instance-type", required=True)
-    parser.add_argument("--ami-id", required=True)
+    parser.add_argument("--image-digest", required=True)
     args = parser.parse_args()
 
     import boto3
@@ -40,7 +40,11 @@ def main():
         series=args.series,
         started_utc=args.started,
         finished_utc=args.finished,
-        environment={"type": "aws", "instance_type": args.instance_type, "ami_id": args.ami_id},
+        environment={
+            "type": "aws",
+            "instance_type": args.instance_type,
+            "image_digest": args.image_digest,
+        },
         revision=deployed["Body"].read().decode().strip(),
     )
     print(f"manifest written: {manifest['files']}")

@@ -112,16 +112,6 @@ def test_status_returns_the_jobs_state_when_there_is_no_result(client, db, owned
     assert data["error_code"] is None
 
 
-def test_status_of_a_job_handed_back_after_an_error_shows_the_error(client, db, owned):
-    """M2b's `retrying` with the error: in M3a the job is queued again with its error_message."""
-    job_id = owned()
-    attempt = billing.claim(db, job_id)
-    billing.release_for_retry(db, job_id, attempt, "RuntimeError: model crashed")
-    data = client.get(f"/api/jobs/{job_id}/status").get_json()
-    assert data["status"] == "queued"
-    assert data["error_message"] == "RuntimeError: model crashed"
-
-
 def test_status_of_a_rejected_job_is_failed_with_its_reason(client, db, owned):
     job_id = owned()
     attempt = billing.claim(db, job_id)

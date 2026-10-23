@@ -199,13 +199,17 @@ def grant_credit(db, email, cents):
 
 def list_jobs(db, user_id, limit):
     """The user's jobs, newest first, at most `limit` (M3b §4a). Deleted jobs are left out
-    (M3c §4)."""
+    (M3c §4), and `needs_retention` marks a done, consented job with neither a retention curve
+    nor a removed dataset (M3e §7)."""
     with db.transaction() as tx:
         return tx.execute(
             "SELECT job_id, filename, status, created_at, verified_duration_ms, captured_cents, "
-            "error_code FROM jobs WHERE user_id = :user_id AND deleted_at IS NULL "
+            "error_code, research_consent, "
+            "(status = :done AND research_consent AND retention_added_at IS NULL "
+            "AND dataset_removed_at IS NULL) AS needs_retention "
+            "FROM jobs WHERE user_id = :user_id AND deleted_at IS NULL "
             "ORDER BY created_at DESC LIMIT :limit",
-            {"user_id": user_id, "limit": limit},
+            {"user_id": user_id, "limit": limit, "done": DONE},
         )
 
 
@@ -320,12 +324,13 @@ def claim(db, job_id, stale_after_s=90):
 
 
 def job_state(db, job_id):
-    """{"status", "updated_at", "attempt", "research_consent"}, or None for an unknown job.
-    Deliberately sees deleted jobs too (M3c §4)."""
+    """The job's status, timing, claim and research fields plus `object_key` and
+    `verified_duration_ms` (M3e §3a), or None for an unknown job. Deliberately sees deleted jobs
+    too (M3c §4)."""
     with db.transaction() as tx:
         rows = tx.execute(
-            "SELECT status, updated_at, attempt, research_consent FROM jobs "
-            "WHERE job_id = CAST(:job_id AS uuid)",
+            "SELECT status, updated_at, attempt, research_consent, object_key, "
+            "verified_duration_ms FROM jobs WHERE job_id = CAST(:job_id AS uuid)",
             {"job_id": job_id},
         )
     return rows[0] if rows else None
@@ -359,28 +364,16 @@ def set_stage(db, job_id, attempt, stage, now=None):
     )
 
 
-def release_for_retry(db, job_id, attempt, error_message=None):
-    """Hand the job back to the queue (failure or shutdown) so the next worker can claim it at
-    once. Money is untouched. False means the claim was lost."""
-    return _update_held(
-        db,
-        job_id,
-        attempt,
-        "status = :queued, updated_at = now(), error_message = :message",
-        {"queued": QUEUED, "message": error_message},
-    )
-
-
 # ---------------------------------------------------------------- Stage 2
 
 
-def verify(db, job_id, attempt, verified_duration_ms, max_duration_s):
-    """Price the job by its measured duration, before any inference. Returns "ok", "lost_claim"
-    (nothing changed), or the refund reason it applied."""
+def verify_queued(db, job_id, verified_duration_ms, max_duration_s):
+    """Price a queued job by its measured duration, before any GPU runs (M3e §3a). Returns "ok",
+    "not_queued" (nothing changed), or the refund reason it applied."""
     with db.transaction() as tx:
         job = _lock_job(tx, job_id)
-        if not _holds_claim(job, attempt):
-            return LOST_CLAIM
+        if job is None or job["status"] != QUEUED:
+            return "not_queued"
         # The length limit is a product rule, checked before any credit logic, whatever the
         # balance (settings.max_duration). Also before recording the duration: a crafted file
         # can claim more hours than the INTEGER column holds.

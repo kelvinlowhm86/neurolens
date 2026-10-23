@@ -144,8 +144,8 @@ def put_result(aws, job_id):
 
 def done_job(aws, db, **kwargs):
     job_id = owned_job(db, **kwargs)
-    attempt = billing.claim(db, job_id)
-    billing.verify(db, job_id, attempt, 27_400, 120)
+    assert billing.verify_queued(db, job_id, 27_400, 120) == "ok"
+    billing.claim(db, job_id)
     result = put_result(aws, job_id)
     billing.settle_success(db, job_id)
     return job_id, result

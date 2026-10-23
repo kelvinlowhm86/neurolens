@@ -311,7 +311,7 @@
           <div class="line" id="upCost"></div>
           <div class="consent-row" id="consentRow">
             <input type="checkbox" id="consentBox">
-            <label for="consentBox">Optional: keep this video and its analysis for up to 12 months for research into how brain response relates to real audiences. I own the rights to this video. <a href="/static/privacy.html">Privacy policy</a></label>
+            <label for="consentBox">Keep this video for research for up to 12 months and add its audience retention once it is published (<a href="/static/retention_guide.html">how</a>); without retention, the copy is deleted after 60 days. I own the rights to this video.</label>
           </div>
           <div class="upload-progress" id="upProgress"><div class="upload-bar" id="upBar"></div></div>
           <div class="status-line">
@@ -771,6 +771,11 @@ function historyRow(job) {
     cancel.addEventListener('click', () => cancelJob(job.job_id));
     actions.append(cancel);
   }
+  if (job.needs_retention) {
+    const add = document.createElement('button'); add.className = 'btn-ghost'; add.textContent = 'Add retention';
+    add.addEventListener('click', () => { resetUI(); trackJob(job.job_id, null); showRetention(job.job_id); });
+    actions.append(add);
+  }
   if (job.result_available) {
     const csv = document.createElement('a'); csv.className = 'btn-ghost'; csv.textContent = 'CSV';
     csv.href = `/api/jobs/${job.job_id}/result.csv`;
@@ -1059,7 +1064,7 @@ function knownFailure(code, message) {
     case 'processing_failed':
     case 'stalled': return 'Processing failed after retrying.' + (message ? ` ${message}` : '');
     case 'cancelled': return 'Cancelled.';
-    case 'deadline_passed': return "This job didn't start or finish within 24 hours. Please try again.";
+    case 'deadline_passed': return "This job didn't start or finish within 4 hours. Please try again.";
     case 'upload_not_received': return "The upload didn't finish. Please try again.";
     case 'upload_missing':
       return 'The uploaded file was no longer available (uploads are kept 30 days). Please upload it again.';
@@ -1069,14 +1074,13 @@ function knownFailure(code, message) {
   }
 }
 const failureText = (code, message) => knownFailure(code, message) || 'Processing failed.';
-const QUEUED_TEXT = 'This can take up to about 20 minutes; you can close this page.';
+const QUEUED_TEXT = 'The GPU may take up to about 10 minutes to start; you can close this page.';
 // Whole minutes since the job last changed state, so a waiting user sees time pass without a ticking clock.
 function waitedText(since) {
   const minutes = Math.max(0, Math.floor((Date.now() - Date.parse(since)) / 60000));
   return minutes < 1 ? 'under a minute' : `${minutes} min`;
 }
 const STEP_TEXT = {
-  downloading: ['Downloading your video to the analysis machine...', 10],
   transcribing: ['Transcribing the speech, so the model can read the words...', 30],
   inference_full: ['Predicting brain activity from the picture and the sound...', 55],
   inference_noaudio: ['Predicting it again without the sound, to measure what the audio adds...', 80],

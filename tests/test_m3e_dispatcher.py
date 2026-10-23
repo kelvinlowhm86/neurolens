@@ -197,7 +197,7 @@ def test_an_unreadable_video_refunds_and_deletes(aws, db, pg, new_job, probe):
     sagemaker = RecordingSageMaker()
     assert dispatch(aws, db, key, sagemaker=sagemaker) == "refunded"
     assert_refunded(pg, job_id, "unreadable_video")
-    assert sagemaker.calls == [] and calls == []
+    assert sagemaker.calls == [] and len(calls) == 1
     assert not exists(aws, key)
 
 

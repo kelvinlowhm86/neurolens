@@ -1,4 +1,4 @@
-"""Experiment 2: the one-minute queue and worker-count series (docs/M2b_spec.md §10), written to
+"""Experiment 2: the one-minute endpoint backlog and instance-count series (M3e §10), written to
 experiment-2/<run_id>/cloudwatch.csv.
 
     python experiments/export_cloudwatch.py <run_id> \
@@ -9,8 +9,8 @@ import argparse
 
 from neurolens.storage import utc_parse, utc_text
 
-COLUMNS = ["minute_utc", "sqs_visible", "sqs_in_flight", "asg_in_service"]
-GROUP = "neurolens-workers"
+COLUMNS = ["minute_utc", "backlog", "instances"]
+VARIANT = "main"
 
 
 def merge_series(series):
@@ -32,18 +32,18 @@ def main():
 
     cfg = settings.load_settings()
     aws = cfg["aws"]
-    queue = aws["sqs_queue_url"].rsplit("/", 1)[-1]
+    endpoint = aws["gpu_endpoint"]
     cloudwatch = boto3.client("cloudwatch", region_name=aws["region"])
     s3 = boto3.client("s3", region_name=aws["region"])
 
-    def query(id_, namespace, metric, dimension, value, stat):
+    def query(id_, metric, stat):
         return {
             "Id": id_,
             "MetricStat": {
                 "Metric": {
-                    "Namespace": namespace,
+                    "Namespace": "AWS/SageMaker",
                     "MetricName": metric,
-                    "Dimensions": [{"Name": dimension, "Value": value}],
+                    "Dimensions": [{"Name": "EndpointName", "Value": endpoint}],
                 },
                 "Period": 60,
                 "Stat": stat,
@@ -51,32 +51,11 @@ def main():
         }
 
     queries = [
-        query(
-            "visible",
-            "AWS/SQS",
-            "ApproximateNumberOfMessagesVisible",
-            "QueueName",
-            queue,
-            "Maximum",
-        ),
-        query(
-            "inflight",
-            "AWS/SQS",
-            "ApproximateNumberOfMessagesNotVisible",
-            "QueueName",
-            queue,
-            "Maximum",
-        ),
-        query(
-            "insvc",
-            "AWS/AutoScaling",
-            "GroupInServiceInstances",
-            "AutoScalingGroupName",
-            GROUP,
-            "Maximum",
-        ),
+        query("backlog", "ApproximateBacklogSize", "Maximum"),
+        # AWS documents the CPU sample count as the way to count running instances.
+        query("instances", "CPUUtilization", "SampleCount"),
     ]
-    names = {"visible": "sqs_visible", "inflight": "sqs_in_flight", "insvc": "asg_in_service"}
+    names = {"backlog": "backlog", "instances": "instances"}
     series = {col: {} for col in COLUMNS[1:]}
     for page in cloudwatch.get_paginator("get_metric_data").paginate(
         MetricDataQueries=queries, StartTime=utc_parse(args.start), EndTime=utc_parse(args.end)

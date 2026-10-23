@@ -69,8 +69,8 @@ def apply_env(cfg):
     """A copy of cfg with person- and deployment-specific values taken from the environment.
 
     HF_TOKEN -> hf_token; NEUROLENS_AWS_REGION / NEUROLENS_S3_BUCKET / NEUROLENS_SQS_QUEUE_URL /
-    NEUROLENS_WORKER_GROUP -> aws.region / aws.s3_bucket / aws.sqs_queue_url / aws.worker_group
-    (the last only on AWS workers); NEUROLENS_DB_CLUSTER_ARN / _SECRET_ARN / _NAME ->
+    NEUROLENS_GPU_ENDPOINT -> aws.region / aws.s3_bucket / aws.sqs_queue_url / aws.gpu_endpoint;
+    NEUROLENS_DB_CLUSTER_ARN / _SECRET_ARN / _NAME ->
     aws.db_cluster_arn / aws.db_secret_arn / aws.db_name; NEUROLENS_DB_DSN -> db.dsn (a local
     PostgreSQL DSN holds a password, so it never goes in config.json). M3b's web functions:
     NEUROLENS_AUTH_MODE / _COGNITO_ISSUER / _COGNITO_CLIENT_ID / _COGNITO_DOMAIN -> auth.mode /
@@ -86,7 +86,7 @@ def apply_env(cfg):
         ("NEUROLENS_AWS_REGION", "aws", "region"),
         ("NEUROLENS_S3_BUCKET", "aws", "s3_bucket"),
         ("NEUROLENS_SQS_QUEUE_URL", "aws", "sqs_queue_url"),
-        ("NEUROLENS_WORKER_GROUP", "aws", "worker_group"),
+        ("NEUROLENS_GPU_ENDPOINT", "aws", "gpu_endpoint"),
         ("NEUROLENS_DB_CLUSTER_ARN", "aws", "db_cluster_arn"),
         ("NEUROLENS_DB_SECRET_ARN", "aws", "db_secret_arn"),
         ("NEUROLENS_DB_NAME", "aws", "db_name"),

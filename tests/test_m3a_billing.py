@@ -181,7 +181,7 @@ def test_claim_staleness_30s_cannot_120s_can(db, pg):
 def test_each_attempt_starts_with_empty_stages(db, pg):
     job_id = claimed(db)
     assert billing.set_stage(db, job_id, 1, "transcribing") is True
-    assert billing.release_for_retry(db, job_id, 1, "RuntimeError: boom") is True
+    pg.age(job_id, updated_s=120)
     assert billing.claim(db, job_id) == 2
     job = pg.job(job_id)
     assert job["stages"] == [] and job["stage"] is None
@@ -244,21 +244,6 @@ def test_set_stage_without_now_uses_the_current_time(db, pg):
     assert abs(datetime.now(UTC) - at.replace(tzinfo=UTC)) < timedelta(minutes=1)
 
 
-def test_release_for_retry_requeues_records_the_message_and_moves_no_money(db, pg):
-    job_id = claimed(db)
-    before = money(pg)
-    ledger = pg.ledger()
-    pg.age(job_id, updated_s=60)
-    assert billing.release_for_retry(db, job_id, 1, "RuntimeError: model crashed") is True
-    job = pg.job(job_id)
-    assert job["status"] == "queued"
-    assert job["error_message"] == "RuntimeError: model crashed"
-    assert job["error_code"] is None
-    assert money(pg) == before and pg.ledger() == ledger
-    assert billing.job_state(db, job_id)["updated_at"] > datetime.now(UTC) - timedelta(seconds=30)
-    assert billing.claim(db, job_id) == 2  # the next worker can claim it at once
-
-
 # ---------------------------------------------------------------- Stage 3: settle_success
 
 
@@ -277,14 +262,6 @@ def test_settle_success_captures_exactly_the_verified_price(db, pg):
     assert job["status"] == "done"
     assert job["captured_cents"] == 270
     assert job["error_code"] is None and job["error_message"] is None
-
-
-def test_settle_success_clears_an_earlier_attempts_error(db, pg):
-    job_id = claimed(db)
-    billing.release_for_retry(db, job_id, 1, "RuntimeError: first attempt failed")
-    assert billing.claim(db, job_id) == 2
-    assert billing.settle_success(db, job_id) is True
-    assert pg.job(job_id)["error_message"] is None
 
 
 def test_settle_success_needs_no_attempt_and_works_on_a_queued_job(db, pg):
@@ -370,7 +347,6 @@ def test_after_a_reclaim_every_attempt_1_call_reports_a_lost_claim_and_moves_no_
     before = pg.snapshot()
     assert billing.touch(db, job_id, 1) is False
     assert billing.set_stage(db, job_id, 1, "transcribing") is False
-    assert billing.release_for_retry(db, job_id, 1, "late error") is False
     assert billing.issue_refund(db, job_id, "unreadable_video", attempt=1) is False
     assert pg.snapshot() == before
 
@@ -388,7 +364,6 @@ def test_after_a_reaper_refund_the_old_attempt_is_a_lost_claim(db, pg):
     before = pg.snapshot()
     assert billing.touch(db, job_id, 1) is False
     assert billing.set_stage(db, job_id, 1, "transcribing") is False
-    assert billing.release_for_retry(db, job_id, 1, "x") is False
     assert pg.snapshot() == before
 
 
@@ -444,7 +419,7 @@ def test_dlq_style_refund_of_a_freshly_claimed_job_returns_false(db, pg):
 
 def test_dlq_style_refund_of_a_stale_processing_job_succeeds(db, pg):
     job_id = claimed(db)
-    billing.release_for_retry(db, job_id, 1, "RuntimeError: boom")
+    pg.age(job_id, updated_s=120)
     assert billing.claim(db, job_id) == 2
     pg.age(job_id, updated_s=120)
     assert (
@@ -470,8 +445,8 @@ def test_processing_stale_does_not_refund_a_queued_job(db, pg):
 
 
 def test_attempt_condition_does_not_refund_a_queued_job(db, pg):
-    job_id = claimed(db)
-    billing.release_for_retry(db, job_id, 1, "x")
+    make_user(db)
+    job_id, _ = reserve(db)
     assert billing.issue_refund(db, job_id, "unreadable_video", attempt=1) is False
 
 

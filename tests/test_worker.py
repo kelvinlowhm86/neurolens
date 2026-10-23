@@ -22,6 +22,7 @@ import pytest
 from botocore.exceptions import ClientError
 from conftest import STARTER_CENTS
 from neurolens import billing, inference, settings, storage, worker
+from neurolens.media import probe_duration as _real_probe_duration  # before tests patch it
 from neurolens.worker import Outcome
 
 SERIES = [
@@ -69,9 +70,7 @@ def no_gpu(patch_everywhere):
 
 
 def probe_duration(path, *args, **kwargs):
-    from neurolens import media
-
-    return media.probe_duration(path, *args, **kwargs)
+    return _real_probe_duration(path, *args, **kwargs)
 
 
 def no_keep_alive(on_beat):

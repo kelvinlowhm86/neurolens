@@ -353,7 +353,7 @@ def test_worker_run_reads_its_config_through_load_settings(make_cfg, monkeypatch
         monkeypatch.setattr(worker, "load_model", load_model)
 
     with pytest.raises(Exception, match="s3_bucket"):
-        worker.run()
+        worker.serve()
     assert loaded == []
 
 

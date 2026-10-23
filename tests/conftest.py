@@ -86,7 +86,7 @@ def isolate_env_settings(monkeypatch):
     """The developer's real .env and environment must never leak into a test.
 
     Removes the settings variables and turns neurolens.settings.load_dotenv into a no-op
-    (load_settings and run() look it up by its module-global name). Tests of the real
+    (load_settings and serve() look it up by its module-global name). Tests of the real
     load_dotenv put the real function back themselves (tests/test_env_settings.py).
     """
     from neurolens import settings

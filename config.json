@@ -16,7 +16,7 @@
   },
   "worker": {
     "heartbeat_seconds": 50,
-    "max_job_minutes": 75
+    "max_job_minutes": 55
   },
   "db": {
     "backend": "data_api"

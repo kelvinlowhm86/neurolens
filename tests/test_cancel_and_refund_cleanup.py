@@ -136,25 +136,6 @@ def test_cancel_refunds_a_queued_job_once_and_deletes_its_upload(client, aws, db
     assert not object_exists(aws, key)
 
 
-def test_cancel_deletes_a_research_copy_left_by_an_earlier_attempt(client, aws, db, pg):
-    job_id, key = make_job(db, research_consent=True)
-    upload(aws, key)
-    assert billing.claim(db, job_id) == 1
-    storage.put_dataset(aws.s3, aws.bucket, job_id, key, {"job_id": job_id}, brain=b"brain bytes")
-    assert billing.release_for_retry(db, job_id, 1, "RuntimeError: crash") is True
-
-    resp = cancel(client, job_id)
-
-    assert resp.status_code == 200
-    assert resp.get_json() == {"cancelled": True}
-    job = pg.job(job_id)
-    assert job["status"] == "failed" and job["error_code"] == "cancelled"
-    assert pg.refund_reason(job_id) == "cancelled"
-    assert pg.balance(WEB_USER_ID) == (STARTER_CENTS, 0)
-    assert not object_exists(aws, key)
-    assert dataset_keys(aws, job_id) == []
-
-
 def test_a_second_cancel_is_409_and_does_not_refund_again(client, aws, db, pg):
     job_id, key = make_job(db)
     upload(aws, key)

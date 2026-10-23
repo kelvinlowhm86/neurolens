@@ -74,12 +74,15 @@ def _job_keys(job):
     return storage.job_keys(job["job_id"], job["object_key"])
 
 
-def _worker_group_paused(autoscaling, group_name):
-    """True when the worker group's maximum is 0 (stop_work.sh or the breaker), so no upload
-    could ever run. A missing group counts as paused. Raises if the group cannot be read."""
-    groups = autoscaling.describe_auto_scaling_groups(AutoScalingGroupNames=[group_name])
-    found = groups["AutoScalingGroups"]
-    return not found or found[0]["MaxSize"] == 0
+def _endpoint_paused(autoscaling, endpoint):
+    """True when the SageMaker endpoint's scalable target has a maximum of 0 (stop_work.sh), so
+    no upload could ever run. A missing target counts as paused. Raises if it cannot be read."""
+    targets = autoscaling.describe_scalable_targets(
+        ServiceNamespace="sagemaker",
+        ResourceIds=[f"endpoint/{endpoint}/variant/main"],
+        ScalableDimension="sagemaker:variant:DesiredInstanceCount",
+    )["ScalableTargets"]
+    return not targets or targets[0].get("MaxCapacity", 0) == 0
 
 
 def _presigned_get(s3, bucket, key, expires_in=300):
@@ -135,9 +138,9 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
     if cfg:  # a launcher's settings must carry a usable block: fail at start-up, not per request
         results.validate_response_config(response_cfg)
     cognito = auth_cfg["mode"] == "cognito"
-    worker_group = (cfg.get("aws") or {}).get("worker_group")
-    if cognito and not worker_group:
-        raise ValueError("Missing required setting in Cognito mode: aws.worker_group")
+    gpu_endpoint = (cfg.get("aws") or {}).get("gpu_endpoint")
+    if cognito and not gpu_endpoint:
+        raise ValueError("Missing required setting in Cognito mode: aws.gpu_endpoint")
     region = (cfg.get("aws") or {}).get("region")
     if cognito and ssm_client is None:
         import boto3
@@ -158,10 +161,10 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
     max_seconds = settings.max_duration(cfg or None)
     static_dir = root / "static"
     autoscaling = None
-    if worker_group:
+    if gpu_endpoint:
         import boto3
 
-        autoscaling = boto3.client("autoscaling", region_name=region)
+        autoscaling = boto3.client("application-autoscaling", region_name=region)
     cognito_idp = None
     user_pool_id = None
     if cognito:
@@ -354,9 +357,9 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
         if autoscaling is not None:
             # Before any reservation: while GPU work is stopped no upload could run (§4a).
             try:
-                paused = _worker_group_paused(autoscaling, worker_group)
+                paused = _endpoint_paused(autoscaling, gpu_endpoint)
             except Exception:
-                logger.exception("Presign refused: could not read the worker group")
+                logger.exception("Presign refused: could not read the GPU endpoint")
                 return _error("presign_failed", "Could not prepare the upload.", status=500)
             if paused:
                 return _error(
@@ -417,18 +420,20 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
         user_id, _ = signed_in_user()
         cutoff = datetime.now(UTC) - timedelta(days=RESULT_DAYS)
         jobs = billing.list_jobs(db, user_id, int(limit))
-        return jsonify(
-            [
-                {
-                    **job,
-                    "job_id": str(job["job_id"]),
-                    "created_at": storage.utc_text(job["created_at"]),
-                    "result_available": job["status"] == billing.DONE
-                    and job["created_at"] > cutoff,
-                }
-                for job in jobs
-            ]
-        )
+        rows = []
+        for job in jobs:
+            row = {
+                key: value
+                for key, value in job.items()
+                if key not in ("research_consent", "needs_retention")
+            }
+            row["job_id"] = str(job["job_id"])
+            row["created_at"] = storage.utc_text(job["created_at"])
+            row["result_available"] = job["status"] == billing.DONE and job["created_at"] > cutoff
+            if job["research_consent"]:
+                row["needs_retention"] = job["needs_retention"]
+            rows.append(row)
+        return jsonify(rows)
 
     def owned_job(job_id):
         """(job, None) for the caller's own job, else (None, an error response). Checked in the
@@ -443,7 +448,8 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
         with db.transaction() as tx:
             rows = tx.execute(
                 "SELECT job_id, object_key, filename, status, stage, stages, attempt, updated_at, "
-                "error_code, error_message, research_consent FROM jobs "
+                "error_code, error_message, research_consent, retention_added_at, "
+                "dataset_removed_at FROM jobs "
                 "WHERE job_id = CAST(:job_id AS uuid) AND user_id = :user_id "
                 "AND deleted_at IS NULL",
                 {"job_id": job_id, "user_id": user_id},
@@ -491,10 +497,11 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
             if storage.result_exists(s3, bucket, job["job_id"]):
                 status = billing.DONE
         # Consent gates the retention upload, which needs a done job, so it is reported only then.
+        hidden = {"object_key", "retention_added_at", "dataset_removed_at"}
         public = {
             key: value
             for key, value in job.items()
-            if key != "object_key" and (key != "research_consent" or job["status"] == billing.DONE)
+            if key not in hidden and (key != "research_consent" or job["status"] == billing.DONE)
         }
         return jsonify(
             {**public, "status": status, "updated_at": storage.utc_text(job["updated_at"])}
@@ -604,6 +611,12 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
             return _error("job_not_done", "The job is not done yet.", status=409)
         if not job["research_consent"]:
             return _error("no_consent", "This video was not kept for research.", status=409)
+        if job["dataset_removed_at"] is not None:
+            return _error(
+                "dataset_removed",
+                "This video's research copy was deleted after 60 days without retention.",
+                status=409,
+            )
 
         data = request.get_json(silent=True)
         text = data.get("report") if isinstance(data, dict) else None
@@ -635,6 +648,11 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
                 "retention_store_failed",
                 "Could not store the report. Please try again.",
                 status=500,
+            )
+        with db.transaction() as tx:
+            tx.execute(
+                "UPDATE jobs SET retention_added_at = now() WHERE job_id = CAST(:job_id AS uuid)",
+                {"job_id": job["job_id"]},
             )
         return jsonify({"stored": True})
 
