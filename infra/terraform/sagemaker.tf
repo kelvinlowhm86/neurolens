@@ -153,8 +153,15 @@ resource "aws_sagemaker_model" "main" {
   primary_container {
     image = local.worker_image_uri
 
-    # SageMaker copies this uncompressed prefix into /opt/ml/model at instance start.
-    model_data_url = "s3://${aws_s3_bucket.main.bucket}/model-data/"
+    # SageMaker copies this uncompressed prefix into /opt/ml/model at instance start
+    # (model_data_url would mean one .tar.gz object).
+    model_data_source {
+      s3_data_source {
+        s3_uri           = "s3://${aws_s3_bucket.main.bucket}/model-data/"
+        s3_data_type     = "S3Prefix"
+        compression_type = "None"
+      }
+    }
 
     environment = {
       NEUROLENS_AWS_REGION     = var.region
