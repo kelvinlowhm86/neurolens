@@ -71,7 +71,7 @@ The same rules as the old `verify` (length limit first, then record the duration
 - **Concurrency:** `MaxConcurrentInvocationsPerInstance = 1`, so SageMaker sends one job at a time. The handler refuses a second concurrent request with 503 as a guard.
 
 ### 4b. `POST /invocations`
-- **Request:** the body is the video (SageMaker streams it from the upload). The handler streams it to a temporary file, never holding it in memory. The job id comes from the `X-Amzn-SageMaker-Custom-Attributes` header. A missing or malformed id → 400, logged.
+- **Request:** the body is the video (SageMaker streams it from the upload). The handler streams it to a temporary file, never holding it in memory. A missing `Content-Length`, or a body that ends before it, → 500 before `handle_job` (no claim), logged: the error handler then refunds the still-queued job as `processing_failed`, so a dropped connection never blames or deletes the user's file. The job id comes from the `X-Amzn-SageMaker-Custom-Attributes` header. A missing or malformed id → 400, logged.
 - **Response:** JSON `{"job_id", "outcome"}`. 200 for `done`, `duplicate`, `rejected` and `skipped`. 500 for `failed`, after the refund (§4c), so SageMaker counts the failure and the error handler sees it (a no-op on a refunded job).
 - **`handle_job(job_id, video_path, *, s3, db, cfg, roi_masks)`** keeps `handle_record`'s logic, with these changes:
   - The object key comes from the job row: `job_state` also returns `object_key` and `verified_duration_ms`.
@@ -79,9 +79,9 @@ The same rules as the old `verify` (length limit first, then record the duration
   - A result already exists → `settle_success`, then `skipped`.
   - `claim` fails on a terminal job → `skipped` (delete the upload if `failed`). It fails on a busy job → `skipped`: the holder finishes it, or the error handler refunds it once stale.
   - A claimed job with `verified_duration_ms` NULL was never dispatched → refund `not_verified`, logged as an error.
-  - The `downloading` stage is gone, since SageMaker downloads. `probe_duration` runs on the local file for the analysis length only (credit was settled by the dispatcher). `UnreadableVideo` → refund `unreadable_video`.
+  - The `downloading` stage is gone, since SageMaker downloads. `probe_duration` runs on the local file (credit was settled by the dispatcher). `UnreadableVideo` → refund `unreadable_video`. A duration over `verified_duration_ms` + 1 s means the upload was replaced after the dispatcher priced it (the presigned POST can be reused for 5 minutes) → refund `video_changed` and delete the upload, so the GPU only ever runs the file that was priced.
   - The stages from `transcribing` on, the dataset copy, the claim checks before every write, the thumbnail, brain file, result and `settle_success` are unchanged (M3c §3b, M3d §5, §5b).
-- **Claim keep-alive:** `ClaimKeepAlive(on_beat, interval_seconds, max_seconds)`. It is the old `Heartbeat` minus SQS: it calls `billing.touch` every `worker.heartbeat_seconds` (50) and stops after `worker.max_job_minutes` (now **55**), logging an error. A hung job's claim therefore goes stale before SageMaker's 60-minute timeout, so the error handler can refund it at once.
+- **Claim keep-alive:** `ClaimKeepAlive(on_beat, interval_seconds, max_seconds)`. It is the old `Heartbeat` minus SQS: it calls `billing.touch` every `worker.heartbeat_seconds` (50) and stops after `worker.max_job_minutes` (now **55**), logging an error and then calling `on_overrun` (`ClaimKeepAlive(on_beat, interval_seconds, max_seconds, on_overrun)`). In the container `on_overrun` ends the process (`os._exit(1)`): a Python thread stuck in the model cannot be stopped, and while it runs it holds the busy lock, so every later job sent to that instance would be refused with 503 and refunded untried. Ending the process fails the request, SageMaker replaces the unhealthy container, the claim goes stale within 90 s and the error handler refunds the job.
 
 ### 4c. Failure inside the container
 - Any exception after the claim: `issue_refund(db, job_id, "processing_failed", _error_text(err), attempt=attempt)`. **Only if it returned True**, delete every file of the job (`storage.job_keys`). Answer 500.
@@ -120,7 +120,7 @@ The same rules as the old `verify` (length limit first, then record the duration
 - **Error handler (`neurolens/lambdas/gpu_failed.py`):** subscribed to the SNS topic `neurolens-gpu-errors`, which is the endpoint's `ErrorTopic` (there is no success topic: the container settles itself).
   - It takes `inferenceId` (the job id) from the notification. It reuses `dlq_handler.settle_or_refund`, moved to `neurolens/lambdas/__init__.py` as `finish_job`: settle if a result exists, else refund `processing_failed` if queued or stale for 90 s, and delete the job's files.
   - While the claim is fresh it raises. Lambda's asynchronous retries (2, over about 3 minutes) then try again, and the reaper is the backstop after that.
-  - An unparseable notification is logged and dropped.
+  - An unparseable notification (not JSON, not a JSON object, or no string `inferenceId`) is logged and dropped.
 - **Reaper:**
   - It stays **every 3 hours**: each run wakes Aurora for about 11 minutes, and hourly measured about $15 a month against $3 (`infra/terraform/lambdas.tf`). It is the backstop for a lost notification, so speed matters less than cost.
   - `DEADLINE_S` becomes **4 hours** after `created_at` (was 24): the dispatcher never gives a request more than 3 hours from creation (§3 step 7), plus 60 minutes of invocation timeout. A lost notification is therefore refunded within about 7 hours.
@@ -195,6 +195,7 @@ The same rules as the old `verify` (length limit first, then record the duration
 - **Page:**
   - the waiting text for a queued job says the GPU may take up to about 10 minutes to start;
   - the `downloading` stage label is removed.
+  - `video_changed` reads "The video was replaced after it was checked. Please upload it again." (with "You have not been charged.").
 - **Web role:** `application-autoscaling:DescribeScalableTargets` (it cannot be scoped to one resource; read-only).
 
 ## 9. Terraform and IAM
@@ -270,11 +271,13 @@ The same rules as the old `verify` (length limit first, then record the duration
   - `max_job_minutes * 60` is less than the invocation timeout (3600);
   - `not_verified` is refunded;
   - the body is streamed to disk;
+  - a missing `Content-Length` or a body shorter than it → 500, no claim, no refund, the upload kept;
+  - a local duration over `verified_duration_ms` + 1 s → `video_changed` refund, upload deleted, `REJECTED`; one within 1 s runs normally;
   - a missing job-id header → 400;
   - `/ping` answers 200 while `/invocations` is busy;
   - a second concurrent invocation → 503;
-  - `ClaimKeepAlive` stops at `max_seconds`.
-- **Error handler:** done result → settled; queued or stale → refunded and files deleted; fresh claim → raises; already terminal → no-op; garbage → logged and dropped.
+  - `ClaimKeepAlive` stops at `max_seconds` and calls `on_overrun` once; `handle_job`'s default keep-alive ends the process on overrun.
+- **Error handler:** done result → settled; queued or stale → refunded and files deleted; fresh claim → raises; already terminal → no-op; garbage (not JSON, a JSON list or string, no `inferenceId`) → logged and dropped.
 - **Guard:**
   - stops only when all four conditions hold;
   - a dispatched queued job created over 30 minutes ago (a slow start-up) blocks it;
