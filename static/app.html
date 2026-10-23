@@ -103,13 +103,14 @@
   .history-empty { font-size: 12.5px; color: var(--stage-muted); }
   .field-row { display: flex; gap: 8px; }
   .field-row input { flex: 1; min-width: 0; border: 1px solid var(--stage-rule); border-radius: 8px; padding: 7px 9px; font-size: 12px; background: #0A0F1A; color: var(--stage-text); }
-  .delete-dialog { background: var(--stage-2); color: var(--stage-text); border: 1px solid var(--stage-rule); border-radius: 14px; padding: 20px 22px; width: min(430px, calc(100vw - 32px)); }
-  .delete-dialog::backdrop { background: rgba(7, 10, 18, .68); }
-  .delete-dialog h2 { font: 600 17px/1.25 var(--display); margin-bottom: 8px; }
-  .delete-dialog p { font-size: 13px; color: var(--stage-muted); line-height: 1.5; }
-  .delete-dialog p.error { color: #FCA5A5; }
-  .delete-dialog .field-row { margin-top: 12px; }
-  .delete-dialog .actions { display: flex; gap: 8px; align-items: center; margin-top: 12px; }
+  .modal { background: var(--stage-2); color: var(--stage-text); border: 1px solid var(--stage-rule); border-radius: 14px; padding: 20px 22px; width: min(430px, calc(100vw - 32px)); }
+  .modal::backdrop { background: rgba(7, 10, 18, .68); }
+  .modal h2 { font: 600 17px/1.25 var(--display); margin-bottom: 8px; }
+  .modal p { font-size: 13px; color: var(--stage-muted); line-height: 1.5; }
+  .modal p.error { color: #FCA5A5; }
+  .modal .field-row { margin-top: 12px; }
+  .modal .actions { display: flex; gap: 8px; align-items: center; margin-top: 12px; }
+  .modal a { color: inherit; }
   .privacy-note { font-size: 11px; color: var(--stage-muted); margin-top: auto; padding: 4px 2px; }
   .privacy-note a { color: var(--stage-muted); }
   .spinner { width: 28px; height: 28px; border: 3px solid var(--stage-rule); border-top-color: var(--heat); border-radius: 50%; animation: spin .9s linear infinite; }
@@ -390,18 +391,14 @@
       </section>
       <div class="retention" id="retentionPanel">
         <div class="rt-title">Real audience retention</div>
-        <div class="rt-text">Add the video's real audience-retention curve to keep with its analysis. <a href="/static/retention_guide.html">How to get the report</a></div>
-        <div class="actions">
-          <button class="btn-ghost" id="retentionPick">Add real audience retention</button>
-          <span class="rt-text" id="retentionMsg"></span>
-        </div>
-        <input type="file" accept=".json,application/json" id="retentionInput" hidden>
+        <div class="rt-text">Add the video's real audience-retention curve to keep with its analysis.</div>
+        <div class="actions"><button class="btn-ghost" id="retentionOpen">Add real audience retention</button></div>
       </div>
     </div>
   </div>
 </div>
 
-<dialog class="delete-dialog" id="deleteDialog" aria-labelledby="deleteDialogTitle">
+<dialog class="modal" id="deleteDialog" aria-labelledby="deleteDialogTitle">
   <h2 id="deleteDialogTitle">Delete my account</h2>
   <p>This deletes every video, analysis and login for this account. Type DELETE to confirm.</p>
   <div class="field-row">
@@ -410,6 +407,18 @@
   </div>
   <p id="deleteAccountMsg"></p>
   <div class="actions"><button class="btn-ghost" id="deleteAccountCancel">Cancel</button></div>
+</dialog>
+
+<dialog class="modal" id="retentionDialog" aria-labelledby="retentionDialogTitle">
+  <h2 id="retentionDialogTitle">Add real audience retention</h2>
+  <p id="retentionVideo"></p>
+  <p>Choose the video's audience-retention report (the .json file from YouTube) to keep with its analysis. A new report replaces the old one. <a href="/static/retention_guide.html" target="_blank" rel="noopener">How to get the report</a></p>
+  <div class="actions">
+    <button class="btn-ghost" id="retentionPick">Choose file</button>
+    <button class="btn-ghost" id="retentionClose">Close</button>
+  </div>
+  <p id="retentionMsg"></p>
+  <input type="file" accept=".json,application/json" id="retentionInput" hidden>
 </dialog>
 
 <script>
@@ -573,11 +582,16 @@ $('deleteAccountMenuItem').addEventListener('click', () => {
   openDeleteDialog();
 });
 $('deleteAccountCancel').addEventListener('click', () => deleteDialog.close());
-deleteDialog.addEventListener('click', e => {
-  if (e.target !== deleteDialog) return;
-  const rect = deleteDialog.getBoundingClientRect();
-  if (e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom) deleteDialog.close();
-});
+
+// A click on the dimmed backdrop (outside the box) closes a dialog.
+function closeOnBackdrop(dialog) {
+  dialog.addEventListener('click', e => {
+    if (e.target !== dialog) return;
+    const rect = dialog.getBoundingClientRect();
+    if (e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom) dialog.close();
+  });
+}
+closeOnBackdrop(deleteDialog);
 
 async function postJSON(url, body) {
   const text = JSON.stringify(body);
@@ -773,7 +787,7 @@ function historyRow(job) {
   }
   if (job.needs_retention) {
     const add = document.createElement('button'); add.className = 'btn-ghost'; add.textContent = 'Add retention';
-    add.addEventListener('click', () => { resetUI(); trackJob(job.job_id, null); showRetention(job.job_id); });
+    add.addEventListener('click', () => openRetention(job.job_id, label));
     actions.append(add);
   }
   if (job.result_available) {
@@ -1129,11 +1143,14 @@ function trackJob(jobId, file) {
   if (!file) {
     uploadZone.classList.add('hidden');
     $('consentRow').classList.add('hidden');
-    $('upFileName').textContent = `Job ${jobId.slice(0, 8)}`;
+    // The name comes from the list when it has loaded, else from the first status poll.
+    const cached = jobsCache.find(j => j.job_id === jobId);
+    const label = cached ? (cached.filename || `Job ${jobId.slice(0, 8)}`) : '';
+    $('upFileName').textContent = label;
     $('upDetail').textContent = ''; $('upCost').textContent = '';
     $('upConfirm').style.display = 'none';
     $('uploadPanel').classList.add('active');
-    $('headerMeta').textContent = `Job ${jobId.slice(0, 8)}`;
+    $('headerMeta').textContent = label;
   }
   $('upCancel').textContent = 'Upload another';
   $('upMsg').classList.remove('error');
@@ -1201,7 +1218,10 @@ async function pollJob(jobId, file) {
     } else {
       const st = await res.json();
       if (trackedJob !== jobId) return;
-      if (!file && st.filename) { $('upFileName').textContent = st.filename; $('headerMeta').textContent = st.filename; }
+      if (!file) {
+        const label = st.filename || `Job ${jobId.slice(0, 8)}`;
+        $('upFileName').textContent = label; $('headerMeta').textContent = label;
+      }
       showJobCancel(st.status === 'queued');
       if (st.status === 'done') {
         again = !(await showResult(jobId, file, st.research_consent));
@@ -1354,9 +1374,9 @@ async function showResult(jobId, file, consented) {
   const t0 = performance.now();
   $('upProgress').classList.remove('active');
   showJobMsg(`Done in ${Math.round(result.processing_time_seconds)}s of analysis time.`);
-  showRetention(consented ? jobId : null);
   const cached = jobsCache.find(j => j.job_id === jobId);
   const title = file ? file.name : (cached && cached.filename ? cached.filename : `Job ${jobId.slice(0, 8)}`);
+  showRetention(consented ? jobId : null, title);
   if (file) setVideoFile(file, result.duration_seconds);
   else {
     clearVideoSource();
@@ -1385,34 +1405,50 @@ async function showResult(jobId, file, consented) {
   return true;
 }
 
-let retentionJob = null;
-function showRetention(jobId) {
-  retentionJob = jobId;
+// The results page shows a button for a consented job; it and the history row's
+// "Add retention" open the same dialog.
+let resultRetention = null;
+function showRetention(jobId, title) {
+  resultRetention = jobId ? { jobId, title } : null;
   $('retentionPanel').classList.toggle('active', !!jobId);
-  $('retentionMsg').textContent = '';
-  $('retentionMsg').classList.remove('error');
 }
+$('retentionOpen').addEventListener('click', () => {
+  if (resultRetention) openRetention(resultRetention.jobId, resultRetention.title);
+});
+
+const retentionDialog = $('retentionDialog');
+let retentionJob = null;
+function setRetentionMsg(text, isError) {
+  $('retentionMsg').textContent = text;
+  $('retentionMsg').classList.toggle('error', !!isError);
+}
+function openRetention(jobId, title) {
+  retentionJob = jobId;
+  $('retentionVideo').textContent = title;
+  setRetentionMsg('');
+  if (!retentionDialog.open) retentionDialog.showModal();
+}
+$('retentionClose').addEventListener('click', () => retentionDialog.close());
+closeOnBackdrop(retentionDialog);
 
 $('retentionPick').addEventListener('click', () => $('retentionInput').click());
 $('retentionInput').addEventListener('change', async ev => {
   const file = ev.target.files[0];
   ev.target.value = '';
-  if (!file || !retentionJob) return;
-  $('retentionMsg').classList.remove('error');
-  $('retentionMsg').textContent = 'Reading the report...';
+  const jobId = retentionJob;
+  if (!file || !jobId) return;
+  // A reply for a job whose dialog is no longer the open one is dropped.
+  const show = (text, isError) => { if (retentionJob === jobId) setRetentionMsg(text, isError); };
+  show('Reading the report...');
   try {
-    const res = await postJSON(`/api/jobs/${retentionJob}/retention`, { report: await file.text() });
+    const res = await postJSON(`/api/jobs/${jobId}/retention`, { report: await file.text() });
     const data = await res.json().catch(() => ({}));
     if (res.status === 401) return window.location.reload();
-    if (!res.ok) {
-      $('retentionMsg').textContent = data.message || `Couldn't save the report (HTTP ${res.status}).`;
-      $('retentionMsg').classList.add('error');
-      return;
-    }
-    $('retentionMsg').textContent = 'Real audience retention saved.';
+    if (!res.ok) return show(data.message || `Couldn't save the report (HTTP ${res.status}).`, true);
+    show('Real audience retention saved.');
+    loadHistory();
   } catch (e) {
-    $('retentionMsg').textContent = "Couldn't reach the server. Please try again.";
-    $('retentionMsg').classList.add('error');
+    show("Couldn't reach the server. Please try again.", true);
   }
 });
 

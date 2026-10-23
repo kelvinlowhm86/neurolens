@@ -183,7 +183,7 @@ The same rules as the old `verify` (length limit first, then record the duration
 - **Retention upload** (M3c §3c):
   - On success it sets `retention_added_at = now()`.
   - It is refused with 409 `dataset_removed` ("This video's research copy was deleted after 60 days without retention.") when `dataset_removed_at` is set.
-- **History:** a done, consented, not-removed job without `retention_added_at` shows a small "Add retention" link in its row, no banner. The link opens the job with the retention upload in view. `list_jobs` returns `needs_retention` (bool) for this.
+- **History:** a done, consented, not-removed job without `retention_added_at` shows a small "Add retention" link in its row, no banner. The link opens a pop-up for that video: its name, the guide link, a "Choose file" button and the saved or error message; after a save the list reloads, so the link goes. The results page's "Add real audience retention" button (M3d §8) opens the same pop-up. `list_jobs` returns `needs_retention` (bool) for this.
 - **Clean-up** (in the reaper's run): select every job that is `done`, has `research_consent`, has no `retention_added_at` and no `dataset_removed_at`, is not deleted, and has `created_at` older than 60 days. For each:
   1. if `dataset/<id>/retention.csv` exists (a curve uploaded before migration 005, or one whose database update failed), set `retention_added_at` and skip the job. A HEAD error other than not-found raises;
   2. delete `dataset/<id>/video<ext>`, `result.json` and `brain` with `storage.delete_keys`;
