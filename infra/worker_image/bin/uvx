@@ -1,0 +1,5 @@
+#!/bin/sh
+# tribev2 runs `uvx whisperx`, whose own torch bundles a newer cuDNN than the base image's.
+# The base image's LD_LIBRARY_PATH puts its cuDNN (9.1) first, which that torch refuses, so the
+# tool keeps only the GPU driver folders; our own model keeps the image's setting.
+LD_LIBRARY_PATH=/usr/local/nvidia/lib:/usr/local/nvidia/lib64 exec /usr/local/bin/uvx "$@"

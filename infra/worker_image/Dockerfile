@@ -46,7 +46,15 @@ RUN mkdir -p /opt/ml/model /opt/neurolens/data \
 # are not in the image: they live under HF_HOME/TORCH_HOME, which settings.py points at ./models.
 RUN uvx whisperx --help
 
+# WhisperX's alignment splits sentences with NLTK's punkt_tab, which it otherwise downloads on
+# first use at every instance start. Bake it into a folder NLTK searches by default.
+RUN uvx --from whisperx python -c "import nltk; nltk.download('punkt_tab', download_dir='/usr/share/nltk_data', raise_on_error=True)"
+
 ENV UV_OFFLINE=1
+
+# `uvx` resolves to bin/uvx (it narrows LD_LIBRARY_PATH for the WhisperX tool; see the file).
+COPY infra/worker_image/bin/uvx /opt/neurolens/bin/uvx
+ENV PATH=/opt/neurolens/bin:$PATH
 
 # SageMaker starts the container as `docker run <image> serve`, which replaces CMD.
 ENTRYPOINT ["python", "/opt/neurolens/worker.py"]
