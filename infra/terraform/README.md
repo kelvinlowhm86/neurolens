@@ -112,12 +112,15 @@ After the first apply:
 
 ## 2b. The GPU image and endpoint (M3e)
 
-Two placeholders stand between the repository and a built image. Fill them once:
+One placeholder stands between the repository and a built image. Fill it once:
+`infra/worker_image/Dockerfile`'s `@sha256:REPLACE_BEFORE_BUILD` becomes the digest of the pinned
+AWS PyTorch base image, which the deploy user may read:
 
-- `infra/worker_image/Dockerfile`: the digest for the pinned AWS PyTorch base image
-  (`pytorch-inference:2.6.0-gpu-py312-cu124-ubuntu22.04`), replacing
-  `@sha256:REPLACE_BEFORE_BUILD`.
-- `infra/build_ffprobe_layer.sh`: the SHA-256 of the pinned ffprobe release.
+```bash
+aws ecr batch-get-image --region us-east-1 --registry-id 763104351884 \
+  --repository-name pytorch-inference --image-ids imageTag=2.6.0-gpu-py312-cu124-ubuntu22.04 \
+  --query 'images[0].imageId.imageDigest' --output text
+```
 
 Then, from the repo root:
 

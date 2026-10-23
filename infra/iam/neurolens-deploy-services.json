@@ -223,6 +223,12 @@
       "Resource": "*"
     },
     {
+      "Sid": "ReadAwsPytorchBaseImageDigest",
+      "Effect": "Allow",
+      "Action": "ecr:BatchGetImage",
+      "Resource": "arn:aws:ecr:us-east-1:763104351884:repository/pytorch-inference"
+    },
+    {
       "Sid": "WorkerBuildOnlyNeurolens",
       "Effect": "Allow",
       "Action": "codebuild:*",
