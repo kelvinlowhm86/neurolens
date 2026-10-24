@@ -282,7 +282,7 @@ The same rules as the old `verify` (length limit first, then record the duration
   - a missing job-id header → 400;
   - `/ping` answers 200 while `/invocations` is busy;
   - a second concurrent invocation → 503;
-  - two invocations in a row on one server both end `done` and charged, with a fake model that creates its cache subfolder under the folder passed to `load_model` only on first use and writes into it on every job (as exca does);
+  - two invocations in a row on one server both answer 200, with a fake job that creates its cache subfolder under the server's feature cache folder only on first use and writes into it on every job (as exca does), so emptying the folder would fail the second;
   - `ClaimKeepAlive` stops at `max_seconds` and calls `on_overrun` once; `handle_job`'s default keep-alive ends the process on overrun.
 - **Error handler:** done result → settled; queued or stale → refunded and files deleted; fresh claim → raises; already terminal → no-op; garbage (not JSON, a JSON list or string, no `inferenceId`) → logged and dropped.
 - **Guard:**
