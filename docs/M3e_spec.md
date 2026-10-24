@@ -64,7 +64,7 @@ The same rules as the old `verify` (length limit first, then record the duration
 - **Start-up**, in order:
   1. `validate_config`;
   2. the Data API client;
-  3. `inference.load_model(cfg, feature_cache=<a new temporary folder>)`, then `roi_masks`. `feature_cache` is where tribev2 writes each job's extracted features (`TribeModel`'s `cache_folder`). It defaults to the models folder (laptop and notebooks, unchanged), but in the container that is the weights SageMaker copied in, which must stay untouched, so the container passes a folder under `/tmp` and empties it after every invocation (the temporary video names never repeat, so nothing in it is reused);
+  3. `inference.load_model(cfg, feature_cache=<a new temporary folder>)`, then `roi_masks`. `feature_cache` is where tribev2 writes each job's extracted features (`TribeModel`'s `cache_folder`). It defaults to the models folder (laptop and notebooks, unchanged), but in the container that is the weights SageMaker copied in, which must stay untouched, so the container passes a folder under `/tmp`. It is never emptied while the process runs: tribev2's caching library (exca) creates each extractor's subfolder once and remembers it, so emptying it made every later job on that instance fail (24 Oct). Nothing in it is reused (the temporary video names never repeat); it grows by about 6 MB per 27 s clip and goes with the instance at scale-in. A refunded or deleted job's features therefore stay on that instance's disk until it stops (at most the 4-hour keep-warm);
   4. a warm-up: `inference.build_events` on the bundled 3-second clip with speech (`data/warmup.mp4`), so the first real job pays no WhisperX set-up;
   5. the boot record (§10);
   6. listen.
@@ -137,7 +137,7 @@ The same rules as the old `verify` (length limit first, then record the duration
 - **Scalable target:** min 0, max `var.max_instances` (1).
 - **Scale out:** the step policy from AWS's scale-from-zero pattern. Alarm `neurolens-gpu-scale-out`: `HasBacklogWithoutCapacity` ≥ 1 for 1 of 1 one-minute periods, missing data not breaching → `ChangeInCapacity +1`.
 - **Scale in:** alarm `neurolens-gpu-scale-in`: `ApproximateBacklogSize` maximum ≤ 0 for 7 of 7 one-minute periods → `ExactCapacity 0`.
-  - The backlog counts requests in progress too (AWS metric definition), so a running job holds the GPU.
+  - The backlog counts requests in progress too (AWS metric definition), but each minute's value reaches CloudWatch about 3 minutes late, so the alarm judges the queue as it was then. A job in its first ~3 minutes does not hold the GPU (§12a).
   - **Missing data counts as breaching:** AWS may stop publishing the backlog when idle, and an alarm without data must not keep a GPU on.
 - No target-tracking policy: with one instance it adds nothing, and AWS warns that several policies conflict.
 - **Instance types:** an instance pool list, `ml.g6e.xlarge` first, then `ml.g6.2xlarge` (SageMaker tries the next pool when the first has no capacity; `VariantInstanceProvisionTimeoutInSeconds` 600).
@@ -282,7 +282,7 @@ The same rules as the old `verify` (length limit first, then record the duration
   - a missing job-id header → 400;
   - `/ping` answers 200 while `/invocations` is busy;
   - a second concurrent invocation → 503;
-  - the feature cache folder passed to `load_model` is emptied after an invocation, whatever its outcome;
+  - two invocations in a row on one server both end `done` and charged, with a fake model that creates its cache subfolder under the folder passed to `load_model` only on first use and writes into it on every job (as exca does);
   - `ClaimKeepAlive` stops at `max_seconds` and calls `on_overrun` once; `handle_job`'s default keep-alive ends the process on overrun.
 - **Error handler:** done result → settled; queued or stale → refunded and files deleted; fresh claim → raises; already terminal → no-op; garbage (not JSON, a JSON list or string, no `inferenceId`) → logged and dropped.
 - **Guard:**
@@ -343,6 +343,7 @@ Measured figures replace these in the build log.
 - **An expired request is reported late.** SageMaker reports a request whose 2-hour wait ran out only when an instance next takes it from the queue (day B: no notice in 18 minutes with no instance; the notice came the moment one started). While the GPU cannot start, the reaper refunds the job instead, 4 to 7 hours after upload. The user waits longer for the refund; no credit is lost. When capacity returns, the expired request still counts as backlog and starts the GPU once, about $0.70 (estimate: cold start plus 7 idle minutes).
 - **A step that hangs inside the model (audio extraction, transcription) has no deadline of its own.** The claim keep-alive's `worker.max_job_minutes` (55, from the longest measured job) is the only bound: the GPU runs up to 55 minutes for that job, then the process ends and the job is refunded. About $2 (estimate) per hang; none seen so far. A per-step deadline would need measured step times first.
 - **A new upload between the guard's check and its stop:** SageMaker starts the GPU again for it; one start-up is wasted.
+- **A job that arrives as the 7 idle minutes run out can still stop the GPU** (24 Oct: requests sent 15:56:37–15:57:00, alarm 15:57:07 on real zeros up to 15:54). The queued requests start it again: about 10 minutes' wait and one more start-up (about $0.70, an estimate). No credit is lost: a request cut by the stop is resent, claimed again only once its heartbeat is 90 s old, and charging needs the matching attempt. A longer window only makes it rarer (about $0.044 per extra idle minute, an estimate); for a demo, keep-warm (§6b).
 - **The scale-in alarm reads missing backlog data as empty.** If AWS ever stopped publishing it during a running job for 7 minutes, the job would be cut off and refunded. Day B checks the data is continuous during a job (§12 step 6).
 
 ## 13. Acceptance criteria
