@@ -237,7 +237,9 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
 
     @app.route("/")
     def index():
-        return send_from_directory(str(static_dir), "index.html")
+        page = send_from_directory(str(static_dir), "index.html")
+        # A laptop is always signed in as the dev user: show the signed-in buttons.
+        return page if cognito else auth.set_signed_in_hint(page)
 
     @app.route("/app")
     def app_page():

@@ -377,6 +377,8 @@ def test_session_cookie_is_secure_httponly_and_samesite_lax(cognito_client, idp)
     cookies = resp.headers.getlist("Set-Cookie")
     assert cookies
     for cookie in cookies:
+        if cookie.startswith(f"{HINT_COOKIE}="):
+            continue  # the landing page's hint is readable by design (its own test below)
         flags = {part.strip().split("=")[0].lower(): part.strip() for part in cookie.split(";")}
         assert "secure" in flags, cookie
         assert "httponly" in flags, cookie
