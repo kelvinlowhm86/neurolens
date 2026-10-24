@@ -6,23 +6,23 @@
 <title>NeuroLens — Video Brain Response Analysis</title>
 <link rel="icon" href="data:,">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,600;12..96,700&family=Public+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
   :root {
-    --stage: #0D1320; --stage-2: #151D2E; --stage-text: #E7EAF0; --stage-muted: #8C96A8; --stage-rule: #253049;
-    --paper: #F4F5F7; --surface: #FFFFFF; --ink: #161B26; --ink-2: #5A6272; --ink-3: #8A91A0; --rule: #DADDE3;
-    --heat: #F2711C; --cool: #6B7A99;
-    --display: 'Bricolage Grotesque', system-ui, sans-serif; --text: 'Public Sans', system-ui, sans-serif;
+    --stage: #0E0F11; --stage-2: #17181B; --stage-text: #ECEDEF; --stage-muted: #A0A6AF; --stage-rule: #24262B;
+    --paper: #0E0F11; --surface: #17181B; --ink: #ECEDEF; --ink-2: #B4B9C0; --ink-3: #8A9099; --rule: #24262B;
+    --heat: #FF8A2A; --cool: #6F7E99;
+    --display: 'Geist', system-ui, sans-serif; --text: 'Geist', system-ui, sans-serif;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { background: var(--paper); color: var(--ink); font: 15px/1.5 var(--text); }
+  body { background: var(--paper); color: var(--ink); font: 14px/1.5 var(--text); letter-spacing: -0.003em; }
   button, input, select { font: inherit; }
   button { cursor: pointer; }
   :focus-visible { outline: 2px solid var(--heat); outline-offset: 2px; }
   [hidden] { display: none !important; }
 
-  .bar { background: var(--stage); color: var(--stage-text); display: flex; align-items: center; gap: 18px; padding: 0 24px; height: 60px; border-bottom: 1px solid var(--stage-rule); }
-  .brand { font: 700 21px/1 var(--display); letter-spacing: -0.01em; color: inherit; text-decoration: none; }
+  .bar { background: var(--stage); color: var(--stage-text); display: flex; align-items: center; gap: 18px; padding: 0 24px; height: 52px; border-bottom: 1px solid var(--rule); }
+  .brand { font: 600 17px/1 var(--display); letter-spacing: -0.02em; color: inherit; text-decoration: none; }
   .bar .spacer { flex: 1; }
   .header-meta { color: var(--stage-muted); font-size: 12px; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .credit { color: var(--stage-muted); font-size: 13px; white-space: nowrap; }
@@ -32,21 +32,21 @@
   .account::after { content: "▾"; font-size: 9px; margin-left: 4px; }
   .account-menu { position: absolute; right: 0; top: calc(100% + 6px); min-width: 160px; background: var(--stage-2); border: 1px solid var(--stage-rule); border-radius: 10px; padding: 5px; display: flex; flex-direction: column; gap: 2px; z-index: 30; box-shadow: 0 10px 24px rgba(0,0,0,.35); }
   .account-menu button { background: none; border: 0; color: var(--stage-text); text-align: left; padding: 8px 10px; border-radius: 7px; font-size: 13px; }
-  .account-menu button:hover, .account-menu button:focus-visible { background: #1D273B; }
-  .btn-white { background: #fff; color: var(--ink); border: 0; border-radius: 10px; padding: 9px 16px; font-weight: 600; }
-  .btn-white:hover { background: #E7EAF0; }
+  .account-menu button:hover, .account-menu button:focus-visible { background: #23252A; }
+  .btn-white { background: #fff; color: #0E0F11; border: 0; border-radius: 6px; padding: 9px 16px; font-weight: 600; }
+  .btn-white:hover { background: #ECEDEF; }
   .btn-white:disabled { opacity: .5; cursor: default; }
-  .btn-ghost { background: none; border: 1px solid var(--rule); color: var(--ink); border-radius: 10px; padding: 7px 12px; text-decoration: none; display: inline-block; }
+  .btn-ghost { background: none; border: 1px solid var(--rule); color: var(--ink); border-radius: 6px; padding: 7px 12px; text-decoration: none; display: inline-block; }
   .stage .btn-ghost, .side .btn-ghost { border-color: var(--stage-rule); color: var(--stage-text); }
-  .btn-ghost:hover { border-color: var(--heat); }
-  .btn-danger { background: none; border: 1px solid var(--stage-rule); color: #FCA5A5; border-radius: 10px; padding: 6px 12px; }
+  .btn-ghost:hover { border-color: var(--ink-3); }
+  .btn-danger { background: none; border: 1px solid var(--stage-rule); color: #FCA5A5; border-radius: 6px; padding: 6px 12px; }
   .btn-danger:hover { border-color: #FCA5A5; }
   .btn-danger:disabled { opacity: .5; cursor: default; }
 
-  .D { display: grid; grid-template-columns: minmax(360px, 40%) 1fr; height: calc(100vh - 60px); overflow: hidden; }
+  .D { display: grid; grid-template-columns: minmax(360px, 38%) 1fr; height: calc(100vh - 52px); overflow: hidden; }
   body:has(.D) { overflow: hidden; }
-  .D .side { background: var(--stage); color: var(--stage-text); padding: 16px 18px; display: flex; flex-direction: column; gap: 12px; min-height: 0; }
-  .D .report { padding: 18px 26px 16px; display: flex; flex-direction: column; gap: 12px; min-height: 0; overflow: hidden; }
+  .D .side { background: var(--stage); color: var(--stage-text); padding: 16px 18px; display: flex; flex-direction: column; gap: 12px; min-height: 0; border-right: 1px solid var(--rule); }
+  .D .report { background: var(--paper); padding: 22px 30px 16px; display: flex; flex-direction: column; gap: 18px; min-height: 0; overflow: hidden; }
 
   .chooser { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; scrollbar-width: thin; }
   .chooser-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--stage-rule); flex: none; }
@@ -54,15 +54,16 @@
   .chooser-tab:hover { color: var(--stage-text); }
   .chooser-tab[aria-selected="true"] { color: var(--stage-text); border-bottom-color: var(--heat); }
   .tab-panel { display: flex; flex-direction: column; gap: 12px; }
-  .box { background: var(--stage-2); border: 1px solid var(--stage-rule); border-radius: 12px; padding: 14px 16px; display: none; flex-direction: column; gap: 8px; }
+  .box { background: var(--stage-2); border: 1px solid var(--stage-rule); border-radius: 6px; padding: 14px 16px; display: none; flex-direction: column; gap: 8px; }
   .box.active { display: flex; }
   .box h2 { font: 600 16px/1.25 var(--display); }
   .box p { font-size: 12.5px; color: var(--stage-muted); line-height: 1.5; }
   .box p.error { color: #FCA5A5; }
   .box .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 2px; align-items: center; }
   .box a:not(.btn-white) { color: var(--stage-text); }
-  .upload-zone { border: 2px dashed var(--stage-rule); border-radius: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; cursor: pointer; position: relative; padding: 26px 16px; text-align: center; background: var(--stage-2); }
-  .upload-zone:hover { border-color: var(--heat); }
+  #signedOutNote:empty { display: none; }
+  .upload-zone { border: 1px dashed var(--stage-rule); border-radius: 6px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; cursor: pointer; position: relative; padding: 22px 16px; text-align: center; background: var(--stage-2); }
+  .upload-zone:hover { border-color: var(--stage-muted); }
   .upload-zone.hidden, .consent-row.hidden { display: none; }
   .upload-zone .up-title { font-weight: 600; font-size: 14px; }
   .upload-zone .up-sub { font-size: 12px; color: var(--stage-muted); }
@@ -79,32 +80,41 @@
   .consent-row { display: flex; align-items: flex-start; gap: 8px; font-size: 12px; line-height: 1.45; color: var(--stage-muted); }
   .consent-row input { margin-top: 3px; flex-shrink: 0; }
   .consent-row a { color: var(--stage-text); }
-  .upload-progress { display: none; height: 5px; background: #0A0F1A; border-radius: 3px; overflow: hidden; }
+  .upload-progress { display: none; height: 5px; background: var(--stage); border-radius: 3px; overflow: hidden; }
   .upload-progress.active { display: block; }
   .upload-bar { height: 100%; width: 0; background: var(--heat); transition: width .15s; }
   .samples-section .label { font-size: 11px; font-weight: 600; color: var(--stage-muted); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 8px; }
-  .samples-grid { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 6px; }
-  .sample-card { flex: 0 0 132px; border-radius: 9px; overflow: hidden; cursor: pointer; border: 2px solid var(--stage-rule); background: #0A0F1A; text-align: left; color: var(--stage-text); padding: 0; }
-  .sample-card:hover { border-color: var(--heat); }
-  .sample-card.active { border-color: var(--heat); }
-  .sample-thumb { width: 100%; height: 74px; background: #070A12; display: flex; align-items: center; justify-content: center; color: var(--stage-muted); }
+  .samples-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 12px; }
+  .sample-card { border: 0; border-radius: 6px; cursor: pointer; background: none; text-align: left; color: var(--stage-text); padding: 0; }
+  .sample-thumb { width: 100%; aspect-ratio: 16 / 9; border-radius: 6px; overflow: hidden; background: #1E2024; display: flex; align-items: center; justify-content: center; color: var(--stage-muted); transition: filter .15s; }
+  .sample-card:hover .sample-thumb { filter: brightness(1.18); }
+  .sample-card.active .sample-thumb { outline: 2px solid var(--heat); outline-offset: 2px; }
   .sample-thumb img { width: 100%; height: 100%; object-fit: cover; }
-  .sample-info { padding: 7px 9px; }
-  .sample-title { font-size: 11px; font-weight: 600; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-  .sample-dur { font-size: 10px; color: var(--stage-muted); margin-top: 2px; }
+  .sample-info { padding: 7px 1px 0; }
+  .sample-title { font-size: 12px; font-weight: 500; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .sample-dur { font-size: 11px; color: var(--stage-muted); margin-top: 1px; }
   .history-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0; border-top: 1px solid var(--stage-rule); font-size: 12px; }
   .history-row:first-child { border-top: 0; }
+  .history-row.openable { cursor: pointer; }
+  .history-row.openable:hover { background: rgba(236,237,239,.04); }
   .history-thumb { width: 64px; height: 40px; flex: none; border-radius: 5px; overflow: hidden; background: var(--stage-rule); }
   .history-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
   .history-main { min-width: 0; flex: 1; }
   .history-name { font-weight: 600; word-break: break-all; }
   .history-sub { color: var(--stage-muted); font-size: 11px; margin-top: 2px; }
-  .history-actions { display: flex; gap: 6px; flex-shrink: 0; }
+  .history-actions { display: flex; gap: 6px; flex-shrink: 0; align-items: center; }
+  .history-link { background: none; border: 0; padding: 0; color: var(--stage-muted); font-size: 11.5px; text-decoration: underline; text-underline-offset: 2px; }
+  .history-link:hover { color: var(--stage-text); }
+  .history-more { width: 26px; height: 24px; border: 1px solid var(--stage-rule); border-radius: 6px; background: none; color: var(--stage-muted); display: grid; place-items: center; font-size: 15px; line-height: 1; }
+  .history-more:hover, .history-more[aria-expanded="true"] { color: var(--stage-text); border-color: var(--stage-muted); }
+  .row-menu { position: fixed; min-width: 160px; background: var(--stage-2); border: 1px solid var(--stage-rule); border-radius: 10px; padding: 5px; display: flex; flex-direction: column; gap: 2px; z-index: 40; box-shadow: 0 10px 24px rgba(0,0,0,.35); }
+  .row-menu button, .row-menu a { background: none; border: 0; color: var(--stage-text); text-align: left; padding: 8px 10px; border-radius: 7px; font-size: 13px; text-decoration: none; }
+  .row-menu button:hover, .row-menu a:hover, .row-menu button:focus-visible, .row-menu a:focus-visible { background: #23252A; }
   .history-empty { font-size: 12.5px; color: var(--stage-muted); }
   .field-row { display: flex; gap: 8px; }
-  .field-row input { flex: 1; min-width: 0; border: 1px solid var(--stage-rule); border-radius: 8px; padding: 7px 9px; font-size: 12px; background: #0A0F1A; color: var(--stage-text); }
-  .modal { background: var(--stage-2); color: var(--stage-text); border: 1px solid var(--stage-rule); border-radius: 14px; padding: 20px 22px; width: min(430px, calc(100vw - 32px)); }
-  .modal::backdrop { background: rgba(7, 10, 18, .68); }
+  .field-row input { flex: 1; min-width: 0; border: 1px solid var(--stage-rule); border-radius: 8px; padding: 7px 9px; font-size: 12px; background: var(--stage); color: var(--stage-text); }
+  .modal { margin: auto; background: var(--stage-2); color: var(--stage-text); border: 1px solid var(--stage-rule); border-radius: 6px; padding: 20px 22px; width: min(430px, calc(100vw - 32px)); }
+  .modal::backdrop { background: rgba(7, 8, 10, .74); }
   .modal h2 { font: 600 17px/1.25 var(--display); margin-bottom: 8px; }
   .modal p { font-size: 13px; color: var(--stage-muted); line-height: 1.5; }
   .modal p.error { color: #FCA5A5; }
@@ -118,31 +128,31 @@
 
   .player { flex: 1; min-height: 0; display: none; flex-direction: column; gap: 10px; }
   .player.active { display: flex; }
-  .side-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; min-height: 20px; }
-  .clip-title { font: 600 18px/1.2 var(--display); }
-  .clip-credit { font-size: 12px; color: var(--stage-muted); }
-  .side-head .btn-ghost { padding: 3px 9px; font-size: 12px; margin-left: auto; }
-  .video-box { position: relative; background: #000; border-radius: 14px; overflow: hidden; aspect-ratio: 16 / 9; flex: none; }
+  .side-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: nowrap; min-height: 20px; }
+  .clip-title { font: 600 15px/1.2 var(--display); letter-spacing: -0.01em; white-space: nowrap; flex: none; }
+  .clip-credit { font-size: 12px; color: var(--stage-muted); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .side-head .btn-ghost { padding: 3px 9px; font-size: 12px; margin-left: auto; flex: none; }
+  .video-box { position: relative; background: #000; border-radius: 6px; overflow: hidden; aspect-ratio: 16 / 9; flex: none; }
   .video-box video { width: 100%; height: 100%; display: block; object-fit: contain; cursor: pointer; }
-  .video-missing { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 22px; text-align: center; font-size: 13px; color: var(--stage-muted); background: radial-gradient(ellipse at 50% 45%, #1A2336 0%, #0A0F1A 75%); }
-  .brain-box { position: relative; background: radial-gradient(ellipse at 50% 45%, #1A2336 0%, #0A0F1A 70%); border-radius: 14px; overflow: hidden; flex: 1; min-height: 150px; }
+  .video-missing { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 22px; text-align: center; font-size: 13px; color: var(--stage-muted); background: #15161A; }
+  .brain-box { position: relative; background: #15161A; border-radius: 6px; overflow: hidden; flex: 1; min-height: 150px; }
   .brain-box canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
   .brain-message { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 20px; text-align: center; font-size: 13px; color: var(--stage-muted); }
   .brain-legend { position: absolute; left: 14px; bottom: 12px; display: flex; gap: 8px; align-items: center; font-size: 11px; color: var(--stage-muted); pointer-events: none; }
   .brain-legend i { width: 86px; height: 6px; border-radius: 3px; background: linear-gradient(90deg, #D9DCE1, #800000 10%, #E61A0A 40%, #FF800A 66%, #FFD926 88%, #FFFFD9); }
   .brain-time { position: absolute; right: 14px; top: 12px; font: 600 13px var(--display); color: var(--stage-muted); font-variant-numeric: tabular-nums; }
-  .sample-meta { font-size: 11.5px; color: var(--stage-muted); line-height: 1.45; }
+  .sample-meta { font-size: 11.5px; color: var(--stage-muted); line-height: 1.45; margin-top: -4px; }
   .sample-meta:empty { display: none; }
   .retention { display: none; flex: none; flex-direction: column; gap: 6px; border-top: 1px solid var(--rule); padding-top: 10px; }
   .retention.active { display: flex; }
   .retention .rt-title { font-size: 12.5px; font-weight: 600; color: var(--ink); }
   .retention .rt-text { font-size: 12px; color: var(--ink-2); }
-  .retention .rt-text.error { color: #B4231A; }
+  .retention .rt-text.error { color: #FCA5A5; }
   .retention .actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 
   .timeline { display: grid; grid-template-columns: auto auto 1fr auto auto; gap: 10px; align-items: center; flex: none; }
   .tl-btn { width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--stage-rule); background: var(--stage-2); color: var(--stage-text); display: grid; place-items: center; padding: 0; }
-  .tl-btn.play { width: 42px; height: 42px; background: var(--heat); color: #1A0D04; border: 0; }
+  .tl-btn.play { width: 42px; height: 42px; background: var(--heat); color: #1B0E03; border: 0; }
   .tl-btn svg { width: 15px; height: 15px; }
   .tl-right { display: flex; gap: 8px; align-items: center; }
   .tl-time { font: 600 13px var(--display); font-variant-numeric: tabular-nums; color: var(--stage-muted); min-width: 84px; text-align: right; }
@@ -151,70 +161,56 @@
 
   .charts-empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: var(--ink-3); font-size: 14px; text-align: center; }
   .charts-empty svg { width: 46px; height: 46px; opacity: .35; }
-  .report-body { flex: 1; min-height: 0; display: none; flex-direction: column; gap: 12px; }
+  .report-body { flex: 1; min-height: 0; display: none; flex-direction: column; gap: 18px; }
   .report-body.active { display: flex; }
   .result-message { background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 18px 20px; font-size: 13px; line-height: 1.55; color: var(--ink-2); }
   .result-message:empty { display: none; }
 
-  .top { display: grid; grid-template-columns: 1fr 1fr 220px; gap: 24px; align-items: start; flex: none; }
-  .top.compare { grid-template-columns: 1fr; }
-  .mgroup { border-top: 2px solid var(--cool); padding-top: 8px; display: flex; flex-direction: column; }
-  .mgroup.hot { border-top-color: var(--heat); }
-  .mgroup h3 { font: 600 16px var(--display); }
-  .mgroup > p { font-size: 12.5px; color: var(--ink-2); margin-bottom: 4px; }
-  .mgroup .empty { font-size: 13px; color: var(--ink-2); padding: 6px 0; }
-  .mrow { display: grid; grid-template-columns: 96px 1fr; gap: 12px; align-items: center; padding: 6px 0; background: none; border: 0; text-align: left; color: inherit; }
-  .mrow.no-thumb { grid-template-columns: 1fr; }
-  .mrow .thumb { width: 100%; aspect-ratio: 16 / 9; border-radius: 6px; background: #DDE1E7 center / cover; }
-  .mrow .when { font: 600 15px var(--display); font-variant-numeric: tabular-nums; }
-  .mrow.hot .when { color: #C2410C; }
+  .top { display: block; flex: none; }
+  .moments { display: flex; flex-direction: column; gap: 8px; }
+  .mset { display: flex; align-items: center; gap: 16px; flex: none; flex-wrap: wrap; }
+  .mset .mlabel { width: 64px; flex: none; font-size: 12px; color: var(--ink-3); }
+  .mset.hot .mlabel { color: var(--ink-2); }
+  .mrow { display: grid; grid-template-columns: 104px auto; gap: 10px; align-items: center; padding: 0; background: none; border: 0; text-align: left; color: inherit; }
+  .mrow.no-thumb { grid-template-columns: auto; }
+  .mrow .thumb { width: 104px; aspect-ratio: 16 / 9; border-radius: 3px; background: #1E2024 center / cover; }
+  .mrow .when { font: 500 13px var(--display); color: var(--ink-2); font-variant-numeric: tabular-nums; }
+  .mrow.hot .when { color: var(--heat); }
   .mrow:hover .when { text-decoration: underline; }
-  .sidefacts { display: flex; flex-direction: column; border-top: 2px solid var(--rule); }
-  .sidefacts h3 { font: 500 12.5px var(--text); color: var(--ink-2); }
-  .opening { padding: 8px 0 10px; border-bottom: 1px solid var(--rule); }
-  .opening strong { display: block; font: 600 18px/1.2 var(--display); }
-  .opening small { display: block; font-size: 12.5px; color: var(--ink-2); }
-  .audio { padding-top: 8px; }
-  .audio strong { display: block; font: 600 21px/1.15 var(--display); }
-  .audio small { display: block; font-size: 12.5px; color: var(--ink-2); margin-top: 2px; }
-  .split { height: 6px; border-radius: 3px; background: #E2E5EA; margin: 5px 0 4px; overflow: hidden; }
-  .split b { display: block; height: 100%; background: var(--heat); }
+  .mset .empty { font-size: 13px; color: var(--ink-3); }
 
-  .chart-head { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
-  .chart-head h2 { font: 600 19px var(--display); }
+  .chart-head { display: flex; align-items: baseline; gap: 10px 14px; flex-wrap: wrap; }
+  .chart-head h2 { font: 600 14px var(--display); color: var(--ink-2); letter-spacing: 0; }
   .keys { display: flex; flex-wrap: wrap; gap: 4px 16px; order: 1; flex-basis: 100%; }
-  .chart-controls { display: inline-flex; align-items: center; gap: 14px; margin-left: auto; }
+  #chartKeys:empty { display: none; }
+  .chart-controls { display: inline-flex; align-items: center; gap: 14px; margin-left: auto; flex-wrap: wrap; }
+  .sound-line { font-size: 12.5px; color: var(--ink-3); }
   .legend-key { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--ink-2); white-space: nowrap; }
   .legend-key i { width: 18px; height: 0; border-top: 2px solid var(--heat); }
   .legend-key i.dash { border-top: 2px dashed var(--cool); }
-  .legend-key i.typical { border-top: 1.5px dashed var(--ink-3); }
-  .legend-key i.swatch { width: 12px; height: 12px; border-top: 0; border-radius: 2px; background: rgba(242,113,28,.18); }
+  .legend-key i.swatch { width: 12px; height: 12px; border-top: 0; border-radius: 2px; background: rgba(255,138,42,.18); }
   .toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--ink-2); white-space: nowrap; }
   .toggle input { accent-color: var(--heat); }
   .compare-pick { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--ink-2); }
   .compare-pick select { border: 1px solid var(--rule); border-radius: 8px; padding: 4px 8px; background: var(--surface); color: var(--ink); font-size: 12px; max-width: 190px; }
   .compare-msg { font-size: 12px; color: var(--ink-2); min-height: 0; }
   .compare-msg:empty { display: none; }
-  .compare-msg.error { color: #B4231A; }
-  .main-chart { flex: 1.86 1 0; min-height: 120px; display: flex; flex-direction: column; }
-  .main-chart .note { font-size: 12.5px; color: var(--ink-2); }
-  .main-chart .chart { flex: 1; min-height: 0; margin-top: 22px; position: relative; }
+  .compare-msg.error { color: #FCA5A5; }
+  .main-chart { flex: 1.25 1 0; min-height: 120px; display: flex; flex-direction: column; }
+  .main-chart .note { font-size: 12.5px; color: var(--ink-3); margin: 0; }
+  .main-chart .chart { flex: 1; min-height: 0; margin-top: 8px; position: relative; }
   .chart { position: relative; width: 100%; }
   .chart svg { display: block; width: 100%; overflow: visible; cursor: pointer; }
   .xaxis { display: flex; justify-content: space-between; font-size: 11px; color: var(--ink-3); height: 16px; }
-  .pins { position: absolute; left: 0; right: 0; top: -22px; height: 20px; }
-  .pin { position: absolute; transform: translateX(-50%); bottom: 0; background: none; border: 0; padding: 0 2px; height: 20px; display: flex; align-items: flex-end; }
-  .pin::after { content: ''; position: absolute; left: 50%; bottom: -4px; width: 1.5px; height: 8px; background: var(--cool); }
-  .pin span { font: 600 11px var(--display); color: var(--ink-2); margin-bottom: 3px; font-variant-numeric: tabular-nums; }
-  .pin.hot span { color: #C2410C; }
-  .pin.hot::after { background: var(--heat); }
-  .pin:hover span { color: var(--ink); }
+  .chart-label { position: absolute; left: 4px; font: 500 11px var(--text); color: var(--ink-3); pointer-events: none; }
 
   .strips-wrap { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; }
+  #stripsCard .chart-head { margin-bottom: 2px; }
+  #stripsCard > p.note { font-size: 12.5px; color: var(--ink-3); margin-bottom: 10px; }
   .strips { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; }
   .strips.swapped { grid-template-columns: 1fr; }
   .strip { min-width: 0; display: flex; flex-direction: column; }
-  .strip h3, .parts h3 { display: flex; justify-content: space-between; align-items: baseline; font: 600 15px var(--display); gap: 8px; margin-bottom: 4px; }
+  .strip h3, .parts h3 { display: flex; justify-content: space-between; align-items: baseline; font: 500 13px var(--display); gap: 8px; margin-bottom: 4px; }
   .strip h3 button, .parts h3 button { background: none; border: 0; font: 500 12.5px var(--text); color: var(--ink-2); padding: 0; }
   .strip h3 button:hover, .parts h3 button:hover { color: var(--ink); }
   .strip .chart { flex: 1; min-height: 0; }
@@ -225,7 +221,7 @@
   .parts h4, .sub h4 { font: 500 12px var(--text); color: var(--ink-2); margin-bottom: 2px; }
   .parts .chart { flex: 1; min-height: 0; }
 
-  .end-marker { position: absolute; font-size: 11px; line-height: 1.3; color: var(--ink-2); background: rgba(255,255,255,.82); padding: 0 3px; border-radius: 3px; white-space: nowrap; pointer-events: none; }
+  .end-marker { position: absolute; font-size: 11px; line-height: 1.3; color: var(--ink-2); background: rgba(14,15,17,.85); padding: 0 3px; border-radius: 3px; white-space: nowrap; pointer-events: none; }
   .end-drop { position: absolute; border-left: 1px dotted var(--cool); pointer-events: none; }
   .end-dot { position: absolute; width: 6px; height: 6px; border-radius: 50%; transform: translate(-50%, -50%); pointer-events: none; }
 
@@ -244,7 +240,6 @@
     .player .brain-box { aspect-ratio: 16 / 10; flex: none; }
     .main-chart { flex: none; }
     .main-chart .chart { height: 200px; flex: none; }
-    .top { grid-template-columns: 1fr; }
     .D .report { padding: 20px 16px 60px; overflow: visible; }
     .strips-wrap { flex: none; }
     .strips { grid-template-columns: 1fr; }
@@ -291,16 +286,16 @@
       </div>
 
       <div class="box" id="signInPanel">
-        <p id="signedOutNote"></p>
         <h2>Sign in to analyse your own videos</h2>
-        <p>Use Google, or an email address and password. Samples can be browsed without signing in.</p>
+        <p>Samples can be browsed without signing in.</p>
+        <p id="signedOutNote"></p>
         <div class="actions"><a class="btn-white" href="/login" style="display:inline-block;text-decoration:none;text-align:center">Sign in</a></div>
       </div>
 
       <div class="tab-panel" id="analysesTab" hidden>
         <div class="upload-zone hidden" id="uploadZone">
-          <div class="up-title">Upload a video for analysis</div>
-          <div class="up-sub" id="limitsText">MP4, MOV, or WebM</div>
+          <div class="up-title">Drop a video or click to choose</div>
+          <div class="up-sub" id="limitsText">MP4, MOV or WebM</div>
           <input type="file" accept="video/mp4,video/quicktime,video/webm" id="fileInput" title="">
         </div>
         <div class="upload-note" id="uploadNote"></div>
@@ -309,7 +304,6 @@
         <div class="box upload-panel" id="uploadPanel">
           <div class="file-name" id="upFileName"></div>
           <div class="line" id="upDetail"></div>
-          <div class="line" id="upCost"></div>
           <div class="consent-row" id="consentRow">
             <input type="checkbox" id="consentBox">
             <label for="consentBox">Keep this video for research for up to 12 months and add its audience retention once it is published (<a href="/static/retention_guide.html">how</a>); without retention, the copy is deleted after 60 days. I own the rights to this video.</label>
@@ -353,13 +347,13 @@
         <video id="videoPlayer" playsinline muted></video>
         <div class="video-missing" id="videoMissing" hidden></div>
       </div>
+      <div class="sample-meta" id="sampleMeta"></div>
       <div class="brain-box" id="brainHost">
         <div class="brain-message" id="brainMessage">The 3D view is not available for this video.</div>
         <div class="brain-legend"><span>typical</span><i></i><span>higher</span></div>
         <span class="brain-time" id="brainSecond"></span>
       </div>
       <div class="timeline" id="timeline"></div>
-      <div class="sample-meta" id="sampleMeta"></div>
     </div>
   </aside>
 
@@ -376,17 +370,18 @@
           <h2>Brain response over time</h2>
           <span class="keys" id="chartKeys"></span>
           <span class="chart-controls">
+            <span class="sound-line" id="soundLine"></span>
             <label class="compare-pick" id="compareRow" hidden><span>Compare with…</span><select id="compareSelect"></select></label>
             <label class="toggle" id="mutedLabel"><input type="checkbox" id="mutedToggle"> Show if muted</label>
           </span>
         </div>
-        <p class="note">Predicted response of an average viewer. The dashed line is typical. Click anywhere to jump there.</p>
+        <p class="note">Predicted for an average viewer.</p>
         <p class="compare-msg" id="compareMsg"></p>
         <div class="chart" id="mainChartBox"></div>
       </section>
       <section class="strips-wrap" id="stripsCard">
         <div class="chart-head"><h2>What the brain is doing</h2></div>
-        <p class="note" style="font-size:12.5px;color:var(--ink-2);margin-bottom:8px">Same scale on all three. Click any chart to jump there.</p>
+        <p class="note">Same scale on all three.</p>
         <div class="strips" id="stripsHost"></div>
       </section>
       <div class="retention" id="retentionPanel">
@@ -407,6 +402,16 @@
   </div>
   <p id="deleteAccountMsg"></p>
   <div class="actions"><button class="btn-ghost" id="deleteAccountCancel">Cancel</button></div>
+</dialog>
+
+<dialog class="modal" id="deleteJobDialog" aria-labelledby="deleteJobTitle">
+  <h2 id="deleteJobTitle">Delete video</h2>
+  <p id="deleteJobText"></p>
+  <div class="actions">
+    <button class="btn-danger" id="deleteJobBtn">Delete</button>
+    <button class="btn-ghost" id="deleteJobCancel">Cancel</button>
+  </div>
+  <p id="deleteJobMsg"></p>
 </dialog>
 
 <dialog class="modal" id="retentionDialog" aria-labelledby="retentionDialogTitle">
@@ -460,6 +465,8 @@ function shortName(name, max = 32) {
   const tail = room - head;
   return text.slice(0, head) + '…' + text.slice(-(tail + ext.length));
 }
+// The player names a video without its file extension.
+function videoBaseName(name) { return String(name || '').replace(/\.(mp4|mov|webm|m4v|avi|mkv)$/i, ''); }
 function hasLocalVideo() { return !!video.getAttribute('src'); }
 function currentTime() { return hasLocalVideo() ? (Number.isFinite(video.currentTime) ? video.currentTime : 0) : virtualTime; }
 function totalSeconds() { return currentResult && currentResult.signals && Array.isArray(currentResult.signals.overall) ? currentResult.signals.overall.length : 0; }
@@ -567,6 +574,67 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape' && !accountMenu.hidden) closeAccountMenu(true);
 });
 
+let rowMenu = null, rowMenuTrigger = null;
+function closeRowMenu(returnFocus) {
+  if (!rowMenu) return;
+  const trigger = rowMenuTrigger;
+  rowMenu.remove();
+  rowMenu = null; rowMenuTrigger = null;
+  if (trigger) trigger.setAttribute('aria-expanded', 'false');
+  if (returnFocus && trigger) trigger.focus();
+}
+function historyMenuItems(job) {
+  const items = [];
+  if (job.status === 'queued') items.push({ label: 'Cancel', run: () => cancelJob(job.job_id) });
+  if (job.result_available) items.push({ label: 'Download CSV', href: `/api/jobs/${job.job_id}/result.csv` });
+  if (job.status === 'done' || job.status === 'failed') items.push({ label: 'Delete', run: () => openDeleteJob(job) });
+  return items;
+}
+function openRowMenu(trigger, job) {
+  closeRowMenu();
+  const menu = document.createElement('div');
+  menu.className = 'row-menu';
+  menu.setAttribute('role', 'menu');
+  historyMenuItems(job).forEach(item => {
+    let el;
+    if (item.href) {
+      el = document.createElement('a');
+      el.href = item.href;
+      el.addEventListener('click', e => { e.stopPropagation(); closeRowMenu(); });
+    } else {
+      el = document.createElement('button');
+      el.type = 'button';
+      el.addEventListener('click', e => { e.stopPropagation(); closeRowMenu(); item.run(); });
+    }
+    el.setAttribute('role', 'menuitem');
+    el.textContent = item.label;
+    menu.append(el);
+  });
+  document.body.append(menu);
+  const rect = trigger.getBoundingClientRect();
+  menu.style.top = `${rect.bottom + 6}px`;
+  menu.style.right = `${Math.max(8, window.innerWidth - rect.right)}px`;
+  rowMenu = menu; rowMenuTrigger = trigger;
+  trigger.setAttribute('aria-expanded', 'true');
+  menu.addEventListener('keydown', e => {
+    const items = [...menu.querySelectorAll('[role="menuitem"]')];
+    const index = items.indexOf(document.activeElement);
+    if (e.key === 'Escape') { e.preventDefault(); closeRowMenu(true); }
+    else if (e.key === 'ArrowDown') { e.preventDefault(); items[(index + 1) % items.length].focus(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); items[(index - 1 + items.length) % items.length].focus(); }
+    else if (e.key === 'Home') { e.preventDefault(); items[0].focus(); }
+    else if (e.key === 'End') { e.preventDefault(); items[items.length - 1].focus(); }
+  });
+  const first = menu.querySelector('[role="menuitem"]');
+  if (first) first.focus();
+}
+document.addEventListener('click', e => {
+  if (rowMenu && !rowMenu.contains(e.target) && !(rowMenuTrigger && rowMenuTrigger.contains(e.target))) closeRowMenu();
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && rowMenu) closeRowMenu(true);
+});
+
 const deleteDialog = $('deleteDialog');
 function openDeleteDialog() {
   $('deleteAccountConfirm').value = '';
@@ -592,6 +660,26 @@ function closeOnBackdrop(dialog) {
   });
 }
 closeOnBackdrop(deleteDialog);
+
+const deleteJobDialog = $('deleteJobDialog');
+let deleteTarget = null;
+function openDeleteJob(job) {
+  deleteTarget = job;
+  const label = job.filename || `Job ${job.job_id.slice(0, 8)}`;
+  $('deleteJobText').textContent = `Delete ${shortName(label)}? Its video, analysis and data will be removed.`;
+  $('deleteJobText').title = label;
+  $('deleteJobMsg').textContent = '';
+  $('deleteJobMsg').classList.remove('error');
+  $('deleteJobBtn').disabled = false;
+  if (!deleteJobDialog.open) deleteJobDialog.showModal();
+  $('deleteJobBtn').focus();
+}
+$('deleteJobCancel').addEventListener('click', () => {
+  deleteTarget = null;
+  deleteJobDialog.close();
+});
+$('deleteJobBtn').addEventListener('click', () => { if (deleteTarget) deleteJob(deleteTarget); });
+closeOnBackdrop(deleteJobDialog);
 
 async function postJSON(url, body) {
   const text = JSON.stringify(body);
@@ -730,6 +818,7 @@ const inUploadBox = job => job.job_id === trackedJob && (job.status === 'queued'
 
 function renderHistory(jobs) {
   jobsCache = jobs; jobsLoaded = true;
+  closeRowMenu();
   const shown = jobs.filter(job => !inUploadBox(job));
   const list = $('historyList');
   list.replaceChildren(...shown.map(historyRow));
@@ -765,62 +854,80 @@ function historyThumb(job) {
 }
 
 function historyRow(job) {
-  const row = document.createElement('div'); row.className = 'history-row';
+  const canOpen = job.result_available || job.status === 'queued' || job.status === 'processing';
+  const row = document.createElement('div');
+  row.className = 'history-row' + (canOpen ? ' openable' : '');
+  if (canOpen) {
+    row.tabIndex = 0;
+    row.setAttribute('role', 'button');
+    row.addEventListener('click', () => openJob(job));
+    row.addEventListener('keydown', e => {
+      if (e.target !== row || e.key !== 'Enter') return;
+      e.preventDefault();
+      openJob(job);
+    });
+  }
+  const label = job.filename || `Job ${job.job_id.slice(0, 8)}`;
   const main = document.createElement('div'); main.className = 'history-main';
   const name = document.createElement('div'); name.className = 'history-name';
-  const label = job.filename || `Job ${job.job_id.slice(0, 8)}`;
   name.textContent = shortName(label);
   name.title = label;
   const sub = document.createElement('div'); sub.className = 'history-sub';
   sub.textContent = historyDetail(job);
   main.append(name, sub);
   const actions = document.createElement('div'); actions.className = 'history-actions';
-  if (job.result_available || job.status === 'queued' || job.status === 'processing') {
-    const open = document.createElement('button'); open.className = 'btn-ghost'; open.textContent = 'Open';
-    open.addEventListener('click', () => { resetUI(); trackJob(job.job_id, null); });
-    actions.append(open);
-  }
-  if (job.status === 'queued') {
-    const cancel = document.createElement('button'); cancel.className = 'btn-ghost'; cancel.textContent = 'Cancel';
-    cancel.addEventListener('click', () => cancelJob(job.job_id));
-    actions.append(cancel);
-  }
   if (job.needs_retention) {
-    const add = document.createElement('button'); add.className = 'btn-ghost'; add.textContent = 'Add retention';
-    add.addEventListener('click', () => openRetention(job.job_id, label));
+    const add = document.createElement('button');
+    add.type = 'button';
+    add.className = 'history-link';
+    add.textContent = 'Add retention';
+    add.addEventListener('click', e => { e.stopPropagation(); openRetention(job.job_id, label); });
     actions.append(add);
   }
-  if (job.result_available) {
-    const csv = document.createElement('a'); csv.className = 'btn-ghost'; csv.textContent = 'CSV';
-    csv.href = `/api/jobs/${job.job_id}/result.csv`;
-    actions.append(csv);
-  }
-  if (job.status === 'done' || job.status === 'failed') {
-    const del = document.createElement('button'); del.className = 'btn-danger'; del.textContent = 'Delete';
-    del.addEventListener('click', () => deleteJob(job));
-    actions.append(del);
+  if (job.status !== 'processing' && historyMenuItems(job).length) {
+    const more = document.createElement('button');
+    more.type = 'button';
+    more.className = 'history-more';
+    more.textContent = '⋯';
+    more.setAttribute('aria-label', `Actions for ${label}`);
+    more.setAttribute('aria-haspopup', 'menu');
+    more.setAttribute('aria-expanded', 'false');
+    more.addEventListener('click', e => {
+      e.stopPropagation();
+      if (rowMenu && rowMenuTrigger === more) closeRowMenu(true);
+      else openRowMenu(more, job);
+    });
+    actions.append(more);
   }
   row.append(historyThumb(job), main, actions);
   return row;
 }
 
+function openJob(job) {
+  resetUI();
+  trackJob(job.job_id, null);
+}
+
 async function deleteJob(job) {
-  const label = job.filename || `Job ${job.job_id.slice(0, 8)}`;
-  if (!window.confirm(`Delete ${label}? Its video, analysis and data will be removed.`)) return;
+  $('deleteJobBtn').disabled = true;
   try {
     const res = await fetch(`/api/jobs/${job.job_id}`, { method: 'DELETE' });
     const data = await res.json().catch(() => ({}));
     if (res.status === 401) return window.location.reload();
     if (!res.ok) {
-      $('historyPanel').classList.add('active');
-      $('historyNote').textContent = data.message || `Couldn't delete this video (HTTP ${res.status}).`;
+      $('deleteJobMsg').textContent = data.message || `Couldn't delete this video (HTTP ${res.status}).`;
+      $('deleteJobMsg').classList.add('error');
+      $('deleteJobBtn').disabled = false;
       return;
     }
+    deleteTarget = null;
+    deleteJobDialog.close();
     if (trackedJob === job.job_id) resetUI();
     refreshAccount();
   } catch (e) {
-    $('historyPanel').classList.add('active');
-    $('historyNote').textContent = "Couldn't reach the server. Please try again.";
+    $('deleteJobMsg').textContent = "Couldn't reach the server. Please try again.";
+    $('deleteJobMsg').classList.add('error');
+    $('deleteJobBtn').disabled = false;
   }
 }
 
@@ -914,7 +1021,8 @@ function loadSample(idx) {
   });
   $('clipTitle').textContent = shortName(s.title || 'Sample');
   $('clipTitle').title = s.title || 'Sample';
-  $('clipCredit').textContent = s.attribution || '';
+  $('clipCredit').textContent = '';
+  $('sampleMeta').textContent = s.attribution || '';
   video.muted = true;
   updateTransport();
   video.play().catch(() => {});
@@ -925,7 +1033,7 @@ async function loadLimits() {
     const res = await fetch('/api/limits');
     if (!res.ok) return null;
     limits = await res.json();
-    $('limitsText').textContent = `MP4, MOV, or WebM — max ${limits.max_video_duration_seconds} seconds`;
+    $('limitsText').textContent = `MP4, MOV or WebM · up to ${limits.max_video_duration_seconds} seconds · from ${dollars(90)}`;
     return limits;
   } catch (e) { return null; }
 }
@@ -981,8 +1089,7 @@ function showConfirm(file, duration) {
   $('consentBox').checked = false; $('consentBox').disabled = false;
   $('consentRow').classList.remove('hidden');
   $('upFileName').textContent = file.name;
-  $('upDetail').textContent = `${duration.toFixed(1)} s · ${(file.size / 1e6).toFixed(1)} MB`;
-  $('upCost').textContent = `Cost: about ${dollars(estimateCostCents(duration))}, held from your credit and refunded if the analysis fails.`;
+  $('upDetail').textContent = `${duration.toFixed(1)} s · ${(file.size / 1e6).toFixed(1)} MB · about ${dollars(estimateCostCents(duration))}, held from your credit and refunded if the analysis fails.`;
   $('upMsg').textContent = ''; $('upMsg').classList.remove('error');
   $('upProgress').classList.remove('active'); $('upBar').style.width = '0';
   $('upConfirm').disabled = false; $('upConfirm').style.display = '';
@@ -1147,7 +1254,7 @@ function trackJob(jobId, file) {
     const cached = jobsCache.find(j => j.job_id === jobId);
     const label = cached ? (cached.filename || `Job ${jobId.slice(0, 8)}`) : '';
     $('upFileName').textContent = label;
-    $('upDetail').textContent = ''; $('upCost').textContent = '';
+    $('upDetail').textContent = '';
     $('upConfirm').style.display = 'none';
     $('uploadPanel').classList.add('active');
     $('headerMeta').textContent = label;
@@ -1304,15 +1411,16 @@ async function loadJobVideo(jobId, seq, resume) {
   return { ok: true };
 }
 
-function setVideoFile(file, seconds) {
+function setVideoFile(file) {
   clearVideoSource();
   videoObjectUrl = URL.createObjectURL(file);
   video.src = videoObjectUrl;
   video.muted = true;
   showVideo(true);
-  $('clipTitle').textContent = shortName(file.name);
-  $('clipTitle').title = file.name;
-  $('clipCredit').textContent = Number.isFinite(seconds) ? `${seconds}s` : '';
+  const name = videoBaseName(file.name);
+  $('clipTitle').textContent = shortName(name);
+  $('clipTitle').title = name;
+  $('clipCredit').textContent = '';
 }
 
 function showResultUnavailable(message, file) {
@@ -1325,6 +1433,7 @@ function showResultUnavailable(message, file) {
   $('resultMessage').textContent = message;
   $('resultMessage').hidden = false;
   $('topArea').replaceChildren();
+  updateSoundLine();
   $('chartCard').hidden = true;
   $('stripsCard').hidden = true;
   $('compareRow').hidden = true;
@@ -1339,7 +1448,7 @@ function showResultUnavailable(message, file) {
   $('timeline').replaceChildren();
   showRetention(null);
   setViewName('player');
-  if (file) setVideoFile(file, null);
+  if (file) setVideoFile(file);
   else { $('videoMissing').textContent = ''; $('clipTitle').textContent = ''; $('clipTitle').title = ''; $('clipCredit').textContent = ''; }
 }
 
@@ -1377,14 +1486,15 @@ async function showResult(jobId, file, consented) {
   const cached = jobsCache.find(j => j.job_id === jobId);
   const title = file ? file.name : (cached && cached.filename ? cached.filename : `Job ${jobId.slice(0, 8)}`);
   showRetention(consented ? jobId : null, title);
-  if (file) setVideoFile(file, result.duration_seconds);
+  if (file) setVideoFile(file);
   else {
     clearVideoSource();
     $('videoMissing').textContent = '';
     setViewName('player');
-    $('clipTitle').textContent = shortName(title);
-    $('clipTitle').title = title;
-    $('clipCredit').textContent = `${result.duration_seconds}s`;
+    const name = videoBaseName(title);
+    $('clipTitle').textContent = shortName(name);
+    $('clipTitle').title = name;
+    $('clipCredit').textContent = '';
   }
   try {
     renderResult(result, result.summary || {}, { jobId, brainUrl: `/api/jobs/${jobId}/brain`, title, fileName: title });
@@ -1478,23 +1588,13 @@ function averageOverall(result) {
 function momentRows(list, hot) {
   const withThumbs = hasLocalVideo();
   return list.map(m => `<button class="mrow${hot ? ' hot' : ''}${withThumbs ? '' : ' no-thumb'}" data-seek="${m.start}">
-    ${withThumbs ? `<span class="thumb" data-thumb="${m.start}"></span>` : ''}
+    ${withThumbs ? `<span class="thumb" data-thumb="${(m.start + m.end) / 2}"></span>` : ''}
     <span class="when">${fmtRange(m)}</span></button>`).join('');
 }
 
-function momentGroup(title, hint, list, hot) {
-  return `<div class="mgroup${hot ? ' hot' : ''}"><h3>${title}</h3><p>${hint}</p>
-    ${list.length ? momentRows(list, hot) : '<p class="empty">Too short to pick one</p>'}</div>`;
-}
-
-function sideFacts(s) {
-  const pct = audioPercent(s);
-  return `<div class="sidefacts">
-    <div class="opening"><h3>Opening</h3><strong>${openingText(s)}</strong><small>the first 3 seconds against the rest</small></div>
-    <div class="audio"><h3>Audio dependence</h3>
-      ${pct === null ? '<strong>—</strong><small>No strong response to measure</small>' :
-        `<strong>${pct}%</strong><div class="split" aria-hidden="true"><b style="width:${pct}%"></b></div><small>of the response comes from the sound</small>`}
-    </div></div>`;
+function momentSet(label, list, hot) {
+  const body = list.length ? momentRows(list, hot) : '<span class="empty">Too short to pick one</span>';
+  return `<div class="mset${hot ? ' hot' : ''}"><span class="mlabel">${label}</span>${body}</div>`;
 }
 
 function escapeHtml(text) {
@@ -1524,7 +1624,7 @@ function compareTable() {
     ${row('Average (overall)', averageOverall(currentResult), averageOverall(comparison && comparison.result))}
     ${row('Strongest moments', momentLinks(currentSummary.strong_moments), momentRanges(other.strong_moments))}
     ${row('Weakest moments', momentLinks(currentSummary.weak_moments), momentRanges(other.weak_moments))}
-    ${row('Audio dependence', audio(currentSummary), audio(other))}
+    ${row('Sound share', audio(currentSummary), audio(other))}
   </tbody></table>`;
 }
 
@@ -1537,8 +1637,22 @@ function swapComparison() {
   trackJob(otherId, null);
 }
 
+function updateSoundLine() {
+  const line = $('soundLine');
+  if (!line) return;
+  if (!currentResult) {
+    line.textContent = '';
+    line.hidden = true;
+    return;
+  }
+  const pct = audioPercent(currentSummary);
+  line.hidden = false;
+  line.textContent = pct === null ? 'No strong response to measure' : `${pct}% of the response comes from the sound`;
+}
+
 function buildTop() {
   const top = $('topArea');
+  updateSoundLine();
   if (!currentResult) { top.replaceChildren(); return; }
   if (comparison) {
     top.classList.add('compare');
@@ -1546,9 +1660,7 @@ function buildTop() {
   } else {
     top.classList.remove('compare');
     const s = currentSummary || {};
-    top.innerHTML = momentGroup('Strongest parts', 'Good spots for the key message', s.strong_moments || [], true) +
-      momentGroup('Weakest parts', 'Worth a look in the edit', s.weak_moments || [], false) +
-      sideFacts(s);
+    top.innerHTML = `<div class="moments">${momentSet('Strongest', s.strong_moments || [], true)}${momentSet('Weakest', s.weak_moments || [], false)}</div>`;
     fillThumbs(resultSeq);
   }
 }
@@ -1601,13 +1713,11 @@ function renderResult(result, summary, ctx) {
   $('reportBody').classList.add('active');
   $('compareMsg').textContent = '';
   $('compareMsg').classList.remove('error');
-  $('sampleMeta').textContent = '';
-  if (ctx.description || ctx.attribution) {
-    $('sampleMeta').textContent = [ctx.description, ctx.attribution ? `Attribution: ${ctx.attribution}` : ''].filter(Boolean).join(' · ');
-  }
+  $('sampleMeta').textContent = ctx.attribution || '';
   setViewName('player');
-  $('clipTitle').textContent = shortName(ctx.title || '');
-  $('clipTitle').title = ctx.title || '';
+  const name = videoBaseName(ctx.title || '');
+  $('clipTitle').textContent = shortName(name);
+  $('clipTitle').title = name;
   if (hasLocalVideo()) {
     $('clipCredit').textContent = `${result.duration_seconds}s` + (result.processing_time_seconds ? ` · analysed in ${Math.round(result.processing_time_seconds)}s` : '');
   } else {
@@ -1641,7 +1751,7 @@ function clearAllCharts() {
   $('timeline').replaceChildren();
 }
 
-function drawChart(host, { lines, range, height = 200, shade = false, axisLabels = false, dark = false, fill = false, span = null, scope }) {
+function drawChart(host, { lines, range, height = 200, shade = false, axisLabels = false, dark = false, fill = false, span = null, scope, yLabels = false, playhead = null }) {
   host.replaceChildren();
   const T = span || totalSeconds();
   if (!T) return;
@@ -1659,11 +1769,25 @@ function drawChart(host, { lines, range, height = 200, shade = false, axisLabels
       if (right <= left) return;
       svgEl('rect', { x: left, width: right - left, y: padT, height: H - padT - padB, fill: colour }, svg);
     };
-    (currentSummary.strong_moments || []).forEach(m => band(m, 'rgba(242,113,28,.15)'));
+    (currentSummary.strong_moments || []).forEach(m => band(m, 'rgba(255,138,42,.15)'));
     (currentSummary.weak_moments || []).forEach(m => band(m, dark ? 'rgba(140,150,168,.16)' : 'rgba(107,122,153,.13)'));
   }
 
-  svgEl('line', { x1: 0, x2: W, y1: y(0), y2: y(0), stroke: dark ? '#3A4560' : '#B9BEC8', 'stroke-dasharray': '6 6', 'vector-effect': 'non-scaling-stroke' }, svg);
+  svgEl('line', { x1: 0, x2: W, y1: y(0), y2: y(0), stroke: dark ? 'rgba(236,237,239,.30)' : '#B9BEC8', 'stroke-dasharray': '6 6', 'vector-effect': 'non-scaling-stroke' }, svg);
+
+  if (yLabels) {
+    const at = py => axisLabels ? `calc(${(py / H) * 100}% - ${(py / H) * 16}px)` : `${(py / H) * 100}%`;
+    const label = (text, top, transform) => {
+      const span = document.createElement('span');
+      span.className = 'chart-label';
+      span.textContent = text;
+      span.style.top = top;
+      if (transform) span.style.transform = transform;
+      host.append(span);
+    };
+    label('higher', at(padT));
+    label('typical', at(y(0)), 'translateY(-100%)');
+  }
 
   lines.forEach(line => {
     const points = line.values.slice(0, T).map((v, i) => `${x(i)},${y(Math.max(-range, Math.min(range, Number.isFinite(v) ? v : 0)))}`).join(' ');
@@ -1700,7 +1824,7 @@ function drawChart(host, { lines, range, height = 200, shade = false, axisLabels
     }
   });
 
-  const ph = svgEl('line', { y1: padT, y2: H - padB, stroke: dark ? '#E7EAF0' : '#161B26', 'stroke-width': 1.5, 'vector-effect': 'non-scaling-stroke' }, svg);
+  const ph = svgEl('line', { y1: padT, y2: H - padB, stroke: playhead || (dark ? '#ECEDEF' : '#161B26'), 'stroke-width': 1.5, 'vector-effect': 'non-scaling-stroke' }, svg);
   playheads.push({ scope, fn: t => {
     const px = x(Math.min(Math.max(0, t), Math.max(0, T - 1)));
     ph.setAttribute('x1', px); ph.setAttribute('x2', px);
@@ -1725,35 +1849,6 @@ function drawChart(host, { lines, range, height = 200, shade = false, axisLabels
   }
 }
 
-function addPins(box) {
-  if (!currentSummary) return;
-  const T = chartSpan();
-  if (!T) return;
-  const row = document.createElement('div');
-  row.className = 'pins';
-  const items = [
-    ...(currentSummary.strong_moments || []).map(m => ({ t: m.start, mid: (m.start + m.end - 1) / 2, hot: true })),
-    ...(currentSummary.weak_moments || []).map(m => ({ t: m.start, mid: (m.start + m.end - 1) / 2, hot: false })),
-  ].sort((a, b) => a.mid - b.mid);
-  let lastPct = -100;
-  items.forEach(it => {
-    const pct = T === 1 ? 0 : (it.mid / (T - 1)) * 100;
-    const button = document.createElement('button');
-    button.className = 'pin' + (it.hot ? ' hot' : '');
-    button.style.left = `${pct}%`;
-    button.dataset.seek = it.t;
-    button.setAttribute('aria-label', `Jump to ${fmt(it.t)}`);
-    if (pct - lastPct > 5) {
-      const span = document.createElement('span');
-      span.textContent = fmt(it.t);
-      button.appendChild(span);
-      lastPct = pct;
-    }
-    row.appendChild(button);
-  });
-  box.prepend(row);
-}
-
 function buildMainChart() {
   if (!currentResult) return;
   clearScope('main');
@@ -1774,13 +1869,11 @@ function buildMainChart() {
   });
   let range = 0;
   lines.forEach(line => { range = Math.max(range, niceRange(line.values)); });
-  drawChart(box, { lines, range, height: 220, shade: true, axisLabels: true, fill: true, span, scope: 'main' });
-  addPins(box);
+  drawChart(box, { lines, range, height: 220, shade: true, axisLabels: true, dark: true, fill: true, span, scope: 'main', yLabels: true });
   const currentKey = `<span class="legend-key" title="${escapeHtml(name)}"><i></i>${escapeHtml(shortName(name))}</span>`;
   const secondKey = secondLabel ? `<span class="legend-key" title="${escapeHtml(secondLabel)}"><i class="dash"></i>${escapeHtml(shortName(secondLabel))}</span>` : '';
   const shadeKey = comparison ? '<span class="legend-key"><i class="swatch"></i>shaded: moments of the solid line</span>' : '';
-  const typicalKey = '<span class="legend-key"><i class="typical"></i>typical</span>';
-  $('chartKeys').innerHTML = currentKey + secondKey + typicalKey + shadeKey;
+  $('chartKeys').innerHTML = secondLabel ? currentKey + secondKey + shadeKey : '';
 }
 
 function stripRange() {
@@ -1830,7 +1923,7 @@ function buildStrips() {
     if (comparison && comparison.result.signals) {
       lines.push({ values: comparison.result.signals[group] || [], colour: 'var(--cool)', dash: true, width: 1.5 });
     }
-    drawChart(chart, { lines, range, height: 78, fill: true, span, scope: 'strips' });
+    drawChart(chart, { lines, range, height: 78, dark: true, fill: true, span, scope: 'strips', playhead: 'rgba(236,237,239,.28)' });
   });
 }
 
@@ -1869,7 +1962,7 @@ function swapParts(group) {
     if (comparison && comparison.result.signals) {
       lines.push({ values: comparison.result.signals[signal] || [], colour: 'var(--cool)', dash: true, width: 1.4 });
     }
-    drawChart(chart, { lines, range: partsRange(group), height: 56, fill: true, span, scope: 'strips-parts' });
+    drawChart(chart, { lines, range: partsRange(group), height: 56, dark: true, fill: true, span, scope: 'strips-parts', playhead: 'rgba(236,237,239,.28)' });
   });
   wrap.append(head, row);
   host.append(wrap);
@@ -2212,6 +2305,7 @@ function resetUI() {
   $('resultMessage').textContent = '';
   $('topArea').replaceChildren();
   $('topArea').classList.remove('compare');
+  updateSoundLine();
   $('chartKeys').replaceChildren();
   $('compareRow').hidden = true;
   $('compareSelect').replaceChildren();

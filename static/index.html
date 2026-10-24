@@ -6,59 +6,59 @@
 <title>NeuroLens</title>
 <link rel="icon" href="data:,">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,600;12..96,700&family=Public+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
   :root {
-    --stage: #0D1320; --stage-2: #151D2E; --stage-text: #E7EAF0; --stage-muted: #8C96A8; --stage-rule: #253049;
-    --paper: #F4F5F7; --surface: #FFFFFF; --ink: #161B26; --ink-2: #5A6272; --ink-3: #8A91A0; --rule: #DADDE3;
-    --heat: #F2711C; --cool: #6B7A99;
-    --display: 'Bricolage Grotesque', system-ui, sans-serif; --text: 'Public Sans', system-ui, sans-serif;
+    --stage: #0E0F11; --stage-2: #17181B; --stage-text: #ECEDEF; --stage-muted: #A0A6AF; --stage-rule: #24262B;
+    --paper: #0E0F11; --surface: #17181B; --ink: #ECEDEF; --ink-2: #B4B9C0; --ink-3: #8A9099; --rule: #24262B;
+    --heat: #FF8A2A; --cool: #6F7E99;
+    --display: 'Geist', system-ui, sans-serif; --text: 'Geist', system-ui, sans-serif;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   [hidden] { display: none !important; }
-  body { background: var(--paper); color: var(--ink); font: 15px/1.55 var(--text); }
+  body { background: var(--paper); color: var(--ink); font: 14px/1.55 var(--text); letter-spacing: -0.003em; }
   a { color: inherit; }
   :focus-visible { outline: 2px solid var(--heat); outline-offset: 2px; }
 
-  .bar { background: var(--stage); color: var(--stage-text); display: flex; align-items: center; gap: 12px; padding: 0 24px; height: 60px; border-bottom: 1px solid var(--stage-rule); }
-  .brand { font: 700 21px/1 var(--display); letter-spacing: -0.01em; margin-right: auto; color: inherit; text-decoration: none; }
-  .btn-white { background: #fff; color: var(--ink); border-radius: 10px; padding: 9px 16px; font-weight: 600; text-decoration: none; display: inline-block; white-space: nowrap; }
-  .btn-white:hover { background: #E7EAF0; }
-  .btn-line { border: 1px solid var(--stage-rule); color: var(--stage-text); border-radius: 10px; padding: 8px 15px; text-decoration: none; display: inline-block; white-space: nowrap; }
-  .btn-line:hover { border-color: var(--heat); }
-  h1 { font: 700 clamp(34px, 4.6vw, 60px)/1.02 var(--display); letter-spacing: -0.025em; }
-  h2 { font: 600 26px/1.15 var(--display); letter-spacing: -0.01em; }
-  h3 { font: 600 17px/1.25 var(--display); }
+  .bar { background: var(--stage); color: var(--stage-text); display: flex; align-items: center; gap: 12px; padding: 0 24px; height: 52px; border-bottom: 1px solid var(--rule); }
+  .brand { font: 600 17px/1 var(--display); letter-spacing: -0.02em; margin-right: auto; color: inherit; text-decoration: none; }
+  .btn-white { background: var(--ink); color: var(--paper); border-radius: 6px; padding: 9px 16px; font-weight: 600; text-decoration: none; display: inline-block; white-space: nowrap; }
+  .btn-white:hover { background: #fff; }
+  .btn-line { border: 1px solid var(--stage-rule); color: var(--stage-text); border-radius: 6px; padding: 8px 15px; text-decoration: none; display: inline-block; white-space: nowrap; }
+  .btn-line:hover { border-color: var(--stage-muted); }
+  h1 { font: 600 clamp(34px, 4.4vw, 58px)/1.02 var(--display); letter-spacing: -0.035em; }
+  h2 { font: 600 26px/1.15 var(--display); letter-spacing: -0.02em; }
+  h3 { font: 600 17px/1.25 var(--display); letter-spacing: -0.02em; }
   .lede { font-size: 17px; color: var(--stage-muted); max-width: 34em; }
   .credit { font-size: 12px; color: var(--stage-muted); }
   .actions { display: flex; gap: 10px; flex-wrap: wrap; }
 
-  .hero { background: var(--stage); color: var(--stage-text); display: grid; grid-template-columns: minmax(320px, 0.9fr) 1.1fr; gap: 48px; padding: 56px 48px; min-height: calc(100vh - 60px); align-items: center; }
+  .hero { background: var(--stage); color: var(--stage-text); display: grid; grid-template-columns: minmax(320px, 0.9fr) 1.1fr; gap: 48px; padding: 56px 48px; min-height: calc(100vh - 52px); align-items: center; }
   .hero-copy { display: flex; flex-direction: column; gap: 22px; }
   .hero-player { display: grid; grid-template-rows: minmax(0, 1fr) minmax(0, 1.25fr); gap: 12px; height: min(80vh, 760px); }
   .hero-player.one { grid-template-rows: 1fr; }
 
-  .video-box { position: relative; background: #000; border-radius: 14px; overflow: hidden; aspect-ratio: 16 / 9; }
+  .video-box { position: relative; background: #000; border-radius: 6px; overflow: hidden; aspect-ratio: 16 / 9; }
   .video-box video { width: 100%; height: 100%; display: block; object-fit: cover; cursor: pointer; }
-  .sound-toggle { position: absolute; right: 12px; bottom: 12px; width: 34px; height: 34px; border: 0; border-radius: 50%; background: #fff; color: var(--ink); display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 2px 8px rgba(0, 0, 0, .35); }
-  .sound-toggle:hover { background: #E7EAF0; }
+  .sound-toggle { position: absolute; right: 12px; bottom: 12px; width: 34px; height: 34px; border: 0; border-radius: 50%; background: var(--ink); color: var(--paper); display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 2px 8px rgba(0, 0, 0, .35); }
+  .sound-toggle:hover { background: #fff; }
   .sound-toggle svg { width: 16px; height: 16px; display: block; }
-  .brain-box { position: relative; background: radial-gradient(ellipse at 50% 45%, #1A2336 0%, #0A0F1A 70%); border-radius: 14px; overflow: hidden; min-height: 200px; }
+  .brain-box { position: relative; background: #15161A; border-radius: 6px; overflow: hidden; min-height: 200px; }
   .brain-box canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
   .brain-message { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 20px; text-align: center; font-size: 13px; color: var(--stage-muted); }
   .brain-legend { position: absolute; left: 14px; bottom: 12px; display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--stage-muted); pointer-events: none; }
   .brain-legend i { width: 86px; height: 6px; border-radius: 3px; background: linear-gradient(90deg, #D9DCE1, #800000 10%, #E61A0A 40%, #FF800A 66%, #FFD926 88%, #FFFFD9); }
   .brain-time { position: absolute; right: 14px; top: 12px; font: 600 13px var(--display); color: var(--stage-muted); font-variant-numeric: tabular-nums; }
   .brain-hint { position: absolute; right: 14px; bottom: 12px; font-size: 11px; color: var(--stage-muted); pointer-events: none; }
-  .coming-soon { background: var(--stage-2); border: 1px solid var(--stage-rule); border-radius: 14px; display: flex; align-items: center; justify-content: center; min-height: 300px; padding: 28px; text-align: center; color: var(--stage-muted); font-size: 15px; }
+  .coming-soon { background: var(--stage-2); border: 1px solid var(--stage-rule); border-radius: 6px; display: flex; align-items: center; justify-content: center; min-height: 300px; padding: 28px; text-align: center; color: var(--stage-muted); font-size: 15px; }
 
-  .how { max-width: 1120px; margin: 0 auto; padding: 72px 48px; display: grid; grid-template-columns: 260px 1fr; gap: 48px; }
+  .how { max-width: 1120px; margin: 0 auto; padding: 72px 48px; background: var(--surface); border-radius: 18px; display: grid; grid-template-columns: 260px 1fr; gap: 48px; }
   .steps { list-style: none; display: grid; gap: 28px; grid-template-columns: repeat(3, 1fr); }
   .steps li { counter-increment: step; }
   .steps { counter-reset: step; }
-  .steps li::before { content: counter(step); display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 50%; background: var(--stage); color: #fff; font: 600 14px/1 var(--display); margin-bottom: 12px; }
+  .steps li::before { content: counter(step); display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 50%; background: var(--ink); color: var(--paper); font: 600 14px/1 var(--display); margin-bottom: 12px; }
   .steps p { color: var(--ink-2); font-size: 14.5px; margin-top: 4px; }
-  .closing { max-width: 1120px; margin: 0 auto 64px; padding: 32px 48px; background: var(--stage); color: var(--stage-text); border-radius: 18px; display: flex; align-items: center; gap: 24px; flex-wrap: wrap; }
+  .closing { max-width: 1120px; margin: 0 auto 64px; padding: 32px 48px; background: var(--surface); color: var(--stage-text); border-radius: 18px; display: flex; align-items: center; gap: 24px; flex-wrap: wrap; }
   .closing h2 { margin-right: auto; }
   footer { border-top: 1px solid var(--rule); padding: 22px 24px; font-size: 12px; color: var(--ink-3); display: flex; gap: 18px; flex-wrap: wrap; }
   footer a { text-decoration: none; }
