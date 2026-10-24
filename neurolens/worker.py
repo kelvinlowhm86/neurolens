@@ -9,7 +9,6 @@ import enum
 import json
 import logging
 import os
-import shutil
 import socket
 import tempfile
 import threading
@@ -364,20 +363,6 @@ def _record_boot(s3, bucket, times):
     _put_boot_json(s3, bucket, f"{socket.gethostname()}-{stamp}", record)
 
 
-def _empty_feature_cache(folder):
-    """Empty the feature cache folder, keeping the folder itself. Never raises."""
-    if folder is None:
-        return
-    try:
-        for entry in Path(folder).iterdir():
-            if entry.is_dir() and not entry.is_symlink():
-                shutil.rmtree(entry)
-            else:
-                entry.unlink(missing_ok=True)
-    except Exception:
-        logger.exception(f"Could not empty the feature cache {folder}")
-
-
 class _Handler(BaseHTTPRequestHandler):
     server_version = "NeuroLensWorker/1"
 
@@ -472,7 +457,6 @@ class _Handler(BaseHTTPRequestHandler):
             logger.exception(f"Invocation for {job_id} failed")
             self._json(500, {"job_id": job_id, "outcome": Outcome.FAILED.value})
         finally:
-            _empty_feature_cache(server.feature_cache)
             server.busy.release()
             if path is not None:
                 Path(path).unlink(missing_ok=True)
@@ -512,8 +496,8 @@ def serve():
     aws = cfg["aws"]
     db = dbmod.from_config(cfg)
     # tribev2 writes each job's extracted features here. In the container ./models is the copy of
-    # the weights SageMaker downloads, which must stay untouched, so use /tmp and empty it per
-    # invocation (the temporary video names never repeat, so nothing in it is reused).
+    # the weights SageMaker downloads, which must stay untouched, so use /tmp. Never empty it
+    # while the process runs: exca creates each subfolder once and remembers it.
     feature_cache = tempfile.mkdtemp(prefix="neurolens-features-")
     inference.load_model(cfg, feature_cache=feature_cache)
     model_loaded = datetime.now(UTC)

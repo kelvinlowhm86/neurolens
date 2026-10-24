@@ -732,12 +732,8 @@ def test_a_busy_container_refuses_a_second_job_but_still_answers_ping(server, fa
     assert fake_handle.calls == [first_job]
 
 
-@pytest.mark.parametrize(
-    "outcome,status",
-    [(worker.Outcome.DONE, 200), (worker.Outcome.FAILED, 500)],
-)
-def test_the_feature_cache_is_emptied_after_an_invocation(
-    aws, db, make_cfg, roi_masks_small, monkeypatch, tmp_path, outcome, status
+def test_a_second_invocation_on_the_same_server_still_works(
+    aws, db, make_cfg, roi_masks_small, monkeypatch, tmp_path
 ):
     cache = tmp_path / "features"
     cache.mkdir()
@@ -750,32 +746,32 @@ def test_the_feature_cache_is_emptied_after_an_invocation(
         roi_masks=roi_masks_small,
         feature_cache=str(cache),
     )
+    created = []
 
     def fake(job_id, video_path, *, s3, db, cfg, roi_masks, keep_alive=None):
-        (cache / "nested").mkdir()
-        (cache / "nested" / "features.npy").write_bytes(b"features")
-        (cache / "video-features.npz").write_bytes(b"features")
-        return outcome
+        if not created:
+            (cache / "extractor").mkdir()
+            created.append(True)
+        (cache / "extractor" / f"{job_id}.npy").write_bytes(b"features")
+        return worker.Outcome.DONE
 
     monkeypatch.setattr(worker, "handle_job", fake)
     thread = threading.Thread(target=instance.serve_forever, daemon=True)
     thread.start()
     try:
-        code, _ = http(
-            instance,
-            "POST",
-            "/invocations",
-            body=b"video",
-            headers={JOB_HEADER: str(uuid.uuid4())},
-        )
-        assert code == status
+        first, second = str(uuid.uuid4()), str(uuid.uuid4())
+        for job_id in (first, second):
+            code, _ = http(
+                instance,
+                "POST",
+                "/invocations",
+                body=b"video",
+                headers={JOB_HEADER: job_id},
+            )
+            assert code == 200
 
-        deadline = time.monotonic() + 2
-        while list(cache.iterdir()) and time.monotonic() < deadline:
-            time.sleep(0.01)
-
-        assert cache.is_dir()
-        assert list(cache.iterdir()) == []
+        assert (cache / "extractor" / f"{first}.npy").exists()
+        assert (cache / "extractor" / f"{second}.npy").exists()
     finally:
         instance.shutdown()
         instance.server_close()
