@@ -11,7 +11,12 @@ ENV NEUROLENS_ROOT=/opt/neurolens \
     NEUROLENS_DEPLOYED=1 \
     HF_HUB_OFFLINE=1 \
     PYTHONUNBUFFERED=1 \
-    UV_OFFLINE=0
+    UV_OFFLINE=0 \
+    UV_TOOL_DIR=/opt/uv-tools
+
+# Every package is resolved as PyPI stood at the day-B build that passed real jobs (M3e §4d), so a
+# rebuild installs the same tested versions. Move it forward only together with a real GPU job.
+ARG PACKAGES_AS_OF=2026-10-23T13:26:00Z
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates ffmpeg git \
@@ -22,8 +27,8 @@ WORKDIR /opt/neurolens
 # Dependencies first, so a code change does not reinstall them.
 COPY pyproject.toml ./
 COPY requirements ./requirements
-RUN pip install --no-cache-dir -r requirements/model.txt \
-    && pip install --no-cache-dir uv
+RUN pip install --no-cache-dir uv==0.12.19 \
+    && uv pip install --system --no-cache --exclude-newer "$PACKAGES_AS_OF" -r requirements/model.txt
 
 COPY worker.py config.json ./
 COPY neurolens ./neurolens
@@ -40,15 +45,15 @@ RUN mkdir -p /opt/ml/model /opt/neurolens/data \
     && ln -s /opt/ml/model/data/hcp_mmp /opt/neurolens/data/hcp_mmp \
     && ln -s /opt/ml/model/data/nilearn /opt/neurolens/data/nilearn
 
-# The WhisperX environment tribev2 runs at run time (`uvx whisperx <wav> ...` in
-# tribev2/eventstransforms.py at the pinned commit). uvx keys its cached environment on the tool
-# name, so any `uvx whisperx` builds the same one; UV_OFFLINE=1 then reuses it. Its model weights
-# are not in the image: they live under HF_HOME/TORCH_HOME, which settings.py points at ./models.
-RUN uvx whisperx --help
+# The WhisperX tool tribev2 runs at run time (`uvx whisperx <wav> ...` in
+# tribev2/eventstransforms.py at the pinned commit); bin/uvx runs this installed copy directly.
+# UV_OFFLINE=1 stays as a guard against any other fetch. Its model
+# weights are not in the image: they live under HF_HOME/TORCH_HOME, which settings.py points at ./models.
+RUN uv tool install --no-cache --exclude-newer "$PACKAGES_AS_OF" whisperx==3.8.6
 
 # WhisperX's alignment splits sentences with NLTK's punkt_tab, which it otherwise downloads on
 # first use at every instance start. Bake it into a folder NLTK searches by default.
-RUN uvx --from whisperx python -c "import nltk; nltk.download('punkt_tab', download_dir='/usr/share/nltk_data', raise_on_error=True)"
+RUN "$UV_TOOL_DIR/whisperx/bin/python" -c "import nltk; nltk.download('punkt_tab', download_dir='/usr/share/nltk_data', raise_on_error=True)"
 
 ENV UV_OFFLINE=1
 

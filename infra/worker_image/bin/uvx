@@ -1,5 +1,13 @@
 #!/bin/sh
-# tribev2 runs `uvx whisperx`, whose own torch bundles a newer cuDNN than the base image's.
-# The base image's LD_LIBRARY_PATH puts its cuDNN (9.1) first, which that torch refuses, so the
-# tool keeps only the GPU driver folders; our own model keeps the image's setting.
-LD_LIBRARY_PATH=/usr/local/nvidia/lib:/usr/local/nvidia/lib64 exec /usr/local/bin/uvx "$@"
+# tribev2 runs `uvx whisperx ...`. This runs the WhisperX tool installed at build time directly,
+# so a job never asks uv to resolve anything (offline, uv would need its package index cache).
+# Anything else tribev2 might run through uvx is not in the image, so it fails loudly here.
+# The tool's own torch bundles a newer cuDNN than the base image's, and the base image's
+# LD_LIBRARY_PATH puts its cuDNN (9.1) first, which that torch refuses, so the tool keeps only the
+# GPU driver folders; our own model keeps the image's setting.
+if [ "$1" != "whisperx" ]; then
+  echo "bin/uvx: only 'uvx whisperx' is installed in this image, got: uvx $*" >&2
+  exit 2
+fi
+shift
+LD_LIBRARY_PATH=/usr/local/nvidia/lib:/usr/local/nvidia/lib64 exec "$UV_TOOL_DIR/whisperx/bin/whisperx" "$@"

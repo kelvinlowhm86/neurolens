@@ -3,3 +3,6 @@
 transformers>=4.45,<5
 # Pinned: neurolens/inference.build_events copies tribev2's event-building steps from this commit.
 tribev2[plotting] @ git+https://github.com/facebookresearch/tribev2.git@af58661791a351a448a489042a28f6c37e1c14b7
+# neuralset splits the transcript into sentences with this spaCy model and downloads it (~400 MB)
+# at first use if it is missing; installing it here keeps every machine from doing that.
+en-core-web-lg @ https://github.com/explosion/spacy-models/releases/download/en_core_web_lg-3.8.0/en_core_web_lg-3.8.0-py3-none-any.whl

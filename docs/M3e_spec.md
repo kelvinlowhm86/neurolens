@@ -93,13 +93,13 @@ The same rules as the old `verify` (length limit first, then record the duration
 - **Base:** AWS's PyTorch inference GPU image for torch 2.6.0, CUDA 12.4, Python 3.12, pinned by digest in the Dockerfile. Our own `ENTRYPOINT ["python", "/opt/neurolens/worker.py"]` with `CMD ["serve"]` replaces its server (SageMaker runs `docker run <image> serve`, which replaces CMD; `serve` in the entry point too would pass it twice).
 - **Contents:**
   - the `neurolens` package;
-  - `requirements/worker.txt` and `requirements/model.txt`;
+  - `requirements/worker.txt` and `requirements/model.txt` (which includes spaCy's `en_core_web_lg`, so no instance downloads it), installed by `uv pip install --exclude-newer` at the date of the day-B build that passed real jobs (`PACKAGES_AS_OF` in the Dockerfile), so a rebuild gets the same versions; `uv` itself is pinned. The date moves forward only together with a real GPU job;
   - ffmpeg;
   - `data/warmup.mp4`;
   - the committed `config.json`, with `NEUROLENS_ROOT=/opt/neurolens` and symlinks `/opt/neurolens/models` → `/opt/ml/model/models` and `/opt/neurolens/data/{hcp_mmp,nilearn}` → `/opt/ml/model/data/…`, so the config's `./models` and `./data` paths reach what SageMaker copies in (`model-data/` mirrors the repo's `models/` and `data/`). The container's start-up fails loudly if `config.json` or the model folder is missing;
-  - the WhisperX tool environment, created at build time with the exact `uvx` command tribev2 runs (so `UV_OFFLINE=1` works at run time).
+  - WhisperX 3.8.6 installed as a uv tool in `UV_TOOL_DIR=/opt/uv-tools` (same date cut-off). tribev2 runs `uvx whisperx`; `bin/uvx` runs that installed copy directly, so a job never asks uv to resolve (offline, uv would need its package index cache) and any other `uvx` call fails loudly;
   - NLTK's `punkt_tab` (WhisperX's sentence splitter) in `/usr/share/nltk_data`, so no instance downloads it;
-  - `bin/uvx` first on `PATH`: it runs the real `uvx` with `LD_LIBRARY_PATH` narrowed to the driver folders, because the WhisperX tool's torch bundles a newer cuDNN than the base image's, which the image's `LD_LIBRARY_PATH` would otherwise load first.
+  - `bin/uvx` first on `PATH`: it runs the installed WhisperX with `LD_LIBRARY_PATH` narrowed to the driver folders, because the WhisperX tool's torch bundles a newer cuDNN than the base image's, which the image's `LD_LIBRARY_PATH` would otherwise load first.
 - **No weights, tokens or secrets** in the image.
 - **Environment at run time:** `HF_HUB_OFFLINE=1`, `UV_OFFLINE=1`, `NEUROLENS_DEPLOYED=1`, `NEUROLENS_ROOT=/opt/neurolens`, and the deployment values from the SageMaker model (§9).
 - **Weights:** SageMaker copies the uncompressed S3 prefix `model-data/` to `/opt/ml/model` when an instance starts. `infra/make_model_data.sh` fills that prefix once, by a server-side copy of `models/` without `*/blobs/*` (the layout the EC2 boot sync produced, including `data/hcp_mmp/`). It checks the object count and total size against the source.
