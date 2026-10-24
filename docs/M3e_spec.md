@@ -47,7 +47,7 @@ The dispatcher Lambda; the container (`neurolens/worker.py` rewritten), its imag
      - otherwise it refunded (too long, or not enough credit) → delete the upload.
   7. **Time left:** `ttl = min(7200, 10800 − seconds since created_at)`. Below 300 → refund `deadline_passed`, delete the upload. This keeps the 4-hour bound of §5 true for a job dispatched late (an outage, redeliveries): its request expires before the reaper may refund it.
   8. `InvokeEndpointAsync(EndpointName, InputLocation="s3://<bucket>/<key>", InferenceId=job_id, CustomAttributes=job_id, ContentType="application/octet-stream", RequestTTLSeconds=ttl, InvocationTimeoutSeconds=3600)`.
-- **Refunds** use `issue_refund(..., queued_before_s=0)`, so a job claimed meanwhile is never refunded.
+- **Refunds** use `issue_refund(..., queued=True)`, so a job claimed meanwhile is never refunded.
 - **Errors:** any other exception (S3, Data API, SageMaker throttling, `ProbeFailed`) propagates, so SQS redelivers the message. The jobs queue's visibility timeout is 1080 s (AWS's rule: at least 6 times the function timeout of 180 s), so a slow run is not redelivered while it is still invoking.
 - **Cancel window:** the jobs queue delays every message by 15 s (`delay_seconds`), so the dispatcher runs at least 15 s after the upload lands and the user can still cancel in that time (§8). A second dispatch of the same job is harmless: `verify_queued` is idempotent (the price difference is then 0), and the container skips a job it cannot claim.
 - **ffprobe:** a static Linux x86-64 ffprobe in a Lambda layer, built by `infra/build_ffprobe_layer.sh` from a pinned release URL with a SHA-256 check. Lambda memory 1024 MB, timeout 180 s (waking Aurora can take about 60 s, then the probe up to 90 s), and `probe_duration`'s ffprobe timeout is a parameter here (90 s).
@@ -162,6 +162,7 @@ The same rules as the old `verify` (length limit first, then record the duration
   A running job dies and is refunded (§5). Uploads are refused while paused (§8).
 - **`start_work.sh`** sets max 1 (the normal state; also what Terraform applies).
   - `--keep-warm --hours N` (1–4): first a one-time scheduled action that sets min back to 0 at the end (`--schedule "at(YYYY-MM-DDThh:mm:ss)"`, UTC), then min 1. In that order, a failure never leaves min 1 without an end. AWS ends a keep-warm without anyone remembering. Running it again moves the end.
+  - Neither script touches Aurora's minimum capacity, and Terraform no longer ignores changes to it.
   - There is no option to keep Aurora awake: Aurora has no scheduled end, so a forgotten one would bill about $40 a month (estimate: 0.5 ACU around the clock), and a demo keeps it awake by itself (it pauses after 5 idle minutes).
 - `debug_worker.sh` is deleted. Container logs are in CloudWatch (`/aws/sagemaker/Endpoints/neurolens`).
 
@@ -202,7 +203,8 @@ The same rules as the old `verify` (length limit first, then record the duration
 
 ## 8. Web
 - **Pause check:** `_endpoint_paused(appscaling, endpoint)` reads `DescribeScalableTargets` for the variant. Max 0, or no target → paused. It replaces `_worker_group_paused`, with the same 503 and the same "could not read" → 500.
-- **Settings:** `NEUROLENS_WORKER_GROUP`/`aws.worker_group` becomes `NEUROLENS_GPU_ENDPOINT`/`aws.gpu_endpoint`, required in Cognito mode.
+- **Settings:** `NEUROLENS_WORKER_GROUP`/`aws.worker_group` becomes `NEUROLENS_GPU_ENDPOINT`/`aws.gpu_endpoint`, required in Cognito mode. `NEUROLENS_SQS_QUEUE_URL`/`aws.sqs_queue_url` is removed (nothing reads it: the queue triggers the dispatcher directly), with its `.env.example` line and the `queue_url`, `queue_arn` and `dlq_url` outputs. The unused `llama_repo_id` and `pre_download_llama` leave `config.json`.
+- **Status and result come from the database alone.** `/status` reports the job's own status, and `/result` (and `/result.csv`) serve only a `done` job; an unfinished job answers `result_not_ready` even if its result object exists. The old crash window (result written, job not yet settled) now closes by itself: nothing refunds after the result is published, and the error handler or the reaper settles such a job (§5). The user waits a few minutes longer in that rare case, the page never shows a result before it is charged, and each status poll makes no S3 call.
 - **Page:**
   - the waiting text for a queued job says the GPU may take up to about 10 minutes to start;
   - the `downloading` stage label is removed;
@@ -211,7 +213,7 @@ The same rules as the old `verify` (length limit first, then record the duration
   - "Show if muted" is enabled again after a failed comparison.
   - `video_changed` reads "The video was replaced after it was checked. Please upload it again." (with "You have not been charged.").
 - **Cancel only before dispatch** (15-s window, §3). Once dispatched, SageMaker starts a GPU for the job whatever happens, so a cancel then would cost a start-up (about $0.70, an estimate) at no cost to the user.
-  - `billing.issue_refund` gains `undispatched_only=False`; with True its guarded update also requires `verified_duration_ms IS NULL`. The cancel route passes True, so the check and the refund are one statement and a cancel racing the dispatcher (which holds the row lock in `verify_queued`) has exactly one winner. A dispatched job → 409 `not_cancellable` ("This analysis has already started.").
+  - `billing.issue_refund`'s queued condition is `queued=True` (any queued job; the old `queued_before_s` age was always 0). It gains `undispatched_only=False`; with True its guarded update also requires `verified_duration_ms IS NULL`. The cancel route passes True, so the check and the refund are one statement and a cancel racing the dispatcher (which holds the row lock in `verify_queued`) has exactly one winner. A dispatched job → 409 `not_cancellable` ("This analysis has already started.").
   - `list_jobs` returns `cancellable` (queued and not dispatched). History's menu shows Cancel only when it is true; the slow-queue text no longer says "you can cancel". `JOB_ACTIVE_MESSAGE` drops "Cancel it first if it hasn't started".
   - Confirm step: the price line ends with "· cancel within 15 s". The page adds "charged only if it succeeds" there only if it does not already say so near the price.
   - After the upload completes, the panel's button reads "Cancel (15)" and counts down each second, then disappears. No extra sentence. A 409 on click removes the button and the progress view carries on, with no error shown.
@@ -261,14 +263,16 @@ The same rules as the old `verify` (length limit first, then record the duration
 - `infra/iam/neurolens-deploy-*.json` gain SageMaker, ECR, CodeBuild and Application Auto Scaling actions scoped to `neurolens*`, and lose EC2/Auto Scaling launch rights;
 - **Application Auto Scaling cannot be scoped by name** (a scalable target's ARN ends in a random id, and policies and scheduled actions have no ARN of their own). The scalable target is tagged `Project=neurolens`; changing actions are allowed on `*` only with `aws:ResourceTag/Project=neurolens` (`aws:RequestTag/Project=neurolens` when registering a new one), checked against the AWS Service Authorization Reference; describes are on `*`;
 - the service-linked role allowed for scaling is `sagemaker.application-autoscaling.amazonaws.com` (`AWSServiceRoleForApplicationAutoScaling_SageMakerEndpoint`);
-- the role boundary gains the SageMaker execution role's, the guard's and CodeBuild's actions (including the base-image pull).
+- the role boundary gains the SageMaker execution role's, the guard's and CodeBuild's actions (including the base-image pull);
+- `neurolens-deploy-compute` loses the rights only the EC2 worker and NAT used: `ec2:GetLaunchTemplateData`, `ec2:GetConsoleOutput`, the instance-profile statement and `iam:ListInstanceProfilesForRole`, and the route-table create/associate/delete actions. It keeps the VPC, subnet, security-group (including rule changes: Terraform removes the default egress rule), tag and describe actions.
 
 ## 10. Scripts, experiments and records
 - **Deleted:** `infra/build_ami.sh`, `infra/pull_code.sh`, `infra/deploy_code.sh`, `infra/neurolens-worker.service`, `infra/terraform/worker_userdata.sh.tftpl`, `infra/debug_worker.sh`, `infra/lambda/breaker.py`.
 - **Boot record:** at start-up the container writes `experiments/boots/<host>-<start time>.json` with `container_start_utc`, `model_loaded_utc`, `warmup_done_utc` and `ready_utc`. Never fatal.
 - **`experiments/cold_start.py`:** one row per scale-out, joining Application Auto Scaling's scaling activities (`describe_scaling_activities`), the boot records, and the first job's `transcribing` start.
 - **`experiments/export_cloudwatch.py`:** the series become `ApproximateBacklogSize` and the instance count (`CPUUtilization` sample count, AWS's documented method).
-- **`experiments/finish_run.py`:** `--ami-id` becomes `--image-digest`.
+- **`experiments/finish_run.py`:** `--ami-id` becomes `--image-digest`, and the manifest's `code_revision` is that digest (it identifies the code exactly; nothing reads S3).
+- **`experiments/cold_start.py`:** the `instance_type` column comes from the run manifest's `environment.instance_type` (the boot record does not know it).
 - **Unchanged:** `latency_run.py` and `latency_breakdown.py` (they use the web API and job stages).
 - **`infra/check_aurora.py`** (the one check of the Data API's value formats): runs `verify_queued` instead of `verify`, drops `release_for_retry`, and checks the types of migration 005's columns too.
 - **Docs:**
