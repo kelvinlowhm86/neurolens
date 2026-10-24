@@ -36,6 +36,7 @@ MAX_ERROR_CHARS = 200  # the job's error_message is shown to the user as is
 MAX_HEARTBEAT_SECONDS = 50
 VIDEO_CHANGED_ALLOWANCE_MS = 1000  # slack between the dispatcher's and the local duration reading
 JOB_HEADER = "X-Amzn-SageMaker-Custom-Attributes"
+BODY_READ_TIMEOUT_S = 60  # a request body that stalls this long gives up and frees the slot
 PORT = 8080
 
 
@@ -443,7 +444,17 @@ class _Handler(BaseHTTPRequestHandler):
             handle = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
             path = handle.name
             handle.close()
-            if self._stream_body(path, length) < length:
+            self.connection.settimeout(BODY_READ_TIMEOUT_S)
+            try:
+                received = self._stream_body(path, length)
+            except TimeoutError:
+                logger.warning(f"Invocation for {job_id} stalled while reading its body")
+                self.close_connection = True  # the rest of the body may still arrive
+                self._json(500, {"job_id": job_id, "outcome": Outcome.FAILED.value})
+                return
+            finally:
+                self.connection.settimeout(None)
+            if received < length:
                 logger.warning(f"Invocation for {job_id} ended before its Content-Length")
                 self._json(500, {"job_id": job_id, "outcome": Outcome.FAILED.value})
                 return

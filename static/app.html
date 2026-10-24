@@ -802,6 +802,7 @@ $('signOut').addEventListener('click', async () => {
 });
 
 const RESULT_DAYS = 30;
+const QUEUED_SLOW_MS = 15 * 60000;
 let historyPollTimer = null, openJobIds = new Set();
 
 async function loadHistory() {
@@ -814,6 +815,10 @@ async function loadHistory() {
     $('historyPanel').classList.add('active');
     $('historyEmpty').hidden = true;
     $('historyNote').textContent = "Couldn't load your earlier analyses.";
+    if (openJobIds.size > 0) {
+      clearTimeout(historyPollTimer);
+      historyPollTimer = setTimeout(loadHistory, POLL_MS);
+    }
   }
 }
 
@@ -953,7 +958,11 @@ function historyDetail(job) {
     return `${day}${cost} · kept until ${expires}`;
   }
   if (job.status === 'failed') return `${day} · ${failureText(job.error_code)}${NOT_CHARGED}`;
-  if (job.status === 'queued') return 'Waiting for the GPU · up to 10 min';
+  if (job.status === 'queued') {
+    return Date.now() - created.getTime() > QUEUED_SLOW_MS
+      ? 'Waiting for the GPU · taking longer than usual, you can cancel'
+      : 'Waiting for the GPU · up to 10 min';
+  }
   if (job.status === 'processing') return 'Analysing';
   return `${day} · ${job.status}`;
 }
@@ -1049,10 +1058,11 @@ async function loadLimits() {
   } catch (e) { return null; }
 }
 const ACCEPTED_TYPES = ['video/mp4', 'video/quicktime', 'video/webm'];
+const EXTENSION_TYPES = { mp4: 'video/mp4', mov: 'video/quicktime', webm: 'video/webm' };
 function estimateCostCents(d) { return 90 * Math.max(1, Math.ceil((d - 0.5) / 30)); }
 
 const uploadZone = $('uploadZone'), fileInput = $('fileInput');
-let pendingFile = null, pendingDuration = 0;
+let pendingFile = null, pendingType = '', pendingDuration = 0;
 ['dragenter','dragover'].forEach(e => uploadZone.addEventListener(e, ev => { ev.preventDefault(); uploadZone.classList.add('dragover'); }));
 ['dragleave','drop'].forEach(e => uploadZone.addEventListener(e, ev => { ev.preventDefault(); uploadZone.classList.remove('dragover'); }));
 uploadZone.addEventListener('drop', ev => { const f = ev.dataTransfer.files; if (f.length) handleFile(f[0]); });
@@ -1079,20 +1089,25 @@ function readDuration(file) {
 
 async function handleFile(file) {
   $('uploadNote').textContent = '';
-  if (!ACCEPTED_TYPES.includes(file.type)) return rejectFile('Unsupported file type. Use MP4, MOV or WebM.');
+  let type = file.type;
+  if (!type) {
+    const ext = file.name.split('.').pop().toLowerCase();
+    type = EXTENSION_TYPES[ext] || '';
+  }
+  if (!ACCEPTED_TYPES.includes(type)) return rejectFile('Unsupported file type. Use MP4, MOV or WebM.');
   if (!limits) await loadLimits();
   if (!limits) return rejectFile("Couldn't reach the server to check the upload limits. Try again.");
   const maxBytes = limits.max_upload_bytes, maxSeconds = limits.max_video_duration_seconds;
   if (maxBytes != null && file.size > maxBytes) return rejectFile(`File is too large (max ${Math.round(maxBytes / 1e6)} MB).`);
   let duration;
   try { duration = await readDuration(file); } catch (e) { return rejectFile("Couldn't read this video."); }
-  if (!Number.isFinite(duration) || duration <= 0) return rejectFile("Couldn't read this video's length.");
+  if (!Number.isFinite(duration) || duration <= 0) return rejectFile("Couldn't read this video's length. Try saving it as MP4.");
   if (duration > maxSeconds) return rejectFile(`Video is too long (${duration.toFixed(0)}s). The maximum is ${maxSeconds}s.`);
-  showConfirm(file, duration);
+  showConfirm(file, duration, type);
 }
 
-function showConfirm(file, duration) {
-  pendingFile = file; pendingDuration = duration;
+function showConfirm(file, duration, type) {
+  pendingFile = file; pendingType = type; pendingDuration = duration;
   setViewName('chooser');
   setChooserTab('analyses');
   uploadZone.classList.add('hidden');
@@ -1116,6 +1131,26 @@ function uploadFailed(message) {
   $('upCancel').textContent = 'Cancel';
 }
 
+const UPLOAD_STALL_MS = 60000;
+async function abandonUpload(jobId, message) {
+  let res;
+  try {
+    res = await postJSON(`/api/jobs/${jobId}/cancel`, {});
+  } catch (e) {
+    uploadFailed(message + ' If it shows in your history as waiting, cancel it there.');
+    return refreshAccount();
+  }
+  if (res.status === 401) return window.location.reload();
+  if (res.ok) {
+    uploadFailed(message + NOT_CHARGED);
+  } else if (res.status === 409) {
+    resetUpload();
+  } else {
+    uploadFailed(message + ' If it shows in your history as waiting, cancel it there.');
+  }
+  refreshAccount();
+}
+
 async function startUpload() {
   const file = pendingFile, duration = pendingDuration;
   pendingCompareId = null;
@@ -1125,7 +1160,7 @@ async function startUpload() {
   let presign;
   try {
     const res = await postJSON('/api/uploads/presign', {
-      filename: file.name, content_type: file.type,
+      filename: file.name, content_type: pendingType,
       client_duration_seconds: duration, client_declared_bytes: file.size,
       research_consent: $('consentBox').checked,
     });
@@ -1140,6 +1175,7 @@ async function startUpload() {
       return uploadFailed(known ? known + NOT_CHARGED : (presign.message || `HTTP ${res.status}`) + NOT_CHARGED);
     }
   } catch (err) { return uploadFailed(`Couldn't start the upload: ${err.message}`); }
+  const jobId = presign.job_id;
   loadBalance();
 
   const fd = new FormData();
@@ -1147,19 +1183,38 @@ async function startUpload() {
   fd.append('file', file);
 
   const xhr = new XMLHttpRequest();
+  let stallTimer = null, finished = false;
+  const clearStallTimer = () => clearTimeout(stallTimer);
+  const armStallTimer = () => {
+    clearStallTimer();
+    stallTimer = setTimeout(() => xhr.abort(), UPLOAD_STALL_MS);
+  };
+  const failUpload = message => {
+    if (finished) return;
+    finished = true;
+    clearStallTimer();
+    abandonUpload(jobId, message);
+  };
   xhr.open('POST', presign.url);
   xhr.upload.onprogress = ev => {
+    if (finished) return;
+    armStallTimer();
     if (!ev.lengthComputable) return;
     $('upBar').style.width = `${Math.round(100 * ev.loaded / ev.total)}%`;
   };
   xhr.onload = () => {
+    if (finished) return;
+    clearStallTimer();
     if (xhr.status === 204) {
+      finished = true;
       $('upBar').style.width = '100%';
       resetUpload();
       refreshAccount();
-    } else { uploadFailed(`Upload failed (HTTP ${xhr.status}).`); }
+    } else { failUpload(`Upload failed (HTTP ${xhr.status}).`); }
   };
-  xhr.onerror = () => uploadFailed('Upload failed: network error.');
+  xhr.onerror = () => failUpload('Upload failed: network error.');
+  xhr.onabort = () => failUpload('Upload failed: no progress for 60 seconds.');
+  armStallTimer();
   $('upMsg').textContent = 'Uploading… keep this page open';
   $('upProgress').classList.add('active');
   xhr.send(fd);
@@ -1167,7 +1222,7 @@ async function startUpload() {
 
 function resetUpload() {
   stopTracking();
-  pendingFile = null; pendingDuration = 0;
+  pendingFile = null; pendingType = ''; pendingDuration = 0;
   $('uploadPanel').classList.remove('active');
   $('uploadNote').textContent = '';
   $('upFileName').textContent = '';
@@ -1361,10 +1416,17 @@ async function showResult(jobId, consented) {
     return false;
   }
   if (seq !== resultSeq) return true;
-  if (res.status === 410) {
+  if (res.status === 401) {
+    window.location.reload();
+    return true;
+  }
+  if (res.status === 403 || res.status === 404 || res.status === 410) {
     const data = await res.json().catch(() => ({}));
     if (seq !== resultSeq) return true;
-    showResultUnavailable(data.message || 'This result was made by an older version of NeuroLens. Upload the video again.');
+    const fallback = res.status === 410
+      ? 'This result was made by an older version of NeuroLens. Upload the video again.'
+      : 'This result is no longer available.';
+    showResultUnavailable(data.message || fallback);
     return true;
   }
   if (!res.ok) return false;

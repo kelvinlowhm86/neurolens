@@ -642,6 +642,36 @@ def test_a_body_shorter_than_its_content_length_is_a_500_and_never_claims(server
     assert fake_handle.calls == []
 
 
+def test_a_body_that_stalls_is_a_500_and_frees_the_busy_lock(server, fake_handle, monkeypatch):
+    monkeypatch.setattr(worker, "BODY_READ_TIMEOUT_S", 0.3)
+    job_id = str(uuid.uuid4())
+    host, port = server.server_address[:2]
+    with socket.create_connection((host, port), timeout=5) as connection:
+        connection.sendall(
+            b"POST /invocations HTTP/1.0\r\n"
+            b"Host: localhost\r\n"
+            + f"{JOB_HEADER}: {job_id}\r\n".encode()
+            + b"Content-Length: 100\r\n"
+            + b"\r\n"
+            + b"0123456789"
+        )
+        response = connection.recv(64 * 1024)
+
+    assert int(response.split(b" ", 2)[1]) == 500
+    assert fake_handle.calls == []
+
+    next_job = str(uuid.uuid4())
+    status = None
+    for _ in range(20):
+        headers = {JOB_HEADER: next_job}
+        status, _ = http(server, "POST", "/invocations", body=b"video", headers=headers)
+        if status != 503:
+            break
+        time.sleep(0.05)
+    assert status == 200
+    assert fake_handle.calls == [next_job]
+
+
 @pytest.mark.parametrize("bad_id", [None, "", "not-a-uuid"])
 def test_a_missing_or_malformed_job_id_is_a_400(server, fake_handle, bad_id):
     headers = {} if bad_id is None else {JOB_HEADER: bad_id}
