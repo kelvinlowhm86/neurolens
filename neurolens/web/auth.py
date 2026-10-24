@@ -17,6 +17,7 @@ from neurolens import settings
 LOCAL_HOST = "127.0.0.1"
 DEFAULT_AUTH = {"mode": "dev", "dev_user_id": "dev-user", "dev_email": "dev@localhost"}
 SESSION_HOURS = 12
+SIGNED_IN_HINT_COOKIE = "nl_signed_in"
 SECRET_PARAMETERS = {
     "client_secret": "/neurolens/web/cognito_client_secret",
     "flask_secret_key": "/neurolens/web/flask_secret_key",
@@ -104,6 +105,26 @@ def start_session(user_id, email):
     session.clear()
     session.permanent = True
     session.update(user_id=user_id, email=email, signed_in_at=int(time.time()))
+
+
+def set_signed_in_hint(response):
+    """The landing page's hint (M3d §8b): no identity, only which buttons show."""
+    response.set_cookie(
+        SIGNED_IN_HINT_COOKIE,
+        "1",
+        max_age=SESSION_HOURS * 3600,
+        secure=current_app.config["SESSION_COOKIE_SECURE"],
+        httponly=False,
+        samesite="Lax",
+        path="/",
+    )
+    return response
+
+
+def clear_signed_in_hint(response):
+    """Delete the landing page's hint whenever the session behind it goes."""
+    response.delete_cookie(SIGNED_IN_HINT_COOKIE, path="/")
+    return response
 
 
 def current_user():

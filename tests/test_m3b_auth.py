@@ -23,7 +23,7 @@ from conftest import (
     WEB_PARAMETERS,
     sign_in,
 )
-from neurolens import settings
+from neurolens import billing, settings
 from neurolens.web.app import create_app
 
 SESSION_KEYS = {"user_id", "email", "signed_in_at"}
@@ -534,3 +534,81 @@ def test_apply_env_maps_neurolens_deployed_to_deployed_true(monkeypatch):
     assert not settings.apply_env({}).get("deployed")
     monkeypatch.setenv("NEUROLENS_DEPLOYED", "1")
     assert settings.apply_env({})["deployed"] is True
+
+
+# ---------------------------------------------------------------- the landing-page hint
+
+
+HINT_COOKIE = "nl_signed_in"
+
+
+def hint_cookie(resp):
+    for cookie in resp.headers.getlist("Set-Cookie"):
+        if cookie.startswith(f"{HINT_COOKIE}="):
+            return cookie
+    return None
+
+
+def cookie_flags(cookie):
+    name_value, *parts = [part.strip() for part in cookie.split(";")]
+    return name_value, {part.split("=")[0].lower(): part for part in parts}
+
+
+def test_sign_in_sets_the_hint_with_the_session_flags(cognito_client, idp):
+    cookie = hint_cookie(sign_in(cognito_client, idp))
+    assert cookie is not None
+    name_value, flags = cookie_flags(cookie)
+    assert name_value == f"{HINT_COOKIE}=1"
+    assert flags["path"].lower() == "path=/"
+    assert flags["max-age"].lower() == f"max-age={12 * HOUR}"
+    assert flags["samesite"].lower() == "samesite=lax"
+    assert "secure" in flags
+    assert "httponly" not in flags
+
+
+def test_logout_deletes_the_hint(cognito_client, idp):
+    sign_in(cognito_client, idp)
+    resp = cognito_client.post("/logout", json={})
+    assert resp.status_code == 200
+    cookie = hint_cookie(resp)
+    assert cookie is not None
+    _, flags = cookie_flags(cookie)
+    assert flags["max-age"].lower() == "max-age=0"
+
+
+def test_account_deletion_deletes_the_hint(cognito_client, idp, monkeypatch):
+    from botocore.client import BaseClient
+
+    real = BaseClient._make_api_call
+
+    def no_users(self, operation_name, api_params):
+        if operation_name == "ListUsers":
+            return {"Users": []}
+        if operation_name == "AdminDeleteUser":
+            return {}
+        return real(self, operation_name, api_params)
+
+    monkeypatch.setattr(BaseClient, "_make_api_call", no_users)
+    sign_in(cognito_client, idp)
+    resp = cognito_client.post("/api/account/delete", json={"confirm": "DELETE"})
+    assert resp.status_code == 200
+    cookie = hint_cookie(resp)
+    assert cookie is not None
+    _, flags = cookie_flags(cookie)
+    assert flags["max-age"].lower() == "max-age=0"
+
+
+def test_a_session_for_a_deleted_user_401s_and_deletes_the_hint(cognito_client, idp, db, pg):
+    sign_in(cognito_client, idp, email="ann@example.com")
+    user_id = pg.one("SELECT user_id FROM users WHERE lower(email) = lower(%s)", "ann@example.com")[
+        "user_id"
+    ]
+    billing.delete_account(db, user_id)
+
+    resp = cognito_client.get("/api/me")
+
+    assert resp.status_code == 401
+    cookie = hint_cookie(resp)
+    assert cookie is not None
+    _, flags = cookie_flags(cookie)
+    assert flags["max-age"].lower() == "max-age=0"

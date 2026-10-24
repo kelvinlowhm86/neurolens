@@ -215,7 +215,8 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
                 )
             if not exists:
                 session.clear()
-                return _error("not_signed_in", "Please sign in.", status=401)
+                response, status = _error("not_signed_in", "Please sign in.", status=401)
+                return auth.clear_signed_in_hint(response), status
         if request.method == "POST" and not request.is_json:
             return _error("json_required", "The request body must be JSON.", status=415)
         return None
@@ -281,12 +282,14 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
                 return _error("sign_in_failed", "Sign-in failed. Please try again.")
             user_id = billing.sign_in(db, claims["iss"], claims["sub"], email, starter_cents)
             auth.start_session(user_id, email)
-            return redirect("/app")
+            return auth.set_signed_in_hint(redirect("/app"))
 
     @app.route("/logout", methods=["POST"])
     def logout():
         session.clear()
-        return jsonify({"logout_url": auth.logout_url(auth_cfg) if cognito else "/"})
+        return auth.clear_signed_in_hint(
+            jsonify({"logout_url": auth.logout_url(auth_cfg) if cognito else "/"})
+        )
 
     @app.route("/api/limits")
     def get_limits():
@@ -731,11 +734,12 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
                 failed = True
         session.clear()
         if failed:
-            return _error(
+            response, status = _error(
                 "login_delete_failed",
                 "Your data has been deleted. Removing your login failed; we have been notified.",
                 status=500,
             )
-        return jsonify({"deleted": True})
+            return auth.clear_signed_in_hint(response), status
+        return auth.clear_signed_in_hint(jsonify({"deleted": True}))
 
     return app

@@ -74,9 +74,6 @@
   .upload-panel .line { font-size: 12px; color: var(--stage-muted); }
   .upload-panel .msg { font-size: 12px; color: var(--stage-muted); }
   .upload-panel .msg.error { color: #FCA5A5; }
-  .status-line { display: flex; align-items: center; gap: 10px; }
-  .status-line .msg { flex: 1; }
-  .status-line .btn-ghost { padding: 4px 10px; font-size: 12px; }
   .consent-row { display: flex; align-items: flex-start; gap: 8px; font-size: 12px; line-height: 1.45; color: var(--stage-muted); }
   .consent-row input { margin-top: 3px; flex-shrink: 0; }
   .consent-row a { color: var(--stage-text); }
@@ -102,6 +99,9 @@
   .history-main { min-width: 0; flex: 1; }
   .history-name { font-weight: 600; word-break: break-all; }
   .history-sub { color: var(--stage-muted); font-size: 11px; margin-top: 2px; }
+  .history-running-bar { position: relative; height: 2px; margin-top: 6px; overflow: hidden; border-radius: 1px; background: var(--stage-rule); }
+  .history-running-bar::before { content: ""; position: absolute; top: 0; bottom: 0; left: -40%; width: 40%; border-radius: 1px; background: var(--heat); animation: history-slide 1.2s linear infinite; }
+  @keyframes history-slide { to { left: 100%; } }
   .history-actions { display: flex; gap: 6px; flex-shrink: 0; align-items: center; }
   .history-link { background: none; border: 0; padding: 0; color: var(--stage-muted); font-size: 11.5px; text-decoration: underline; text-underline-offset: 2px; }
   .history-link:hover { color: var(--stage-text); }
@@ -253,6 +253,7 @@
     .header-meta { display: none; }
   }
   @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto; } }
+  @media (prefers-reduced-motion: reduce) { .history-running-bar::before { animation: none; left: 0; width: 100%; opacity: .6; } }
 </style>
 </head>
 <body>
@@ -306,13 +307,10 @@
           <div class="line" id="upDetail"></div>
           <div class="consent-row" id="consentRow">
             <input type="checkbox" id="consentBox">
-            <label for="consentBox">Keep this video for research for up to 12 months and add its audience retention once it is published (<a href="/static/retention_guide.html">how</a>); without retention, the copy is deleted after 60 days. I own the rights to this video.</label>
+            <label for="consentBox">Keep this video for research (<a href="/static/privacy.html#research" target="_blank" rel="noopener">details</a>). I own the rights to it.</label>
           </div>
           <div class="upload-progress" id="upProgress"><div class="upload-bar" id="upBar"></div></div>
-          <div class="status-line">
-            <div class="msg" id="upMsg"></div>
-            <button class="btn-ghost" id="jobCancel" hidden>Cancel</button>
-          </div>
+          <div class="msg" id="upMsg"></div>
           <div class="actions">
             <button class="btn-white" id="upConfirm">Upload</button>
             <button class="btn-ghost" id="upCancel">Cancel</button>
@@ -326,7 +324,7 @@
         </div>
       </div>
 
-      <div class="tab-panel" id="samplesTab">
+      <div class="tab-panel" id="samplesTab" hidden>
         <div class="samples-section" id="samplesSection">
           <div class="label">Sample videos</div>
           <div class="samples-grid" id="samplesGrid"></div>
@@ -440,12 +438,12 @@ const GROUPS = {
 const SIGNAL_LABELS = { faces: 'Faces', bodies: 'Bodies', scenes: 'Scenes', visual: 'Visual', sound: 'Sound', speech: 'Speech', social: 'Social' };
 const NS = 'http://www.w3.org/2000/svg';
 
-let samplesData = null, jobsCache = [], jobsLoaded = false;
+let samplesData = null, jobsCache = [];
 let currentResult = null, currentSummary = null, currentContext = null;
 let comparison = null, mutedOn = false, resultSeq = 0, compareRequest = 0, pendingCompareId = null;
 let signedIn = false, me = null, limits = null;
 let activeTab = 'analyses', playerOriginTab = 'analyses';
-let videoObjectUrl = null, virtualTime = 0, virtualPlaying = false, virtualAnchor = 0, virtualRaf = 0, videoRaf = 0;
+let virtualTime = 0, virtualPlaying = false, virtualAnchor = 0, virtualRaf = 0, videoRaf = 0;
 let videoJob = null, videoRetried = false, videoRequest = 0, videoPlaying = false;
 let playheads = [];
 
@@ -719,6 +717,8 @@ async function loadBalance() {
 
 const refreshAccount = () => { loadBalance(); loadHistory(); };
 
+const clearSignedInHint = () => { document.cookie = 'nl_signed_in=; Max-Age=0; path=/'; };
+
 const STARTUP_RETRIES = 3, STARTUP_RETRY_MS = 5000;
 function startupFailed() {
   $('startupTitle').textContent = 'Something went wrong';
@@ -733,7 +733,7 @@ async function start(attempt = 0) {
   let res;
   try { res = await fetch('/api/me'); } catch (e) { return startupFailed(); }
   if (res.status === 200) return showApp(await res.json());
-  if (res.status === 401) return showSignedOut();
+  if (res.status === 401) { clearSignedInHint(); return showSignedOut(); }
   if (res.status === 503 && attempt < STARTUP_RETRIES) {
     $('startupText').textContent = 'Waking the database; this can take up to a minute.';
     return setTimeout(() => start(attempt + 1), STARTUP_RETRY_MS);
@@ -744,6 +744,8 @@ $('startupRetry').addEventListener('click', () => start());
 
 function showSignedOut() {
   signedIn = false;
+  clearTimeout(historyPollTimer);
+  openJobIds = new Set();
   closeAccountMenu();
   $('startupPanel').classList.remove('active');
   $('signInPanel').classList.add('active');
@@ -780,7 +782,7 @@ function showApp(meJson) {
   loadLimits();
   loadHistory();
   const jobParam = params.get('job');
-  if (jobParam && /^[0-9a-f-]{36}$/i.test(jobParam)) trackJob(jobParam, null);
+  if (jobParam && /^[0-9a-f-]{36}$/i.test(jobParam)) trackJob(jobParam);
 }
 
 $('signOut').addEventListener('click', async () => {
@@ -800,6 +802,8 @@ $('signOut').addEventListener('click', async () => {
 });
 
 const RESULT_DAYS = 30;
+let historyPollTimer = null, openJobIds = new Set();
+
 async function loadHistory() {
   if (!signedIn) return;
   try {
@@ -813,25 +817,23 @@ async function loadHistory() {
   }
 }
 
-// The open job shown in the upload box is left out, so it never appears twice.
-const inUploadBox = job => job.job_id === trackedJob && (job.status === 'queued' || job.status === 'processing');
-
 function renderHistory(jobs) {
-  jobsCache = jobs; jobsLoaded = true;
+  jobsCache = jobs;
   closeRowMenu();
-  const shown = jobs.filter(job => !inUploadBox(job));
   const list = $('historyList');
-  list.replaceChildren(...shown.map(historyRow));
-  // Hidden when its only job is the one in the upload box; "No analyses yet." only when there are none.
-  $('historyPanel').classList.toggle('active', shown.length > 0 || jobs.length === 0);
-  $('historyEmpty').hidden = shown.length > 0;
+  list.replaceChildren(...jobs.map(historyRow));
+  $('historyPanel').classList.add('active');
+  $('historyEmpty').hidden = jobs.length > 0;
   $('historyNote').textContent = '';
   if (currentResult) showCompareRow();
-}
 
-// Redraws from the last list after the tracked job changes; only once the list has loaded.
-function redrawHistory() {
-  if (signedIn && jobsLoaded) renderHistory(jobsCache);
+  const openNow = new Set(
+    jobs.filter(job => job.status === 'queued' || job.status === 'processing').map(job => job.job_id),
+  );
+  if ([...openJobIds].some(jobId => !openNow.has(jobId))) loadBalance();
+  openJobIds = openNow;
+  clearTimeout(historyPollTimer);
+  if (openNow.size > 0) historyPollTimer = setTimeout(loadHistory, POLL_MS);
 }
 
 // History redraws on every poll, so each job's thumbnail element is made once and reused.
@@ -854,7 +856,8 @@ function historyThumb(job) {
 }
 
 function historyRow(job) {
-  const canOpen = job.result_available || job.status === 'queued' || job.status === 'processing';
+  const running = job.status === 'queued' || job.status === 'processing';
+  const canOpen = !!job.result_available;
   const row = document.createElement('div');
   row.className = 'history-row' + (canOpen ? ' openable' : '');
   if (canOpen) {
@@ -874,7 +877,13 @@ function historyRow(job) {
   name.title = label;
   const sub = document.createElement('div'); sub.className = 'history-sub';
   sub.textContent = historyDetail(job);
-  main.append(name, sub);
+  main.append(name);
+  if (running) {
+    const bar = document.createElement('div');
+    bar.className = 'history-running-bar';
+    main.append(bar);
+  }
+  main.append(sub);
   const actions = document.createElement('div'); actions.className = 'history-actions';
   if (job.needs_retention) {
     const add = document.createElement('button');
@@ -905,7 +914,7 @@ function historyRow(job) {
 
 function openJob(job) {
   resetUI();
-  trackJob(job.job_id, null);
+  trackJob(job.job_id);
 }
 
 async function deleteJob(job) {
@@ -944,6 +953,8 @@ function historyDetail(job) {
     return `${day}${cost} · kept until ${expires}`;
   }
   if (job.status === 'failed') return `${day} · ${failureText(job.error_code)}${NOT_CHARGED}`;
+  if (job.status === 'queued') return 'Waiting for the GPU · up to 10 min';
+  if (job.status === 'processing') return 'Analysing';
   return `${day} · ${job.status}`;
 }
 
@@ -1052,8 +1063,7 @@ $('topUpload').addEventListener('click', () => {
 });
 $('btnNew').addEventListener('click', resetUI);
 $('upConfirm').addEventListener('click', startUpload);
-$('upCancel').addEventListener('click', () => (trackedJob ? resetUI() : resetUpload()));
-$('jobCancel').addEventListener('click', () => { if (trackedJob) cancelJob(trackedJob); });
+$('upCancel').addEventListener('click', resetUpload);
 
 function rejectFile(message) { $('uploadNote').textContent = message; fileInput.value = ''; }
 
@@ -1089,7 +1099,7 @@ function showConfirm(file, duration) {
   $('consentBox').checked = false; $('consentBox').disabled = false;
   $('consentRow').classList.remove('hidden');
   $('upFileName').textContent = file.name;
-  $('upDetail').textContent = `${duration.toFixed(1)} s · ${(file.size / 1e6).toFixed(1)} MB · about ${dollars(estimateCostCents(duration))}, held from your credit and refunded if the analysis fails.`;
+  $('upDetail').textContent = `${duration.toFixed(1)} s · ${(file.size / 1e6).toFixed(1)} MB · ${dollars(estimateCostCents(duration))}`;
   $('upMsg').textContent = ''; $('upMsg').classList.remove('error');
   $('upProgress').classList.remove('active'); $('upBar').style.width = '0';
   $('upConfirm').disabled = false; $('upConfirm').style.display = '';
@@ -1130,7 +1140,7 @@ async function startUpload() {
       return uploadFailed(known ? known + NOT_CHARGED : (presign.message || `HTTP ${res.status}`) + NOT_CHARGED);
     }
   } catch (err) { return uploadFailed(`Couldn't start the upload: ${err.message}`); }
-  refreshAccount();
+  loadBalance();
 
   const fd = new FormData();
   Object.entries(presign.fields).forEach(([k, v]) => fd.append(k, v));
@@ -1145,32 +1155,33 @@ async function startUpload() {
   xhr.onload = () => {
     if (xhr.status === 204) {
       $('upBar').style.width = '100%';
-      $('upConfirm').style.display = 'none';
-      $('headerMeta').textContent = '';
-      trackJob(presign.job_id, file);
+      resetUpload();
+      refreshAccount();
     } else { uploadFailed(`Upload failed (HTTP ${xhr.status}).`); }
   };
   xhr.onerror = () => uploadFailed('Upload failed: network error.');
-  $('upMsg').textContent = 'Uploading...';
+  $('upMsg').textContent = 'Uploading… keep this page open';
   $('upProgress').classList.add('active');
   xhr.send(fd);
 }
 
 function resetUpload() {
   stopTracking();
-  showJobCancel(false);
   pendingFile = null; pendingDuration = 0;
   $('uploadPanel').classList.remove('active');
   $('uploadNote').textContent = '';
+  $('upFileName').textContent = '';
+  $('upDetail').textContent = '';
+  $('upMsg').textContent = '';
+  $('upMsg').classList.remove('error');
+  $('upProgress').classList.remove('active');
+  $('upBar').style.width = '0';
   fileInput.value = '';
   if (signedIn) uploadZone.classList.remove('hidden');
   $('headerMeta').textContent = '';
 }
 
 const POLL_MS = 5000;
-const SLOW_AFTER_MS = 30 * 60 * 1000;
-const STOP_AFTER_MS = 60 * 60 * 1000;
-const STOPPED_TEXT = 'Still not finished. Reload this page (the link keeps your job) to check again.';
 const NOT_CHARGED = ' You have not been charged.';
 function knownFailure(code, message) {
   const maxSeconds = limits ? limits.max_video_duration_seconds : 120;
@@ -1196,30 +1207,8 @@ function knownFailure(code, message) {
   }
 }
 const failureText = (code, message) => knownFailure(code, message) || 'Processing failed.';
-const QUEUED_TEXT = 'The GPU may take up to about 10 minutes to start; you can close this page.';
-// Whole minutes since the job last changed state, so a waiting user sees time pass without a ticking clock.
-function waitedText(since) {
-  const minutes = Math.max(0, Math.floor((Date.now() - Date.parse(since)) / 60000));
-  return minutes < 1 ? 'under a minute' : `${minutes} min`;
-}
-const STEP_TEXT = {
-  transcribing: ['Transcribing the speech, so the model can read the words...', 30],
-  inference_full: ['Predicting brain activity from the picture and the sound...', 55],
-  inference_noaudio: ['Predicting it again without the sound, to measure what the audio adds...', 80],
-  extracting_roi: ['Working out the brain response for each group of signals...', 95],
-  saving_dataset: ['Saving the results...', 98],
-  saving_result: ['Saving the results...', 98],
-};
 window.neurolensTimings = {};
-let trackedJob = null, pollTimer = null, trackStart = 0, pausedPoll = null;
-
-document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible' && pausedPoll) {
-    const resume = pausedPoll;
-    pausedPoll = null;
-    resume();
-  }
-});
+let trackedJob = null, pollTimer = null;
 
 function setParam(name, value) {
   try {
@@ -1233,134 +1222,55 @@ const setJobInUrl = jobId => setParam('job', jobId);
 function stopTracking() {
   trackedJob = null;
   pendingCompareId = null;
-  pausedPoll = null;
   clearTimeout(pollTimer);
   setJobInUrl(null);
-  redrawHistory();
 }
 
-function trackJob(jobId, file) {
+function trackJob(jobId) {
   clearTimeout(pollTimer);
-  trackedJob = jobId; trackStart = Date.now();
+  trackedJob = jobId;
   setJobInUrl(jobId);
-  redrawHistory();
-  setViewName('chooser');
   playerOriginTab = 'analyses';
-  setChooserTab('analyses');
-  if (!file) {
-    uploadZone.classList.add('hidden');
-    $('consentRow').classList.add('hidden');
-    // The name comes from the list when it has loaded, else from the first status poll.
-    const cached = jobsCache.find(j => j.job_id === jobId);
-    const label = cached ? (cached.filename || `Job ${jobId.slice(0, 8)}`) : '';
-    $('upFileName').textContent = label;
-    $('upDetail').textContent = '';
-    $('upConfirm').style.display = 'none';
-    $('uploadPanel').classList.add('active');
-    $('headerMeta').textContent = label;
-  }
-  $('upCancel').textContent = 'Upload another';
-  $('upMsg').classList.remove('error');
-  showJobCancel(false);
-  pollJob(jobId, file);
+  pollJob(jobId);
 }
-
-function showJobMsg(text, isError) {
-  const slow = !isError && Date.now() - trackStart > SLOW_AFTER_MS;
-  $('upMsg').textContent = slow ? `${text} This is taking longer than expected.` : text;
-  $('upMsg').classList.toggle('error', !!isError);
-}
-
-function showJobCancel(show) { $('jobCancel').hidden = !show; }
 
 async function cancelJob(jobId) {
   try {
     const res = await postJSON(`/api/jobs/${jobId}/cancel`, {});
-    const data = await res.json().catch(() => ({}));
     if (res.status === 401) return window.location.reload();
-    if (res.ok) {
-      if (trackedJob === jobId) {
-        clearTimeout(pollTimer);
-        showJobCancel(false);
-        showJobMsg('Cancelled. Your credit is back.');
-      }
-      refreshAccount();
-    } else if (res.status === 409) {
-      if (trackedJob === jobId) {
-        clearTimeout(pollTimer);
-        pollJob(jobId);
-      } else {
-        loadHistory();
-      }
-    } else if (trackedJob === jobId) {
-      showJobMsg(data.message || `Couldn't cancel this job (HTTP ${res.status}).`, true);
-    }
-  } catch (e) {
-    if (trackedJob === jobId) showJobMsg("Couldn't reach the server. Please try again.", true);
-  }
+    if (res.ok) refreshAccount();
+    else if (res.status === 409) loadHistory();
+  } catch (e) { /* the list still shows the job's state */ }
 }
 
-async function pollJob(jobId, file) {
+async function pollJob(jobId) {
   if (trackedJob !== jobId) return;
-  if (Date.now() - trackStart > STOP_AFTER_MS) {
-    showJobCancel(false);
-    $('upProgress').classList.remove('active');
-    return showJobMsg(STOPPED_TEXT);
-  }
-  if (document.visibilityState === 'hidden') {
-    pausedPoll = () => pollJob(jobId, file);
-    return;
-  }
   let again = true;
   try {
     const res = await fetch(`/api/jobs/${jobId}/status`);
     if (trackedJob !== jobId) return;
     if (res.status === 404) {
       again = false;
-      showJobCancel(false);
-      $('upProgress').classList.remove('active');
-      showJobMsg('No such job for this account.', true);
-    } else if (!res.ok) {
-      showJobMsg(`Could not check the job (HTTP ${res.status}). Trying again...`);
-    } else {
+      showResultUnavailable('No such job for this account.');
+    } else if (res.ok) {
       const st = await res.json();
       if (trackedJob !== jobId) return;
-      if (!file) {
-        const label = st.filename || `Job ${jobId.slice(0, 8)}`;
-        $('upFileName').textContent = label; $('headerMeta').textContent = label;
-      }
-      showJobCancel(st.status === 'queued');
       if (st.status === 'done') {
-        again = !(await showResult(jobId, file, st.research_consent));
+        again = !(await showResult(jobId, st.research_consent));
         if (!again) refreshAccount();
       } else if (st.status === 'failed') {
         again = false;
-        $('upProgress').classList.remove('active');
-        showJobMsg(failureText(st.error_code, st.error_message) + NOT_CHARGED, true);
+        showResultUnavailable(failureText(st.error_code, st.error_message) + NOT_CHARGED);
         refreshAccount();
-      } else if (st.status === 'queued') {
-        $('upProgress').classList.remove('active');
-        const waited = waitedText(st.updated_at);
-        showJobMsg(st.attempt > 0
-          ? `Waiting to retry after a problem with the last attempt · ${waited}.`
-          : `Waiting for a GPU · ${waited}. ${QUEUED_TEXT}`);
-      } else {
-        const step = STEP_TEXT[st.stage];
-        $('upProgress').classList.add('active');
-        $('upBar').style.width = `${step ? step[1] : 5}%`;
-        showJobMsg(step ? step[0] : 'Processing...');
       }
     }
-  } catch (e) {
-    showJobMsg('Could not reach the server. Trying again...');
-  }
-  if (again && trackedJob === jobId) pollTimer = setTimeout(() => pollJob(jobId, file), POLL_MS);
+  } catch (e) { /* try again */ }
+  if (again && trackedJob === jobId) pollTimer = setTimeout(() => pollJob(jobId), POLL_MS);
 }
 
 function clearVideoSource() {
   stopVirtual();
   videoJob = null; videoRetried = false; videoRequest += 1; videoPlaying = false;
-  if (videoObjectUrl) { URL.revokeObjectURL(videoObjectUrl); videoObjectUrl = null; }
   video.pause();
   video.removeAttribute('src');
   video.load();
@@ -1411,19 +1321,7 @@ async function loadJobVideo(jobId, seq, resume) {
   return { ok: true };
 }
 
-function setVideoFile(file) {
-  clearVideoSource();
-  videoObjectUrl = URL.createObjectURL(file);
-  video.src = videoObjectUrl;
-  video.muted = true;
-  showVideo(true);
-  const name = videoBaseName(file.name);
-  $('clipTitle').textContent = shortName(name);
-  $('clipTitle').title = name;
-  $('clipCredit').textContent = '';
-}
-
-function showResultUnavailable(message, file) {
+function showResultUnavailable(message) {
   resultSeq += 1;
   stopVirtual();
   currentResult = null; currentSummary = null; currentContext = null; comparison = null;
@@ -1448,67 +1346,55 @@ function showResultUnavailable(message, file) {
   $('timeline').replaceChildren();
   showRetention(null);
   setViewName('player');
-  if (file) setVideoFile(file);
-  else { $('videoMissing').textContent = ''; $('clipTitle').textContent = ''; $('clipTitle').title = ''; $('clipCredit').textContent = ''; }
+  $('videoMissing').textContent = '';
+  $('clipTitle').textContent = '';
+  $('clipTitle').title = '';
+  $('clipCredit').textContent = '';
 }
 
-async function showResult(jobId, file, consented) {
+async function showResult(jobId, consented) {
   const seq = resultSeq;
   let res;
   try {
     res = await fetch(`/api/jobs/${jobId}/result`);
   } catch (e) {
-    showJobMsg('The analysis is done; loading the result...');
     return false;
   }
   if (seq !== resultSeq) return true;
   if (res.status === 410) {
     const data = await res.json().catch(() => ({}));
     if (seq !== resultSeq) return true;
-    $('upProgress').classList.remove('active');
-    showJobMsg('The analysis is done.');
-    showResultUnavailable(data.message || 'This result was made by an older version of NeuroLens. Upload the video again.', file);
+    showResultUnavailable(data.message || 'This result was made by an older version of NeuroLens. Upload the video again.');
     return true;
   }
-  if (!res.ok) {
-    showJobMsg('The analysis is done; loading the result...');
-    return false;
-  }
+  if (!res.ok) return false;
   let result;
   try { result = await res.json(); } catch (e) {
-    showJobMsg('The analysis is done; loading the result...');
     return false;
   }
   if (seq !== resultSeq) return true;
   const t0 = performance.now();
-  $('upProgress').classList.remove('active');
-  showJobMsg(`Done in ${Math.round(result.processing_time_seconds)}s of analysis time.`);
   const cached = jobsCache.find(j => j.job_id === jobId);
-  const title = file ? file.name : (cached && cached.filename ? cached.filename : `Job ${jobId.slice(0, 8)}`);
+  const title = cached && cached.filename ? cached.filename : `Job ${jobId.slice(0, 8)}`;
   showRetention(consented ? jobId : null, title);
-  if (file) setVideoFile(file);
-  else {
-    clearVideoSource();
-    $('videoMissing').textContent = '';
-    setViewName('player');
-    const name = videoBaseName(title);
-    $('clipTitle').textContent = shortName(name);
-    $('clipTitle').title = name;
-    $('clipCredit').textContent = '';
-  }
+  clearVideoSource();
+  $('videoMissing').textContent = '';
+  setViewName('player');
+  const name = videoBaseName(title);
+  $('clipTitle').textContent = shortName(name);
+  $('clipTitle').title = name;
+  $('clipCredit').textContent = '';
   try {
     renderResult(result, result.summary || {}, { jobId, brainUrl: `/api/jobs/${jobId}/brain`, title, fileName: title });
   } catch (e) {
     showResultUnavailable('The result could not be drawn.');
     return true;
   }
-  if (!file) {
-    const seq = resultSeq;
-    loadJobVideo(jobId, seq).then(outcome => {
-      if (!outcome || outcome.ok) return;
-      showVideoMessage(outcome.deleted ? VIDEO_DELETED : VIDEO_UNPLAYABLE);
-    });
-  }
+  const videoSeq = resultSeq;
+  loadJobVideo(jobId, videoSeq).then(outcome => {
+    if (!outcome || outcome.ok) return;
+    showVideoMessage(outcome.deleted ? VIDEO_DELETED : VIDEO_UNPLAYABLE);
+  });
   requestAnimationFrame(() => requestAnimationFrame(() => {
     window.neurolensTimings.render_ms = Math.round(performance.now() - t0);
   }));
@@ -1634,7 +1520,7 @@ function swapComparison() {
   if (!previousId || !otherId) return;
   resetUI();
   pendingCompareId = previousId;
-  trackJob(otherId, null);
+  trackJob(otherId);
 }
 
 function updateSoundLine() {

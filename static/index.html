@@ -7,6 +7,11 @@
 <link rel="icon" href="data:,">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&display=swap" rel="stylesheet">
+<script>
+  if (/(?:^|;\s*)nl_signed_in=1(?:;|$)/.test(document.cookie)) {
+    document.documentElement.classList.add('signed-in');
+  }
+</script>
 <style>
   :root {
     --stage: #0E0F11; --stage-2: #17181B; --stage-text: #ECEDEF; --stage-muted: #A0A6AF; --stage-rule: #24262B;
@@ -32,6 +37,7 @@
   .lede { font-size: 17px; color: var(--stage-muted); max-width: 34em; }
   .credit { font-size: 12px; color: var(--stage-muted); }
   .actions { display: flex; gap: 10px; flex-wrap: wrap; }
+  html.signed-in .explore { display: none; }
 
   .hero { background: var(--stage); color: var(--stage-text); display: grid; grid-template-columns: minmax(320px, 0.9fr) 1.1fr; gap: 48px; padding: 56px 48px; min-height: calc(100vh - 52px); align-items: center; }
   .hero-copy { display: flex; flex-direction: column; gap: 22px; }
@@ -142,6 +148,21 @@
   <span id="footerCredit" hidden></span>
 </footer>
 
+<script>
+  if (document.documentElement.classList.contains('signed-in')) {
+    const $ = id => document.getElementById(id);
+    const top = $('topSignIn');
+    top.textContent = 'Open NeuroLens';
+    top.href = '/app';
+    const hero = $('heroSignIn');
+    hero.textContent = 'Upload a video';
+    hero.href = '/app';
+    hero.className = 'btn-white';
+    const closing = $('closingSignIn');
+    closing.textContent = 'Upload a video';
+    closing.href = '/app';
+  }
+</script>
 <script type="module">
 import { createBrainView, decodeBrain, UNAVAILABLE } from '/static/brain_view.js';
 
@@ -176,22 +197,6 @@ async function loadLimit() {
   if (!Number.isFinite(seconds) || seconds <= 0) return;
   const minutes = Math.max(1, Math.round(seconds / 60));
   $('uploadLimit').textContent = `Any video up to ${minutes} ${minutes === 1 ? 'minute' : 'minutes'}. Sample videos are free to explore without an account.`;
-}
-
-async function loadSignedIn() {
-  try {
-    const res = await fetch('/api/me');
-    if (!res.ok) return;
-    $('topSignIn').textContent = 'Open NeuroLens';
-    $('topSignIn').href = '/app';
-    $('heroSignIn').textContent = 'Upload a video';
-    $('heroSignIn').href = '/app';
-    $('heroSignIn').className = 'btn-white';
-    $('closingSignIn').textContent = 'Upload a video';
-    $('closingSignIn').href = '/app';
-    // Signed in, every button opens /app, so the extra 'Explore samples' would be a duplicate.
-    document.querySelectorAll('.explore').forEach(el => { el.hidden = true; });
-  } catch (error) { /* the landing page works signed out */ }
 }
 
 function showComingSoon() {
@@ -291,7 +296,6 @@ function tick() {
 requestAnimationFrame(tick);
 
 loadHero();
-loadSignedIn();
 loadLimit();
 </script>
 </body>
