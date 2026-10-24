@@ -251,6 +251,13 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
         """Video files, thumbnails and samples.json (laptop; on AWS they come from S3)."""
         return send_from_directory(str(data_dir), filename)
 
+    if not cognito:
+
+        @app.route("/login")
+        def dev_login():
+            """A laptop is always signed in as the dev user: Sign in just opens the app."""
+            return redirect("/app")
+
     if cognito:
 
         @app.route("/login")
