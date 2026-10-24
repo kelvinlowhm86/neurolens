@@ -179,7 +179,7 @@ The same rules as the old `verify` (length limit first, then record the duration
 
 ## 7. Research consent needs the retention curve
 - **Migration `infra/migrations/005_retention_rule.sql`:** `jobs.retention_added_at TIMESTAMPTZ`, `jobs.dataset_removed_at TIMESTAMPTZ`.
-- **Consent box** (one line, replaces M3c §3a's text): "Keep this video for research for up to 12 months and add its audience retention once it is published ([how](/static/retention_guide.html)); without retention, the copy is deleted after 60 days. I own the rights to this video."
+- **Consent box** (one line, replaces M3c §3a's text): "Keep this video for research ([details](/static/privacy.html#research)). I own the rights to it." The privacy page's "Consent for research" section (`id="research"`) states the rules in full: kept up to 12 months; please add its audience retention once published ([how](/static/retention_guide.html)); without retention the copy is deleted 60 days after upload.
 - **Retention upload** (M3c §3c):
   - On success it sets `retention_added_at = now()`.
   - It is refused with 409 `dataset_removed` ("This video's research copy was deleted after 60 days without retention.") when `dataset_removed_at` is set.
