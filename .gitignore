@@ -63,3 +63,6 @@ env/
 Thumbs.db
 .vscode/
 .idea/
+
+# ─── Planning docs (local only) ────────────────────────────────────────────
+/docs/PLAN.md
