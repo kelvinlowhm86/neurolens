@@ -76,11 +76,11 @@ One rule: **behaviour settings are shared; anything specific to a person or a de
     "max_upload_bytes": 300000000
   }
   ```
-- **`.env`** is gitignored and per person (`.env.example` is committed, with placeholders). `KEY=VALUE` lines; blank lines and `#` comments ignored; one pair of surrounding quotes around a value is removed. It holds `HF_TOKEN`, `NEUROLENS_S3_BUCKET`, `NEUROLENS_SQS_QUEUE_URL` and `NEUROLENS_AWS_REGION`. Josh copies the bucket, queue and region from `terraform output`. Later milestones' deployment-specific identifiers follow the same rule (environment variables: `.env` on a laptop, `env.conf` on AWS).
+- **`.env`** is gitignored and per person (`.env.example` is committed, with placeholders). `KEY=VALUE` lines; blank lines and `#` comments ignored; one pair of surrounding quotes around a value is removed. It holds `HF_TOKEN`, `NEUROLENS_S3_BUCKET` and `NEUROLENS_AWS_REGION`. Josh copies the bucket and region from `terraform output`. Later milestones' deployment-specific identifiers follow the same rule (environment variables: `.env` on a laptop, `env.conf` on AWS).
 
 **Loading (`neurolens.settings`).** Entry points (the launcher `app.py`, the worker's `run()`, and `inference.load_model(cfg=None)`) call `load_settings`; `load_config` stays file-only.
 - `load_dotenv(root=None) -> None`: reads `<root>/.env` if it exists (no file is not an error) and sets each variable in `os.environ` **only if it is not already set**, so a real environment variable always wins over the file.
-- `apply_env(cfg: dict) -> dict`: returns a copy of `cfg` with `HF_TOKEN` as `hf_token`, `NEUROLENS_AWS_REGION` as `aws.region`, `NEUROLENS_S3_BUCKET` as `aws.s3_bucket` and `NEUROLENS_SQS_QUEUE_URL` as `aws.sqs_queue_url`, for each of those variables that is set and non-empty (creating the `aws` dict if needed). It never changes its input and adds nothing for an unset variable.
+- `apply_env(cfg: dict) -> dict`: returns a copy of `cfg` with `HF_TOKEN` as `hf_token`, `NEUROLENS_AWS_REGION` as `aws.region`, `NEUROLENS_S3_BUCKET` as `aws.s3_bucket`, for each of those variables that is set and non-empty (creating the `aws` dict if needed). It never changes its input and adds nothing for an unset variable.
 - `load_settings(root=None) -> dict`: `load_dotenv(root)`, then `apply_env(load_config(root))`.
 - `configure_env(cfg, paths)`: `hf_token` in `cfg` is optional; when it is absent `HF_TOKEN` is left as it is (fake mode needs no token).
 - `load_config` raises `FileNotFoundError` naming `config.json` when it is missing.
@@ -169,7 +169,7 @@ Add `max_upload_bytes` to `config.json` as a top-level field alongside `max_vide
 5. **Frontend pre-check.** Read `file.size` before calling `/api/uploads/presign` and reject client-side (UI message only) if it exceeds `max_upload_bytes`, using the existing duration/MIME-check pattern in §6.
 
 ## 5. Worker (`neurolens/worker.py`, launched by root `worker.py`)
-- **Validates the config first**, before loading anything: `run()` raises a clear error naming the missing key if the config lacks `aws.region`, `aws.s3_bucket`, `aws.sqs_queue_url`, `paths.output` or `max_upload_bytes`. `handle_record` resolves and creates the output folder after the size check and **before** the download, so a bad path fails before any expensive work.
+- **Validates the config first**, before loading anything: `run()` raises a clear error naming the missing key if the config lacks `aws.region`, `aws.s3_bucket`, `paths.output` or `max_upload_bytes`. `handle_record` resolves and creates the output folder after the size check and **before** the download, so a bad path fails before any expensive work.
 - Calls `neurolens.inference.load_model()` at startup (log this clearly; in real mode it takes the same 2–5 min the notebook documents on first run)
 - boto3 SQS client, long-polls `receive_message(QueueUrl=..., WaitTimeSeconds=20, MaxNumberOfMessages=1)`
 - Parses the S3 event from the message body with `parse_s3_event` (the SQS message body **is** the raw S3 event JSON when S3 publishes directly to SQS — don't assume an SNS wrapper unless one was added)
@@ -231,7 +231,7 @@ worker.py           NEW launcher
 infra/terraform/    NEW: bucket, queue, notification, lifecycle, CORS; README with state bootstrap + teardown
 tests/              MODIFIED: §6a tests
 config.json         COMMITTED, shared settings only (no secrets or deployment values): max_upload_bytes
-.env.example        NEW: placeholders for HF_TOKEN, NEUROLENS_S3_BUCKET, NEUROLENS_SQS_QUEUE_URL, NEUROLENS_AWS_REGION (config.sample.json is removed)
+.env.example        NEW: placeholders for HF_TOKEN, NEUROLENS_S3_BUCKET, NEUROLENS_AWS_REGION (config.sample.json is removed)
 static/             MODIFIED: presign + direct-upload flow
 requirements/       MODIFIED: boto3 (web, worker), moto (dev)
 ```

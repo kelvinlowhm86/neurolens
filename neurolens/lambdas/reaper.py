@@ -71,7 +71,7 @@ def reap(db, s3, bucket, job):
         db,
         job_id,
         "deadline_passed",
-        queued_before_s=0,
+        queued=True,
         processing_stale_s=HEARTBEAT_STALE_S,
     ):
         logger.warning(f"{job_id}: past the 4-hour deadline, refunded")

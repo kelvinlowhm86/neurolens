@@ -23,20 +23,6 @@ INVOCATION_TIMEOUT_S = 3600
 PRESIGNED_GET_S = 600
 
 
-def _sigv4(**_):
-    return "s3v4"
-
-
-def _presigned_get(s3, bucket, key, expires_in):
-    """A SigV4 presigned GET, as the web app's ``_presigned_get`` does."""
-    s3.meta.events.register_first(
-        "choose-signer.s3.GetObject", _sigv4, unique_id="neurolens-dispatcher-sigv4"
-    )
-    return s3.generate_presigned_url(
-        "get_object", Params={"Bucket": bucket, "Key": key}, ExpiresIn=expires_in
-    )
-
-
 def _created_at(db, job_id):
     with db.transaction() as tx:
         rows = tx.execute(
@@ -52,7 +38,7 @@ def _delete_upload(s3, bucket, key):
 
 def _refund(db, s3, bucket, key, job_id, reason, *, delete=True):
     """Refund a queued job; delete the upload only when the refund really happened."""
-    if not billing.issue_refund(db, job_id, reason, queued_before_s=0):
+    if not billing.issue_refund(db, job_id, reason, queued=True):
         return "skipped"
     logger.warning(f"Refunded {job_id}: {reason}")
     if delete:
@@ -99,7 +85,9 @@ def dispatch(
     if size > max_upload_bytes:
         return _refund(db, s3, bucket, key, job_id, "file_too_large")
 
-    url = _presigned_get(s3, bucket, key, PRESIGNED_GET_S)
+    url = storage.presigned_get(
+        s3, bucket, key, PRESIGNED_GET_S, unique_id="neurolens-dispatcher-sigv4"
+    )
     try:
         duration = probe_duration(url, timeout_s=PROBE_TIMEOUT_S)
     except UnreadableVideo:

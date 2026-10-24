@@ -35,7 +35,7 @@ def reserved_job(db, *, user_id=USER_ID, client_ms=3000):
 
 def failed_job(db):
     job_id = reserved_job(db)
-    assert billing.issue_refund(db, job_id, "stalled", queued_before_s=0) is True
+    assert billing.issue_refund(db, job_id, "stalled", queued=True) is True
     return job_id
 
 

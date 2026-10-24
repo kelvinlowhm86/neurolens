@@ -178,7 +178,7 @@ def test_a_failed_jobs_leftover_files_are_deleted_without_a_second_refund(
 ):
     job_id, key = new_job()
     upload(aws, key)
-    assert billing.issue_refund(db, job_id, "processing_failed", queued_before_s=0) is True
+    assert billing.issue_refund(db, job_id, "processing_failed", queued=True) is True
     ledger = pg.ledger()
 
     run_reaper()
@@ -192,7 +192,7 @@ def test_a_failed_jobs_leftover_files_are_deleted_without_a_second_refund(
 def test_a_failed_job_older_than_two_days_is_not_touched(aws, db, pg, lambda_env, new_job):
     job_id, key = new_job()
     upload(aws, key)
-    assert billing.issue_refund(db, job_id, "processing_failed", queued_before_s=0) is True
+    assert billing.issue_refund(db, job_id, "processing_failed", queued=True) is True
     pg.age(job_id, updated_s=3 * DAY)
     before = pg.snapshot()
 
@@ -222,7 +222,7 @@ def test_a_delete_that_still_fails_makes_the_run_raise(
 ):
     job_id, key = new_job()
     upload(aws, key)
-    assert billing.issue_refund(db, job_id, "processing_failed", queued_before_s=0) is True
+    assert billing.issue_refund(db, job_id, "processing_failed", queued=True) is True
     ledger = pg.ledger()
 
     import boto3

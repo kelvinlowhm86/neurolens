@@ -68,8 +68,8 @@ def load_dotenv(root=None):
 def apply_env(cfg):
     """A copy of cfg with person- and deployment-specific values taken from the environment.
 
-    HF_TOKEN -> hf_token; NEUROLENS_AWS_REGION / NEUROLENS_S3_BUCKET / NEUROLENS_SQS_QUEUE_URL /
-    NEUROLENS_GPU_ENDPOINT -> aws.region / aws.s3_bucket / aws.sqs_queue_url / aws.gpu_endpoint;
+    HF_TOKEN -> hf_token; NEUROLENS_AWS_REGION / NEUROLENS_S3_BUCKET /
+    NEUROLENS_GPU_ENDPOINT -> aws.region / aws.s3_bucket / aws.gpu_endpoint;
     NEUROLENS_DB_CLUSTER_ARN / _SECRET_ARN / _NAME ->
     aws.db_cluster_arn / aws.db_secret_arn / aws.db_name; NEUROLENS_DB_DSN -> db.dsn (a local
     PostgreSQL DSN holds a password, so it never goes in config.json). M3b's web functions:
@@ -85,7 +85,6 @@ def apply_env(cfg):
     for var, section, key in (
         ("NEUROLENS_AWS_REGION", "aws", "region"),
         ("NEUROLENS_S3_BUCKET", "aws", "s3_bucket"),
-        ("NEUROLENS_SQS_QUEUE_URL", "aws", "sqs_queue_url"),
         ("NEUROLENS_GPU_ENDPOINT", "aws", "gpu_endpoint"),
         ("NEUROLENS_DB_CLUSTER_ARN", "aws", "db_cluster_arn"),
         ("NEUROLENS_DB_SECRET_ARN", "aws", "db_secret_arn"),
@@ -171,9 +170,9 @@ def configure_env(cfg, paths):
 # The max duration reflects the target use case (short-form pre-roll / social ad
 # creative). The GPU was chosen for it: memory and job time grow with video length
 # and were measured only up to 120 s. A 120 s 4K video takes about 40-47 minutes, so
-# the idle alarm (90 min, M2a §4f) must stay longer than the slowest job. This is a hard
+# a running job must never be stopped as idle. This is a hard
 # product constraint, independent of billing — it must be enforced
-# regardless of credit balance (see M3a §4a `verify`, which must check this
+# regardless of credit balance (see M3e §3a `verify_queued`, which must check this
 # BEFORE any credit-adjustment logic, not instead of it).
 def max_duration(cfg):
     """Longest accepted video in seconds (120 when unset or when there is no config)."""

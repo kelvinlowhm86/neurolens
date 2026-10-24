@@ -62,14 +62,14 @@ def fake_ffprobe(monkeypatch, stdout):
     monkeypatch.setattr(media.subprocess, "run", run)
 
 
-def test_probe_duration_timeout_is_an_unreadable_video(monkeypatch):
+def test_probe_duration_timeout_is_a_probe_failure(monkeypatch):
     from neurolens import media
 
     def run(*args, **kwargs):
         raise subprocess.TimeoutExpired("ffprobe", 30)
 
     monkeypatch.setattr(media.subprocess, "run", run)
-    with pytest.raises(media.UnreadableVideo):
+    with pytest.raises(media.ProbeFailed):
         media.probe_duration("clip.mp4")
 
 
@@ -99,9 +99,9 @@ def test_probe_duration_ignores_packets_without_a_timestamp(monkeypatch):
     assert media.probe_duration("clip.mp4") == pytest.approx(2.0)
 
 
-def test_probe_duration_with_no_output_is_an_unreadable_video(monkeypatch):
+def test_probe_duration_with_no_output_is_a_probe_failure(monkeypatch):
     from neurolens import media
 
     fake_ffprobe(monkeypatch, "")
-    with pytest.raises(media.UnreadableVideo):
+    with pytest.raises(media.ProbeFailed):
         media.probe_duration("clip.mp4")

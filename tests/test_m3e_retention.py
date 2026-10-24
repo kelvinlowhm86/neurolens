@@ -111,7 +111,7 @@ def test_list_jobs_marks_only_done_consented_jobs_without_a_curve_or_removal(db,
     queued, _ = make_job(db, consent=True, done=False)
     unconsented, _ = make_job(db, consent=False, done=True)
     failed, _ = make_job(db, consent=True, done=False)
-    assert billing.issue_refund(db, failed, "processing_failed", queued_before_s=0) is True
+    assert billing.issue_refund(db, failed, "processing_failed", queued=True) is True
 
     rows = billing.list_jobs(db, WEB_USER_ID, 50)
     by_id = {str(row["job_id"]): row["needs_retention"] for row in rows}

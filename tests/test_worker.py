@@ -665,7 +665,6 @@ def test_a_job_refunded_mid_pipeline_is_a_lost_claim(
 MISSING_KEYS = [
     ("aws", "region"),
     ("aws", "s3_bucket"),
-    (None, "max_upload_bytes"),
     ("worker", "heartbeat_seconds"),
     ("worker", "max_job_minutes"),
 ]

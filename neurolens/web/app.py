@@ -66,11 +66,6 @@ def _old_result():
     )
 
 
-def _job_keys(job):
-    """Every S3 key for one job row (the shared storage.job_keys)."""
-    return storage.job_keys(job["job_id"], job["object_key"])
-
-
 def _endpoint_paused(autoscaling, endpoint):
     """True when the SageMaker endpoint's scalable target has a maximum of 0 (stop_work.sh), so
     no upload could ever run. A missing target counts as paused. Raises if it cannot be read."""
@@ -80,22 +75,6 @@ def _endpoint_paused(autoscaling, endpoint):
         ScalableDimension="sagemaker:variant:DesiredInstanceCount",
     )["ScalableTargets"]
     return not targets or targets[0].get("MaxCapacity", 0) == 0
-
-
-def _presigned_get(s3, bucket, key, expires_in=300):
-    """A presigned GET URL for key, always SigV4.
-
-    boto3 still presigns S3 URLs with the old SigV2 by default; choosing the signer for this one
-    operation keeps the client's endpoint, region and credentials.
-    """
-    s3.meta.events.register_first("choose-signer.s3.GetObject", _sigv4, unique_id="neurolens-sigv4")
-    return s3.generate_presigned_url(
-        "get_object", Params={"Bucket": bucket, "Key": key}, ExpiresIn=expires_in
-    )
-
-
-def _sigv4(**_):
-    return "s3v4"
 
 
 def _s3_client(cfg):
@@ -334,7 +313,7 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
             )
 
         # UX checks only: the browser's numbers can be wrong or spoofed. The real checks are
-        # S3's size cap and the worker's head_object / ffprobe checks (which re-price the job).
+        # S3's size cap and the dispatcher's head_object / ffprobe checks (which re-price the job).
         duration = data.get("client_duration_seconds")
         if not _is_number(duration) or duration < MIN_DURATION_SECONDS:
             return _error(
@@ -405,7 +384,7 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
             presigned = storage.presign_upload(s3, bucket, key, max_bytes)
         except Exception:
             logger.exception(f"Presign failed for {job_id}; refunding its reservation")
-            billing.issue_refund(db, job_id, "presign_failed", queued_before_s=0)
+            billing.issue_refund(db, job_id, "presign_failed", queued=True)
             return _error("presign_failed", "Could not prepare the upload.", status=500)
 
         return jsonify(
@@ -468,43 +447,40 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
         return rows[0], None
 
     def owned_result(job_id):
-        """(result, job, None) for the caller's job, else (None, None, an error response). Served
-        for a done job and for an unfinished one whose result exists (M3a's crash window: the
-        worker wrote it, then died before settling). A refunded job never serves one, even one a
-        late worker wrote."""
+        """(result, job, None) for the caller's done job, else (None, None, an error response).
+        A done job's result is read from S3; any other job answers ``result_not_ready`` without
+        touching S3. A refunded job never serves one, even one a late worker wrote, and a done
+        job whose result has expired answers ``result_expired``."""
         job, error = owned_job(job_id)
         if error:
             return None, None, error
         if job["status"] == billing.FAILED:
             return None, None, _not_found()
+        if job["status"] != billing.DONE:
+            return (
+                None,
+                None,
+                _error("result_not_ready", "The result is not ready yet.", status=404),
+            )
         if s3 is None or not bucket:
             return None, None, _not_configured()
         result = storage.get_result(s3, bucket, job["job_id"])
-        if result is not None:
-            if result.get("format") != 2:
-                return None, None, _old_result()
-            return result, job, None
-        if job["status"] == billing.DONE:
+        if result is None:
             return (
                 None,
                 None,
                 _error("result_expired", f"Results are kept {RESULT_DAYS} days.", status=404),
             )
-        return None, None, _error("result_not_ready", "The result is not ready yet.", status=404)
+        if result.get("format") != 2:
+            return None, None, _old_result()
+        return result, job, None
 
     @app.route("/api/jobs/<job_id>/status")
     def job_status(job_id):
-        """The job as the database has it, except that an unfinished job whose result exists is
-        `done` (a worker crashed between writing the result and settling)."""
+        """The job as the database has it: the database alone decides its status."""
         job, error = owned_job(job_id)
         if error:
             return error
-        status = job["status"]
-        if status in OPEN:
-            if s3 is None or not bucket:
-                return _not_configured()
-            if storage.result_exists(s3, bucket, job["job_id"]):
-                status = billing.DONE
         # Consent gates the retention upload, which needs a done job, so it is reported only then.
         hidden = {
             "object_key",
@@ -517,9 +493,7 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
             for key, value in job.items()
             if key not in hidden and (key != "research_consent" or job["status"] == billing.DONE)
         }
-        return jsonify(
-            {**public, "status": status, "updated_at": storage.utc_text(job["updated_at"])}
-        )
+        return jsonify({**public, "updated_at": storage.utc_text(job["updated_at"])})
 
     @app.route("/api/jobs/<job_id>/result")
     def job_result(job_id):
@@ -552,7 +526,9 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
         key = f"results/{uuid.UUID(job_id)}.brain"
         if not storage.object_exists(s3, bucket, key):
             return _error("brain_missing", "The brain file for this result is missing.", status=404)
-        return redirect(_presigned_get(s3, bucket, key, expires_in=300))
+        return redirect(
+            storage.presigned_get(s3, bucket, key, 300, unique_id="neurolens-web-sigv4")
+        )
 
     @app.route("/api/jobs/<job_id>/thumbnail")
     def job_thumbnail(job_id):
@@ -565,7 +541,9 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
         if s3 is None or not bucket:
             return _not_configured()
         key = f"results/{uuid.UUID(job_id)}.jpg"
-        resp = redirect(_presigned_get(s3, bucket, key, expires_in=300))
+        resp = redirect(
+            storage.presigned_get(s3, bucket, key, 300, unique_id="neurolens-web-sigv4")
+        )
         resp.headers["Cache-Control"] = "private, max-age=300"
         return resp
 
@@ -583,7 +561,9 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
                 return _error("video_deleted", "This video has been deleted.", status=404)
         return jsonify(
             {
-                "url": _presigned_get(s3, bucket, key, expires_in=VIDEO_LINK_SECONDS),
+                "url": storage.presigned_get(
+                    s3, bucket, key, VIDEO_LINK_SECONDS, unique_id="neurolens-web-sigv4"
+                ),
                 "expires_in": VIDEO_LINK_SECONDS,
             }
         )
@@ -600,7 +580,7 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
         if s3 is None or not bucket:
             return _not_configured()
         if not billing.issue_refund(
-            db, job["job_id"], "cancelled", queued_before_s=0, undispatched_only=True
+            db, job["job_id"], "cancelled", queued=True, undispatched_only=True
         ):
             return _error("not_cancellable", "This analysis has already started.", status=409)
         try:

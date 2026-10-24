@@ -15,7 +15,7 @@ NeuroLens predicts brain activity for a video (TRIBE v2) and turns it into a sig
 - Heavy imports (`torch`, `tribev2`, `nilearn`, `huggingface_hub`) only inside functions, never at module top of `neurolens/`.
 - The web code never imports `neurolens.inference` (nor `torch`): analysis happens only in the SageMaker container (`python worker.py serve`; set `FAKE_INFERENCE=1` on a laptop). `create_app(data_dir=None, cfg=None)` never reads `config.json`; the launcher `app.py` loads it.
 - Read config only through `neurolens.settings`. Nothing runs at import time.
-- Settings: `config.json` is committed and shared (behaviour settings only, no secrets). Secrets and deployment-specific values (`HF_TOKEN`, `NEUROLENS_S3_BUCKET`, `NEUROLENS_SQS_QUEUE_URL`, `NEUROLENS_GPU_ENDPOINT`) go in `.env` (git-ignored; copy `.env.example`) and are read through `settings.load_settings`. Never commit `.env`, tokens or AWS keys, and never put them in Docker images.
+- Settings: `config.json` is committed and shared (behaviour settings only, no secrets). Secrets and deployment-specific values (`HF_TOKEN`, `NEUROLENS_S3_BUCKET`, `NEUROLENS_GPU_ENDPOINT`) go in `.env` (git-ignored; copy `.env.example`) and are read through `settings.load_settings`. Never commit `.env`, tokens or AWS keys, and never put them in Docker images.
 - Never edit a test to make it pass: stop and ask.
 - Do not change `extract_response` without regenerating `tests/fixtures/extract_response_golden.json` and saying so.
 - Values rule, do not "fix": `extract_response` gives signed means with no absolute value and no rescaling (0 = typical film/TV viewing, the model's built-in scale), so videos can be compared. The muted (no-audio) series are cut to the shared length of the two passes.

@@ -1,8 +1,8 @@
 """M2b status and result endpoints, rewritten for M3a (Flask test client + moto + PostgreSQL).
 Written from docs/M2b_spec.md §1a (neurolens.web.app routes), §4 and §11, against the
 Aurora-backed endpoints of docs/M3a_spec.md §6 with a seeded job owned by the app's development
-user. A result in S3 still decides `done` for a job that is not yet terminal (the crash window).
-Ownership checks and the refunded-job rules are in tests/test_m3a_web.py.
+user. Status and result come from the database alone: a result in S3 never makes an unfinished job
+look done. Ownership checks and the refunded-job rules are in tests/test_m3a_web.py.
 """
 
 import json
@@ -74,7 +74,7 @@ def format2_result(job_id, **extra):
 # ---------------------------------------------------------------- status
 
 
-def test_status_is_done_when_a_result_exists_even_if_the_job_says_processing(
+def test_status_reports_the_db_status_when_a_result_exists_for_a_processing_job(
     client, aws, db, owned
 ):
     job_id = owned()
@@ -84,17 +84,17 @@ def test_status_is_done_when_a_result_exists_even_if_the_job_says_processing(
     resp = client.get(f"/api/jobs/{job_id}/status")
     assert resp.status_code == 200
     data = resp.get_json()
-    assert data["status"] == "done"
+    assert data["status"] == "processing"
     assert data["job_id"] == job_id
 
 
-def test_status_is_done_when_a_result_exists_for_a_job_still_queued(client, aws, owned):
-    """A crash after the result write but before settlement still reports done."""
+def test_status_reports_the_db_status_when_a_result_exists_for_a_queued_job(client, aws, owned):
+    """A result in S3 never makes a queued job look done."""
     job_id = owned()
     put_json(aws, f"results/{job_id}.json", format2_result(job_id))
     resp = client.get(f"/api/jobs/{job_id}/status")
     assert resp.status_code == 200
-    assert resp.get_json()["status"] == "done"
+    assert resp.get_json()["status"] == "queued"
     assert resp.get_json()["job_id"] == job_id
 
 
@@ -197,8 +197,7 @@ with mock_aws():
     from neurolens.web.app import create_app
     cfg = {
         "paths": {"models": "m", "data": "d"},
-        "aws": {"region": "us-east-1", "s3_bucket": "neurolens-hygiene",
-                "sqs_queue_url": "https://sqs.us-east-1.amazonaws.com/123456789012/q"},
+        "aws": {"region": "us-east-1", "s3_bucket": "neurolens-hygiene"},
         "max_video_duration_seconds": 120,
         "max_upload_bytes": 300000000,
         "response": {"colour_range": 0.5},

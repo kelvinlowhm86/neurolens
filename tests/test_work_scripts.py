@@ -107,12 +107,6 @@ if key == "sagemaker update-endpoint-weights-and-capacities":
     out()
 if key == "sagemaker describe-endpoint":
     out(str(w["instances"]))
-if key == "rds describe-db-clusters":
-    out(w["db_min"])
-if key == "rds modify-db-cluster":
-    cfg = opt("--serverless-v2-scaling-configuration")
-    w["db_min"] = cfg.split("MinCapacity=")[1].split(",")[0]
-    out()
 print("fake aws: unexpected call: " + " ".join(args), file=sys.stderr)
 sys.exit(99)
 """
@@ -125,7 +119,6 @@ def healthy_world(**overrides):
         "target": {"min": 0, "max": 0},
         "instances": 0,
         "scheduled": [],
-        "db_min": "0.0",
         "fail": [],
     }
     world.update(overrides)
@@ -212,7 +205,15 @@ def test_start_plain_sets_the_maximum_to_one(sandbox):
     assert option(call, "--max-capacity") == "1"
     assert option(call, "--min-capacity") in (None, "0")
     assert r.find("application-autoscaling", "put-scheduled-action") == []
-    assert r.find("rds", "modify-db-cluster") == []
+
+
+@pytest.mark.parametrize(
+    "args", [("start_work.sh",), ("start_work.sh", "--keep-warm"), ("stop_work.sh",)]
+)
+def test_the_work_scripts_never_touch_aurora(sandbox, args):
+    r = sandbox(args[0], healthy_world(), *args[1:])
+    assert r.code == 0, r.err
+    assert [c for c in r.calls if c[0] == "rds"] == []
 
 
 def test_keep_warm_sets_min_one_and_a_one_time_action(sandbox):
@@ -261,22 +262,6 @@ def test_start_refuses_keep_db(sandbox):
     assert r.code == 2
     assert r.calls == []
     assert "usage" in r.err
-
-
-def test_keep_db_raises_aurora_without_holding_the_gpu(sandbox):
-    r = sandbox("start_work.sh", healthy_world(), "--keep-db")
-    assert r.code == 0, r.err
-    modify = r.only("rds", "modify-db-cluster")
-    assert "MinCapacity=0.5" in (option(modify, "--serverless-v2-scaling-configuration") or "")
-    assert r.find("application-autoscaling", "put-scheduled-action") == []
-
-
-def test_keep_warm_and_db_do_both_and_never_touch_auroras_maximum(sandbox):
-    r = sandbox("start_work.sh", healthy_world(), "--keep-warm", "--keep-db")
-    assert r.code == 0, r.err
-    assert r.find("application-autoscaling", "put-scheduled-action")
-    modify = r.only("rds", "modify-db-cluster")
-    assert "MaxCapacity" not in " ".join(modify)
 
 
 @pytest.mark.parametrize(
@@ -361,22 +346,6 @@ def test_stop_deletes_any_keep_warm_action(sandbox):
     assert option(deleted, "--scheduled-action-name") == "neurolens-keep-warm-end"
 
 
-def test_stop_resets_aurora_minimum_then_all_stopped(sandbox):
-    r = sandbox("stop_work.sh", healthy_world(db_min="0.5"))
-    modify = r.only("rds", "modify-db-cluster")
-    assert "MinCapacity=0," in (option(modify, "--serverless-v2-scaling-configuration") or "")
-    assert "SecondsUntilAutoPause=300" in (
-        option(modify, "--serverless-v2-scaling-configuration") or ""
-    )
-    assert r.code == 0 and "ALL STOPPED" in r.out
-
-
-def test_stop_never_touches_auroras_maximum(sandbox):
-    r = sandbox("stop_work.sh", healthy_world(db_min="0.5"))
-    modify = r.only("rds", "modify-db-cluster")
-    assert "MaxCapacity" not in " ".join(modify)
-
-
 def test_stop_endpoint_that_never_reaches_zero_is_not_confirmed(sandbox):
     r = sandbox("stop_work.sh", healthy_world(instances=1, stuck=True))
     assert r.code != 0
@@ -392,7 +361,6 @@ def test_stop_endpoint_that_never_reaches_zero_is_not_confirmed(sandbox):
         "application-autoscaling delete-scheduled-action",
         "sagemaker update-endpoint-weights-and-capacities",
         "sagemaker describe-endpoint",
-        "rds modify-db-cluster",
     ],
 )
 def test_stop_failing_call_is_never_all_stopped(sandbox, failing):

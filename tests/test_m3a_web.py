@@ -384,20 +384,13 @@ def test_result_of_a_done_job(aws, client, db):
     assert data == stored
 
 
-def test_result_in_the_crash_window_is_served(aws, client, db):
+def test_result_in_the_crash_window_is_not_served_until_done(aws, client, db):
     job_id = owned_job(db)
     billing.claim(db, job_id)
-    stored = put_result(aws, job_id)
+    put_result(aws, job_id)
     resp = client.get(f"/api/jobs/{job_id}/result")
-    assert resp.status_code == 200
-    data = resp.get_json()
-    assert set(data.pop("summary")) == {
-        "opening",
-        "strong_moments",
-        "weak_moments",
-        "audio_dependence",
-    }
-    assert data == stored
+    assert resp.status_code == 404
+    assert resp.get_json()["error"] == "result_not_ready"
 
 
 @pytest.mark.parametrize("claimed", [False, True], ids=["queued", "processing"])

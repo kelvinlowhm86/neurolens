@@ -2,9 +2,9 @@
 
 Covers: put_result (S3 results, never overwritten), the worker publishing through it and the
 DUPLICATE outcome, and resolve_paths keeping absolute paths. M2b §1a removed the idle exit of
-run() and its tests (no-idle-exit is now tested in tests/test_m2b_shutdown.py), and changed a
-result that exists before any work from DUPLICATE to SKIPPED (§5). Calls use the M3a §5
-signatures (db, heartbeat(on_beat)), with each record's job seeded in PostgreSQL first.
+run() and its tests, and changed a result that exists before any work from DUPLICATE to SKIPPED
+(§5). Calls use the M3a §5 signatures (db, heartbeat(on_beat)), with each record's job seeded in
+PostgreSQL first.
 """
 
 import contextlib
@@ -17,7 +17,6 @@ from neurolens import billing, settings, storage, worker
 from neurolens.worker import Outcome
 
 MODULES = ("neurolens.inference", "neurolens.worker")
-MAX_RECEIVES = 2  # the job queue's maxReceiveCount (M2a §4h); every message here is receive 1
 
 
 def no_keep_alive(on_beat):
@@ -77,16 +76,6 @@ class FailingPut:
 def stored(aws, job_id):
     body = aws.s3.get_object(Bucket=aws.bucket, Key=f"results/{job_id}.json")["Body"]
     return json.loads(body.read())
-
-
-def s3_event(*pairs):
-    return json.dumps(
-        {
-            "Records": [
-                {"s3": {"bucket": {"name": b}, "object": {"key": k, "size": 1}}} for b, k in pairs
-            ]
-        }
-    )
 
 
 # ---------------------------------------------------------------- put_result

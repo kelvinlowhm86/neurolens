@@ -63,8 +63,7 @@ def test_issue_refund_undispatched_only_refuses_a_dispatched_job(db, pg):
     before = pg.snapshot()
 
     assert (
-        billing.issue_refund(db, job_id, "cancelled", queued_before_s=0, undispatched_only=True)
-        is False
+        billing.issue_refund(db, job_id, "cancelled", queued=True, undispatched_only=True) is False
     )
 
     assert pg.snapshot() == before
@@ -74,8 +73,7 @@ def test_issue_refund_undispatched_only_still_refunds_an_undispatched_job(db, pg
     job_id, _ = make_job(db)
 
     assert (
-        billing.issue_refund(db, job_id, "cancelled", queued_before_s=0, undispatched_only=True)
-        is True
+        billing.issue_refund(db, job_id, "cancelled", queued=True, undispatched_only=True) is True
     )
 
     assert pg.job(job_id)["status"] == "failed"
@@ -131,7 +129,7 @@ def test_list_jobs_cancellable_is_true_only_before_dispatch(db):
 
 def test_verify_queued_on_a_cancelled_job_changes_nothing(db, pg):
     job_id, _ = make_job(db)
-    assert billing.issue_refund(db, job_id, "cancelled", queued_before_s=0, undispatched_only=True)
+    assert billing.issue_refund(db, job_id, "cancelled", queued=True, undispatched_only=True)
     before = pg.snapshot()
 
     assert billing.verify_queued(db, job_id, 3000, MAX_S) == "not_queued"

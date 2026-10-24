@@ -12,8 +12,9 @@ and `destroy` removes everything it created. The region is one setting (`region`
 - One S3 bucket: public access blocked, encrypted, HTTPS-only, ACLs disabled, browser upload
   (CORS) from `allowed_origins`, and prefix-scoped expiry (`uploads/` and `results/` after 30 days,
   `dataset/` after 365, `sagemaker-output/` after 1, `build/` after 7, `experiments/` never).
-- One SQS queue (visibility 720 s) and the wiring that sends a message whenever a file lands under
-  `uploads/`. A second queue (`neurolens-jobs-dlq`) receives a job that failed twice.
+- One SQS queue (visibility 1080 s, a 15 s delivery delay) and the wiring that sends a message
+  whenever a file lands under `uploads/`. A second queue (`neurolens-jobs-dlq`) receives a job that
+  failed twice.
 - A VPC with private subnets for Aurora only. No NAT Gateway, no internet gateway, no S3 endpoint:
   Aurora is reached through the Data API, and S3 through its public HTTPS endpoint.
 - Roles: the SageMaker execution role, the CodeBuild role, the dispatcher, the SageMaker error
@@ -96,9 +97,9 @@ terraform apply                                 # again: should report "No chang
 `zones` are the private subnets for Aurora (at least two). `alert_email` receives the alarms;
 click the confirmation email AWS sends or no alarm can reach you.
 
-`terraform output` prints `region`, `bucket_name`, `queue_url`, `gpu_endpoint` and the database
+`terraform output` prints `region`, `bucket_name`, `gpu_endpoint` and the database
 values. Put them in the git-ignored `.env` at the repo root as `NEUROLENS_AWS_REGION`,
-`NEUROLENS_S3_BUCKET`, `NEUROLENS_SQS_QUEUE_URL`, `NEUROLENS_GPU_ENDPOINT`,
+`NEUROLENS_S3_BUCKET`, `NEUROLENS_GPU_ENDPOINT`,
 `NEUROLENS_DB_CLUSTER_ARN`, `NEUROLENS_DB_SECRET_ARN` and `NEUROLENS_DB_NAME`
 (see `.env.example`).
 

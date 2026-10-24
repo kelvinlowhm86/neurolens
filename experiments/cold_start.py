@@ -2,7 +2,8 @@
 
 Joins Application Auto Scaling's scaling activities with the container's own boot record
 (`container_start_utc`, `model_loaded_utc`, `warmup_done_utc`, `ready_utc`) and the first job's
-`transcribing` start. `rows()` is pure; the command line does the AWS calls.
+`transcribing` start. The instance type comes from the run manifest (the boot record has none).
+`rows()` is pure; the command line does the AWS calls.
 
     python experiments/cold_start.py --since 2026-10-14 --run-id 20261014-burst
 """
@@ -55,7 +56,7 @@ def launch_activity(container_start, scaling_activities):
     return max(candidates, default=(None, None), key=lambda pair: pair[0])[1]
 
 
-def rows(boot_records, scaling_activities):
+def rows(boot_records, scaling_activities, instance_type=None):
     """One dict per boot with exactly COLUMNS (missing values None). Pure."""
     out = []
     for boot in boot_records:
@@ -70,7 +71,7 @@ def rows(boot_records, scaling_activities):
             {
                 "boot_utc": _text(launched or container),
                 "trigger": "alarm" if "alarm" in cause else "manual",
-                "instance_type": boot.get("instance_type"),
+                "instance_type": instance_type,
                 "capacity_wait_s": _seconds(launched, container),
                 "container_start_utc": boot.get("container_start_utc"),
                 "model_loaded_utc": boot.get("model_loaded_utc"),
@@ -144,7 +145,11 @@ def main():
     for boot in boots:
         boot["first_job_transcribing_s"] = _first_transcribing_s(boot, jobs)
 
-    result = rows(boots, activities)
+    manifest_text = experiment_runs.get_text(
+        s3, bucket, "experiment-2", args.run_id, "manifest.json"
+    )
+    environment = json.loads(manifest_text)["environment"] if manifest_text else {}
+    result = rows(boots, activities, instance_type=environment.get("instance_type"))
     experiment_runs.put_text(
         s3,
         bucket,

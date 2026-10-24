@@ -308,7 +308,7 @@ source .venv/bin/activate
 #    (requirements/ has one file per machine type; NumPy is pinned in base.txt)
 pip install -e . -r requirements/notebooks.txt
 
-# 4. Put your secrets in .env (git-ignored): HuggingFace token, and later the AWS bucket/queue names.
+# 4. Put your secrets in .env (git-ignored): HuggingFace token, and later the AWS bucket name.
 #    Shared settings live in the committed config.json.
 cp .env.example .env    # then edit .env
 

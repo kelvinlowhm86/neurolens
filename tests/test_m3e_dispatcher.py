@@ -113,7 +113,7 @@ def test_unknown_job_is_skipped_without_touching_the_upload(aws, db, pg, new_key
 def test_a_failed_job_deletes_the_late_upload_and_skips(aws, db, pg, new_job, probe):
     job_id, key = new_job()
     upload(aws, key)
-    billing.issue_refund(db, job_id, "cancelled", queued_before_s=0)
+    billing.issue_refund(db, job_id, "cancelled", queued=True)
     calls = probe()
     sagemaker = RecordingSageMaker()
     assert dispatch(aws, db, key, sagemaker=sagemaker) == "skipped"

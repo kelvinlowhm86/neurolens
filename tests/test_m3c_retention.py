@@ -269,7 +269,7 @@ def test_retention_before_the_job_is_done_is_409_job_not_done(client, aws, db, p
 
 def test_retention_on_a_failed_job_is_409_job_not_done(client, aws, db):
     job_id, _ = make_job(db, consent=True, done=False)
-    assert billing.issue_refund(db, job_id, "unreadable_video", queued_before_s=0) is True
+    assert billing.issue_refund(db, job_id, "unreadable_video", queued=True) is True
     resp = client.post(f"/api/jobs/{job_id}/retention", json={"report": report_text(valid_rows(3))})
     assert resp.status_code == 409
     assert resp.get_json()["error"] == "job_not_done"

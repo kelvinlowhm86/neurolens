@@ -2,7 +2,7 @@
 # Fills s3://<bucket>/model-data/ once (docs/M3e_spec.md §4d). SageMaker copies that prefix,
 # uncompressed, to /opt/ml/model when an instance starts. It is a server-side copy of the
 # existing models/ prefix without HuggingFace's blobs/ (snapshots/ holds full copies), keeping
-# the layout the old EC2 boot sync produced, including data/hcp_mmp/.
+# the prefix's own layout, including data/hcp_mmp/.
 set -euo pipefail
 
 ROOT=$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)

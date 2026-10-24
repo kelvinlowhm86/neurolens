@@ -11,7 +11,7 @@ from botocore.client import BaseClient
 from botocore.exceptions import ClientError
 from conftest import STARTER_CENTS, WEB_USER_ID, sign_in
 from neurolens import billing, storage
-from neurolens.web.app import _job_keys, create_app
+from neurolens.web.app import create_app
 
 
 @pytest.fixture
@@ -73,11 +73,11 @@ def object_exists(aws, key):
     return True
 
 
-def test_job_keys_lists_both_brain_keys():
+def test_storage_lists_both_brain_keys():
     job_id = str(uuid.uuid4())
     job = {"job_id": job_id, "object_key": f"uploads/{WEB_USER_ID}/{job_id}.mp4"}
 
-    keys = _job_keys(job)
+    keys = storage.job_keys(job["job_id"], job["object_key"])
 
     assert f"results/{job_id}.brain" in keys
     assert f"dataset/{job_id}/brain" in keys

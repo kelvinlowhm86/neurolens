@@ -52,6 +52,19 @@ def presign_upload(s3, bucket, object_key, max_bytes, expires_in=300):
     return {"url": post["url"], "fields": post["fields"], "expires_in": expires_in}
 
 
+def _sigv4(**_):
+    return "s3v4"
+
+
+def presigned_get(s3, bucket, key, expires_in, unique_id):
+    """A presigned GET URL for key, always SigV4. `unique_id` names the event handler, so each
+    caller keeps its own copy on its own client."""
+    s3.meta.events.register_first("choose-signer.s3.GetObject", _sigv4, unique_id=unique_id)
+    return s3.generate_presigned_url(
+        "get_object", Params={"Bucket": bucket, "Key": key}, ExpiresIn=expires_in
+    )
+
+
 def parse_s3_event(body):
     """(bucket, key) for every record under uploads/. Anything else gives no records.
 

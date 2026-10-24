@@ -191,7 +191,7 @@ def test_a_terminal_job_is_skipped_and_a_failed_one_loses_its_upload(
     upload(aws, key, clip_path)
     verify(db, job_id)
     if terminal == "failed":
-        billing.issue_refund(db, job_id, "cancelled", queued_before_s=0)
+        billing.issue_refund(db, job_id, "cancelled", queued=True)
     else:
         billing.settle_success(db, job_id)
     before = pg.snapshot()

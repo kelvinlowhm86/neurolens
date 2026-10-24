@@ -29,7 +29,6 @@ logger = logging.getLogger("neurolens")
 REQUIRED_CONFIG = [
     (("aws", "region"), "aws.region (NEUROLENS_AWS_REGION)"),
     (("aws", "s3_bucket"), "aws.s3_bucket (NEUROLENS_S3_BUCKET)"),
-    (("max_upload_bytes",), "max_upload_bytes"),
     (("worker", "heartbeat_seconds"), "worker.heartbeat_seconds"),
     (("worker", "max_job_minutes"), "worker.max_job_minutes"),
 ]

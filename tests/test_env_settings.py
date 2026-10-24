@@ -20,7 +20,6 @@ ENV_TO_KEY = {
     "HF_TOKEN": ("hf_token",),
     "NEUROLENS_AWS_REGION": ("aws", "region"),
     "NEUROLENS_S3_BUCKET": ("aws", "s3_bucket"),
-    "NEUROLENS_SQS_QUEUE_URL": ("aws", "sqs_queue_url"),
     "NEUROLENS_GPU_ENDPOINT": ("aws", "gpu_endpoint"),
     # M3a §3a / §9: the database's deployment-specific identifiers
     "NEUROLENS_DB_CLUSTER_ARN": ("aws", "db_cluster_arn"),
@@ -237,15 +236,13 @@ def root(tmp_path, real_dotenv):
 def test_load_settings_overlays_dotenv_on_config_json(root):
     write_env(
         root,
-        "HF_TOKEN=hf_fake\nNEUROLENS_S3_BUCKET=my-bucket\n"
-        "NEUROLENS_SQS_QUEUE_URL=https://q.example/1\nNEUROLENS_AWS_REGION=eu-west-1\n",
+        "HF_TOKEN=hf_fake\nNEUROLENS_S3_BUCKET=my-bucket\nNEUROLENS_AWS_REGION=eu-west-1\n",
     )
     cfg = settings.load_settings(root)
     assert cfg["hf_token"] == "hf_fake"
     assert cfg["aws"] == {
         "region": "eu-west-1",
         "s3_bucket": "my-bucket",
-        "sqs_queue_url": "https://q.example/1",
     }
     assert cfg["paths"] == FILE_CFG["paths"]
     assert cfg["max_upload_bytes"] == FILE_CFG["max_upload_bytes"]
@@ -257,11 +254,11 @@ def test_load_settings_without_dotenv_or_env_equals_load_config(root):
 
 
 def test_load_settings_real_environment_beats_dotenv(root, monkeypatch):
-    write_env(root, "NEUROLENS_S3_BUCKET=from-file\nNEUROLENS_SQS_QUEUE_URL=u-file\n")
+    write_env(root, "NEUROLENS_S3_BUCKET=from-file\nNEUROLENS_AWS_REGION=eu-west-1\n")
     monkeypatch.setenv("NEUROLENS_S3_BUCKET", "from-environment")
     cfg = settings.load_settings(root)
     assert cfg["aws"]["s3_bucket"] == "from-environment"
-    assert cfg["aws"]["sqs_queue_url"] == "u-file"
+    assert cfg["aws"]["region"] == "eu-west-1"
 
 
 def test_load_settings_defaults_root_to_get_root(root, monkeypatch):
@@ -428,7 +425,6 @@ def test_env_example_is_committed_with_placeholders():
     for name in (
         "HF_TOKEN",
         "NEUROLENS_S3_BUCKET",
-        "NEUROLENS_SQS_QUEUE_URL",
         "NEUROLENS_DB_CLUSTER_ARN",
         "NEUROLENS_DB_SECRET_ARN",
         "NEUROLENS_DB_NAME",
@@ -443,7 +439,7 @@ def test_env_example_can_be_parsed_by_load_dotenv(tmp_path, real_dotenv, monkeyp
     """The example file must be valid input (placeholders only) for the real parser."""
     import os
 
-    for name in ("HF_TOKEN", "NEUROLENS_S3_BUCKET", "NEUROLENS_SQS_QUEUE_URL"):
+    for name in ("HF_TOKEN", "NEUROLENS_S3_BUCKET"):
         monkeypatch.setenv(name, "x")
         monkeypatch.delenv(name)
     (tmp_path / ".env").write_text((REPO_ROOT / ".env.example").read_text())

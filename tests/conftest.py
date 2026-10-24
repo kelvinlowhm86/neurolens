@@ -1,6 +1,6 @@
 """Shared fixtures for the M1 tests (docs/M1_spec.md section 6a).
 
-Everything AWS-related runs against moto, an in-memory fake of S3 and SQS. Fake credentials
+Everything AWS-related runs against moto, an in-memory fake of S3. Fake credentials
 are set for every test so that an accidental real AWS call fails instead of costing money.
 
 M3a (docs/M3a_spec.md §10): database tests run against a real PostgreSQL 16 named by
@@ -67,7 +67,6 @@ ENV_SETTING_VARS = [
     "HF_TOKEN",
     "NEUROLENS_AWS_REGION",
     "NEUROLENS_S3_BUCKET",
-    "NEUROLENS_SQS_QUEUE_URL",
     "NEUROLENS_GPU_ENDPOINT",  # M3e: aws.gpu_endpoint
     "NEUROLENS_DEPLOYED",  # M3e: marks a deployed (Cognito) web app
     "NEUROLENS_DB_CLUSTER_ARN",  # M3a §3a: aws.db_cluster_arn
@@ -98,16 +97,14 @@ def isolate_env_settings(monkeypatch):
 
 @pytest.fixture
 def aws():
-    """A moto S3 bucket and SQS queue, plus boto3 clients for them."""
+    """A moto S3 bucket plus a boto3 client for it."""
     import boto3
     from moto import mock_aws
 
     with mock_aws():
         s3 = boto3.client("s3", region_name="us-east-1")
         s3.create_bucket(Bucket=BUCKET)
-        sqs = boto3.client("sqs", region_name="us-east-1")
-        queue_url = sqs.create_queue(QueueName="neurolens-test-queue")["QueueUrl"]
-        yield SimpleNamespace(s3=s3, sqs=sqs, bucket=BUCKET, queue_url=queue_url)
+        yield SimpleNamespace(s3=s3, bucket=BUCKET)
 
 
 @pytest.fixture
@@ -123,13 +120,10 @@ def make_cfg(aws, tmp_path):
             },
             "model": {
                 "repo_id": "facebook/tribev2",
-                "llama_repo_id": "meta-llama/Llama-3.2-3B",
-                "pre_download_llama": False,
             },
             "aws": {
                 "region": "us-east-1",
                 "s3_bucket": aws.bucket,
-                "sqs_queue_url": aws.queue_url,
             },
             "hf_download_timeout": 300,
             "max_video_duration_seconds": 120,

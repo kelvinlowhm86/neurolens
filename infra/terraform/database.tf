@@ -57,12 +57,6 @@ resource "aws_rds_cluster" "db" {
   apply_immediately        = true
 
   tags = { Milestone = "M3a" }
-
-  lifecycle {
-    # start_work.sh --keep-worker-and-db raises the minimum and stop_work.sh lowers it again;
-    # Terraform must not fight them.
-    ignore_changes = [serverlessv2_scaling_configuration[0].min_capacity]
-  }
 }
 
 resource "aws_rds_cluster_instance" "db" {
@@ -97,11 +91,10 @@ locals {
 }
 
 # Forgotten-database alarm (M3b §6): awake in more than 30% of the minutes of each of 6 hours in a
-# row means something keeps it awake (a forgotten stop_work.sh or --keep-worker-and-db, an open tab, a
-# retrying Lambda): about $1.40 a day at 0.5 ACU. The metric reads 0 while paused, so the hourly 70th
-# percentile of its per-minute values is above 0 exactly when it was awake for over 30% of the hour,
-# whatever capacity it ran at. A reaper wake (about 11 minutes, measured) stays below that; a
-# caller every 12 minutes (about 45%) and a held minimum (100%) are above it.
+# row means something keeps it awake (an open tab, a retrying Lambda): about $1.40 a day at 0.5 ACU.
+# The metric reads 0 while paused, so the hourly 70th percentile of its per-minute values is above 0
+# exactly when it was awake for over 30% of the hour, whatever capacity it ran at. A reaper wake
+# (about 11 minutes, measured) stays below that; a caller every 12 minutes (about 45%) is above it.
 resource "aws_cloudwatch_metric_alarm" "db_awake_long" {
   alarm_name        = "neurolens-db-awake-6h"
   alarm_description = "NeuroLens Aurora has been awake for a large share (over 30%) of each of the last 6 hours (about $1.40 a day while awake). Run infra/stop_work.sh; if it stays awake, look for whatever keeps calling it (an open page, a Lambda retrying: see /aws/lambda/neurolens-*)."

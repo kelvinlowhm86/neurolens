@@ -1,22 +1,10 @@
 # Put these in the git-ignored .env at the repo root (bucket_name -> NEUROLENS_S3_BUCKET,
-# queue_url -> NEUROLENS_SQS_QUEUE_URL, gpu_endpoint -> NEUROLENS_GPU_ENDPOINT,
+# gpu_endpoint -> NEUROLENS_GPU_ENDPOINT,
 # db_cluster_arn / db_secret_arn / db_name ->
 # NEUROLENS_DB_CLUSTER_ARN / NEUROLENS_DB_SECRET_ARN / NEUROLENS_DB_NAME).
 
 output "bucket_name" {
   value = aws_s3_bucket.main.bucket
-}
-
-output "queue_url" {
-  value = aws_sqs_queue.jobs.url
-}
-
-output "queue_arn" {
-  value = aws_sqs_queue.jobs.arn
-}
-
-output "dlq_url" {
-  value = aws_sqs_queue.jobs_dlq.url
 }
 
 output "gpu_endpoint" {

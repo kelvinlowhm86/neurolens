@@ -42,6 +42,7 @@ JOB_KEYS = {
     "captured_cents",
     "error_code",
     "result_available",
+    "cancellable",
 }
 DAY = 24 * 3600
 
@@ -305,32 +306,23 @@ ROUTES = ["result", "result.csv"]
 
 
 @pytest.mark.parametrize("route", ROUTES)
-def test_a_processing_job_whose_result_exists_serves_it(aws, client, db, route):
-    """M3a's crash window: the worker wrote the result, then died before settling."""
+def test_a_processing_job_whose_result_exists_is_404_result_not_ready(aws, client, db, route):
+    """The database alone decides: a result object is not served before the job is done."""
     job_id = owned_job(db)
     billing.claim(db, job_id)
-    result = put_result(aws, job_id)
+    put_result(aws, job_id)
     resp = client.get(f"/api/jobs/{job_id}/{route}")
-    assert resp.status_code == 200
-    if route == "result":
-        data = resp.get_json()
-        assert set(data.pop("summary")) == {
-            "opening",
-            "strong_moments",
-            "weak_moments",
-            "audio_dependence",
-        }
-        assert data == result
-    else:
-        rows = parse_csv(resp.get_data(as_text=True))
-        assert rows[1:] == [expected_cells(t) for t in range(result["duration_seconds"])]
+    assert resp.status_code == 404
+    assert resp.get_json()["error"] == "result_not_ready"
 
 
 @pytest.mark.parametrize("route", ROUTES)
-def test_a_queued_job_whose_result_exists_serves_it(aws, client, db, route):
+def test_a_queued_job_whose_result_exists_is_404_result_not_ready(aws, client, db, route):
     job_id = owned_job(db)
     put_result(aws, job_id)
-    assert client.get(f"/api/jobs/{job_id}/{route}").status_code == 200
+    resp = client.get(f"/api/jobs/{job_id}/{route}")
+    assert resp.status_code == 404
+    assert resp.get_json()["error"] == "result_not_ready"
 
 
 @pytest.mark.parametrize("route", ROUTES)

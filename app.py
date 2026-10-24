@@ -1,7 +1,7 @@
 """NeuroLens launcher: builds the Flask app from config.json and serves it.
 
 The code lives in the neurolens/ package; this file is kept so `python app.py` still works.
-The web app never runs the model: start the worker (`python worker.py`) for analysis.
+The web app never runs the model: start the container (`python worker.py serve`) for analysis.
 """
 
 import logging

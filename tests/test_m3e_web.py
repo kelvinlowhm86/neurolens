@@ -40,7 +40,6 @@ def signed_in_with(aws, db, cognito_cfg, cognito_app, idp, monkeypatch):
     def make(appscaling):
         cfg = cognito_cfg()
         cfg["aws"]["gpu_endpoint"] = ENDPOINT
-        cfg["aws"].pop("worker_group", None)
         real_client = boto3.client
 
         def client(service_name, *args, **kwargs):

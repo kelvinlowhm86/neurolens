@@ -152,7 +152,7 @@ def test_delete_account_removes_every_row_and_keeps_other_users_intact(db, pg):
     other = billing.sign_in(db, ISSUER, "sub-o", "other@example.com", STARTER_CENTS)
     done, _ = reserve_job(db, target)
     failed, _ = reserve_job(db, target, done=False)
-    assert billing.issue_refund(db, failed, "unreadable_video", queued_before_s=0) is True
+    assert billing.issue_refund(db, failed, "unreadable_video", queued=True) is True
     other_job, _ = reserve_job(db, other)
     check_invariants(pg.conn)
 

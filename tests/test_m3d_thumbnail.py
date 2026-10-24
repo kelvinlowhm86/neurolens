@@ -267,7 +267,7 @@ def seed_files(aws, job_id, key):
     return keys
 
 
-def test_job_keys_includes_the_thumbnail():
+def test_storage_includes_the_thumbnail():
     job_id = str(uuid.uuid4())
 
     keys = storage.job_keys(job_id, f"uploads/{WEB_USER_ID}/{job_id}.mp4")

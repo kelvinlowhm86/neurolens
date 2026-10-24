@@ -141,7 +141,7 @@ def smoke(db):
         billing.reserve(
             db, user_id, refunded, f"uploads/{user_id}/{refunded}.mp4", "smoke-2.mp4", 27400
         )
-        if not billing.issue_refund(db, refunded, "presign_failed", queued_before_s=0):
+        if not billing.issue_refund(db, refunded, "presign_failed", queued=True):
             problems.append("issue_refund returned False")
         balance = billing.get_balance(db, user_id)
         if balance != {"available_cents": 230, "reserved_cents": 0}:

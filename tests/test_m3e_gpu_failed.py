@@ -130,7 +130,7 @@ def test_an_already_terminal_job_is_a_noop(aws, db, pg, gpu_env, new_job, termin
     if terminal == "done":
         billing.settle_success(db, job_id)
     else:
-        billing.issue_refund(db, job_id, "upload_missing", queued_before_s=0)
+        billing.issue_refund(db, job_id, "upload_missing", queued=True)
     before = pg.snapshot()
 
     gpu_failed()(sns_event(job_id), None)

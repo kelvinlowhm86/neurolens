@@ -214,16 +214,6 @@ def summarise(result):
 RETENTION_COLUMNS = ("elapsedVideoTimeRatio", "audienceWatchRatio")
 
 
-def _retention_number(value):
-    """A JSON number that is finite; bool is an int in Python but not a number here."""
-    if isinstance(value, bool) or not isinstance(value, int | float):
-        return False
-    try:
-        return math.isfinite(value)
-    except OverflowError:  # an integer too large for a float
-        return False
-
-
 def parse_retention_report(text):
     """The (elapsed_ratio, watch_ratio) rows of a YouTube Analytics `reports.query` response.
 
@@ -267,13 +257,13 @@ def parse_retention_report(text):
         if not isinstance(row, list) or len(row) != len(names):
             raise ValueError(f"row {number}: expected {len(names)} values")
         elapsed, watch = row[elapsed_index], row[watch_index]
-        if not _retention_number(elapsed):
+        if not _number(elapsed):
             raise ValueError(f"row {number}: elapsedVideoTimeRatio must be a finite number")
         if not 0 <= elapsed <= 1:
             raise ValueError(f"row {number}: elapsedVideoTimeRatio must be between 0 and 1")
         if previous is not None and elapsed <= previous:
             raise ValueError(f"row {number}: elapsedVideoTimeRatio must be strictly increasing")
-        if not _retention_number(watch):
+        if not _number(watch):
             raise ValueError(f"row {number}: audienceWatchRatio must be a finite number")
         if watch < 0:
             raise ValueError(f"row {number}: audienceWatchRatio must be at least 0")

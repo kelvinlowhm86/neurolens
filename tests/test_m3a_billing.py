@@ -191,7 +191,7 @@ def test_a_terminal_job_can_never_be_claimed(db, pg):
     done_job = claimed(db)
     billing.settle_success(db, done_job)
     refunded, _ = reserve(db)
-    billing.issue_refund(db, refunded, "upload_not_received", queued_before_s=0)
+    billing.issue_refund(db, refunded, "upload_not_received", queued=True)
     for job_id in (done_job, refunded):
         pg.age(job_id, updated_s=3600)
         assert billing.claim(db, job_id) is None
@@ -281,7 +281,7 @@ def test_settle_then_refund_gives_one_outcome(db, pg):
     assert billing.settle_success(db, job_id) is True
     before = pg.snapshot()
     assert billing.issue_refund(db, job_id, "stalled", attempt=1) is False
-    assert billing.issue_refund(db, job_id, "processing_failed", queued_before_s=0) is False
+    assert billing.issue_refund(db, job_id, "processing_failed", queued=True) is False
     assert billing.issue_refund(db, job_id, "stalled", processing_stale_s=0) is False
     assert pg.snapshot() == before
     assert pg.job(job_id)["status"] == "done"
@@ -303,10 +303,10 @@ def test_repeated_settle_and_refund_are_no_ops(db, pg):
     done_job = claimed(db)
     assert billing.settle_success(db, done_job) is True
     refunded, _ = reserve(db)
-    assert billing.issue_refund(db, refunded, "presign_failed", queued_before_s=0) is True
+    assert billing.issue_refund(db, refunded, "presign_failed", queued=True) is True
     before = pg.snapshot()
     assert billing.settle_success(db, done_job) is False
-    assert billing.issue_refund(db, refunded, "presign_failed", queued_before_s=0) is False
+    assert billing.issue_refund(db, refunded, "presign_failed", queued=True) is False
     assert pg.snapshot() == before
 
 
@@ -378,30 +378,10 @@ def test_a_late_touch_after_settlement_changes_nothing(db, pg):
 # ---------------------------------------------------------------- refund guards
 
 
-def test_reaper_style_refund_of_a_job_a_worker_has_just_claimed_returns_false(db, pg):
+def test_queued_refund_refunds_any_queued_job(db, pg):
     make_user(db)
     job_id, _ = reserve(db)
-    pg.age(job_id, updated_s=7200, created_s=7200)  # looked abandoned to the reaper's query
-    assert billing.claim(db, job_id) == 1  # a worker takes it before the reaper's refund
-    before = pg.snapshot()
-    assert billing.issue_refund(db, job_id, "upload_not_received", queued_before_s=3600) is False
-    assert pg.snapshot() == before
-
-
-def test_queued_before_refunds_only_a_queued_job_old_enough(db, pg):
-    make_user(db)
-    job_id, _ = reserve(db)
-    pg.age(job_id, updated_s=1800)
-    assert billing.issue_refund(db, job_id, "upload_not_received", queued_before_s=3600) is False
-    pg.age(job_id, updated_s=3700)
-    assert billing.issue_refund(db, job_id, "upload_not_received", queued_before_s=3600) is True
-    assert pg.job(job_id)["status"] == "failed"
-
-
-def test_queued_before_zero_refunds_any_queued_job(db, pg):
-    make_user(db)
-    job_id, _ = reserve(db)
-    assert billing.issue_refund(db, job_id, "presign_failed", queued_before_s=0) is True
+    assert billing.issue_refund(db, job_id, "presign_failed", queued=True) is True
     assert money(pg) == (500, 0)
 
 
@@ -410,7 +390,7 @@ def test_dlq_style_refund_of_a_freshly_claimed_job_returns_false(db, pg):
     before = pg.snapshot()
     assert (
         billing.issue_refund(
-            db, job_id, "processing_failed", "x", queued_before_s=0, processing_stale_s=90
+            db, job_id, "processing_failed", "x", queued=True, processing_stale_s=90
         )
         is False
     )
@@ -428,7 +408,7 @@ def test_dlq_style_refund_of_a_stale_processing_job_succeeds(db, pg):
             job_id,
             "processing_failed",
             "RuntimeError: boom",
-            queued_before_s=0,
+            queued=True,
             processing_stale_s=90,
         )
         is True

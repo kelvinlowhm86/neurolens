@@ -27,6 +27,8 @@ QUEUED, PROCESSING, DONE, FAILED = "queued", "processing", "done", "failed"
 TERMINAL = (DONE, FAILED)
 LOST_CLAIM = "lost_claim"
 OK = "ok"
+# A live worker refreshes its claim every <= 50 s; a processing job older than this is dead.
+STALE_AFTER_S = 90
 
 
 class InsufficientCredit(Exception):
@@ -310,7 +312,7 @@ def reserve(db, user_id, job_id, object_key, filename, client_duration_ms, resea
 # ---------------------------------------------------------------- claiming and progress
 
 
-def claim(db, job_id, stale_after_s=90):
+def claim(db, job_id):
     """Take a queued job, or a processing one whose worker stopped heartbeating. Returns the new
     attempt, or None if the job is unknown, terminal, or held by a live worker."""
     with db.transaction() as tx:
@@ -320,7 +322,12 @@ def claim(db, job_id, stale_after_s=90):
             "WHERE job_id = CAST(:job_id AS uuid) AND (status = :queued OR "
             "(status = :processing AND updated_at < now() - make_interval(secs => :stale))) "
             "RETURNING attempt",
-            {"job_id": job_id, "processing": PROCESSING, "queued": QUEUED, "stale": stale_after_s},
+            {
+                "job_id": job_id,
+                "processing": PROCESSING,
+                "queued": QUEUED,
+                "stale": STALE_AFTER_S,
+            },
         )
     return rows[0]["attempt"] if rows else None
 
@@ -435,14 +442,14 @@ def issue_refund(
     message=None,
     *,
     attempt=None,
-    queued_before_s=None,
+    queued=False,
     processing_stale_s=None,
     undispatched_only=False,
 ):
     """Refund a job if at least one stated condition holds, re-checked under the job's row lock:
 
     - attempt: the job is processing under this attempt (the worker holding the claim);
-    - queued_before_s: it is queued and was last updated at least that long ago (0: any queued);
+    - queued: the job is queued (any age);
     - processing_stale_s: it is processing and was last updated at least that long ago;
     - undispatched_only: also require that the dispatcher has not priced it yet
       (`verified_duration_ms IS NULL`), so Cancel and `verify_queued` have one winner.
@@ -451,26 +458,21 @@ def issue_refund(
     Returns False, changing nothing, when none holds. No condition at all raises ValueError:
     every caller must state why the refund is safe.
     """
-    if attempt is None and queued_before_s is None and processing_stale_s is None:
-        raise ValueError("issue_refund needs attempt, queued_before_s or processing_stale_s")
+    if attempt is None and not queued and processing_stale_s is None:
+        raise ValueError("issue_refund needs attempt, queued or processing_stale_s")
     with db.transaction() as tx:
         rows = tx.execute(
             "SELECT user_id, status, attempt, reserved_cents, verified_duration_ms, "
-            "updated_at <= now() - make_interval(secs => :queued_s) AS queued_old, "
             "updated_at <= now() - make_interval(secs => :stale_s) AS processing_old "
             "FROM jobs WHERE job_id = CAST(:job_id AS uuid) FOR UPDATE",
-            {
-                "job_id": job_id,
-                "queued_s": queued_before_s or 0,
-                "stale_s": processing_stale_s or 0,
-            },
+            {"job_id": job_id, "stale_s": processing_stale_s or 0},
         )
         job = rows[0] if rows else None
         if job is None:
             return False
         allowed = (
             (attempt is not None and _holds_claim(job, attempt))
-            or (queued_before_s is not None and job["status"] == QUEUED and job["queued_old"])
+            or (queued and job["status"] == QUEUED)
             or (
                 processing_stale_s is not None
                 and job["status"] == PROCESSING

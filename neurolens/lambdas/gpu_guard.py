@@ -9,10 +9,10 @@ import logging
 import os
 
 from neurolens import lambdas
+from neurolens.billing import STALE_AFTER_S
 
 logger = logging.getLogger(__name__)
 
-LIVE_CLAIM_S = 90
 DISPATCHED_S = 3 * 60 * 60
 QUIET_S = 30 * 60
 VARIANT = "main"
@@ -37,7 +37,7 @@ def _work_possible(db):
             {
                 "processing": "processing",
                 "queued": "queued",
-                "live": LIVE_CLAIM_S,
+                "live": STALE_AFTER_S,
                 "dispatched": DISPATCHED_S,
                 "quiet": QUIET_S,
             },

@@ -479,7 +479,7 @@ def test_reaper_refunds_and_raises_when_s3_reports_a_failed_delete(
 
 def test_reaper_leaves_terminal_jobs_and_runs_twice_safely(aws, db, pg, lambda_env, new_job):
     failed, _ = new_job()
-    billing.issue_refund(db, failed, "cancelled", queued_before_s=0)
+    billing.issue_refund(db, failed, "cancelled", queued=True)
     pg.age(failed, updated_s=DEADLINE_S + 3600, created_s=DEADLINE_S + 3600)
     done_job, _ = new_job()
     billing.settle_success(db, done_job)

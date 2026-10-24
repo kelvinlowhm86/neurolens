@@ -9,10 +9,9 @@ import os
 
 from neurolens import billing, storage
 from neurolens import db as dbmod
+from neurolens.billing import STALE_AFTER_S
 
 logger = logging.getLogger("neurolens")
-
-STALE_AFTER_S = 90  # as billing.claim: a live worker refreshes its claim every <= 50 s
 
 
 def setup_logging():
@@ -78,7 +77,7 @@ def finish_job(db, s3, bucket, job_id):
         job_id,
         "processing_failed",
         message,
-        queued_before_s=0,
+        queued=True,
         processing_stale_s=STALE_AFTER_S,
     ):
         logger.warning(f"{job_id}: failed on the GPU, refunded")

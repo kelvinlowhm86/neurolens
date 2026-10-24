@@ -112,7 +112,7 @@ def test_a_terminal_job_is_not_queued_and_moves_no_money(db, pg, new_job, termin
     if terminal == "done":
         billing.settle_success(db, job_id)
     else:
-        billing.issue_refund(db, job_id, "upload_missing", queued_before_s=0)
+        billing.issue_refund(db, job_id, "upload_missing", queued=True)
     before = pg.snapshot()
     assert billing.verify_queued(db, job_id, 61000, MAX_S) == "not_queued"
     assert pg.snapshot() == before

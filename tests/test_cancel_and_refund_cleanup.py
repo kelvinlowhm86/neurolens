@@ -46,7 +46,7 @@ def make_job(db, *, state="queued", user_id=WEB_USER_ID, research_consent=False)
     elif state == "done":
         assert billing.settle_success(db, job_id) is True
     elif state == "failed":
-        assert billing.issue_refund(db, job_id, "processing_failed", queued_before_s=0) is True
+        assert billing.issue_refund(db, job_id, "processing_failed", queued=True) is True
     else:
         assert state == "queued"
     return job_id, key
@@ -256,7 +256,7 @@ def test_worker_receiving_an_upload_for_a_refunded_job_deletes_it_and_skips(
 ):
     job_id, key = new_job()
     upload(aws, key)
-    assert billing.issue_refund(db, job_id, "cancelled", queued_before_s=0) is True
+    assert billing.issue_refund(db, job_id, "cancelled", queued=True) is True
     before = pg.snapshot()
 
     assert (

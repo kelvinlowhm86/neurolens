@@ -11,11 +11,11 @@ Do these in this order. Each step says what it costs and how to know it worked.
 4. **Work.** An upload starts the endpoint; a new GPU can take about 10 minutes to be ready. Run one
    short warm-up job first.
 5. **Stop.** `infra/stop_work.sh`. It ends any keep-warm, sets the endpoint's scaling maximum and
-   minimum to 0 and checks both, waits for the GPU to go and puts Aurora's minimum back to 0. It
+   minimum to 0 and checks both, and waits for the GPU to go. It
    prints **ALL STOPPED** only when every check succeeded; anything it could not prove is printed
    as **NOT CONFIRMED** with the reason.
 
-Run `terraform apply` for anything else only after `stop_work.sh` (a held session changes Aurora's settings by hand).
+Run `terraform apply` for anything else only after `stop_work.sh`.
 
 If a step fails, do not skip ahead: the scripts name the cause. Aurora pauses by itself about 5 minutes
 after its last use; the reaper wakes it every 3 hours (about $3 a month).

@@ -7,7 +7,6 @@ set -uo pipefail
 VARIANT_MAIN=main
 KEEP_WARM_END=neurolens-keep-warm-end
 ENDPOINT=neurolens
-DB=neurolens-db
 PROBLEMS=""
 problem() {
   PROBLEMS="$PROBLEMS  - $*"$'\n'
@@ -74,13 +73,8 @@ for _ in $(seq 1 60); do
 done
 [ "$STOPPED" = 1 ] || problem "the endpoint still shows $COUNT instance(s); it did not reach 0"
 
-aws rds modify-db-cluster --db-cluster-identifier "$DB" --apply-immediately \
-  --serverless-v2-scaling-configuration MinCapacity=0,SecondsUntilAutoPause=300 \
-  --output text >/dev/null \
-  || problem "could not put Aurora's minimum back to 0"
-
 if [ -n "$PROBLEMS" ]; then
   printf 'NOT CONFIRMED in %s:\n%s' "${AWS_REGION:-unknown region}" "$PROBLEMS" >&2
   exit 1
 fi
-echo "ALL STOPPED in ${AWS_REGION:-unknown region}: scalable target 0/0, no keep-warm, endpoint at 0, Aurora minimum 0."
+echo "ALL STOPPED in ${AWS_REGION:-unknown region}: scalable target 0/0, no keep-warm, endpoint at 0."

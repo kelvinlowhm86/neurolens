@@ -200,10 +200,10 @@ resource "aws_cognito_user_pool_domain" "users" {
 # ─── The web function (M3b §3a) ───────────────────────────────────────────
 #
 # It runs outside the VPC: it reaches Cognito, Parameter Store, S3 and the Data API over AWS's
-# public endpoints, so it never depends on the NAT Gateway. Its role is in web_iam.tf. Terraform
+# public endpoints, so it never depends on a NAT Gateway. Its role is in web_iam.tf. Terraform
 # uploads the zip only when it creates the function (build it first with
 # infra/build_web_lambda.sh); after that infra/deploy_web.sh ships code, so an apply for anything
-# else (the NAT Gateway switch) never needs a build and never changes the running code.
+# else never needs a build and never changes the running code.
 
 locals {
   web_zip = "${local.repo_root}/build/web_lambda.zip"
