@@ -7,9 +7,9 @@ CI tests only the PostgreSQL backend, so this is the one check of the Data API b
 formats. Run it after changing neurolens/db.py's Data API code or adding a migration, and once on
 a new account.
 
-Runs ensure_user, reserve, claim, set_stage, verify and settle_success for a throwaway user,
-then a second job through touch, release_for_retry (no message) and issue_refund (whose re-check
-reads boolean columns), checks the ledger invariant, reads the whole `jobs` row back and checks
+Runs ensure_user, reserve, verify_queued, claim, set_stage and settle_success for a throwaway
+user, then a second job through touch and issue_refund (whose re-check reads boolean columns),
+checks the ledger invariant, reads the whole `jobs` row back and checks
 the Python type of every column against what the PostgreSQL backend returns (§3d), so a wrong
 guess about the Data API's formats is caught here, not in production. Then signs a throwaway
 identity in three times: created, found again, and linked by the same email in other letter case
@@ -29,6 +29,7 @@ from neurolens import db as dbmod
 
 STRS = (str,)
 OPTIONAL_STR = (str, type(None))
+OPTIONAL_DATETIME = (datetime, type(None))
 # Every jobs column after the run below (stage set, verified, settled, no error).
 EXPECTED_TYPES = {
     "job_id": STRS,
@@ -45,6 +46,10 @@ EXPECTED_TYPES = {
     "captured_cents": (int,),
     "error_code": OPTIONAL_STR,
     "error_message": OPTIONAL_STR,
+    "research_consent": (bool,),
+    "deleted_at": OPTIONAL_DATETIME,
+    "retention_added_at": OPTIONAL_DATETIME,
+    "dataset_removed_at": OPTIONAL_DATETIME,
     "created_at": (datetime,),
     "updated_at": (datetime,),
 }
@@ -119,24 +124,25 @@ def smoke(db):
         print(f"first call (includes any wake-up): {time.monotonic() - started:.1f} s")
         key = f"uploads/{user_id}/{job_id}.mp4"
         price = billing.reserve(db, user_id, job_id, key, "smoke.mp4", 27400)
+        verdict = billing.verify_queued(db, job_id, 61000, 120)
+        if verdict != billing.OK:
+            problems.append(f"verify_queued returned {verdict!r}")
         attempt = billing.claim(db, job_id)
         if attempt != 1:
             problems.append(f"claim returned {attempt!r}, expected 1")
-        billing.set_stage(db, job_id, attempt, "downloading")
-        verdict = billing.verify(db, job_id, attempt, 61000, 120)
-        if verdict != billing.OK:
-            problems.append(f"verify returned {verdict!r}")
+        steps = {
+            "touch": billing.touch(db, job_id, attempt),
+            "set_stage": billing.set_stage(db, job_id, attempt, "transcribing"),
+        }
+        problems += [f"{name} returned False" for name, ok in steps.items() if not ok]
         if not billing.settle_success(db, job_id):
             problems.append("settle_success returned False")
         refunded = str(uuid.uuid4())
-        billing.reserve(db, user_id, refunded, f"uploads/{user_id}/{refunded}.mp4", None, 27400)
-        attempt = billing.claim(db, refunded)
-        steps = {
-            "touch": billing.touch(db, refunded, attempt),
-            "release_for_retry": billing.release_for_retry(db, refunded, attempt, None),
-            "issue_refund": billing.issue_refund(db, refunded, "presign_failed", queued_before_s=0),
-        }
-        problems += [f"{name} returned False" for name, ok in steps.items() if not ok]
+        billing.reserve(
+            db, user_id, refunded, f"uploads/{user_id}/{refunded}.mp4", "smoke-2.mp4", 27400
+        )
+        if not billing.issue_refund(db, refunded, "presign_failed", queued_before_s=0):
+            problems.append("issue_refund returned False")
         balance = billing.get_balance(db, user_id)
         if balance != {"available_cents": 230, "reserved_cents": 0}:
             problems.append(f"balance {balance} after reserving {price}, capturing 270, refunding")

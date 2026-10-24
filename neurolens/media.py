@@ -7,21 +7,41 @@ import json
 import math
 import subprocess
 
+INVALID_DATA = "Invalid data found when processing input"
+
 
 class UnreadableVideo(ValueError):
-    """ffprobe could not produce a duration: not a video, corrupt, or no duration in the header."""
+    """ffprobe read the file and found no usable video: not a video, corrupt, or no duration."""
+
+
+class ProbeFailed(RuntimeError):
+    """ffprobe could not fetch or finish the file: retry it rather than blame the video."""
+
+
+def _stderr_text(err):
+    text = err.stderr
+    if text is None:
+        return ""
+    if isinstance(text, bytes):
+        text = text.decode(errors="replace")
+    return text.strip()
+
+
+def _probe_failure(message, stderr):
+    return f"{message}: {stderr}" if stderr else message
 
 
 def probe_duration(path, timeout_s=30):
     """Video length in seconds, measured with ffprobe from the file's packets, not the length its
     header declares (M1 §1: whoever made the file wrote the header, so it could understate the
-    length). Raises UnreadableVideo if unreadable."""
+    length). Raises UnreadableVideo when the file itself is at fault, ProbeFailed when ffprobe
+    could not fetch or finish it."""
     try:
         result = subprocess.run(
             [
                 "ffprobe",
                 "-v",
-                "quiet",
+                "error",
                 "-print_format",
                 "json",
                 "-show_streams",
@@ -34,9 +54,28 @@ def probe_duration(path, timeout_s=30):
             timeout=timeout_s,
         )
     except subprocess.TimeoutExpired as err:
-        raise UnreadableVideo(f"ffprobe timed out on {path}") from err
+        raise ProbeFailed(
+            _probe_failure(f"ffprobe timed out after {timeout_s}s on {path}", _stderr_text(err))
+        ) from err
+    stderr = (result.stderr or "").strip()
+    if result.returncode != 0:
+        if INVALID_DATA in stderr:
+            raise UnreadableVideo(_probe_failure(f"ffprobe could not read {path}", stderr))
+        raise ProbeFailed(
+            _probe_failure(
+                f"ffprobe exited with status {result.returncode} on {path}",
+                stderr or "no error text",
+            )
+        )
     try:
         info = json.loads(result.stdout)
+    except ValueError as err:  # JSONDecodeError too
+        raise ProbeFailed(
+            _probe_failure(f"ffprobe gave no usable JSON for {path}", stderr)
+        ) from err
+    if not isinstance(info, dict):
+        raise ProbeFailed(_probe_failure(f"ffprobe gave no usable JSON for {path}", stderr))
+    try:
         has_video = any(s.get("codec_type") == "video" for s in info.get("streams", []))
         starts, ends = [], []
         for packet in info.get("packets", []):
@@ -45,7 +84,7 @@ def probe_duration(path, timeout_s=30):
             start = float(packet["pts_time"])
             starts.append(start)
             ends.append(start + float(packet.get("duration_time", 0)))
-    except (ValueError, KeyError, TypeError, AttributeError) as err:  # JSONDecodeError too
+    except (ValueError, KeyError, TypeError, AttributeError) as err:
         raise UnreadableVideo(f"ffprobe could not read {path}") from err
     if not has_video:
         # e.g. an audio-only .mp4: it would pass the length check, then fail in the model

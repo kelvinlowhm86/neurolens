@@ -159,9 +159,13 @@ resource "aws_s3_bucket_cors_configuration" "main" {
 resource "aws_sqs_queue" "jobs" {
   name = var.queue_name
 
-  # The dispatcher gets at most 120 s per message (AWS asks for six times the function
+  # Every message waits 15 s, so the user can still cancel before the dispatcher starts a GPU
+  # (M3e §3, §8).
+  delay_seconds = 15
+
+  # The dispatcher gets at most 180 s per message (AWS asks for six times the function
   # timeout), so a slow dispatch is not redelivered while it is still invoking (M3e §3).
-  visibility_timeout_seconds = 720
+  visibility_timeout_seconds = 1080
 
   sqs_managed_sse_enabled = true
 

@@ -199,17 +199,19 @@ def grant_credit(db, email, cents):
 
 def list_jobs(db, user_id, limit):
     """The user's jobs, newest first, at most `limit` (M3b §4a). Deleted jobs are left out
-    (M3c §4), and `needs_retention` marks a done, consented job with neither a retention curve
-    nor a removed dataset (M3e §7)."""
+    (M3c §4), `needs_retention` marks a done, consented job with neither a retention curve nor a
+    removed dataset (M3e §7), and `cancellable` marks a queued job the dispatcher has not priced
+    yet (M3e §8)."""
     with db.transaction() as tx:
         return tx.execute(
             "SELECT job_id, filename, status, created_at, verified_duration_ms, captured_cents, "
             "error_code, research_consent, "
             "(status = :done AND research_consent AND retention_added_at IS NULL "
-            "AND dataset_removed_at IS NULL) AS needs_retention "
+            "AND dataset_removed_at IS NULL) AS needs_retention, "
+            "(status = :queued AND verified_duration_ms IS NULL) AS cancellable "
             "FROM jobs WHERE user_id = :user_id AND deleted_at IS NULL "
             "ORDER BY created_at DESC LIMIT :limit",
-            {"user_id": user_id, "limit": limit, "done": DONE},
+            {"user_id": user_id, "limit": limit, "done": DONE, "queued": QUEUED},
         )
 
 
@@ -427,13 +429,23 @@ def settle_success(db, job_id):
 
 
 def issue_refund(
-    db, job_id, reason, message=None, *, attempt=None, queued_before_s=None, processing_stale_s=None
+    db,
+    job_id,
+    reason,
+    message=None,
+    *,
+    attempt=None,
+    queued_before_s=None,
+    processing_stale_s=None,
+    undispatched_only=False,
 ):
     """Refund a job if at least one stated condition holds, re-checked under the job's row lock:
 
     - attempt: the job is processing under this attempt (the worker holding the claim);
     - queued_before_s: it is queued and was last updated at least that long ago (0: any queued);
-    - processing_stale_s: it is processing and was last updated at least that long ago.
+    - processing_stale_s: it is processing and was last updated at least that long ago;
+    - undispatched_only: also require that the dispatcher has not priced it yet
+      (`verified_duration_ms IS NULL`), so Cancel and `verify_queued` have one winner.
 
     Every condition requires a non-terminal status, so a done or failed job is never refunded.
     Returns False, changing nothing, when none holds. No condition at all raises ValueError:
@@ -443,7 +455,7 @@ def issue_refund(
         raise ValueError("issue_refund needs attempt, queued_before_s or processing_stale_s")
     with db.transaction() as tx:
         rows = tx.execute(
-            "SELECT user_id, status, attempt, reserved_cents, "
+            "SELECT user_id, status, attempt, reserved_cents, verified_duration_ms, "
             "updated_at <= now() - make_interval(secs => :queued_s) AS queued_old, "
             "updated_at <= now() - make_interval(secs => :stale_s) AS processing_old "
             "FROM jobs WHERE job_id = CAST(:job_id AS uuid) FOR UPDATE",
@@ -465,6 +477,8 @@ def issue_refund(
                 and job["processing_old"]
             )
         )
+        if undispatched_only:
+            allowed = allowed and job["verified_duration_ms"] is None
         if not allowed:
             return False
         _refund(tx, job_id, job, reason, message)

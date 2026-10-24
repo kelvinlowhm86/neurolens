@@ -5,10 +5,12 @@
 the analysis, writes the result and charges or refunds it. `/ping` answers while a job runs.
 """
 
+import contextlib
 import enum
 import json
 import logging
 import os
+import shutil
 import socket
 import tempfile
 import threading
@@ -93,7 +95,9 @@ class ClaimKeepAlive:
                     self._on_overrun()
                 return
             try:
-                self._on_beat()
+                if self._on_beat() is False:
+                    logger.warning("The claim was lost; stopping the keep-alive")
+                    return
             except Exception:
                 logger.warning("Keep-alive beat failed; trying again next interval", exc_info=True)
 
@@ -114,6 +118,49 @@ def validate_config(cfg):
             f"worker.heartbeat_seconds must be at most {MAX_HEARTBEAT_SECONDS} (a claim goes "
             "stale after 90 s without a beat)."
         )
+
+
+def _log_temp_state(base, feature_cache):
+    """The disk's free space and anything left in the base temp folder besides the feature cache."""
+    try:
+        free = shutil.disk_usage(base).free
+        cache = None if feature_cache is None else str(feature_cache)
+        left = [entry for entry in Path(base).iterdir() if str(entry) != cache]
+        logger.info(
+            f"Temporary folder cleaned: {free} bytes free on {base}; "
+            f"{len(left)} entries left besides the feature cache"
+        )
+    except OSError:
+        logger.exception(f"Could not inspect the temporary folder {base}")
+
+
+@contextlib.contextmanager
+def job_temp_dir(feature_cache=None):
+    """A fresh folder for one job, under the base temp folder and never inside the feature cache.
+
+    `tempfile.tempdir` and TMPDIR point at it for the job, so the audio and transcript the model
+    extracts land there too. Both are restored and the folder is removed whole whatever happens.
+    One job runs at a time (M3e §4a), so the process-wide temporary folder is safe to move.
+    """
+    base = tempfile.gettempdir()
+    folder = tempfile.mkdtemp(prefix="job-", dir=base)
+    previous_tempdir = tempfile.tempdir
+    previous_tmpdir = os.environ.get("TMPDIR")
+    tempfile.tempdir = folder
+    os.environ["TMPDIR"] = folder
+    try:
+        yield Path(folder)
+    finally:
+        tempfile.tempdir = previous_tempdir
+        if previous_tmpdir is None:
+            os.environ.pop("TMPDIR", None)
+        else:
+            os.environ["TMPDIR"] = previous_tmpdir
+        try:
+            shutil.rmtree(folder)
+        except OSError:
+            logger.exception(f"Could not remove the job's temporary folder {folder}")
+        _log_temp_state(base, feature_cache)
 
 
 def _error_text(err):
@@ -321,7 +368,13 @@ def _analyse(
         storage.put_thumbnail(s3, bucket, job_id, thumbnail)
     storage.put_brain(s3, bucket, job_id, preds_full)
     published = storage.put_result(s3, bucket, job_id, result)
-    if not billing.settle_success(db, job_id):
+    try:
+        settled = billing.settle_success(db, job_id)
+    except Exception:
+        # The result is public now: nothing refunds or deletes; the error handler settles it.
+        logger.exception(f"SETTLE_FAILED {job_id}")
+        return Outcome.FAILED
+    if not settled:
         logger.warning(f"{job_id} was already settled or refunded; the result is not charged")
     if not published:
         logger.warning(f"Duplicate {job_id}: a result already exists, left unchanged")
@@ -416,50 +469,49 @@ class _Handler(BaseHTTPRequestHandler):
             logger.warning("Rejected a second concurrent invocation")
             self._json(503, {"error": "busy"})
             return
-        path = None
+        reply = (500, {"job_id": job_id, "outcome": Outcome.FAILED.value})
         try:
-            try:
-                length = int(self.headers.get("Content-Length", ""))
-            except ValueError:
-                length = None
-            if length is None:
-                logger.warning(f"Invocation for {job_id} has no usable Content-Length")
-                self._json(500, {"job_id": job_id, "outcome": Outcome.FAILED.value})
-                return
-            handle = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
-            path = handle.name
-            handle.close()
-            self.connection.settimeout(BODY_READ_TIMEOUT_S)
-            try:
-                received = self._stream_body(path, length)
-            except TimeoutError:
-                logger.warning(f"Invocation for {job_id} stalled while reading its body")
-                self.close_connection = True  # the rest of the body may still arrive
-                self._json(500, {"job_id": job_id, "outcome": Outcome.FAILED.value})
-                return
-            finally:
-                self.connection.settimeout(None)
-            if received < length:
-                logger.warning(f"Invocation for {job_id} ended before its Content-Length")
-                self._json(500, {"job_id": job_id, "outcome": Outcome.FAILED.value})
-                return
-            outcome = handle_job(
-                job_id,
-                path,
-                s3=server.s3,
-                db=server.db,
-                cfg=server.cfg,
-                roi_masks=server.roi_masks,
-            )
-            status = 200 if outcome in _OK_OUTCOMES else 500
-            self._json(status, {"job_id": job_id, "outcome": outcome.value})
+            with job_temp_dir(server.feature_cache) as folder:
+                # A name never used before on this instance, as the feature cache relies on (§4a).
+                path = folder / f"{folder.name}.mp4"
+                try:
+                    length = int(self.headers.get("Content-Length", ""))
+                except ValueError:
+                    length = None
+                if length is None:
+                    logger.warning(f"Invocation for {job_id} has no usable Content-Length")
+                else:
+                    received = None
+                    self.connection.settimeout(BODY_READ_TIMEOUT_S)
+                    try:
+                        received = self._stream_body(path, length)
+                    except TimeoutError:
+                        logger.warning(f"Invocation for {job_id} stalled while reading its body")
+                        self.close_connection = True  # the rest of the body may still arrive
+                    finally:
+                        self.connection.settimeout(None)
+                    if received is None:
+                        pass
+                    elif received < length:
+                        logger.warning(f"Invocation for {job_id} ended before its Content-Length")
+                    else:
+                        outcome = handle_job(
+                            job_id,
+                            str(path),
+                            s3=server.s3,
+                            db=server.db,
+                            cfg=server.cfg,
+                            roi_masks=server.roi_masks,
+                        )
+                        status = 200 if outcome in _OK_OUTCOMES else 500
+                        reply = (status, {"job_id": job_id, "outcome": outcome.value})
+            # The response waits for the folder to go, so the next request never races its cleanup.
+            self._json(*reply)
         except Exception:
             logger.exception(f"Invocation for {job_id} failed")
             self._json(500, {"job_id": job_id, "outcome": Outcome.FAILED.value})
         finally:
             server.busy.release()
-            if path is not None:
-                Path(path).unlink(missing_ok=True)
 
 
 _OK_OUTCOMES = (Outcome.DONE, Outcome.DUPLICATE, Outcome.REJECTED, Outcome.SKIPPED)
@@ -506,7 +558,8 @@ def serve():
     warmup = settings.resolve_paths(cfg, settings.get_root())["data"] / "warmup.mp4"
     if not warmup.exists():
         raise FileNotFoundError(f"Warm-up clip not found: {warmup}")
-    inference.build_events(warmup)
+    with job_temp_dir(feature_cache):
+        inference.build_events(warmup)
     warmup_done = datetime.now(UTC)
 
     s3 = boto3.client("s3", region_name=aws["region"])

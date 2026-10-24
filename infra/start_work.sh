@@ -2,27 +2,23 @@
 # Starts processing (docs/M3e_spec.md §6b): the SageMaker endpoint's normal state is max 1.
 #   infra/start_work.sh                         scale out on demand; the GPU stops after 7 idle minutes
 #   infra/start_work.sh --keep-warm [--hours N] one GPU now, for N hours (1-4, default 3); AWS ends it
-#   infra/start_work.sh --keep-db               keep Aurora awake (minimum 0.5 ACU)
 set -euo pipefail
 
 VARIANT_MAIN=main
 KEEP_WARM_END=neurolens-keep-warm-end
 ENDPOINT=neurolens
-DB=neurolens-db
 HOURS=3
 KEEP_WARM=0
-KEEP_DB=0
 HOURS_GIVEN=0
 
 usage() {
-  echo "usage: $0 [--keep-warm [--hours 1-4]] [--keep-db]" >&2
+  echo "usage: $0 [--keep-warm [--hours 1-4]]" >&2
   exit 2
 }
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --keep-warm) KEEP_WARM=1 ;;
-    --keep-db) KEEP_DB=1 ;;
     --hours) [ $# -ge 2 ] || usage; HOURS=$2; HOURS_GIVEN=1; shift ;;
     *) usage ;;
   esac
@@ -64,10 +60,4 @@ else
     --min-capacity 0 \
     --max-capacity 1
   echo "GPU endpoint $ENDPOINT: max 1. An upload starts a GPU by itself."
-fi
-
-if [ "$KEEP_DB" = 1 ]; then
-  aws rds modify-db-cluster --db-cluster-identifier "$DB" --apply-immediately \
-    --serverless-v2-scaling-configuration MinCapacity=0.5 --output text >/dev/null
-  echo "Aurora kept awake (minimum 0.5 ACU) until infra/stop_work.sh."
 fi

@@ -280,7 +280,7 @@ resource "aws_lambda_function" "dispatcher" {
   filename         = data.archive_file.m3a_lambdas.output_path
   source_code_hash = data.archive_file.m3a_lambdas.output_base64sha256
   layers           = [aws_lambda_layer_version.ffprobe.arn]
-  timeout          = 120
+  timeout          = 180
   memory_size      = 1024 # ffprobe reads packets: the extra memory is mostly I/O headroom
 
   environment {

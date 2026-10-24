@@ -185,18 +185,18 @@ itself and it stops 7 idle minutes after the last job.
 ```bash
 infra/start_work.sh                     # normal state: max 1, scale out on demand
 infra/start_work.sh --keep-warm --hours 3   # one GPU now, kept 3 hours (AWS ends it)
-infra/start_work.sh --keep-db --hours 3     # keep Aurora awake too
 infra/stop_work.sh                      # emergency pause; prints ALL STOPPED only when proven
 ```
 
-`stop_work.sh` sets the endpoint's scaling maximum and minimum to 0, deletes any keep-warm action,
-sets the desired count to 0, waits until the endpoint shows 0 and puts Aurora's minimum back to 0.
+`stop_work.sh` deletes any keep-warm action, sets the endpoint's scaling maximum and minimum to 0
+and checks both, sets the desired count to 0, waits until the endpoint shows 0 and puts Aurora's
+minimum back to 0.
 A running job dies and is refunded. `start_work.sh` puts the maximum back to 1.
 
 ## 5b. Demo routine
 
 1. The day before (a week before for the TA demo): one full dry run.
-2. 45–60 minutes before: `infra/start_work.sh --keep-warm --keep-db --hours 3`.
+2. 45–60 minutes before: `infra/start_work.sh --keep-warm --hours 3`.
 3. One short warm-up job, so the first-job costs are paid before the audience arrives.
 4. Demo. If it overruns, run step 2 again (it moves the end).
 5. Straight after: `infra/stop_work.sh`, and wait for **ALL STOPPED**.

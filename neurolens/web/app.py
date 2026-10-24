@@ -33,10 +33,7 @@ RESULT_DAYS = 30  # the results/ lifecycle rule (Terraform)
 VIDEO_LINK_SECONDS = 3600  # a video is streamed in pieces; one hour outlives a paused viewer
 HISTORY_LIMIT, HISTORY_MAX = 50, 100
 RETENTION_MAX_BYTES = 64 * 1024
-JOB_ACTIVE_MESSAGE = (
-    "This video is still waiting or being processed. Cancel it first if it hasn't started, or "
-    "try again when it finishes."
-)
+JOB_ACTIVE_MESSAGE = "This video is still waiting or being processed. Try again when it finishes."
 
 
 def _is_number(value):
@@ -461,7 +458,7 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
             rows = tx.execute(
                 "SELECT job_id, object_key, filename, status, stage, stages, attempt, updated_at, "
                 "error_code, error_message, research_consent, retention_added_at, "
-                "dataset_removed_at FROM jobs "
+                "dataset_removed_at, verified_duration_ms FROM jobs "
                 "WHERE job_id = CAST(:job_id AS uuid) AND user_id = :user_id "
                 "AND deleted_at IS NULL",
                 {"job_id": job_id, "user_id": user_id},
@@ -509,7 +506,12 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
             if storage.result_exists(s3, bucket, job["job_id"]):
                 status = billing.DONE
         # Consent gates the retention upload, which needs a done job, so it is reported only then.
-        hidden = {"object_key", "retention_added_at", "dataset_removed_at"}
+        hidden = {
+            "object_key",
+            "retention_added_at",
+            "dataset_removed_at",
+            "verified_duration_ms",
+        }
         public = {
             key: value
             for key, value in job.items()
@@ -588,20 +590,19 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
 
     @app.route("/api/jobs/<job_id>/cancel", methods=["POST"])
     def cancel_job(job_id):
-        """Refund and delete a queued job the caller owns (M3d §7)."""
+        """Refund and delete a queued job the caller owns, before the dispatcher prices it
+        (M3d §7, M3e §8)."""
         job, error = owned_job(job_id)
         if error:
             return error
-        if job["status"] != billing.QUEUED:
-            return _error(
-                "not_cancellable", "This job has already started or finished.", status=409
-            )
+        if job["status"] != billing.QUEUED or job["verified_duration_ms"] is not None:
+            return _error("not_cancellable", "This analysis has already started.", status=409)
         if s3 is None or not bucket:
             return _not_configured()
-        if not billing.issue_refund(db, job["job_id"], "cancelled", queued_before_s=0):
-            return _error(
-                "not_cancellable", "This job has already started or finished.", status=409
-            )
+        if not billing.issue_refund(
+            db, job["job_id"], "cancelled", queued_before_s=0, undispatched_only=True
+        ):
+            return _error("not_cancellable", "This analysis has already started.", status=409)
         try:
             deleted = storage.delete_keys(
                 s3, bucket, storage.job_keys(job["job_id"], job["object_key"])

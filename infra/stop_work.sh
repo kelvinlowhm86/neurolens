@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Emergency pause (docs/M3e_spec.md §6b): no GPU may start or stay on, and no keep-warm survives.
+# It deletes the keep-warm action before scaling down, then reads the target back.
 # Prints ALL STOPPED only when every step succeeded; otherwise NOT CONFIRMED and exit 1.
 set -uo pipefail
 
@@ -17,16 +18,9 @@ source "$(dirname "$0")/aws_env.sh"
 RESOURCE="endpoint/$ENDPOINT/variant/$VARIANT_MAIN"
 DIMENSION=sagemaker:variant:DesiredInstanceCount
 
-aws application-autoscaling register-scalable-target \
-  --service-namespace sagemaker \
-  --resource-id "$RESOURCE" \
-  --scalable-dimension "$DIMENSION" \
-  --min-capacity 0 \
-  --max-capacity 0 \
-  || problem "could not set the scalable target to 0/0"
-
-# The keep-warm end timer is a fixed name. Delete it even when none is listed: a stale timer in
-# a later session must not raise the minimum behind our back. Nothing to delete is the normal case.
+# The keep-warm end timer is a fixed name. Delete it first, even when none is listed: a stale
+# timer in a later session must not raise the minimum behind our back. Nothing to delete is the
+# normal case.
 if ! DELETE_ERR=$(aws application-autoscaling delete-scheduled-action \
     --service-namespace sagemaker \
     --scheduled-action-name "$KEEP_WARM_END" \
@@ -36,6 +30,28 @@ if ! DELETE_ERR=$(aws application-autoscaling delete-scheduled-action \
     *ObjectNotFoundException*) ;;
     *) problem "could not delete the keep-warm action ($KEEP_WARM_END): $DELETE_ERR" ;;
   esac
+fi
+
+aws application-autoscaling register-scalable-target \
+  --service-namespace sagemaker \
+  --resource-id "$RESOURCE" \
+  --scalable-dimension "$DIMENSION" \
+  --min-capacity 0 \
+  --max-capacity 0 \
+  || problem "could not set the scalable target to 0/0"
+
+if ! READBACK=$(aws application-autoscaling describe-scalable-targets \
+    --service-namespace sagemaker \
+    --resource-ids "$RESOURCE" \
+    --scalable-dimension "$DIMENSION" \
+    --query 'ScalableTargets[0].[MinCapacity,MaxCapacity]' \
+    --output text 2>&1); then
+  problem "could not read the scalable target back: $READBACK"
+else
+  read -r MIN MAX <<< "$READBACK" || true
+  if [ "${MIN:-}" != "0" ] || [ "${MAX:-}" != "0" ]; then
+    problem "the scalable target still reads min=${MIN:-?} max=${MAX:-?}; it must be 0/0"
+  fi
 fi
 
 aws sagemaker update-endpoint-weights-and-capacities \

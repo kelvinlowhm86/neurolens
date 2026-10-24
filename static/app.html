@@ -583,7 +583,7 @@ function closeRowMenu(returnFocus) {
 }
 function historyMenuItems(job) {
   const items = [];
-  if (job.status === 'queued') items.push({ label: 'Cancel', run: () => cancelJob(job.job_id) });
+  if (job.cancellable) items.push({ label: 'Cancel', run: () => cancelJob(job.job_id) });
   if (job.result_available) items.push({ label: 'Download CSV', href: `/api/jobs/${job.job_id}/result.csv` });
   if (job.status === 'done' || job.status === 'failed') items.push({ label: 'Delete', run: () => openDeleteJob(job) });
   return items;
@@ -960,7 +960,7 @@ function historyDetail(job) {
   if (job.status === 'failed') return `${day} · ${failureText(job.error_code)}${NOT_CHARGED}`;
   if (job.status === 'queued') {
     return Date.now() - created.getTime() > QUEUED_SLOW_MS
-      ? 'Waiting for the GPU · taking longer than usual, you can cancel'
+      ? 'Waiting for the GPU · taking longer than usual'
       : 'Waiting for the GPU · up to 10 min';
   }
   if (job.status === 'processing') return 'Analysing';
@@ -1063,6 +1063,7 @@ function estimateCostCents(d) { return 90 * Math.max(1, Math.ceil((d - 0.5) / 30
 
 const uploadZone = $('uploadZone'), fileInput = $('fileInput');
 let pendingFile = null, pendingType = '', pendingDuration = 0;
+let uploadCancel = null, uploadWindowTimer = null;
 ['dragenter','dragover'].forEach(e => uploadZone.addEventListener(e, ev => { ev.preventDefault(); uploadZone.classList.add('dragover'); }));
 ['dragleave','drop'].forEach(e => uploadZone.addEventListener(e, ev => { ev.preventDefault(); uploadZone.classList.remove('dragover'); }));
 uploadZone.addEventListener('drop', ev => { const f = ev.dataTransfer.files; if (f.length) handleFile(f[0]); });
@@ -1073,16 +1074,27 @@ $('topUpload').addEventListener('click', () => {
 });
 $('btnNew').addEventListener('click', resetUI);
 $('upConfirm').addEventListener('click', startUpload);
-$('upCancel').addEventListener('click', resetUpload);
+$('upCancel').addEventListener('click', () => { if (uploadCancel) uploadCancel(); else resetUpload(); });
 
 function rejectFile(message) { $('uploadNote').textContent = message; fileInput.value = ''; }
 
 function readDuration(file) {
   return new Promise((resolve, reject) => {
     const v = document.createElement('video'), url = URL.createObjectURL(file);
+    const timer = setTimeout(() => finish(reject, new Error('timeout')), 10000);
+    let done = false;
+    const finish = (settle, value) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      URL.revokeObjectURL(url);
+      v.removeAttribute('src');
+      v.load();
+      settle(value);
+    };
     v.preload = 'metadata';
-    v.onloadedmetadata = () => { URL.revokeObjectURL(url); resolve(v.duration); };
-    v.onerror = () => { URL.revokeObjectURL(url); reject(new Error('unreadable')); };
+    v.onloadedmetadata = () => finish(resolve, v.duration);
+    v.onerror = () => finish(reject, new Error('unreadable'));
     v.src = url;
   });
 }
@@ -1114,20 +1126,23 @@ function showConfirm(file, duration, type) {
   $('consentBox').checked = false; $('consentBox').disabled = false;
   $('consentRow').classList.remove('hidden');
   $('upFileName').textContent = file.name;
-  $('upDetail').textContent = `${duration.toFixed(1)} s · ${(file.size / 1e6).toFixed(1)} MB · ${dollars(estimateCostCents(duration))}`;
+  $('upDetail').textContent = `${duration.toFixed(1)} s · ${(file.size / 1e6).toFixed(1)} MB · ${dollars(estimateCostCents(duration))} · charged only if it succeeds · cancel within 15 s`;
   $('upMsg').textContent = ''; $('upMsg').classList.remove('error');
   $('upProgress').classList.remove('active'); $('upBar').style.width = '0';
   $('upConfirm').disabled = false; $('upConfirm').style.display = '';
+  $('upCancel').hidden = false;
   $('upCancel').textContent = 'Cancel';
   $('uploadPanel').classList.add('active');
   $('headerMeta').textContent = `Ready to upload: ${file.name}`;
 }
 
 function uploadFailed(message) {
+  clearUploadWindow();
   $('upMsg').textContent = message; $('upMsg').classList.add('error');
   $('upProgress').classList.remove('active');
   $('upConfirm').disabled = false; $('upConfirm').style.display = '';
   $('consentBox').disabled = false;
+  $('upCancel').hidden = false;
   $('upCancel').textContent = 'Cancel';
 }
 
@@ -1193,7 +1208,16 @@ async function startUpload() {
     if (finished) return;
     finished = true;
     clearStallTimer();
+    uploadCancel = null;
     abandonUpload(jobId, message);
+  };
+  uploadCancel = () => {
+    if (finished) return;
+    finished = true;
+    clearStallTimer();
+    uploadCancel = null;
+    xhr.abort();
+    abandonUpload(jobId, 'Upload cancelled.');
   };
   xhr.open('POST', presign.url);
   xhr.upload.onprogress = ev => {
@@ -1208,7 +1232,7 @@ async function startUpload() {
     if (xhr.status === 204) {
       finished = true;
       $('upBar').style.width = '100%';
-      resetUpload();
+      showCancelWindow(jobId);
       refreshAccount();
     } else { failUpload(`Upload failed (HTTP ${xhr.status}).`); }
   };
@@ -1220,7 +1244,47 @@ async function startUpload() {
   xhr.send(fd);
 }
 
+function clearUploadWindow() {
+  clearInterval(uploadWindowTimer);
+  uploadWindowTimer = null;
+  uploadCancel = null;
+}
+
+function showCancelWindow(jobId) {
+  clearUploadWindow();
+  const button = $('upCancel');
+  let left = 15;
+  button.hidden = false;
+  button.textContent = `Cancel (${left})`;
+  $('upConfirm').style.display = 'none';
+  $('upMsg').textContent = '';
+  $('upMsg').classList.remove('error');
+  $('upProgress').classList.add('active');
+  $('upBar').style.width = '100%';
+  uploadWindowTimer = setInterval(() => {
+    left -= 1;
+    if (left <= 0) { resetUpload(); return; }
+    button.textContent = `Cancel (${left})`;
+  }, 1000);
+  uploadCancel = async () => {
+    let res;
+    try {
+      res = await postJSON(`/api/jobs/${jobId}/cancel`, {});
+    } catch (e) { return; }
+    if (res.status === 401) return window.location.reload();
+    if (res.ok) {
+      resetUpload();
+      refreshAccount();
+    } else if (res.status === 409) {
+      uploadCancel = null;
+      button.hidden = true;
+      refreshAccount();
+    }
+  };
+}
+
 function resetUpload() {
+  clearUploadWindow();
   stopTracking();
   pendingFile = null; pendingType = ''; pendingDuration = 0;
   $('uploadPanel').classList.remove('active');
@@ -1232,6 +1296,8 @@ function resetUpload() {
   $('upProgress').classList.remove('active');
   $('upBar').style.width = '0';
   fileInput.value = '';
+  $('upCancel').hidden = false;
+  $('upCancel').textContent = 'Cancel';
   if (signedIn) uploadZone.classList.remove('hidden');
   $('headerMeta').textContent = '';
 }
@@ -2059,7 +2125,9 @@ async function loadComparison() {
         ? 'This result was made by an older version of NeuroLens. Upload the video again.'
         : `Couldn't load that result (HTTP ${res.status}).`);
       msg.classList.add('error');
-      comparison = null; buildTop(); buildMainChart(); buildStrips();
+      comparison = null;
+      $('mutedToggle').disabled = false;
+      buildTop(); buildMainChart(); buildStrips();
       return;
     }
     comparison = { result: data, summary: data.summary || {}, label, jobId: id };
@@ -2073,7 +2141,9 @@ async function loadComparison() {
     if (request !== compareRequest || seq !== resultSeq) return;
     msg.textContent = "Couldn't reach the server. Please try again.";
     msg.classList.add('error');
-    comparison = null; buildTop(); buildMainChart(); buildStrips();
+    comparison = null;
+    $('mutedToggle').disabled = false;
+    buildTop(); buildMainChart(); buildStrips();
   }
 }
 $('compareSelect').addEventListener('change', loadComparison);

@@ -5,10 +5,10 @@ keeps the world in a JSON file (so a change is seen by later calls), logs every 
 loudly (exit 99) on any call it does not know, so nothing slips through unrecorded.
 
 start_work.sh sets the SageMaker variant's maximum to 1; --keep-warm (--hours N) also sets its
-minimum to 1 and records a one-time scheduled action that puts the minimum back; --keep-db keeps
-Aurora awake. stop_work.sh sets the scalable target's min and max to 0, deletes keep-warm actions,
-sets the endpoint's desired count to 0, waits for DescribeEndpoint to show 0 and prints ALL
-STOPPED. Uploads are refused while paused by the web app (tests/test_m3e_web.py).
+minimum to 1 and records a one-time scheduled action that puts the minimum back; --keep-db is
+refused. stop_work.sh deletes keep-warm actions first, sets the scalable target's min and max to 0,
+reads them back, sets the endpoint's desired count to 0, waits for DescribeEndpoint to show 0 and
+prints ALL STOPPED. Uploads are refused while paused by the web app (tests/test_m3e_web.py).
 """
 
 import datetime
@@ -58,7 +58,8 @@ if key == "application-autoscaling register-scalable-target":
 if key == "application-autoscaling describe-scalable-targets":
     if "length(" in query:
         out("1")
-    out(f'{target["min"]}\t{target["max"]}')
+    shown = w.get("readback", target)
+    out(f'{shown["min"]}\t{shown["max"]}')
 if key == "application-autoscaling put-scheduled-action":
     known = {
         "--service-namespace", "--scheduled-action-name", "--resource-id",
@@ -255,6 +256,13 @@ def test_keep_warm_failing_action_never_raises_the_minimum(sandbox):
     ]
 
 
+def test_start_refuses_keep_db(sandbox):
+    r = sandbox("start_work.sh", healthy_world(), "--keep-db")
+    assert r.code == 2
+    assert r.calls == []
+    assert "usage" in r.err
+
+
 def test_keep_db_raises_aurora_without_holding_the_gpu(sandbox):
     r = sandbox("start_work.sh", healthy_world(), "--keep-db")
     assert r.code == 0, r.err
@@ -301,6 +309,37 @@ def test_stop_sets_the_target_and_endpoint_to_zero_and_prints_all_stopped(sandbo
     assert "DesiredInstanceCount=0" in (option(endpoint, "--desired-weights-and-capacities") or "")
     assert "ALL STOPPED" in r.out
     assert "NOT CONFIRMED" not in r.err
+
+
+def test_stop_deletes_the_keep_warm_action_before_scaling_down(sandbox):
+    world = healthy_world(
+        scheduled=[{"name": "neurolens-keep-warm-end", "at": "2026-10-22T12:00:00Z", "action": ""}]
+    )
+    r = sandbox("stop_work.sh", world)
+    assert r.code == 0, r.err
+    deleted = r.find("application-autoscaling", "delete-scheduled-action")[0]
+    registered = r.find("application-autoscaling", "register-scalable-target")[0]
+    read_back = r.find("application-autoscaling", "describe-scalable-targets")[0]
+    assert deleted < registered < read_back
+
+
+def test_stop_fails_when_the_scalable_target_reads_back_nonzero(sandbox):
+    r = sandbox("stop_work.sh", healthy_world(readback={"min": 1, "max": 0}))
+    assert r.code != 0
+    assert "ALL STOPPED" not in r.out
+    assert "NOT CONFIRMED" in r.err
+    assert "min=1 max=0" in r.err
+
+
+def test_stop_fails_when_the_scalable_target_cannot_be_read_back(sandbox):
+    r = sandbox(
+        "stop_work.sh",
+        healthy_world(fail=["application-autoscaling describe-scalable-targets"]),
+    )
+    assert r.code != 0
+    assert "ALL STOPPED" not in r.out
+    assert "NOT CONFIRMED" in r.err
+    assert "could not read the scalable target back" in r.err
 
 
 def test_stop_without_a_keep_warm_action_still_stops(sandbox):
