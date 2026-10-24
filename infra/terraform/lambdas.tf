@@ -76,11 +76,15 @@ resource "aws_iam_role_policy" "m3a_lambda" {
     Version = "2012-10-17"
     Statement = concat(local.db_access_statements, [
       {
-        # Is there a result (settle) or an upload (reaper)?
-        Sid      = "ReadResultsAndUploads"
-        Effect   = "Allow"
-        Action   = "s3:GetObject"
-        Resource = ["${aws_s3_bucket.main.arn}/results/*", "${aws_s3_bucket.main.arn}/uploads/*"]
+        # Is there a result (settle), an upload, or a retention curve (reaper's dataset clean-up)?
+        Sid    = "ReadResultsUploadsAndDataset"
+        Effect = "Allow"
+        Action = "s3:GetObject"
+        Resource = [
+          "${aws_s3_bucket.main.arn}/results/*",
+          "${aws_s3_bucket.main.arn}/uploads/*",
+          "${aws_s3_bucket.main.arn}/dataset/*",
+        ]
       },
       {
         # A refund deletes every file the job has (M3a §7b).

@@ -71,7 +71,7 @@ The same rules as the old `verify` (length limit first, then record the duration
 - **Concurrency:** `MaxConcurrentInvocationsPerInstance = 1`, so SageMaker sends one job at a time. The handler refuses a second concurrent request with 503 as a guard.
 
 ### 4b. `POST /invocations`
-- **Request:** the body is the video (SageMaker streams it from the upload). The handler streams it to a temporary file, never holding it in memory. A missing `Content-Length`, or a body that ends before it, → 500 before `handle_job` (no claim), logged: the error handler then refunds the still-queued job as `processing_failed`, so a dropped connection never blames or deletes the user's file. The job id comes from the `X-Amzn-SageMaker-Custom-Attributes` header. A missing or malformed id → 400, logged.
+- **Request:** the body is the video (SageMaker streams it from the upload). The handler streams it to a temporary file, never holding it in memory. A missing `Content-Length`, a body that ends before it, or a body that stalls (no bytes for 60 s; the socket timeout applies only while the body is read, so idle keep-alive connections are unchanged) → 500 before `handle_job` (no claim), logged, and the busy lock is freed: the error handler then refunds the still-queued job as `processing_failed`, so a dropped connection never blames or deletes the user's file. The job id comes from the `X-Amzn-SageMaker-Custom-Attributes` header. A missing or malformed id → 400, logged.
 - **Response:** JSON `{"job_id", "outcome"}`. 200 for `done`, `duplicate`, `rejected` and `skipped`. 500 for `failed`, after the refund (§4c), so SageMaker counts the failure and the error handler sees it (a no-op on a refunded job).
 - **`handle_job(job_id, video_path, *, s3, db, cfg, roi_masks)`** keeps `handle_record`'s logic, with these changes:
   - The object key comes from the job row: `job_state` also returns `object_key` and `verified_duration_ms`.
@@ -226,6 +226,7 @@ The same rules as the old `verify` (length limit first, then record the duration
 - their roles, each scoped to `neurolens` resources:
   - `dispatcher`: consume the jobs queue (receive, delete, get attributes); `s3:GetObject` and `s3:DeleteObject` on `uploads/*`, `s3:ListBucket` on the bucket; `sagemaker:InvokeEndpointAsync` on the endpoint; the Data API and the database secret; its logs;
   - `gpu_failed`: the M3a Lambda role (the DLQ handler's rights, same work);
+  - the M3a Lambda role also reads `dataset/*` (`s3:GetObject`): the reaper's 60-day clean-up checks for `retention.csv`, and without read rights S3 answers 403, not 404;
   - `gpu_guard`: §6c's permissions, the Data API and the database secret, its logs;
 - the lifecycle rules: `sagemaker-output/` 1 day, `build/` 7 days;
 
@@ -340,6 +341,7 @@ Measured figures replace these in the build log.
 - **An invoke whose answer is lost, twice:** SageMaker accepted the request, the dispatcher saw an error both times, and the DLQ handler refunds the job. The request then finds a `failed` job and skips it. The user is refunded and uploads again; at most one start-up is wasted.
 - **Retention added in the same moment as the 60-day clean-up:** the clean-up checks `retention.csv` just before deleting, so the window is a fraction of a second, once per job.
 - **An expired request is reported late.** SageMaker reports a request whose 2-hour wait ran out only when an instance next takes it from the queue (day B: no notice in 18 minutes with no instance; the notice came the moment one started). While the GPU cannot start, the reaper refunds the job instead, 4 to 7 hours after upload. The user waits longer for the refund; no credit is lost. When capacity returns, the expired request still counts as backlog and starts the GPU once, about $0.70 (estimate: cold start plus 7 idle minutes).
+- **A step that hangs inside the model (audio extraction, transcription) has no deadline of its own.** The claim keep-alive's `worker.max_job_minutes` (55, from the longest measured job) is the only bound: the GPU runs up to 55 minutes for that job, then the process ends and the job is refunded. About $2 (estimate) per hang; none seen so far. A per-step deadline would need measured step times first.
 - **A new upload between the guard's check and its stop:** SageMaker starts the GPU again for it; one start-up is wasted.
 - **The scale-in alarm reads missing backlog data as empty.** If AWS ever stopped publishing it during a running job for 7 minutes, the job would be cut off and refunded. Day B checks the data is continuous during a job (§12 step 6).
 
