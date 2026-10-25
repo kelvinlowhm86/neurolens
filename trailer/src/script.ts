@@ -38,7 +38,8 @@ export const CUE = {
     cue('group-understand', 'Understand', 36, 40),
   ],
   mute: cue('mute', 'Still works on mute?', 40.3, 46),
-  compare: cue('compare', 'Which cut wins?', 46, 54),
+  muteAnswer: cue('mute-answer', 'Yes.', 44.25, 46),
+  compare: cue('compare', 'Which opening wins?', 46, 54),
   model: cue('model', 'Built on a model trained on real brain scans.', 54, 58),
   weeks: cue('weeks', 'Weeks', 58, 61),
   minutes: cue('minutes', 'Minutes.', 61, 68.25),
@@ -50,6 +51,8 @@ export const CUE = {
 export const LABEL = {
   bunny: 'Big Buck Bunny',
   sintel: 'Sintel',
+  openingA: 'Opening A',
+  openingB: 'Opening B',
   peak: 'peak',
   trough: 'low',
   sameScale: 'same signed scale',

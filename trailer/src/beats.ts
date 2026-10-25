@@ -33,9 +33,9 @@ export const beats = Array.from({length: LAST_BEAT}, (_, i) => {
 }).filter(({seconds}) => seconds >= 0 && !silent(seconds));
 
 export const CLIPS = {
-  openBunny: 20, openSintel: 12,
-  hooked: [48.5, 52.5], drift: [26.5, 30.5], mute: [22, 28],
-  compareSintel: [28.7, 36.7], compareBunny: [31, 39],
+  openBunny: 5, openSintel: 12,
+  hooked: [48.5, 52.5], drift: [26.5, 30.5], mute: [18, 24],
+  compareA: [1, 9], compareB: [22, 30],
 } as const;
 
 export const cuts = {

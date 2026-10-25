@@ -39,7 +39,7 @@ Music and sound effects (impact, scribble) made with ElevenLabs; the mute chime 
 
 | Frames | Shot |
 | --- | --- |
-| 0–90 | Big Buck Bunny (source 20 s), full-bleed. “You made a video.” |
+| 0–90 | Big Buck Bunny (source 5 s, smiling close-up), full-bleed. “You made a video.” |
 | 90–180 | Sintel (source 12 s), full-bleed. “Will it grab them?” |
 | 180–548 | One continuous `Scanner` push. 6–14 s slow push; 14–18.25 s accelerated fly-in through the open bore. “The real answer is in the brain.” / “A lab.” / “A scanner.” / “Weeks.” / “What if all you needed” |
 | 548–600 | Black at the stop. “was the video?” It shatters on the drop. |
@@ -48,8 +48,8 @@ Music and sound effects (impact, scribble) made with ElevenLabs; the mute chime 
 | 840–960 | Drift: full-bleed clip with the overall chart and trough marker. |
 | 960–1,080 | Seven signal names, one per beat from 32.0 s; this scene fills 32–36 s until stage 2 adds the groups. |
 | 1,080–1,200 | Groups: three columns with their charts. |
-| 1,200–1,380 | Mute: full-bleed clip, overall and muted overall on one chart, muffled music. “Still works on mute?” |
-| 1,380–1,620 | Compare: Bunny and Sintel side by side with one shared chart. “Which cut wins?” |
+| 1,200–1,380 | Mute: Big Buck Bunny (source 18–24 s), full-bleed, overall and muted overall on one chart, muffled music. “Still works on mute?”; “Yes.” lands on the music stop. |
+| 1,380–1,620 | Compare: Sintel’s two openings side by side with one shared chart: A (source 1–9 s, left) and B (source 22–30 s, right). “Which opening wins?” |
 | 1,620–1,740 | `BrainHero`. “Built on a model trained on real brain scans.” |
 | 1,740–1,830 | Drained `Scanner` placeholder with “Weeks”; stage 2 adds the counter, scribble and fade. |
 | 1,830–2,048 | `BrainHero` and “Minutes.” |
