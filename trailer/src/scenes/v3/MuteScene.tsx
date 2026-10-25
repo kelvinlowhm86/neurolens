@@ -2,13 +2,15 @@ import React from 'react';
 import {AbsoluteFill, Freeze, useCurrentFrame} from 'remotion';
 import sintel from '../../sintel.json';
 import {CUE, LABEL} from '../../script';
-import {FPS, cuts, f, moments} from '../../beats';
+import {CLIPS, FPS, cuts, f, moments} from '../../beats';
 import {Graph, at, signed} from '../../edit/Graph';
 import {clamp, ease, enter} from '../../edit/anim';
 import {C, Caption, Flash, FullBleed, Shade} from '../../edit/ui';
 
+const [MUTE_FROM, MUTE_TO] = CLIPS.mute;
+
 const rangeOf = (): [number, number] => {
-  const slice = [...sintel.signals.overall.slice(19, 26), ...sintel.muted.overall.slice(19, 26)];
+  const slice = [...sintel.signals.overall.slice(MUTE_FROM, MUTE_TO + 1), ...sintel.muted.overall.slice(MUTE_FROM, MUTE_TO + 1)];
   const low = Math.min(0, ...slice), high = Math.max(0, ...slice);
   const pad = (high - low) * .18 || .04;
   return [low - pad, high + pad];
@@ -26,16 +28,16 @@ export const MuteScene: React.FC = () => {
   const local = g - cuts.mute;
   const holdFrom = moments.muteStop - cuts.mute, holdTo = moments.muteBack - cuts.mute;
   const effective = local >= holdTo ? holdFrom + (local - holdTo) : Math.min(local, holdFrom);
-  const t = 19 + effective / FPS;
-  const progress = clamp((t - 19) / 6);
+  const t = MUTE_FROM + effective / FPS;
+  const progress = clamp((t - MUTE_FROM) / (MUTE_TO - MUTE_FROM));
   const shrink = ease(g, cuts.mute + f(.4), cuts.mute + f(1));
-  const pop = enter(g, cuts.mute, 9);
+  const pop = enter(g, cuts.mute, 11.5);
   const x = 960 + (1832 - 960) * shrink;
   const y = 540 + (94 - 540) * shrink;
   const size = 160 + (64 - 160) * shrink;
   return <AbsoluteFill style={{background: C.bg}}>
     <AbsoluteFill>
-      <Freeze frame={effective}><FullBleed clip="sintel" start={19} /></Freeze>
+      <Freeze frame={effective}><FullBleed clip="sintel" start={MUTE_FROM} /></Freeze>
     </AbsoluteFill>
     <Shade top="rgba(6,7,9,.52)" bottom="rgba(6,7,9,.97)" />
     <Caption cue={CUE.mute} offset={cuts.mute} size={126} y={244} maxWidth={1740} />
@@ -51,8 +53,8 @@ export const MuteScene: React.FC = () => {
       <Graph
         values={sintel.signals.overall}
         comparison={sintel.muted.overall}
-        from={19}
-        to={25}
+        from={MUTE_FROM}
+        to={MUTE_TO}
         range={rangeOf()}
         width={1712}
         height={420}

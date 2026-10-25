@@ -3,13 +3,17 @@ import {AbsoluteFill, useCurrentFrame} from 'remotion';
 import bunny from '../../bunny.json';
 import sintel from '../../sintel.json';
 import {CUE, LABEL} from '../../script';
-import {FPS, cuts, f} from '../../beats';
+import {CLIPS, FPS, cuts, f} from '../../beats';
 import {Graph, at, signed} from '../../edit/Graph';
 import {clamp, ease, enter} from '../../edit/anim';
 import {C, Caption, FullBleed} from '../../edit/ui';
 
+const [SINTEL_FROM, SINTEL_TO] = CLIPS.compareSintel;
+const [BUNNY_FROM, BUNNY_TO] = CLIPS.compareBunny;
+const SPAN = SINTEL_TO - SINTEL_FROM;
+
 const rangeOf = (): [number, number] => {
-  const slice = [...bunny.signals.overall.slice(9, 18), ...sintel.signals.overall.slice(9, 18)];
+  const slice = [...bunny.signals.overall.slice(BUNNY_FROM, BUNNY_TO + 1), ...sintel.signals.overall.slice(SINTEL_FROM, SINTEL_TO + 1)];
   const low = Math.min(0, ...slice), high = Math.max(0, ...slice);
   const pad = (high - low) * .14;
   return [low - pad, high + pad];
@@ -23,19 +27,21 @@ const Label: React.FC<{name: string; value: number; color: string}> = ({name, va
 export const CompareScene: React.FC = () => {
   const frame = useCurrentFrame();
   const g = frame + cuts.compare;
-  const t = 9 + (g - cuts.compare) / FPS;
-  const progress = clamp((t - 9) / 8);
+  const s = (g - cuts.compare) / FPS;
+  const progress = clamp(s / SPAN);
+  const bunnyAt = BUNNY_FROM + s;
+  const sintelAt = SINTEL_FROM + s;
   const winFrame = cuts.compare + f(6);
   const win = ease(g, winFrame, winFrame + 8);
   const tag = enter(g, winFrame, 10);
   return <AbsoluteFill style={{background: C.bg}}>
     <div style={{position: 'absolute', left: 0, top: 0, width: 960, height: 1080, overflow: 'hidden', filter: `brightness(${1 - .4 * win})`}}>
-      <FullBleed clip="bunny" start={9} />
-      <div style={{position: 'absolute', left: 96, top: 310}}><Label name={LABEL.bunny} value={at(bunny.signals.overall, t)} color={C.hot} /></div>
+      <FullBleed clip="bunny" start={BUNNY_FROM} />
+      <div style={{position: 'absolute', left: 96, top: 310}}><Label name={LABEL.bunny} value={at(bunny.signals.overall, bunnyAt)} color={C.cool} /></div>
     </div>
     <div style={{position: 'absolute', left: 960, top: 0, width: 960, height: 1080, overflow: 'hidden'}}>
-      <FullBleed clip="sintel" start={9} />
-      <div style={{position: 'absolute', right: 96, top: 310}}><Label name={LABEL.sintel} value={at(sintel.signals.overall, t)} color={C.cool} /></div>
+      <FullBleed clip="sintel" start={SINTEL_FROM} />
+      <div style={{position: 'absolute', right: 96, top: 310}}><Label name={LABEL.sintel} value={at(sintel.signals.overall, sintelAt)} color={C.hot} /></div>
       <AbsoluteFill style={{border: `6px solid ${C.hot}`, boxShadow: `inset 0 0 60px rgba(255,138,42,${.34 * win})`, opacity: win, pointerEvents: 'none'}} />
     </div>
     <div style={{position: 'absolute', left: 959, top: 0, width: 2, height: 1080, background: 'rgba(236,237,239,.32)', boxShadow: '0 0 24px #000'}} />
@@ -46,16 +52,20 @@ export const CompareScene: React.FC = () => {
     <div style={{position: 'absolute', left: 104, right: 104, bottom: 50}}>
       <Graph
         values={bunny.signals.overall}
+        valuesOffset={BUNNY_FROM}
         comparison={sintel.signals.overall}
-        from={9}
-        to={17}
+        comparisonOffset={SINTEL_FROM}
+        from={0}
+        to={SPAN}
         range={rangeOf()}
         width={1712}
         height={340}
         progress={progress}
         comparisonProgress={progress}
-        playhead={t}
+        playhead={s}
         zeroLabel={LABEL.typical}
+        color={C.cool}
+        comparisonColor={C.hot}
         comparisonStrokeWidth={5 + 4 * win}
         comparisonGlow={win}
         label="compare"

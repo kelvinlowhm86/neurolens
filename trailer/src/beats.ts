@@ -24,6 +24,12 @@ export const moments = {
   finalHit: f(73.75), musicEnd: f(76.05),
 } as const;
 
+export const CLIPS = {
+  openBunny: 20, openSintel: 12,
+  hooked: [48.5, 52.5], drift: [26.5, 30.5], mute: [22, 28],
+  compareSintel: [28.7, 36.7], compareBunny: [31, 39],
+} as const;
+
 export const cuts = {
   open: f(0), sintelOpen: f(4), scanner: f(8), lab: f(12), scannerWord: f(14), weeks: f(16),
   question: f(20), drop: f(24), hooked: f(28), drift: f(32), signals: f(36), groups: f(40),

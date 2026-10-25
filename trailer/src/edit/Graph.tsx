@@ -14,6 +14,8 @@ const signed = (n: number, digits = 2) => `${n >= 0 ? '+' : '\u2212'}${Math.abs(
 export type GraphProps = {
   values: number[];
   comparison?: number[];
+  valuesOffset?: number;
+  comparisonOffset?: number;
   from: number;
   to: number;
   range: [number, number];
@@ -39,6 +41,8 @@ export type GraphProps = {
 export const Graph: React.FC<GraphProps> = ({
   values,
   comparison,
+  valuesOffset,
+  comparisonOffset,
   from,
   to,
   range,
@@ -70,19 +74,23 @@ export const Graph: React.FC<GraphProps> = ({
   const x = (second: number) => padL + ((second - from) / (to - from)) * innerW;
   const y = (value: number) => padT + ((range[1] - value) / (range[1] - range[0])) * innerH;
   const zero = y(0);
+  const mainOffset = valuesOffset ?? from;
+  const compareOffset = comparisonOffset ?? from;
 
   const end = from + (to - from) * clamp(progress);
-  const path = (data: number[], finish: number) => {
-    const points: Array<[number, number]> = [[x(from), y(at(data, from))]];
+  const path = (data: number[], finish: number, offset: number) => {
+    const value = (second: number) => at(data, offset + (second - from));
+    const points: Array<[number, number]> = [[x(from), y(value(from))]];
     for (let second = Math.ceil(from); second <= Math.floor(finish); second++) {
-      if (second >= 0 && second < data.length) points.push([x(second), y(data[second])]);
+      const i = offset + (second - from);
+      if (i >= 0 && i < data.length) points.push([x(second), y(at(data, i))]);
     }
-    points.push([x(finish), y(at(data, finish))]);
+    points.push([x(finish), y(value(finish))]);
     return points.map(([px, py], i) => `${i ? 'L' : 'M'}${px.toFixed(2)},${py.toFixed(2)}`).join(' ');
   };
 
-  const main = path(values, end);
-  const compare = comparison ? path(comparison, from + (to - from) * clamp(comparisonProgress)) : '';
+  const main = path(values, end, mainOffset);
+  const compare = comparison ? path(comparison, from + (to - from) * clamp(comparisonProgress), compareOffset) : '';
   const fill = `${main} L${x(end).toFixed(2)},${zero.toFixed(2)} L${x(from).toFixed(2)},${zero.toFixed(2)} Z`;
   const ticks = [range[0], range[0] / 2, 0, range[1] / 2, range[1]].filter((v, i, a) => a.indexOf(v) === i);
   const seconds = Array.from({length: Math.floor(to) - Math.ceil(from) + 1}, (_, i) => Math.ceil(from) + i)
@@ -112,7 +120,7 @@ export const Graph: React.FC<GraphProps> = ({
     {axes && zeroLabel && <text x={padL + 12} y={zero - 9} fill="#A0A6AF" fontSize="20" textAnchor="start" letterSpacing=".02em">{zeroLabel}</text>}
     {playhead !== undefined && playhead >= from && playhead <= to && (() => {
       const px = x(playhead);
-      const py = y(at(values, playhead));
+      const py = y(at(values, mainOffset + (playhead - from)));
       return <g>
         <line x1={px} x2={px} y1={padT} y2={height - padB} stroke="#ECEDEF" strokeOpacity=".28" strokeWidth="1.5" />
         <circle cx={px} cy={py} r="6" fill={color} stroke="#0E0F11" strokeWidth="2.5" />
@@ -120,7 +128,7 @@ export const Graph: React.FC<GraphProps> = ({
     })()}
     {marker && marker.second <= end + .001 && (() => {
       const px = x(marker.second);
-      const py = y(at(values, marker.second));
+      const py = y(at(values, mainOffset + (marker.second - from)));
       const pop = Math.max(0, marker.pop ?? 1);
       const size = marker.size ?? 24;
       const dx = px < width * .66 ? px + size * .8 : px - size * .8;
@@ -136,7 +144,7 @@ export const Graph: React.FC<GraphProps> = ({
     })()}
     {comparisonMarker && comparison && comparisonMarker.second <= from + (to - from) * clamp(comparisonProgress) + .001 && (() => {
       const px = x(comparisonMarker.second);
-      const py = y(at(comparison, comparisonMarker.second));
+      const py = y(at(comparison, compareOffset + (comparisonMarker.second - from)));
       return <g>
         <circle cx={px} cy={py} r="6" fill={comparisonColor} stroke="#0E0F11" strokeWidth="2.5" />
         <text x={px < width * .66 ? px + 19 : px - 19} y={py + 34} fill={comparisonColor} fontSize="22" fontWeight="500" textAnchor={px < width * .66 ? 'start' : 'end'} fontVariant="tabular-nums">{comparisonMarker.label}</text>

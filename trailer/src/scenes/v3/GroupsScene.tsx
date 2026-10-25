@@ -52,6 +52,7 @@ export const GroupsScene: React.FC = () => {
             height={chartHeight}
             progress={draw}
             color={group.color}
+            zeroLabel={group.title === 'See' ? LABEL.typical : undefined}
             label={`group-${group.title}`}
             background
           />

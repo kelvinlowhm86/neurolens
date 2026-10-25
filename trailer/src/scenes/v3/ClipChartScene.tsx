@@ -4,7 +4,7 @@ import bunny from '../../bunny.json';
 import sintel from '../../sintel.json';
 import type {Cue} from '../../script';
 import {CUE, LABEL} from '../../script';
-import {FPS, cuts} from '../../beats';
+import {CLIPS, FPS, cuts} from '../../beats';
 import {Graph, signed} from '../../edit/Graph';
 import {C, Caption, FullBleed, Shade} from '../../edit/ui';
 import {clamp, ease} from '../../edit/anim';
@@ -22,7 +22,7 @@ type Props = {
 };
 
 const rangeOf = (values: number[], from: number, to: number): [number, number] => {
-  const slice = values.slice(Math.floor(from), Math.ceil(to) + 1);
+  const slice = values.slice(Math.floor(from), Math.floor(to) + 1);
   const low = Math.min(0, ...slice), high = Math.max(0, ...slice);
   const pad = (high - low) * .18 || .04;
   return [low - pad, high + pad];
@@ -35,7 +35,7 @@ export const ClipChartScene: React.FC<Props> = ({
   const g = frame + sceneStart;
   const t = windowStart + (g - sceneStart) / FPS;
   const progress = clamp((t - windowStart) / (windowEnd - windowStart));
-  const slice = values.slice(Math.floor(windowStart), Math.ceil(windowEnd) + 1);
+  const slice = values.slice(Math.floor(windowStart), Math.floor(windowEnd) + 1);
   const markerValue = mode === 'peak' ? Math.max(...slice) : Math.min(...slice);
   const markerSecond = slice.indexOf(markerValue) + Math.floor(windowStart);
   const reach = sceneStart + (markerSecond - windowStart) * FPS;
@@ -66,9 +66,9 @@ export const ClipChartScene: React.FC<Props> = ({
 };
 
 export const HookedScene: React.FC = () =>
-  <ClipChartScene cue={CUE.hooked} clip="sintel" values={sintel.signals.overall}
-    sceneStart={cuts.hooked} windowStart={8.5} windowEnd={12.5} color={C.hot} label="hooked" mode="peak" />;
+  <ClipChartScene cue={CUE.hooked} clip="bunny" values={bunny.signals.overall}
+    sceneStart={cuts.hooked} windowStart={CLIPS.hooked[0]} windowEnd={CLIPS.hooked[1]} color={C.hot} label="hooked" mode="peak" />;
 
 export const DriftScene: React.FC = () =>
   <ClipChartScene cue={CUE.drift} clip="bunny" values={bunny.signals.overall}
-    sceneStart={cuts.drift} windowStart={26.5} windowEnd={30.5} color={C.cool} label="drift" mode="low" />;
+    sceneStart={cuts.drift} windowStart={CLIPS.drift[0]} windowEnd={CLIPS.drift[1]} color={C.cool} label="drift" mode="low" />;
