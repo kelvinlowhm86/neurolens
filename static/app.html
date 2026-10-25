@@ -849,6 +849,16 @@ async function loadHistory() {
 function renderHistory(jobs) {
   jobsCache = jobs;
   closeRowMenu();
+  // A result opened from a ?job= link predates this list, so re-check its title and link (§4.17).
+  const shown = currentContext && currentContext.jobId
+    ? jobs.find(job => job.job_id === currentContext.jobId) : null;
+  if (shown) {
+    const title = shown.filename || `Job ${shown.job_id.slice(0, 8)}`;
+    const name = videoBaseName(title);
+    $('clipTitle').textContent = shortName(name);
+    $('clipTitle').title = name;
+    showRetention(shown.job_id, title);
+  }
   updateTabTitle(jobs);
   sendPendingCurves(jobs);
   const list = $('historyList');
@@ -1033,6 +1043,14 @@ function historyRow(job) {
 
 function openJob(job) {
   resetUI();
+  // Switch to the player at once; the result replaces this line when it arrives (§4.16).
+  setViewName('player');
+  $('reportBody').classList.add('active');
+  $('reportEmpty').style.display = 'none';
+  $('chartCard').hidden = true;
+  $('stripsCard').hidden = true;
+  $('resultMessage').textContent = 'Opening this result…';
+  $('resultMessage').hidden = false;
   trackJob(job.job_id);
 }
 
@@ -1534,6 +1552,11 @@ async function uploadEntry(entry) {
   const jobId = presign.job_id;
   entry.jobId = jobId;
   loadBalance();
+  // Removed while the presign was in flight: its job now exists, so cancel and never upload (§2b).
+  if (entry.removed) {
+    cancelReservedJob(jobId);
+    return;
+  }
 
   const fd = new FormData();
   Object.entries(presign.fields).forEach(([k, v]) => fd.append(k, v));
@@ -1622,11 +1645,13 @@ async function cancelNewJob(jobId) {
     if (res.status === 401) return window.location.reload();
     cancelWindows.delete(jobId);
     if (res.status === 409) { renderHistory(jobsCache); return; }  // already dispatched: just loses the button
-    if (res.ok) { loadBalance(); loadHistory(); }
+    if (res.ok) { forgetTabJob(jobId); loadBalance(); loadHistory(); }
   } catch (e) { /* the window keeps counting; the job can still be cancelled from the menu */ }
 }
 
 const POLL_MS = 5000;
+// A done job whose result will not load is retried this many times, then the page says so.
+const RESULT_LOAD_TRIES = 4;
 // Short History failure texts, each shown with "· not charged" (§4.5).
 const FAILURE_TEXTS = {
   unreadable_video: 'Not a readable video',
@@ -1644,7 +1669,7 @@ const FAILURE_TEXTS = {
 };
 const failureText = code => FAILURE_TEXTS[code] || 'Failed';
 window.neurolensTimings = {};
-let trackedJob = null, pollTimer = null;
+let trackedJob = null, pollTimer = null, resultLoadFails = 0;
 
 function setParam(name, value) {
   try {
@@ -1664,6 +1689,7 @@ function stopTracking() {
 function trackJob(jobId) {
   clearTimeout(pollTimer);
   trackedJob = jobId;
+  resultLoadFails = 0;
   setJobInUrl(jobId);
   pollJob(jobId);
 }
@@ -1672,7 +1698,7 @@ async function cancelJob(jobId) {
   try {
     const res = await postJSON(`/api/jobs/${jobId}/cancel`, {});
     if (res.status === 401) return window.location.reload();
-    if (res.ok) refreshAccount();
+    if (res.ok) { forgetTabJob(jobId); refreshAccount(); }
     else if (res.status === 409) loadHistory();
   } catch (e) { /* the list still shows the job's state */ }
 }
@@ -1692,8 +1718,15 @@ async function pollJob(jobId) {
       const st = await res.json();
       if (trackedJob !== jobId) return;
       if (st.status === 'done') {
-        again = !(await showResult(jobId));
-        if (!again) refreshAccount();
+        const opened = await showResult(jobId);
+        if (trackedJob !== jobId) return;
+        if (opened) {
+          again = false;
+          refreshAccount();
+        } else if (++resultLoadFails >= RESULT_LOAD_TRIES) {
+          again = false;
+          showResultUnavailable("Couldn't open this result. Try again later.");
+        }
       } else if (st.status === 'failed') {
         again = false;
         resetUI();
@@ -1988,6 +2021,7 @@ $('curveSave').addEventListener('click', async () => {
       $('curveSave').disabled = false;
       return setCurveMsg(message, true);
     }
+    curveFailures.delete(target.jobId);
     const rewarded = data.rewarded_cents || 0;
     if (rewarded > 0) setCurveMsg(`Saved. This analysis is now free: ${dollars(rewarded)} is back in your credit.`);
     else if (Array.isArray(data.quality) && data.quality.length) setCurveMsg("Saved. It doesn't look like a full retention curve, so it isn't free.");
@@ -2013,6 +2047,7 @@ async function sendPendingCurves(jobs) {
       const res = await postJSON(`/api/jobs/${jobId}/retention`, entry.curve);
       if (res.status === 401) return window.location.reload();
       if (!res.ok) curveFailures.set(jobId, `Couldn't add the curve for ${entry.name}.`);
+      else curveFailures.delete(jobId);
     } catch (e) {
       curveFailures.set(jobId, `Couldn't add the curve for ${entry.name}.`);
     }
@@ -2064,6 +2099,12 @@ $('stopShareBtn').addEventListener('click', async () => {
 // tabJobs holds a job's id once it exists, with whether it has appeared in the list yet.
 let tabTotal = 0, tabTitleDone = false, tabTitleVisHandler = null;
 const tabJobs = new Map();
+// A job the page cancels itself leaves the count at once (§4.18); the list path then never sees it.
+function forgetTabJob(jobId) {
+  if (!tabJobs.delete(jobId)) return;
+  tabTotal = Math.max(0, tabTotal - 1);
+  updateTabTitle(jobsCache);
+}
 function updateTabTitle(jobs) {
   if (tabTotal === 0) {
     if (!tabTitleDone) document.title = 'NeuroLens';
@@ -2611,6 +2652,7 @@ function showCompareRow() {
   if (!signedIn || !currentResult || candidates.length === 0) {
     row.hidden = true;
     select.replaceChildren();
+    $('mutedToggle').disabled = false;
     if (comparison) { comparison = null; buildTop(); buildMainChart(); buildStrips(); }
     return;
   }
@@ -2632,6 +2674,7 @@ function showCompareRow() {
     select.value = keep;
   } else {
     select.value = '';
+    $('mutedToggle').disabled = false;
     if (comparison) { comparison = null; buildTop(); buildMainChart(); buildStrips(); }
   }
 }

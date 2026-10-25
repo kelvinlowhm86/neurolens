@@ -5,6 +5,7 @@ racing `reserve`) and `POST /api/account/delete` (confirmation, files and rows, 
 per Cognito identity, a missing user counts as done, failure logging, and the stale-session 401).
 """
 
+import json
 import logging
 import re
 import threading
@@ -18,6 +19,7 @@ from conftest import ISSUER, STARTER_CENTS, check_invariants, sign_in
 from neurolens import billing, storage
 from neurolens.web.app import create_app
 from test_m3c_delete_job import DeleteReportsError
+from test_m3f_purge_retry import run_reaper
 
 GOOGLE = "https://accounts.google.example"
 EMAIL = "ann@example.com"
@@ -78,6 +80,37 @@ def cognito_admin(monkeypatch):
 
     monkeypatch.setattr(BaseClient, "_make_api_call", make_api_call)
     return fake
+
+
+@pytest.fixture
+def reaper_env(aws, db, monkeypatch, tmp_path, patch_everywhere):
+    """The reaper handler on the test database, with config.json's research block configurable."""
+    monkeypatch.setenv(
+        "NEUROLENS_DB_CLUSTER_ARN", "arn:aws:rds:us-east-1:000000000000:cluster:neurolens-db"
+    )
+    monkeypatch.setenv(
+        "NEUROLENS_DB_SECRET_ARN",
+        "arn:aws:secretsmanager:us-east-1:000000000000:secret:rds!cluster-test",
+    )
+    monkeypatch.setenv("NEUROLENS_DB_NAME", "neurolens")
+    monkeypatch.setenv("NEUROLENS_S3_BUCKET", aws.bucket)
+    monkeypatch.setenv("AWS_REGION", "us-east-1")
+
+    def data_api_database(*args, **kwargs):
+        return db
+
+    patch_everywhere(
+        "DataApiDatabase", data_api_database, "neurolens.db", "neurolens.lambdas.reaper"
+    )
+
+    def install(no_curve_days):
+        root = tmp_path / f"root-{no_curve_days}"
+        (root / "data").mkdir(parents=True)
+        config = {"research": {"no_curve_days": no_curve_days}}
+        (root / "config.json").write_text(json.dumps(config))
+        monkeypatch.setenv("NEUROLENS_ROOT", str(root))
+
+    return install
 
 
 def delete_account(client, **body):
@@ -146,26 +179,41 @@ class DeleteFailsThenWorks(DeleteReportsError):
 # ---------------------------------------------------------------- billing.delete_account
 
 
-def test_delete_account_removes_every_row_and_keeps_other_users_intact(db, pg):
+def test_delete_account_marks_the_rows_and_keeps_other_users_intact(db, pg):
     target = billing.sign_in(db, ISSUER, "sub-t", "target@example.com", STARTER_CENTS)
     add_identity(db, ISSUER, "sub-t2", "target@example.com")
     other = billing.sign_in(db, ISSUER, "sub-o", "other@example.com", STARTER_CENTS)
     done, _ = reserve_job(db, target)
     failed, _ = reserve_job(db, target, done=False)
     assert billing.issue_refund(db, failed, "unreadable_video", queued=True) is True
+    # A copy purged earlier (Stop sharing, the 90-day rule) must get its own files purged too.
+    pg.conn.execute(
+        "UPDATE jobs SET dataset_removed_at = now(), dataset_purged_at = now() "
+        "WHERE job_id = %s::uuid",
+        (done,),
+    )
     other_job, _ = reserve_job(db, other)
+    balance_before = pg.balance(target)
+    ledger_before = pg.ledger(target)
     check_invariants(pg.conn)
 
     deleted = billing.delete_account(db, target)
 
     assert set(deleted) == {(ISSUER, "sub-t"), (ISSUER, "sub-t2")}
-    assert pg.one("SELECT * FROM users WHERE user_id = %s", target) is None
-    assert pg.balance(target) is None
-    assert pg.rows("SELECT * FROM ledger WHERE user_id = %s", target) == []
-    assert pg.rows("SELECT * FROM jobs WHERE user_id = %s", target) == []
-    assert pg.rows("SELECT * FROM identities WHERE user_id = %s", target) == []
+    row = pg.one("SELECT * FROM users WHERE user_id = %s", target)
+    assert row is not None, "delete_account removed the account instead of marking it"
+    assert row["deleted_at"] is not None
+    assert row["email"] == f"deleted:{target}"
+    assert pg.balance(target) == balance_before
+    assert pg.ledger(target) == ledger_before
     for job_id in (done, failed):
-        assert pg.refund_reason(job_id) is None
+        job = pg.job(job_id)
+        assert job is not None, "delete_account removed a job instead of marking it"
+        assert job["deleted_at"] is not None
+        assert job["filename"] is None
+        assert job["dataset_purged_at"] is None
+    assert pg.rows("SELECT * FROM identities WHERE user_id = %s", target) == []
+    assert pg.rows("SELECT * FROM sessions WHERE user_id = %s", target) == []
     assert pg.one("SELECT * FROM users WHERE user_id = %s", other) is not None
     assert pg.balance(other) is not None
     other_jobs = pg.rows("SELECT job_id::text AS job_id FROM jobs WHERE user_id = %s", other)
@@ -217,14 +265,16 @@ def test_a_reserve_racing_delete_account_cannot_leave_a_job_behind(db, pg, row_l
 
     job = pg.job(job_id)
     user_row = pg.one("SELECT * FROM users WHERE user_id = %s", user)
-    assert (job is None) == (user_row is None), "a job outlived the account that owns it"
+    assert user_row is not None, "a delete removed the account instead of marking it"
     if reserved:
         assert delete_errors and isinstance(delete_errors[0], billing.JobActive)
-        assert job is not None and user_row is not None
+        assert job is not None
+        assert user_row["deleted_at"] is None
     else:
         assert delete_errors == []
-        assert reserve_errors and isinstance(reserve_errors[0], LookupError)
-        assert job is None and user_row is None
+        assert reserve_errors and isinstance(reserve_errors[0], billing.AccountDeleted)
+        assert job is None
+        assert user_row["deleted_at"] is not None
 
 
 # ---------------------------------------------------------------- the route
@@ -278,9 +328,10 @@ def test_account_delete_removes_the_users_files_and_rows(
 
 
 @pytest.mark.parametrize("content_type", ["video/mp4", "video/quicktime"], ids=["mp4", "mov"])
-def test_a_reported_s3_error_leaves_the_account_and_a_retry_finishes(
-    cognito_app, idp, aws, db, pg, cognito_admin, content_type
+def test_a_reported_s3_error_still_answers_200_and_the_reaper_finishes_the_delete(
+    cognito_app, idp, aws, db, pg, cognito_admin, content_type, reaper_env
 ):
+    reaper_env(90)
     s3 = DeleteFailsThenWorks(aws.s3)
     client = cognito_app(s3_client=s3).test_client()
     user_id = signed_in_user_id(client, idp, pg, sub="google_1001")
@@ -290,25 +341,27 @@ def test_a_reported_s3_error_leaves_the_account_and_a_retry_finishes(
 
     resp = delete_account(client, confirm="DELETE")
 
-    assert resp.status_code == 500
-    assert pg.one("SELECT * FROM users WHERE user_id = %s", user_id) is not None
-    assert pg.job(job_id) is not None
-    assert {
-        row["subject"]
-        for row in pg.rows("SELECT subject FROM identities WHERE user_id = %s", user_id)
-    } == {"google_1001", "email_2002"}
+    assert resp.status_code == 200
+    assert resp.get_json() == {"deleted": True}
+    user_row = pg.one("SELECT * FROM users WHERE user_id = %s", user_id)
+    assert user_row is not None and user_row["deleted_at"] is not None
+    assert user_row["email"] == f"deleted:{user_id}"
+    job = pg.job(job_id)
+    assert job is not None and job["deleted_at"] is not None
+    assert job["dataset_purged_at"] is None
+    assert pg.rows("SELECT * FROM identities WHERE user_id = %s", user_id) == []
     assert all(object_exists(aws, name) for name in keys)
-    assert cognito_admin.filters == [] and cognito_admin.deleted == []
+    assert sorted(cognito_admin.deleted) == ["user-email_2002", "user-google_1001"]
+    assert client.get("/api/me").status_code == 401
 
     s3.failing = False
-    resp = delete_account(client, confirm="DELETE")
+    run_reaper()
 
-    assert resp.status_code == 200
     assert pg.one("SELECT * FROM users WHERE user_id = %s", user_id) is None
+    assert pg.balance(user_id) is None
+    assert pg.rows("SELECT * FROM ledger WHERE user_id = %s", user_id) == []
     assert pg.rows("SELECT * FROM jobs WHERE user_id = %s", user_id) == []
-    assert pg.rows("SELECT * FROM identities WHERE user_id = %s", user_id) == []
     assert not any(object_exists(aws, name) for name in keys)
-    assert sorted(cognito_admin.deleted) == ["user-email_2002", "user-google_1001"]
 
 
 def test_cognito_is_called_once_per_cognito_identity(cognito_client, idp, db, pg, cognito_admin):
