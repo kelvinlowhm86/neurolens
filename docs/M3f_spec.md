@@ -1,4 +1,4 @@
-# NeuroLens — M3f Implementation Spec: batch upload, research sharing, direct GPU start
+# NeuroLens — M3f Implementation Spec: batch upload, research sharing, sign-in sessions
 
 Status: current design. Builds on M3d (page) and M3e (SageMaker). Where this spec and an older one
 disagree, this one wins, and the older section is updated to match.
@@ -9,8 +9,8 @@ disagree, this one wins, and the older section is updated to match.
   15-s cancel window and refund.
 - Research sharing asks for consent to train NeuroLens's own models, keeps shared videos 3 years, and
   rewards a valid audience-retention curve with that video's analysis for free.
-- The dispatcher starts the GPU itself (about 4 minutes shorter cold start). The scale-out alarm and
-  the guard stay as backstops.
+- Starting the GPU from the dispatcher is measured first, not built (§6).
+- Sign-in lasts 30 days from the last use, recorded on the server so that signing out ends it (§6b).
 - `python app.py` on a laptop runs only against the local fake stack.
 
 ## 1. Scope
@@ -33,6 +33,9 @@ place in line among other users, waking the database from the landing page.
   10 s) stays listed with its reason and no price, and is left out of the total. Files beyond
   `max_batch_files` (`config.json` `upload.max_batch_files`, 5; served by `/api/limits`) are listed
   as "5 at a time" and left out.
+- **Server limit:** presign refuses with 429 `too_many_waiting` ("Too many videos waiting. Try again
+  when some finish.") when the user already has `upload.max_waiting_jobs` (10, `config.json`) jobs
+  queued. The page shows it on the row like any presign refusal.
 - Below the rows: one total, "$3.60 · charged only for videos that finish · cancel within 15 s", the
   consent box (§5a, one for the whole batch), and Upload.
 - If the total is more than the available credit: "Needs $4.50; you have $3.70" and Upload stays
@@ -128,9 +131,12 @@ place in line among other users, waking the database from the landing page.
 - One box per batch, unticked, never required:
   "Share for research and to train NeuroLens's own models ([details](/static/privacy.html#research)).
   I own the rights to it."
-- The server stores, per job with `research_consent`, `consent_version` (the constant
-  `billing.CONSENT_VERSION = "2026-10-25"`) and `consented_at = now()` (migration 006). A wording
-  change means a new constant; old jobs keep the version they agreed to.
+- The page sends `consent_version`, the version of the wording it showed, with each presign that
+  has `research_consent`. The server accepts only its current `billing.CONSENT_VERSION`
+  (`"2026-10-25"`); any other value → 409 `consent_outdated` ("Please refresh the page."), nothing
+  reserved. It stores `consent_version` and `consented_at = now()` per consented job (migration 006).
+  A wording change means a new constant and the new text on the page together; old jobs keep the
+  version they agreed to.
 - The privacy page's `#research` section ("Sharing a video for research") states, in plain words:
   sharing is optional and changes nothing about the analysis; what is kept (the video, its file
   details, any retention curve and the ranges given with it); the purposes (study how what is on
@@ -204,7 +210,9 @@ place in line among other users, waking the database from the landing page.
   - insert the `retention_snapshots` row; set `jobs.retention_added_at` if empty;
   - **reward** the job's `captured_cents` when all hold: the curve is valid; `captured_cents > 0`; the
     job has no `curve_rewarded_at`; no other job with the same non-null `video_sha256` has
-    `curve_rewarded_at`; the user has fewer than `reward_cap` rewards in the last
+    `curve_rewarded_at`; the user has received credit beyond the starter credit at least once (a
+    ledger row of kind `grant` or `test_topup`, a payment in a real launch), so throwaway accounts
+    cannot farm rewards; the user has fewer than `reward_cap` rewards in the last
     `reward_window_days` days. Then `_move(tx, user_id, job_id, "curve_reward", +captured, 0)`,
     `jobs.curve_rewarded_at = now()` and the snapshot's `rewarded_cents`;
   - returns `{"rewarded_cents": n, "quality": [...]}`.
@@ -236,23 +244,28 @@ The six jobs shared under the old wording are Josh's test data. In the real-run 
 deploy, Josh stops sharing each one in the page (which also removes any old `retention.csv` and
 `result.json` under `dataset/`). Nothing in the code reads the old layout afterwards.
 
-## 6. Direct GPU start (`neurolens/lambdas/dispatcher.py`)
-- After a successful `InvokeEndpointAsync`, `start_gpu_if_idle(sagemaker, autoscaling, endpoint)`:
-  1. `DescribeScalableTargets` for the variant: no target or max 0 (paused) → do nothing;
-  2. `DescribeEndpoint`: status `InService` and the variant's `CurrentInstanceCount` 0 →
-     `UpdateEndpointWeightsAndCapacities(DesiredInstanceCount=1)` and log `GPU_DIRECT_START`;
-     otherwise do nothing (already running or already changing).
-- A `ValidationException` from the update (the endpoint started changing meanwhile) is logged at
-  info and ignored. Any other error is logged as `GPU_DIRECT_START_FAILED` and does not fail the
-  dispatch: the job is already in SageMaker's queue, and the scale-out alarm starts the GPU a few
-  minutes later. Raising would make SQS redeliver the message and send the request twice.
-- A log metric filter on `GPU_DIRECT_START_FAILED` feeds the alarm
-  `neurolens-gpu-direct-start-failed`, which emails the alerts topic.
-- The dispatcher's role gains `sagemaker:DescribeEndpoint` and
-  `sagemaker:UpdateEndpointWeightsAndCapacities` on our endpoint only, and
-  `application-autoscaling:DescribeScalableTargets`.
-- The scale-in alarm, the scale-out alarm and the guard are unchanged. Whether the scale-in alarm
-  (still in ALARM while the GPU was off) undoes a direct start is checked in the real run (§11).
+## 6. GPU start and sign-in
+### 6a. GPU start from the dispatcher: measured first
+Starting the GPU from the dispatcher (`UpdateEndpointWeightsAndCapacities`) would save about 4 minutes
+of a cold start, but the scale-in alarm is in ALARM whenever the GPU is off, and AWS keeps applying a
+step policy while its alarm stays in ALARM. The two could fight over the capacity. Nothing is built
+now. In the real run (§11), one cold start is made by hand from the dispatcher's position (invoke,
+then set the desired count to 1), and the scale-in alarm's history and the endpoint's events show
+whether the instance stays. Only if it does is the start built, as a separate change with its tests.
+
+### 6b. Sign-in sessions (`neurolens/web/auth.py`)
+- **Migration 006** adds `sessions`: `session_hash TEXT PRIMARY KEY` (SHA-256 of the token),
+  `user_id TEXT NOT NULL`, `created_at`, `last_seen_at TIMESTAMPTZ NOT NULL`; index on `user_id`.
+- A verified Cognito sign-in creates a random 32-byte token (`secrets.token_urlsafe`), stores its hash
+  and puts only the token in the signed session cookie (cookie lifetime 30 days). The user id and email
+  are read from the database, never trusted from the cookie.
+- A request is signed in while its token's row exists and `last_seen_at` is within 30 days
+  (`SESSION_DAYS = 30`). `last_seen_at` is refreshed at most once an hour, and the cookie's lifetime
+  with it, so an active user stays signed in and a request costs no extra write most of the time.
+- Sign-out deletes the row. Delete account deletes all the user's rows. Expired rows are deleted by
+  the reaper's run.
+- The landing page's hint cookie follows the session's lifetime.
+- Dev mode is unchanged. The 12-hour rule (`SESSION_HOURS`) is removed.
 
 ## 7. Laptop (`app.py`, `infra/local_stack.py`)
 - `python app.py` refuses to start unless `AWS_ENDPOINT_URL` is set to a `localhost` or `127.0.0.1`
@@ -299,18 +312,20 @@ Money and data paths get full treatment:
   NeuroLens's output under `dataset/`.
 - Consent: version and time stored only when consent is true.
 - `claim` sets `claimed_at`; `list_jobs` leaves out cancelled jobs and returns the new fields.
-- Direct start: starts only at InService with 0 instances and max ≥ 1; does nothing when paused,
-  running or updating; a `ValidationException` and any other error never fail the dispatch and never
-  re-invoke; no start when the invoke itself failed.
+- Sessions (full treatment): a token signs in only while its row exists and was seen within 30 days;
+  a stale cookie, a forged token, a deleted row (sign-out, account delete) and a 31-day-old row are
+  refused; `last_seen_at` moves at most once an hour; the cookie holds no user id.
+- Consent version: an outdated or missing version with consent → 409, nothing reserved.
+- Reward: refused for an account with only starter credit.
+- Presign: 429 at `max_waiting_jobs` queued jobs, nothing reserved.
 - CSV header: ASCII and non-ASCII names, missing name.
 - `app.py` refuses without a local endpoint.
 Page work (light treatment): one walk on the local stack at 1440 px and 390 px covering §2–§4.
 
 ## 11. Real run (cost estimate first)
 One GPU session after deploy (estimate about $1–1.50: two cold starts plus a 5-file batch):
-1. From a cold endpoint, upload one file: the log shows `GPU_DIRECT_START`; time from upload to
-   `InService` (compare M3e's measured cold start); the scale-in alarm does not stop the instance
-   before the job is claimed.
+1. The GPU-start measurement of §6a: from a cold endpoint, upload one file and set the desired count
+   to 1 at once; record whether the instance stays, and the time from upload to the job's claim.
 2. A 5-file batch: each job charged once, all done on one warm GPU, title count and rows correct,
    cancel one file within 15 s (refunded, not listed).
 3. Add a curve to a shared result: reward appears in the credit and the ledger once; a second curve
