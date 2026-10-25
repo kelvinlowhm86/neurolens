@@ -1119,6 +1119,7 @@ async function handleFile(file) {
 }
 
 function showConfirm(file, duration, type) {
+  clearUploadWindow();  // a new file ends the last upload's cancel window, or its timer would wipe this one
   pendingFile = file; pendingType = type; pendingDuration = duration;
   setViewName('chooser');
   setChooserTab('analyses');
