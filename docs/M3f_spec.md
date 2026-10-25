@@ -166,8 +166,18 @@ place in line among other users, waking the database from the landing page.
 - `storage.delete_job_prefixes(s3, bucket, job_id)` deletes every object under `dataset/<job_id>/`
   and `academic/<job_id>/` (listed by prefix, paged). It refuses a `job_id` that is not a UUID, so it
   can never list or delete a wider prefix. It raises on any failed delete.
-- **Stop sharing:** `POST /api/jobs/<id>/stop-sharing` on a done, shared, not-removed job deletes both
-  prefixes, then sets `dataset_removed_at = now()` and `dataset_removed_reason = 'stopped'`. A queued
+- **Mark first, then purge.** Removing a research copy (Stop sharing, the 90-day rule, job delete) first
+  marks it in one guarded update under the job's row lock that re-checks it is still eligible
+  (`dataset_removed_at` and its reason, or `deleted_at`), so no curve can be added after that moment;
+  then `delete_job_prefixes`; on success `jobs.dataset_purged_at = now()` (migration 006). A failed
+  delete leaves `dataset_purged_at` empty and every reaper run retries the purge for consented jobs
+  that are marked (removed or deleted) and not purged. Account delete keeps its order (files, then
+  rows) since no row is left to retry from.
+- **Lock order:** any transaction that locks both takes the user's balance row first, then the job row
+  (`add_curve`, account delete, `reserve`), so two of them can never deadlock.
+- **Stop sharing:** `POST /api/jobs/<id>/stop-sharing` on a done, shared, not-removed job marks it
+  (`dataset_removed_reason = 'stopped'`) and purges, as above. A failed purge still answers 200 (the
+  copy is no longer used and the reaper finishes the delete) and logs an error. A queued
   or processing job → 409 `job_active`; not shared or already removed → 409 `not_shared`. The user's
   own result, brain and thumbnail are untouched. History's "⋯" menu shows "Stop sharing" on shared
   rows, with a one-line confirm ("Stop sharing this video? Its research copy is deleted now.").
@@ -192,6 +202,9 @@ place in line among other users, waking the database from the landing page.
 - `POST /api/jobs/<id>/retention` body: `report` (text, as now), `views` (`lt_1k`, `1k_10k`,
   `10k_100k`, `gt_100k`), `published` (`week`, `month`, `older`), `promoted` (bool). Bad values → 400.
   The job must be done, shared and not removed (409s as now, with the messages of §5c).
+- Duplicates are checked before any S3 write. If `add_curve` refuses for any reason (including a
+  unique-constraint race, which answers 409 `duplicate_curve`), the route deletes the two files it
+  wrote.
 - Order: parse the report (`results.parse_retention_report`, unchanged) → compute the quality flags
   (below) → write the raw `.json` and the `.csv` to S3 under a new `snapshot_id` → `billing.add_curve`.
   An S3 failure → 500, nothing recorded. A database failure after the writes leaves two orphan files
@@ -229,7 +242,7 @@ place in line among other users, waking the database from the landing page.
 
 ### 5e. Migration 006 (`infra/migrations/006_m3f.sql`)
 - `jobs`: `claimed_at`, `consent_version TEXT`, `consented_at`, `video_sha256 TEXT`,
-  `curve_rewarded_at`, `dataset_removed_reason TEXT` (`'no_curve'` or `'stopped'`; existing removed
+  `curve_rewarded_at`, `dataset_purged_at`, `dataset_removed_reason TEXT` (`'no_curve'` or `'stopped'`; existing removed
   rows get `'no_curve'`).
 - `retention_snapshots`: `snapshot_id UUID PRIMARY KEY`, `job_id UUID NOT NULL REFERENCES jobs`,
   `added_at TIMESTAMPTZ NOT NULL DEFAULT now()`, `source TEXT NOT NULL DEFAULT 'youtube_api'`,
@@ -269,12 +282,13 @@ whether the instance stays. Only if it does is the start built, as a separate ch
 
 ## 7. Laptop (`app.py`, `infra/local_stack.py`)
 - `python app.py` refuses to start unless `AWS_ENDPOINT_URL` is set to a `localhost` or `127.0.0.1`
-  address, with the message "python app.py runs only against the local fake stack: python
+  address, no `AWS_ENDPOINT_URL_<SERVICE>` points elsewhere, and `AWS_IGNORE_CONFIGURED_ENDPOINT_URLS`
+  is not set, with the message "python app.py runs only against the local fake stack: python
   infra/local_stack.py. The real .env is for the admin scripts." Nothing else reads this rule.
 - `python infra/local_stack.py` runs the whole product on the laptop with no real AWS: it requires a
-  local PostgreSQL DSN (`--dsn`, default `postgresql://postgres@localhost:55432/postgres`), starts
-  moto's server on port 5005, uses throwaway test credentials and region in its own environment
-  (never the real profile), creates the bucket (with the page's CORS) and the jobs queue and
+  local PostgreSQL DSN (host `localhost` or `127.0.0.1`, no `host`/`hostaddr` query parameters) (`--dsn`, default `postgresql://postgres@localhost:55432/postgres`), starts
+  moto's server on port 5005, removes every inherited `AWS_*` variable and uses throwaway test credentials,
+  region and endpoint in its own environment (never the real profile), creates the bucket (with the page's CORS) and the jobs queue and
   notification, applies the schema, then runs the web app on 5003 (Postgres backend) and a loop that
   passes each queued upload through the real `dispatcher.dispatch` (with a stand-in SageMaker client
   that hands the job straight to the fake-mode worker's handler). Ctrl-C stops everything it started.
@@ -289,6 +303,8 @@ whether the instance stays. Only if it does is the start built, as a separate ch
 ## 9. Known limitations (accepted)
 - A curve cannot be proved to belong to its video (the report holds no video id or length). Limits:
   one reward per video hash across accounts, a cap per user, and the right to remove fake data.
+- A curve upload that crashes between its S3 writes and its refusal can leave its two files under a
+  removed job's prefix (needs a crash at that exact moment).
 - Two accounts sharing the same video at the same moment could each be rewarded once (no lock across
   jobs). Needs deliberate abuse; the cap bounds it.
 - No request rate limit. The costly paths are bounded already: a GPU run needs credit, and a caller
