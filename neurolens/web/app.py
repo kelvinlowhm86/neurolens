@@ -51,13 +51,19 @@ def _error(code, message, status=400, **extra):
 
 
 def _csv_disposition(filename):
-    """The CSV's attachment name: "<video name> – NeuroLens.csv" (M3f §4.7)."""
+    """The CSV's attachment name, "<video name> – NeuroLens.csv" (M3f §4.7). HTTP headers are
+    latin-1, so the full name goes in RFC 5987's `filename*` and `filename` carries a plain-ASCII
+    fallback for old browsers."""
     stem = PurePosixPath(filename).stem.strip() if isinstance(filename, str) else ""
-    base = stem or "NeuroLens result"
-    name = f"{base} – NeuroLens.csv"
-    if base.isascii():
-        return f'attachment; filename="{name}"'
-    return f"attachment; filename=\"NeuroLens result.csv\"; filename*=UTF-8''{quote(name, safe='')}"
+    if not stem:
+        return (
+            "attachment; filename=\"NeuroLens result.csv\"; filename*=UTF-8''NeuroLens%20result.csv"
+        )
+    ascii_stem = "".join(
+        c if c.isascii() and c.isprintable() and c not in '"\\' else "_" for c in stem
+    )
+    full = quote(f"{stem} \u2013 NeuroLens.csv", safe="")
+    return f"attachment; filename=\"{ascii_stem} - NeuroLens.csv\"; filename*=UTF-8''{full}"
 
 
 def _not_configured():

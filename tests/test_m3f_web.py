@@ -213,39 +213,65 @@ def test_list_jobs_and_the_jobs_api_leave_out_cancelled_jobs(aws, db, make_cfg, 
 # ---------------------------------------------------------------- the CSV name
 
 
+def csv_disposition(client, job_id):
+    """The CSV's Content-Disposition, checked to be sendable: HTTP headers are latin-1, and a
+    header that is not makes the real server fail the whole download."""
+    resp = client.get(f"/api/jobs/{job_id}/result.csv")
+    assert resp.status_code == 200
+    header = resp.headers["Content-Disposition"]
+    header.encode("latin-1")
+    return header
+
+
+def full_name(header):
+    encoded = header.split("filename*=UTF-8''", 1)[1].split(";", 1)[0].strip()
+    return urllib.parse.unquote(encoded)
+
+
+def fallback_name(header):
+    return header.split('filename="', 1)[1].split('"', 1)[0]
+
+
 def test_csv_is_named_after_the_video(aws, db, make_cfg, tmp_path):
     client = app_for(aws, db, make_cfg, tmp_path)
     job_id, _ = done_job_with_result(aws, db, filename="My Ad.mp4")
 
-    resp = client.get(f"/api/jobs/{job_id}/result.csv")
+    header = csv_disposition(client, job_id)
 
-    assert resp.status_code == 200
-    assert resp.headers["Content-Disposition"] == (
-        'attachment; filename="My Ad \u2013 NeuroLens.csv"'
-    )
+    assert header.startswith("attachment;")
+    assert full_name(header) == "My Ad \u2013 NeuroLens.csv"
+    assert fallback_name(header) == "My Ad - NeuroLens.csv"
 
 
-def test_a_non_ascii_name_gets_an_rfc_5987_filename(aws, db, make_cfg, tmp_path):
+def test_a_non_ascii_name_keeps_its_full_name_and_an_ascii_fallback(aws, db, make_cfg, tmp_path):
     client = app_for(aws, db, make_cfg, tmp_path)
-    job_id, _ = done_job_with_result(aws, db, filename="Caf\u00e9 ad.mp4")
+    job_id, _ = done_job_with_result(aws, db, filename="Caf\u00e9 \u5e7f\u544a.mp4")
 
-    resp = client.get(f"/api/jobs/{job_id}/result.csv")
+    header = csv_disposition(client, job_id)
 
-    header = resp.headers["Content-Disposition"]
-    assert "filename*=UTF-8''" in header
-    encoded = header.split("filename*=UTF-8''", 1)[1].strip().strip('"')
-    assert urllib.parse.unquote(encoded) == "Caf\u00e9 ad \u2013 NeuroLens.csv"
+    assert full_name(header) == "Caf\u00e9 \u5e7f\u544a \u2013 NeuroLens.csv"
+    assert fallback_name(header).isascii()
+    assert fallback_name(header).endswith(" - NeuroLens.csv")
+
+
+def test_quotes_in_a_name_cannot_break_the_header(aws, db, make_cfg, tmp_path):
+    client = app_for(aws, db, make_cfg, tmp_path)
+    job_id, _ = done_job_with_result(aws, db, filename='a"b\\c.mp4')
+
+    header = csv_disposition(client, job_id)
+
+    assert '"' not in fallback_name(header) and "\\" not in fallback_name(header)
+    assert full_name(header) == 'a"b\\c \u2013 NeuroLens.csv'
 
 
 def test_a_missing_name_falls_back_to_neurolens_result(aws, db, make_cfg, tmp_path):
     client = app_for(aws, db, make_cfg, tmp_path)
     job_id, _ = done_job_with_result(aws, db, filename=None)
 
-    resp = client.get(f"/api/jobs/{job_id}/result.csv")
+    header = csv_disposition(client, job_id)
 
-    header = resp.headers["Content-Disposition"]
-    assert "NeuroLens result" in header
-    assert header.endswith('.csv"')
+    assert fallback_name(header) == "NeuroLens result.csv"
+    assert full_name(header) == "NeuroLens result.csv"
 
 
 # ---------------------------------------------------------------- python app.py

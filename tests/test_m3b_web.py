@@ -291,9 +291,9 @@ def test_csv_route_serves_the_jobs_result_as_an_attachment(aws, client, db):
     job_id, result = done_job(aws, db)
     resp = client.get(f"/api/jobs/{job_id}/result.csv")
     assert resp.status_code == 200
-    assert resp.headers["Content-Disposition"] == (
-        f'attachment; filename="ad-{job_id[:8]} \u2013 NeuroLens.csv"'
-    )
+    header = resp.headers["Content-Disposition"]
+    assert header.startswith("attachment;")
+    assert f'filename="ad-{job_id[:8]} - NeuroLens.csv"' in header
     rows = parse_csv(resp.get_data(as_text=True))
     assert rows[0] == CSV_COLUMNS
     assert rows[1:] == [expected_cells(t) for t in range(result["duration_seconds"])]
