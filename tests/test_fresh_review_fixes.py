@@ -12,6 +12,7 @@ import json
 import os
 import subprocess
 import sys
+import threading
 import time
 import uuid
 from email.utils import parsedate_to_datetime
@@ -669,3 +670,121 @@ def test_local_stack_leaves_a_dispatch_error_on_the_queue(monkeypatch):
         )
 
     assert sqs.deleted == [], "the local stack deleted a message whose dispatch failed"
+
+
+# ---------------------------------------------------------------- J. stale purge and sign-in races
+
+
+def test_a_purge_racing_a_job_delete_does_not_mark_the_own_files_purged(
+    aws, db, pg, monkeypatch, reaper_env
+):
+    reaper_env(90)
+    user = make_user(db)
+    job_id, key = make_job(db, user)
+    research, own = seed_files(aws, job_id, key)
+    assert billing.mark_dataset_removed(db, job_id, "stopped") is True
+    real = storage.delete_job_prefixes
+
+    def delete_after_mark(s3, bucket, job):
+        assert billing.delete_job(db, user, job_id) is True
+        return real(s3, bucket, job)
+
+    monkeypatch.setattr(storage, "delete_job_prefixes", delete_after_mark)
+
+    billing.purge_job_files(db, aws.s3, aws.bucket, job_id)
+
+    job = pg.job(job_id)
+    assert job["deleted_at"] is not None
+    assert job["dataset_purged_at"] is None, (
+        "purge marked the copy purged although the job was deleted after it read the row"
+    )
+    assert not any(object_exists(aws, name) for name in research)
+    assert all(object_exists(aws, name) for name in own)
+
+    monkeypatch.setattr(storage, "delete_job_prefixes", real)
+    run_reaper()
+
+    job = pg.job(job_id)
+    assert job["dataset_purged_at"] is not None
+    assert all(not object_exists(aws, name) for name in own)
+
+
+def test_signing_in_after_a_delete_with_a_new_identity_creates_a_new_user(db, pg):
+    user = billing.sign_in(db, ISSUER, "sub-after-delete-new", EMAIL, STARTER)
+    billing.delete_account(db, user)
+
+    new_user = billing.sign_in(db, ISSUER, "sub-after-delete-new-2", EMAIL, STARTER)
+
+    assert new_user != user
+    assert pg.one("SELECT * FROM users WHERE user_id = %s", new_user)["deleted_at"] is None
+    assert pg.balance(new_user) == (STARTER, 0)
+    assert pg.one("SELECT * FROM users WHERE user_id = %s", new_user)["email"] == EMAIL
+    assert pg.one("SELECT * FROM users WHERE user_id = %s", user)["email"] == f"deleted:{user}"
+    assert pg.rows("SELECT * FROM identities WHERE user_id = %s", user) == []
+    assert billing.remove_deleted_account(db, user) is True
+    assert pg.one("SELECT * FROM users WHERE user_id = %s", user) is None
+
+
+def test_signing_in_after_a_delete_with_the_old_identity_creates_a_new_user(db, pg):
+    user = billing.sign_in(db, ISSUER, "sub-after-delete-old", EMAIL, STARTER)
+    billing.delete_account(db, user)
+
+    new_user = billing.sign_in(db, ISSUER, "sub-after-delete-old", EMAIL, STARTER)
+
+    assert new_user != user
+    assert pg.one("SELECT * FROM users WHERE user_id = %s", new_user)["deleted_at"] is None
+    assert pg.one("SELECT * FROM users WHERE user_id = %s", user)["email"] == f"deleted:{user}"
+    assert pg.rows("SELECT * FROM identities WHERE user_id = %s", user) == []
+    assert pg.one("SELECT * FROM identities WHERE user_id = %s", new_user)["subject"] == (
+        "sub-after-delete-old"
+    )
+    assert billing.remove_deleted_account(db, user) is True
+    assert pg.one("SELECT * FROM users WHERE user_id = %s", user) is None
+
+
+def test_a_sign_in_racing_a_delete_account_leaves_no_identity_on_the_marked_user(db, pg, row_lock):
+    user = billing.sign_in(db, ISSUER, "sub-sign-in-race", EMAIL, STARTER)
+    lock = row_lock()
+    lock.execute("SELECT 1 FROM users WHERE user_id = %s FOR UPDATE", user)
+    signed, sign_errors, delete_errors = [], [], []
+
+    def do_sign_in():
+        try:
+            signed.append(billing.sign_in(db, ISSUER, "sub-sign-in-race-new", EMAIL, STARTER))
+        except Exception as err:  # reported below
+            sign_errors.append(err)
+
+    def do_delete():
+        try:
+            billing.delete_account(db, user)
+        except Exception as err:  # reported below
+            delete_errors.append(err)
+
+    threads = [threading.Thread(target=do_sign_in), threading.Thread(target=do_delete)]
+    for thread in threads:
+        thread.start()
+    lock.wait_for_blocked(2, timeout=5)
+    lock.release()
+    for thread in threads:
+        thread.join(20)
+    assert not any(thread.is_alive() for thread in threads)
+    assert not sign_errors, sign_errors
+    assert not delete_errors, delete_errors
+    assert len(signed) == 1
+    assert pg.one("SELECT * FROM users WHERE user_id = %s", user)["deleted_at"] is not None
+
+    new_user = signed[0]
+    if new_user == user:
+        assert (
+            pg.rows(
+                "SELECT * FROM identities WHERE issuer = %s AND subject = %s",
+                ISSUER,
+                "sub-sign-in-race-new",
+            )
+            == []
+        ), "a sign-in racing the delete left an identity on the marked account"
+    else:
+        assert pg.one("SELECT * FROM users WHERE user_id = %s", new_user)["deleted_at"] is None
+    assert pg.rows("SELECT * FROM identities WHERE user_id = %s", user) == []
+    assert billing.remove_deleted_account(db, user) is True
+    assert pg.one("SELECT * FROM users WHERE user_id = %s", user) is None

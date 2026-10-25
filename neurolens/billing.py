@@ -168,9 +168,12 @@ def _create_user(tx, user_id, email, starter_cents):
     return True
 
 
-def _user_by_email(tx, email):
+def _user_by_email(tx, email, *, lock=False):
+    # `lock` holds the row until commit, so a sign-in and an account delete take turns (M3c §5).
     rows = tx.execute(
-        "SELECT user_id FROM users WHERE lower(email) = lower(:email)", {"email": email}
+        "SELECT user_id FROM users WHERE lower(email) = lower(:email)"
+        + (" FOR UPDATE" if lock else ""),
+        {"email": email},
     )
     return rows[0]["user_id"] if rows else None
 
@@ -206,20 +209,28 @@ def sign_in(db, issuer, subject, email, starter_cents):
     `(issuer, subject)` first; else the user with this email (any letter case), linked to it;
     else a new user with a random UUID and the starter credit. Every insert uses
     ON CONFLICT DO NOTHING and re-reads the winner, because a caught unique-violation would
-    abort the transaction (on Postgres and the Data API alike)."""
+    abort the transaction (on Postgres and the Data API alike).
+
+    The user row is locked as it is found, and a marked account is never found, so a sign-in
+    racing `delete_account` either links before the mark (and the mark removes the link) or
+    makes a new account after it (M3c §5)."""
     key = {"issuer": issuer, "subject": subject}
-    find_identity = "SELECT user_id FROM identities WHERE issuer = :issuer AND subject = :subject"
+    find_identity = (
+        "SELECT i.user_id FROM identities i JOIN users u ON u.user_id = i.user_id "
+        "WHERE i.issuer = :issuer AND i.subject = :subject AND u.deleted_at IS NULL "
+        "FOR UPDATE OF u"
+    )
     with db.transaction() as tx:
         rows = tx.execute(find_identity, key)
         if rows:
             user_id = rows[0]["user_id"]
             _keep_email_current(tx, user_id, email)
             return user_id
-        user_id = _user_by_email(tx, email)
+        user_id = _user_by_email(tx, email, lock=True)
         if user_id is None:
             user_id = str(uuid.uuid4())
             if not _create_user(tx, user_id, email, starter_cents):
-                user_id = _user_by_email(tx, email)
+                user_id = _user_by_email(tx, email, lock=True)
         linked = tx.execute(
             "INSERT INTO identities (issuer, subject, user_id) "
             "VALUES (:issuer, :subject, :user_id) ON CONFLICT DO NOTHING RETURNING user_id",
@@ -371,7 +382,7 @@ def purge_job_files(db, s3, bucket, job_id):
             "DELETE FROM retention_snapshots WHERE job_id = CAST(:job_id AS uuid)",
             {"job_id": job_id},
         )
-    mark_dataset_purged(db, job_id)
+    mark_dataset_purged(db, job_id, own_files=job is not None and job["deleted_at"] is not None)
 
 
 def mark_dataset_removed(db, job_id, reason, *, user_id=None, require_no_snapshot=False):
@@ -405,14 +416,19 @@ def mark_dataset_removed(db, job_id, reason, *, user_id=None, require_no_snapsho
     return bool(rows)
 
 
-def mark_dataset_purged(db, job_id):
-    """Record that a marked copy's files are gone (M3f §5c). False if it was not marked."""
+def mark_dataset_purged(db, job_id, *, own_files=False):
+    """Record that a marked copy's files are gone (M3f §5c). False if it was not marked.
+
+    A purge that did not delete the job's own files (`own_files` false) records nothing once
+    the job has been deleted meanwhile, so that purge is still owed.
+    """
     with db.transaction() as tx:
         rows = tx.execute(
             "UPDATE jobs SET dataset_purged_at = now() "
             "WHERE job_id = CAST(:job_id AS uuid) AND dataset_purged_at IS NULL "
-            "AND (dataset_removed_at IS NOT NULL OR deleted_at IS NOT NULL) RETURNING job_id",
-            {"job_id": job_id},
+            "AND (dataset_removed_at IS NOT NULL OR deleted_at IS NOT NULL) "
+            "AND (deleted_at IS NULL OR :own_files) RETURNING job_id",
+            {"job_id": job_id, "own_files": own_files},
         )
     return bool(rows)
 
@@ -444,6 +460,10 @@ def delete_account(db, user_id):
         )
         if not locked:
             raise LookupError(f"no balance for user {user_id!r}: call ensure_user first")
+        # The user row next: a racing sign-in waits for the mark, then no longer finds it.
+        tx.execute(
+            "SELECT user_id FROM users WHERE user_id = :user_id FOR UPDATE", {"user_id": user_id}
+        )
         active = tx.execute(
             "SELECT 1 AS active FROM jobs WHERE user_id = :user_id AND status IN "
             "(:queued, :processing) LIMIT 1",
