@@ -29,6 +29,16 @@ LOST_CLAIM = "lost_claim"
 OK = "ok"
 # A live worker refreshes its claim every <= 50 s; a processing job older than this is dead.
 STALE_AFTER_S = 90
+# The wording of the research-consent box (M3f §5a). A wording change needs a new value here and
+# the new text on the page together; old jobs keep the version they agreed to.
+CONSENT_VERSION = "2026-10-25"
+# A session row older than this (by its last use) no longer signs anybody in (M3f §6b).
+SESSION_DAYS = 30
+
+CURVE_REMOVED_MESSAGES = {
+    "stopped": "You stopped sharing this video.",
+    "no_curve": "This video's research copy was deleted after 90 days without a curve.",
+}
 
 
 class InsufficientCredit(Exception):
@@ -40,6 +50,24 @@ class InsufficientCredit(Exception):
 
 class JobActive(Exception):
     """A job is queued or processing, so deleting it (or its account) is refused."""
+
+
+class TooManyWaiting(Exception):
+    """The user already has the maximum number of queued jobs (M3f §2a)."""
+
+
+class DuplicateCurve(Exception):
+    """This exact retention curve is already stored (M3f §5d)."""
+
+
+class CurveRefused(Exception):
+    """A job that cannot take a curve, with the reply the web route gives (M3f §5d)."""
+
+    def __init__(self, code, message, status=409):
+        super().__init__(message)
+        self.code = code
+        self.message = message
+        self.status = status
 
 
 # ---------------------------------------------------------------- helpers (inside a transaction)
@@ -200,21 +228,42 @@ def grant_credit(db, email, cents):
 
 
 def list_jobs(db, user_id, limit):
-    """The user's jobs, newest first, at most `limit` (M3b §4a). Deleted jobs are left out
-    (M3c §4), `needs_retention` marks a done, consented job with neither a retention curve nor a
-    removed dataset (M3e §7), and `cancellable` marks a queued job the dispatcher has not priced
-    yet (M3e §8)."""
+    """The user's jobs, newest first, at most `limit` (M3b §4a, M3f §3, §5d).
+
+    Deleted and cancelled jobs are left out. `claimed_at` is UTC text; `cancellable` marks a
+    queued job the dispatcher has not priced yet (M3e §8). For a shared job, `sharing` is true
+    while its research copy is present, `curve_count` is its stored curves, and
+    `curve_reward_cents` is what a valid curve would return now (0 when it cannot).
+    """
     with db.transaction() as tx:
-        return tx.execute(
-            "SELECT job_id, filename, status, created_at, verified_duration_ms, captured_cents, "
-            "error_code, research_consent, "
-            "(status = :done AND research_consent AND retention_added_at IS NULL "
-            "AND dataset_removed_at IS NULL) AS needs_retention, "
-            "(status = :queued AND verified_duration_ms IS NULL) AS cancellable "
-            "FROM jobs WHERE user_id = :user_id AND deleted_at IS NULL "
-            "ORDER BY created_at DESC LIMIT :limit",
-            {"user_id": user_id, "limit": limit, "done": DONE, "queued": QUEUED},
+        rows = tx.execute(
+            "SELECT j.job_id, j.filename, j.status, j.created_at, j.verified_duration_ms, "
+            "j.captured_cents, j.error_code, j.research_consent, j.claimed_at, "
+            "(j.status = :queued AND j.verified_duration_ms IS NULL) AS cancellable, "
+            "(j.research_consent AND j.dataset_removed_at IS NULL) AS sharing, "
+            "(SELECT count(*) FROM retention_snapshots s "
+            "WHERE s.job_id = j.job_id) AS curve_count, "
+            "CASE WHEN j.status = :done AND j.research_consent "
+            "AND j.dataset_removed_at IS NULL AND j.captured_cents > 0 "
+            "AND j.curve_rewarded_at IS NULL AND NOT EXISTS "
+            "(SELECT 1 FROM jobs other WHERE other.video_sha256 = j.video_sha256 "
+            "AND other.video_sha256 IS NOT NULL AND other.curve_rewarded_at IS NOT NULL) "
+            "THEN j.captured_cents ELSE 0 END AS curve_reward_cents "
+            "FROM jobs j WHERE j.user_id = :user_id AND j.deleted_at IS NULL "
+            "AND (j.error_code IS NULL OR j.error_code <> :cancelled) "
+            "ORDER BY j.created_at DESC LIMIT :limit",
+            {
+                "user_id": user_id,
+                "limit": limit,
+                "done": DONE,
+                "queued": QUEUED,
+                "cancelled": "cancelled",
+            },
         )
+    for row in rows:
+        if row["claimed_at"] is not None:
+            row["claimed_at"] = row["claimed_at"].astimezone(UTC).strftime(TIME_FORMAT)
+    return rows
 
 
 def delete_job(db, user_id, job_id):
@@ -224,6 +273,16 @@ def delete_job(db, user_id, job_id):
             "UPDATE jobs SET deleted_at = now(), filename = NULL "
             "WHERE job_id = CAST(:job_id AS uuid) AND user_id = :user_id",
             {"job_id": job_id, "user_id": user_id},
+        )
+
+
+def mark_dataset_removed(db, job_id, reason):
+    """Record that a job's research copy is gone, and why (M3f §5c)."""
+    with db.transaction() as tx:
+        tx.execute(
+            "UPDATE jobs SET dataset_removed_at = now(), dataset_removed_reason = :reason "
+            "WHERE job_id = CAST(:job_id AS uuid)",
+            {"job_id": job_id, "reason": reason},
         )
 
 
@@ -249,6 +308,7 @@ def delete_account(db, user_id):
         )
         if active:
             raise JobActive(f"user {user_id!r} has an active job")
+        tx.execute("DELETE FROM sessions WHERE user_id = :user_id", {"user_id": user_id})
         tx.execute("DELETE FROM ledger WHERE user_id = :user_id", {"user_id": user_id})
         tx.execute("DELETE FROM jobs WHERE user_id = :user_id", {"user_id": user_id})
         tx.execute("DELETE FROM balances WHERE user_id = :user_id", {"user_id": user_id})
@@ -271,14 +331,40 @@ def get_balance(db, user_id):
     return rows[0]
 
 
+def record_video_hash(db, job_id, sha256):
+    """Store the SHA-256 of the video, so one video can be rewarded once (M3f §5b, §5d)."""
+    with db.transaction() as tx:
+        rows = tx.execute(
+            "UPDATE jobs SET video_sha256 = :sha WHERE job_id = CAST(:job_id AS uuid) "
+            "RETURNING job_id",
+            {"job_id": job_id, "sha": sha256},
+        )
+    return bool(rows)
+
+
 # ---------------------------------------------------------------- Stage 1
 
 
-def reserve(db, user_id, job_id, object_key, filename, client_duration_ms, research_consent=False):
+def reserve(
+    db,
+    user_id,
+    job_id,
+    object_key,
+    filename,
+    client_duration_ms,
+    research_consent=False,
+    *,
+    max_waiting_jobs=None,
+):
     """Move the estimated price from available to reserved and create the queued job.
-    Raises InsufficientCredit (changing nothing) if the available credit is lower.
-    `research_consent` is stored on the job (M3c §3a)."""
+
+    Raises InsufficientCredit (changing nothing) if the available credit is lower. With consent,
+    the current CONSENT_VERSION and the time are stored too (M3f §5a). `max_waiting_jobs` refuses
+    with TooManyWaiting when the user already has that many queued jobs (M3f §2a); the balance
+    row lock makes the count and the new job one decision per user.
+    """
     price = estimate_cost_cents(client_duration_ms / 1000)
+    consent_version = CONSENT_VERSION if research_consent else None
     with db.transaction() as tx:
         rows = tx.execute(
             "SELECT available_cents FROM balances WHERE user_id = :user_id FOR UPDATE",
@@ -286,14 +372,22 @@ def reserve(db, user_id, job_id, object_key, filename, client_duration_ms, resea
         )
         if not rows:
             raise LookupError(f"no balance for user {user_id!r}: call ensure_user first")
+        if max_waiting_jobs is not None:
+            waiting = tx.execute(
+                "SELECT count(*) AS n FROM jobs WHERE user_id = :user_id AND status = :queued",
+                {"user_id": user_id, "queued": QUEUED},
+            )[0]["n"]
+            if waiting >= max_waiting_jobs:
+                raise TooManyWaiting(f"user {user_id!r} already has {waiting} queued jobs")
         available = rows[0]["available_cents"]
         if available < price:
             raise InsufficientCredit(available, price)
         tx.execute(
             "INSERT INTO jobs (job_id, user_id, object_key, filename, status, "
-            "client_duration_ms, reserved_cents, research_consent) "
+            "client_duration_ms, reserved_cents, research_consent, consent_version, consented_at) "
             "VALUES (CAST(:job_id AS uuid), :user_id, :object_key, :filename, :queued, "
-            ":client_duration_ms, :price, :research_consent)",
+            ":client_duration_ms, :price, :research_consent, :consent_version, "
+            "CASE WHEN :research_consent THEN now() ELSE NULL END)",
             {
                 "job_id": job_id,
                 "user_id": user_id,
@@ -303,6 +397,7 @@ def reserve(db, user_id, job_id, object_key, filename, client_duration_ms, resea
                 "client_duration_ms": client_duration_ms,
                 "price": price,
                 "research_consent": research_consent,
+                "consent_version": consent_version,
             },
         )
         _move(tx, user_id, job_id, "reserve", -price, price)
@@ -318,7 +413,7 @@ def claim(db, job_id):
     with db.transaction() as tx:
         rows = tx.execute(
             "UPDATE jobs SET status = :processing, attempt = attempt + 1, stage = NULL, "
-            "stages = jsonb_build_array(), updated_at = now() "
+            "stages = jsonb_build_array(), claimed_at = now(), updated_at = now() "
             "WHERE job_id = CAST(:job_id AS uuid) AND (status = :queued OR "
             "(status = :processing AND updated_at < now() - make_interval(secs => :stale))) "
             "RETURNING attempt",
@@ -485,3 +580,125 @@ def issue_refund(
             return False
         _refund(tx, job_id, job, reason, message)
     return True
+
+
+# ---------------------------------------------------------------- retention curves
+
+
+def _text_array(values):
+    """A PostgreSQL text[] literal for a parameter, as neither backend can bind a Python list."""
+
+    def quoted(value):
+        return '"' + str(value).replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+    return "{" + ",".join(quoted(value) for value in values) + "}"
+
+
+def add_curve(
+    db,
+    user_id,
+    job_id,
+    snapshot_id,
+    raw_key,
+    csv_key,
+    curve_sha256,
+    points,
+    quality_flags,
+    views,
+    published,
+    promoted,
+    reward_cap,
+    reward_window_days,
+):
+    """Store one retention snapshot and reward the analysis when all the rules allow it.
+
+    One transaction with the job row locked (M3f §5d): the job must be the user's, done, shared,
+    not removed and not deleted. A curve already stored under the same hash, on any job or
+    account, raises DuplicateCurve and stores nothing. A valid curve of a charged job whose video
+    hash has never been rewarded, by an account that has had credit beyond the starter, and below
+    the per-window cap, returns the captured price once.
+    """
+    with db.transaction() as tx:
+        rows = tx.execute(
+            "SELECT user_id, status, research_consent, dataset_removed_at, "
+            "dataset_removed_reason, deleted_at, captured_cents, curve_rewarded_at, video_sha256 "
+            "FROM jobs WHERE job_id = CAST(:job_id AS uuid) FOR UPDATE",
+            {"job_id": job_id},
+        )
+        job = rows[0] if rows else None
+        if job is None or job["user_id"] != user_id or job["deleted_at"] is not None:
+            raise CurveRefused("not_found", "No such job.", status=404)
+        if job["status"] != DONE:
+            raise CurveRefused("job_not_done", "The job is not done yet.")
+        if not job["research_consent"]:
+            raise CurveRefused("no_consent", "This video was not shared for research.")
+        if job["dataset_removed_at"] is not None:
+            message = CURVE_REMOVED_MESSAGES.get(
+                job["dataset_removed_reason"], CURVE_REMOVED_MESSAGES["no_curve"]
+            )
+            raise CurveRefused("dataset_removed", message)
+
+        duplicate = tx.execute(
+            "SELECT 1 AS present FROM retention_snapshots WHERE curve_sha256 = :sha LIMIT 1",
+            {"sha": curve_sha256},
+        )
+        if duplicate:
+            raise DuplicateCurve("this curve was already added")
+
+        reward = 0
+        if (
+            not quality_flags
+            and job["captured_cents"] is not None
+            and job["captured_cents"] > 0
+            and job["curve_rewarded_at"] is None
+        ):
+            same_video = tx.execute(
+                "SELECT 1 AS present FROM jobs other WHERE other.video_sha256 = :sha "
+                "AND other.video_sha256 IS NOT NULL AND other.curve_rewarded_at IS NOT NULL "
+                "LIMIT 1",
+                {"sha": job["video_sha256"]},
+            )
+            funded = tx.execute(
+                "SELECT 1 AS present FROM ledger WHERE user_id = :user_id "
+                "AND (kind = :grant OR kind = :topup) LIMIT 1",
+                {"user_id": user_id, "grant": "grant", "topup": "test_topup"},
+            )
+            recent = tx.execute(
+                "SELECT count(*) AS n FROM ledger WHERE user_id = :user_id "
+                "AND kind = :kind AND created_at > now() - make_interval(days => :days)",
+                {"user_id": user_id, "kind": "curve_reward", "days": reward_window_days},
+            )[0]["n"]
+            if not same_video and funded and recent < reward_cap:
+                reward = job["captured_cents"]
+
+        tx.execute(
+            "INSERT INTO retention_snapshots (snapshot_id, job_id, raw_key, csv_key, "
+            "curve_sha256, points, quality_flags, views, published, promoted, rewarded_cents) "
+            "VALUES (CAST(:snapshot_id AS uuid), CAST(:job_id AS uuid), :raw_key, :csv_key, "
+            ":sha, :points, CAST(:flags AS text[]), :views, :published, :promoted, :reward)",
+            {
+                "snapshot_id": snapshot_id,
+                "job_id": job_id,
+                "raw_key": raw_key,
+                "csv_key": csv_key,
+                "sha": curve_sha256,
+                "points": len(points),
+                "flags": _text_array(quality_flags),
+                "views": views,
+                "published": published,
+                "promoted": promoted,
+                "reward": reward,
+            },
+        )
+        tx.execute(
+            "UPDATE jobs SET retention_added_at = COALESCE(retention_added_at, now()) "
+            "WHERE job_id = CAST(:job_id AS uuid)",
+            {"job_id": job_id},
+        )
+        if reward:
+            _move(tx, user_id, job_id, "curve_reward", reward, 0)
+            tx.execute(
+                "UPDATE jobs SET curve_rewarded_at = now() WHERE job_id = CAST(:job_id AS uuid)",
+                {"job_id": job_id},
+            )
+    return {"rewarded_cents": reward, "quality": list(quality_flags)}

@@ -51,8 +51,9 @@ def make_job(
     billing.ensure_user(db, user_id, f"{user_id}@example.com", STARTER_CENTS)
     job_id = str(uuid.uuid4())
     key = storage.object_key(user_id, job_id, content_type)
-    billing.reserve(db, user_id, job_id, key, f"clip{PurePosixPath(key).suffix}", 3000,
-                    research_consent=consent)
+    billing.reserve(
+        db, user_id, job_id, key, f"clip{PurePosixPath(key).suffix}", 3000, research_consent=consent
+    )
     if state in ("processing", "done"):
         assert billing.claim(db, job_id) == 1
     if state == "done":
@@ -88,9 +89,7 @@ def object_exists(aws, key):
 
 
 def prefix_keys(aws, prefix):
-    pages = aws.s3.get_paginator("list_objects_v2").paginate(
-        Bucket=aws.bucket, Prefix=prefix
-    )
+    pages = aws.s3.get_paginator("list_objects_v2").paginate(Bucket=aws.bucket, Prefix=prefix)
     return [obj["Key"] for page in pages for obj in page.get("Contents", [])]
 
 
@@ -134,9 +133,7 @@ def test_delete_job_prefixes_deletes_every_object_under_both_prefixes_across_pag
     other = str(uuid.uuid4())
     for prefix in (f"dataset/{job_id}/objects", f"academic/{job_id}/objects"):
         for number in range(1001):
-            aws.s3.put_object(
-                Bucket=aws.bucket, Key=f"{prefix}/{number:04d}", Body=b"x"
-            )
+            aws.s3.put_object(Bucket=aws.bucket, Key=f"{prefix}/{number:04d}", Body=b"x")
     aws.s3.put_object(Bucket=aws.bucket, Key=f"dataset/{other}/video.mp4", Body=b"x")
 
     storage.delete_job_prefixes(aws.s3, aws.bucket, job_id)
@@ -321,9 +318,7 @@ def test_the_reaper_deletes_the_copy_after_90_days_and_says_no_curve(
     assert all(object_exists(aws, name) for name in own)
 
 
-def test_the_reaper_keeps_a_copy_younger_than_its_configured_limit(
-    aws, db, pg, reaper_env
-):
+def test_the_reaper_keeps_a_copy_younger_than_its_configured_limit(aws, db, pg, reaper_env):
     reaper_env(90)
     job_id, key = make_job(db)
     dataset, academic, _ = seed_research(aws, job_id, key)
@@ -410,9 +405,7 @@ def cognito_admin(monkeypatch):
     monkeypatch.setattr(BaseClient, "_make_api_call", make_api_call)
 
 
-def test_account_delete_removes_both_prefixes(
-    aws, db, pg, cognito_client, idp, cognito_admin
-):
+def test_account_delete_removes_both_prefixes(aws, db, pg, cognito_client, idp, cognito_admin):
     assert sign_in(cognito_client, idp, email="ann@example.com").status_code in (302, 303)
     user_id = pg.one("SELECT user_id FROM users WHERE lower(email) = 'ann@example.com'")["user_id"]
     job_id, key = make_job(db, user_id=user_id)

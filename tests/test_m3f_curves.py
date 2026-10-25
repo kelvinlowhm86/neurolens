@@ -169,15 +169,22 @@ def test_a_watch_ratio_of_exactly_10_is_allowed_and_above_is_refused():
 
 def test_a_valid_curve_rewards_the_captured_price_once(db, pg):
     job_id, _ = make_job(db)
-    assert pg.balance() == (STARTER_CENTS - PRICE_CENTS, 0)
+    billing.grant_credit(db, f"{WEB_USER_ID}@example.com", 100)
+    assert pg.balance(WEB_USER_ID) == (STARTER_CENTS + 100 - PRICE_CENTS, 0)
 
     result = billing.add_curve(db, WEB_USER_ID, job_id, **curve_args(job_id))
 
     assert result["rewarded_cents"] == PRICE_CENTS
     assert result["quality"] == []
-    assert pg.balance() == (STARTER_CENTS, 0)
-    ledger = pg.ledger()
-    assert [row["kind"] for row in ledger] == ["starter", "reserve", "capture", "curve_reward"]
+    assert pg.balance(WEB_USER_ID) == (STARTER_CENTS + 100, 0)
+    ledger = pg.ledger(WEB_USER_ID)
+    assert [row["kind"] for row in ledger] == [
+        "starter",
+        "reserve",
+        "capture",
+        "grant",
+        "curve_reward",
+    ]
     reward = ledger[-1]
     assert reward["job_id"] == job_id
     assert (reward["available_delta_cents"], reward["reserved_delta_cents"]) == (PRICE_CENTS, 0)
@@ -192,13 +199,13 @@ def test_a_valid_curve_rewards_the_captured_price_once(db, pg):
 
 def test_an_account_with_only_starter_credit_is_not_rewarded(db, pg):
     job_id, _ = make_job(db)
-    balance = pg.balance()
+    balance = pg.balance(WEB_USER_ID)
 
     result = billing.add_curve(db, WEB_USER_ID, job_id, **curve_args(job_id))
 
     assert result["rewarded_cents"] == 0
-    assert pg.balance() == balance
-    assert "curve_reward" not in pg.kinds()
+    assert pg.balance(WEB_USER_ID) == balance
+    assert "curve_reward" not in pg.kinds(WEB_USER_ID)
     assert pg.job(job_id)["curve_rewarded_at"] is None
 
 
@@ -209,12 +216,13 @@ def test_a_curve_is_rewarded_once_the_account_has_a_grant(db, pg):
     result = billing.add_curve(db, WEB_USER_ID, job_id, **curve_args(job_id))
 
     assert result["rewarded_cents"] == PRICE_CENTS
-    assert pg.balance() == (STARTER_CENTS + 100, 0)
-    assert pg.kinds() == ["starter", "reserve", "capture", "grant", "curve_reward"]
+    assert pg.balance(WEB_USER_ID) == (STARTER_CENTS + 100, 0)
+    assert pg.kinds(WEB_USER_ID) == ["starter", "reserve", "capture", "grant", "curve_reward"]
 
 
 def test_a_second_curve_on_the_same_job_is_stored_without_another_reward(db, pg):
     job_id, _ = make_job(db)
+    billing.grant_credit(db, f"{WEB_USER_ID}@example.com", 100)
     billing.add_curve(db, WEB_USER_ID, job_id, **curve_args(job_id))
     after_first = pg.snapshot()
 
@@ -227,15 +235,16 @@ def test_a_second_curve_on_the_same_job_is_stored_without_another_reward(db, pg)
     assert pg.snapshot()["ledger"] == after_first["ledger"]
     assert len(snapshot_rows(pg, job_id)) == 2
     assert snapshot_rows(pg, job_id)[-1]["rewarded_cents"] == 0
-    assert pg.kinds().count("curve_reward") == 1
+    assert pg.kinds(WEB_USER_ID).count("curve_reward") == 1
 
 
 def test_the_unique_index_refuses_a_second_curve_reward_row(db, pg):
     from psycopg.errors import UniqueViolation
 
     job_id, _ = make_job(db)
+    billing.grant_credit(db, f"{WEB_USER_ID}@example.com", 100)
     billing.add_curve(db, WEB_USER_ID, job_id, **curve_args(job_id))
-    balance = pg.balance()
+    balance = pg.balance(WEB_USER_ID)
 
     with pytest.raises(UniqueViolation):
         pg.conn.execute(
@@ -244,12 +253,13 @@ def test_the_unique_index_refuses_a_second_curve_reward_row(db, pg):
             (WEB_USER_ID, job_id),
         )
 
-    assert pg.balance() == balance
+    assert pg.balance(WEB_USER_ID) == balance
 
 
 def test_an_invalid_curve_is_stored_without_a_reward(db, pg):
     job_id, _ = make_job(db)
-    before = pg.balance()
+    billing.grant_credit(db, f"{WEB_USER_ID}@example.com", 100)
+    before = pg.balance(WEB_USER_ID)
 
     result = billing.add_curve(
         db,
@@ -260,7 +270,7 @@ def test_an_invalid_curve_is_stored_without_a_reward(db, pg):
 
     assert result["rewarded_cents"] == 0
     assert result["quality"] == ["too_few_points"]
-    assert pg.balance() == before
+    assert pg.balance(WEB_USER_ID) == before
     assert pg.job(job_id)["curve_rewarded_at"] is None
     [snapshot] = snapshot_rows(pg, job_id)
     assert snapshot["rewarded_cents"] == 0
@@ -268,21 +278,22 @@ def test_an_invalid_curve_is_stored_without_a_reward(db, pg):
 
 def test_a_zero_price_job_is_not_rewarded(db, pg):
     job_id, _ = make_job(db)
-    pg.conn.execute(
-        "UPDATE jobs SET captured_cents = 0 WHERE job_id = %s::uuid", (job_id,)
-    )
-    balance = pg.balance()
+    billing.grant_credit(db, f"{WEB_USER_ID}@example.com", 100)
+    pg.conn.execute("UPDATE jobs SET captured_cents = 0 WHERE job_id = %s::uuid", (job_id,))
+    balance = pg.balance(WEB_USER_ID)
 
     result = billing.add_curve(db, WEB_USER_ID, job_id, **curve_args(job_id))
 
     assert result["rewarded_cents"] == 0
-    assert pg.balance() == balance
-    assert "curve_reward" not in pg.kinds()
+    assert pg.balance(WEB_USER_ID) == balance
+    assert "curve_reward" not in pg.kinds(WEB_USER_ID)
 
 
 def test_a_video_already_rewarded_on_another_account_is_not_rewarded_again(db, pg):
     first, _ = make_job(db, sha="same-video")
     second, _ = make_job(db, user_id=OTHER_USER, sha="same-video")
+    billing.grant_credit(db, f"{WEB_USER_ID}@example.com", 100)
+    billing.grant_credit(db, f"{OTHER_USER}@example.com", 100)
     billing.add_curve(db, WEB_USER_ID, first, **curve_args(first))
     balance = pg.balance(OTHER_USER)
 
@@ -298,6 +309,7 @@ def test_a_video_already_rewarded_on_another_account_is_not_rewarded_again(db, p
 def test_a_user_at_the_cap_is_not_rewarded_until_the_window_passes(db, pg):
     cap = 2
     jobs = [make_job(db, sha=f"video-{number}")[0] for number in range(4)]
+    billing.grant_credit(db, f"{WEB_USER_ID}@example.com", 100)
     for job_id in jobs[:cap]:
         result = billing.add_curve(
             db,
@@ -307,7 +319,7 @@ def test_a_user_at_the_cap_is_not_rewarded_until_the_window_passes(db, pg):
         )
         assert result["rewarded_cents"] == PRICE_CENTS
 
-    second_balance = pg.balance()
+    second_balance = pg.balance(WEB_USER_ID)
     third = billing.add_curve(
         db,
         WEB_USER_ID,
@@ -315,7 +327,7 @@ def test_a_user_at_the_cap_is_not_rewarded_until_the_window_passes(db, pg):
         **curve_args(jobs[2], sha="curve-third", reward_cap=cap),
     )
     assert third["rewarded_cents"] == 0
-    assert pg.balance() == second_balance
+    assert pg.balance(WEB_USER_ID) == second_balance
 
     # The two earlier rewards fall out of the window; the fourth job is rewarded again.
     pg.conn.execute(
@@ -335,7 +347,7 @@ def test_a_user_at_the_cap_is_not_rewarded_until_the_window_passes(db, pg):
         **curve_args(jobs[3], sha="curve-fourth", reward_cap=cap),
     )
     assert fourth["rewarded_cents"] == PRICE_CENTS
-    assert pg.balance() == (STARTER_CENTS - PRICE_CENTS, 0)
+    assert pg.balance(WEB_USER_ID) == (STARTER_CENTS + 100 - PRICE_CENTS, 0)
 
 
 def test_a_duplicate_curve_is_refused_and_stores_nothing(db, pg):
@@ -397,6 +409,7 @@ def test_add_curve_refuses_a_job_that_is_not_eligible(db, pg, case):
 def test_the_route_stores_the_raw_report_and_the_parsed_curve(db, aws, make_cfg, tmp_path, pg):
     client = app_for(aws, db, make_cfg, tmp_path)
     job_id, _ = make_job(db)
+    billing.grant_credit(db, f"{WEB_USER_ID}@example.com", 100)
     points = curve()
     report = report_text(points)
 
@@ -456,16 +469,16 @@ def test_the_route_refuses_bad_fields_and_writes_nothing(db, aws, make_cfg, tmp_
     assert resp.status_code == 400
     assert snapshot_rows(pg, job_id) == []
     assert pg.job(job_id)["retention_added_at"] is None
-    assert not aws.s3.list_objects_v2(
-        Bucket=aws.bucket, Prefix=f"dataset/{job_id}/retention/"
-    ).get("Contents")
+    assert not aws.s3.list_objects_v2(Bucket=aws.bucket, Prefix=f"dataset/{job_id}/retention/").get(
+        "Contents"
+    )
 
 
 def test_an_s3_failure_records_nothing(db, aws, make_cfg, tmp_path, pg):
     s3 = PutFails(aws.s3)
     client = app_for(aws, db, make_cfg, tmp_path, s3_client=s3)
     job_id, _ = make_job(db)
-    balance = pg.balance()
+    balance = pg.balance(WEB_USER_ID)
 
     resp = client.post(
         f"/api/jobs/{job_id}/retention",
@@ -480,8 +493,8 @@ def test_an_s3_failure_records_nothing(db, aws, make_cfg, tmp_path, pg):
     assert resp.status_code == 500
     assert snapshot_rows(pg, job_id) == []
     assert pg.job(job_id)["retention_added_at"] is None
-    assert pg.balance() == balance
-    assert "curve_reward" not in pg.kinds()
+    assert pg.balance(WEB_USER_ID) == balance
+    assert "curve_reward" not in pg.kinds(WEB_USER_ID)
 
 
 @pytest.mark.parametrize(

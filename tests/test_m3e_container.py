@@ -136,10 +136,10 @@ def test_a_consented_job_keeps_its_dataset_copy(
 
     assert run_job(aws, db, job_id, clip_path, make_cfg, roi_masks_small) is worker.Outcome.DONE
 
+    assert object_exists(aws, f"dataset/{job_id}/video.mp4")
     for kept in (
-        f"dataset/{job_id}/video.mp4",
-        f"dataset/{job_id}/result.json",
-        f"dataset/{job_id}/brain",
+        f"academic/{job_id}/result.json",
+        f"academic/{job_id}/brain",
     ):
         assert object_exists(aws, kept)
     result = json.loads(

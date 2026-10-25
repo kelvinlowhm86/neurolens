@@ -185,28 +185,22 @@ The same rules as the old `verify` (length limit first, then record the duration
   - a missing run (EventBridge not invoking) uses an alarm on its `Invocations` < 1 in 30 minutes, the pattern of `breaker_not_running`.
 - **Permissions:** `sagemaker:DescribeEndpoint` and `sagemaker:UpdateEndpointWeightsAndCapacities` on our endpoint only, plus `application-autoscaling:DescribeScalableTargets`.
 
-## 7. Research consent needs the retention curve
-- **Migration `infra/migrations/005_retention_rule.sql`:** `jobs.retention_added_at TIMESTAMPTZ`, `jobs.dataset_removed_at TIMESTAMPTZ`.
-- **Consent box** (one line, replaces M3c §3a's text): "Keep this video for research ([details](/static/privacy.html#research)). I own the rights to it." The privacy page's "Consent for research" section (`id="research"`) states the rules in full: kept up to 12 months; please add its audience retention once published ([how](/static/retention_guide.html)); without retention the copy is deleted 60 days after upload.
-- **Retention upload** (M3c §3c):
-  - On success it sets `retention_added_at = now()`.
-  - It is refused with 409 `dataset_removed` ("This video's research copy was deleted after 60 days without retention.") when `dataset_removed_at` is set.
-- **History:** a done, consented, not-removed job without `retention_added_at` shows a small "Add retention" link in its row, no banner. The link opens a pop-up for that video: its name, the guide link, a "Choose file" button and the saved or error message; after a save the list reloads, so the link goes. The results page's "Add real audience retention" button (M3d §8) opens the same pop-up. `list_jobs` returns `needs_retention` (bool) for this.
-- **Clean-up** (in the reaper's run): select every job that is `done`, has `research_consent`, has no `retention_added_at` and no `dataset_removed_at`, is not deleted, and has `created_at` older than 60 days. For each:
-  1. if `dataset/<id>/retention.csv` exists (a curve uploaded before migration 005, or one whose database update failed), set `retention_added_at` and skip the job. A HEAD error other than not-found raises;
-  2. delete `dataset/<id>/video<ext>`, `result.json` and `brain` with `storage.delete_keys`;
-  3. only if every delete succeeded, set `dataset_removed_at`.
-
-  A failure leaves the row for the next run and makes the run raise, so the Lambda error alarm emails. The user's own result, brain and thumbnail are untouched.
-- **Privacy page:** a consented copy without retention is deleted 60 days after upload. The 12-month rule for the rest is unchanged.
-- **Constant:** `reaper.DATASET_WITHOUT_RETENTION_DAYS = 60`.
+## 7. Research consent, retention curves and clean-up
+M3f §5 replaces this section. It describes the consent box and its version, the `dataset/` and
+`academic/` layout, retention snapshots and the reward, Stop sharing, the 90-day clean-up without a
+curve (`research.no_curve_days`), and the reaper's removal of both prefixes. Migration 005's two
+columns remain; migration 006 adds the rest. Nothing here should be read as a current rule.
 
 ## 8. Web
+The page and research-sharing parts described here have moved to M3f §2–§4: the batch dialog,
+waiting and progress texts, the consent box and its version, the retention curve form and reward,
+Stop sharing, the CSV name, the landing samples and the phone layout. Only the web tier's technical
+behaviour remains below.
+
 - **Pause check:** `_endpoint_paused(appscaling, endpoint)` reads `DescribeScalableTargets` for the variant. Max 0, or no target → paused. It replaces `_worker_group_paused`, with the same 503 and the same "could not read" → 500.
 - **Settings:** `NEUROLENS_WORKER_GROUP`/`aws.worker_group` becomes `NEUROLENS_GPU_ENDPOINT`/`aws.gpu_endpoint`, required in Cognito mode. `NEUROLENS_SQS_QUEUE_URL`/`aws.sqs_queue_url` is removed (nothing read it: the queue triggers the dispatcher directly), with its `.env.example` line and the `queue_url`, `queue_arn` and `dlq_url` outputs. The unused `llama_repo_id` and `pre_download_llama` leave `config.json`.
 - **Status and result come from the database alone.** `/status` reports the job's own status, and `/result` (and `/result.csv`) serve only a `done` job; an unfinished job answers `result_not_ready` even if its result object exists. The old crash window (result written, job not yet settled) now closes by itself: nothing refunds after the result is published, and the error handler or the reaper settles such a job (§5). The user waits a few minutes longer in that rare case, the page never shows a result before it is charged, and each status poll makes no S3 call.
 - **Page:**
-  - the waiting text for a queued job says the GPU may take up to about 10 minutes to start;
   - the `downloading` stage label is removed;
   - Cancel while the file is uploading aborts the upload, then cancels the reserved job as a failed upload does, so it is never dispatched or charged;
   - reading the chosen file's length gives up after 10 s with "Couldn't read this video.";

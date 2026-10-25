@@ -152,11 +152,13 @@ def put_thumbnail(s3, bucket, job_id, data):
 
 
 def put_dataset(s3, bucket, job_id, upload_key, result, brain):
-    """Keep a consented job's video, result and brain under dataset/<job_id>/ (M3c §3b, M3d §5).
+    """Keep a consented job's video under dataset/<job_id>/ and our output under academic/.
 
-    The video is copied from the upload key, keeping its extension. The result is serialised first,
-    so a NaN or infinity raises ValueError before either write. All writes replace earlier copies:
-    a redelivered job writes the same content. Any S3 error is raised to the worker's failure path.
+    The video is copied from the upload key, keeping its extension (M3f §5b). The result and
+    brain are written under academic/<job_id>/, never under dataset/ (training reads only dataset/).
+    The result is serialised first, so a NaN or infinity raises ValueError before either write.
+    All writes replace earlier copies: a redelivered job writes the same content. Any S3 error is
+    raised to the worker's failure path.
     """
     body = json.dumps(result, allow_nan=False).encode()
     ext = PurePosixPath(upload_key).suffix
@@ -167,13 +169,13 @@ def put_dataset(s3, bucket, job_id, upload_key, result, brain):
     )
     s3.put_object(
         Bucket=bucket,
-        Key=f"dataset/{job_id}/result.json",
+        Key=f"academic/{job_id}/result.json",
         Body=body,
         ContentType="application/json",
     )
     s3.put_object(
         Bucket=bucket,
-        Key=f"dataset/{job_id}/brain",
+        Key=f"academic/{job_id}/brain",
         Body=brain,
         ContentType="application/octet-stream",
     )
@@ -219,19 +221,18 @@ def object_exists(s3, bucket, key):
 
 
 def job_keys(job_id, object_key):
-    """Every S3 key one job can have: the upload, its result, brain and thumbnail, and the
-    research copy (M3a §7b), with the dataset video's real extension."""
+    """The job's own S3 keys: the upload, its result, brain and thumbnail.
+
+    The research copy is not a fixed list any more (M3f §5b): dataset/<job_id>/ also holds
+    retention snapshots, and our output lives under academic/<job_id>/. Both prefixes are removed
+    by `delete_job_prefixes`.
+    """
     job_id = str(job_id)
-    ext = PurePosixPath(object_key).suffix
     return [
         object_key,
         f"results/{job_id}.json",
         f"results/{job_id}.brain",
         f"results/{job_id}.jpg",
-        f"dataset/{job_id}/video{ext}",
-        f"dataset/{job_id}/result.json",
-        f"dataset/{job_id}/brain",
-        f"dataset/{job_id}/retention.csv",
     ]
 
 
@@ -244,6 +245,31 @@ def delete_keys(s3, bucket, keys):
             logger.error(f"S3 reported {len(reported)} failed deletes in {bucket}")
             return False
     return True
+
+
+def delete_job_prefixes(s3, bucket, job_id):
+    """Delete every object under dataset/<job_id>/ and academic/<job_id>/, paged (M3f §5c).
+
+    The job id must be a canonical UUID: nothing else can widen a prefix. Raises on any delete
+    S3 reports as failed, so a caller never marks a copy removed while part of it remains.
+    """
+    text = str(job_id)
+    job_id = str(uuid.UUID(text))
+    if job_id != text:
+        raise ValueError(f"not a canonical UUID: {text!r}")
+    for prefix in (f"dataset/{job_id}/", f"academic/{job_id}/"):
+        pages = s3.get_paginator("list_objects_v2").paginate(Bucket=bucket, Prefix=prefix)
+        for page in pages:
+            keys = [item["Key"] for item in page.get("Contents", [])]
+            if not keys:
+                continue
+            reported = s3.delete_objects(
+                Bucket=bucket, Delete={"Objects": [{"Key": key} for key in keys]}
+            ).get("Errors")
+            if reported:
+                raise RuntimeError(
+                    f"S3 reported {len(reported)} failed deletes under {prefix} in {bucket}"
+                )
 
 
 def result_exists(s3, bucket, job_id):

@@ -129,7 +129,7 @@ def test_put_dataset_writes_the_given_brain_bytes(aws):
 
     storage.put_dataset(aws.s3, aws.bucket, job_id, key, result, brain=b"brain bytes")
 
-    assert object_bytes(aws, f"dataset/{job_id}/brain") == b"brain bytes"
+    assert object_bytes(aws, f"academic/{job_id}/brain") == b"brain bytes"
 
 
 # ---------------------------------------------------------------- the worker's write order
@@ -218,6 +218,6 @@ def test_a_consented_job_writes_the_same_brain_bytes_to_the_dataset(
     assert run_job(aws, db, job_id, clip_path, make_cfg(), roi_masks_small) is worker.Outcome.DONE
 
     brain = object_bytes(aws, f"results/{job_id}.brain")
-    assert object_bytes(aws, f"dataset/{job_id}/brain") == brain
+    assert object_bytes(aws, f"academic/{job_id}/brain") == brain
     stored = json.loads(object_bytes(aws, f"results/{job_id}.json"))
     assert stored["format"] == 2

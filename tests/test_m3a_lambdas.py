@@ -94,11 +94,11 @@ def consented_job(db, new_key, *, ext=".mp4", user_id=USER_ID):
 
 
 def research_keys(job_id, ext=".mp4"):
-    """The research copy's keys, as `storage.put_dataset` writes them (M3c §3b)."""
+    """The research copy's keys, as `storage.put_dataset` writes them (M3f §5b)."""
     return [
         f"dataset/{job_id}/video{ext}",
-        f"dataset/{job_id}/result.json",
-        f"dataset/{job_id}/brain",
+        f"academic/{job_id}/result.json",
+        f"academic/{job_id}/brain",
     ]
 
 

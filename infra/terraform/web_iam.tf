@@ -64,8 +64,8 @@ locals {
         Resource = "*"
       },
       {
-        # Deleting a video or the whole account removes its upload, result and dataset files
-        # (M3c §4, §5). Missing keys are fine.
+        # Deleting a video or the whole account removes its upload, result and both research
+        # prefixes (M3f §5c). Missing keys are fine.
         Sid    = "DeleteJobFiles"
         Effect = "Allow"
         Action = "s3:DeleteObject"
@@ -73,14 +73,15 @@ locals {
           "${aws_s3_bucket.main.arn}/uploads/*",
           "${aws_s3_bucket.main.arn}/results/*",
           "${aws_s3_bucket.main.arn}/dataset/*",
+          "${aws_s3_bucket.main.arn}/academic/*",
         ]
       },
       {
-        # A real audience-retention CSV for a consented job (M3c §3c).
-        Sid      = "StoreRetentionCsv"
+        # A retention snapshot's raw report and parsed CSV (M3f §5d).
+        Sid      = "StoreRetentionSnapshots"
         Effect   = "Allow"
         Action   = "s3:PutObject"
-        Resource = "${aws_s3_bucket.main.arn}/dataset/*/retention.csv"
+        Resource = "${aws_s3_bucket.main.arn}/dataset/*/retention/*"
       },
       {
         # Account deletion removes the user's logins from our pool only (M3c §5).

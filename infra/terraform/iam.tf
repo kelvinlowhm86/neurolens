@@ -53,19 +53,21 @@ resource "aws_iam_role_policy" "sagemaker" {
         Resource = aws_s3_bucket.main.arn
       },
       {
-        # The result, the consented dataset copy and the boot record (M3e §4).
+        # Our result and brain under academic/, the shared video under dataset/, and the boot
+        # record (M3f §5b).
         Sid    = "WriteResultsDatasetAndBootRecords"
         Effect = "Allow"
         Action = "s3:PutObject"
         Resource = [
           "${aws_s3_bucket.main.arn}/results/*",
           "${aws_s3_bucket.main.arn}/dataset/*",
+          "${aws_s3_bucket.main.arn}/academic/*",
           "${aws_s3_bucket.main.arn}/experiments/boots/*",
           "${aws_s3_bucket.main.arn}/sagemaker-output/*",
         ]
       },
       {
-        # A refund deletes every file the job has (M3e §4c).
+        # A refund deletes every file the job has (M3e §4c, M3f §5c).
         Sid    = "DeleteAJobsFilesAfterRefund"
         Effect = "Allow"
         Action = "s3:DeleteObject"
@@ -73,6 +75,7 @@ resource "aws_iam_role_policy" "sagemaker" {
           "${aws_s3_bucket.main.arn}/uploads/*",
           "${aws_s3_bucket.main.arn}/results/*",
           "${aws_s3_bucket.main.arn}/dataset/*",
+          "${aws_s3_bucket.main.arn}/academic/*",
         ]
       },
       {

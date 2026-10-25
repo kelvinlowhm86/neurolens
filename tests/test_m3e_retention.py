@@ -71,13 +71,25 @@ def test_a_successful_upload_records_the_retention_curve(aws, db, pg, make_cfg, 
     client = app_for(aws, db, make_cfg, tmp_path)
     job_id, _ = make_job(db, consent=True, done=True)
 
-    resp = client.post(f"/api/jobs/{job_id}/retention", json={"report": valid_report()})
+    resp = client.post(
+        f"/api/jobs/{job_id}/retention",
+        json={
+            "report": valid_report(),
+            "views": "lt_1k",
+            "published": "week",
+            "promoted": False,
+        },
+    )
 
     assert 200 <= resp.status_code < 300
     job = pg.job(job_id)
     assert job["retention_added_at"] is not None
     assert job["dataset_removed_at"] is None
-    assert object_exists(aws, retention_key(job_id))
+    [snapshot] = pg.rows(
+        "SELECT raw_key, csv_key FROM retention_snapshots WHERE job_id = %s::uuid", job_id
+    )
+    assert object_exists(aws, snapshot["raw_key"])
+    assert object_exists(aws, snapshot["csv_key"])
 
 
 def test_an_upload_after_the_dataset_was_removed_is_409_dataset_removed(
@@ -102,7 +114,9 @@ def test_list_jobs_marks_only_done_consented_jobs_without_a_curve_or_removal(db,
     needed, _ = make_job(db, consent=True, done=True)
     with_curve, _ = make_job(db, consent=True, done=True)
     pg.conn.execute(
-        "UPDATE jobs SET retention_added_at = now() WHERE job_id = %s::uuid", (with_curve,)
+        "INSERT INTO retention_snapshots (snapshot_id, job_id, curve_sha256, points) "
+        "VALUES (gen_random_uuid(), %s::uuid, %s, 20)",
+        (with_curve, f"curve-{with_curve}"),
     )
     removed, _ = make_job(db, consent=True, done=True)
     pg.conn.execute(
@@ -114,7 +128,10 @@ def test_list_jobs_marks_only_done_consented_jobs_without_a_curve_or_removal(db,
     assert billing.issue_refund(db, failed, "processing_failed", queued=True) is True
 
     rows = billing.list_jobs(db, WEB_USER_ID, 50)
-    by_id = {str(row["job_id"]): row["needs_retention"] for row in rows}
+    by_id = {
+        str(row["job_id"]): row["sharing"] and row["status"] == "done" and row["curve_count"] == 0
+        for row in rows
+    }
 
     assert by_id[needed] is True
     for job_id in (with_curve, removed, queued, unconsented, failed):
@@ -126,12 +143,17 @@ def test_the_jobs_api_exposes_needs_retention(aws, db, pg, make_cfg, tmp_path):
     needed, _ = make_job(db, consent=True, done=True)
     with_curve, _ = make_job(db, consent=True, done=True)
     pg.conn.execute(
-        "UPDATE jobs SET retention_added_at = now() WHERE job_id = %s::uuid", (with_curve,)
+        "INSERT INTO retention_snapshots (snapshot_id, job_id, curve_sha256, points) "
+        "VALUES (gen_random_uuid(), %s::uuid, %s, 20)",
+        (with_curve, f"curve-{with_curve}"),
     )
 
     resp = client.get("/api/jobs")
 
     assert resp.status_code == 200
-    by_id = {row["job_id"]: row["needs_retention"] for row in resp.get_json()}
+    by_id = {
+        row["job_id"]: row["sharing"] and row["status"] == "done" and row["curve_count"] == 0
+        for row in resp.get_json()
+    }
     assert by_id[needed] is True
     assert by_id[with_curve] is False

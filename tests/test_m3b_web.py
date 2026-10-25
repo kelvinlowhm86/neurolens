@@ -41,8 +41,12 @@ JOB_KEYS = {
     "verified_duration_ms",
     "captured_cents",
     "error_code",
+    "claimed_at",
     "result_available",
     "cancellable",
+    "sharing",
+    "curve_count",
+    "curve_reward_cents",
 }
 DAY = 24 * 3600
 
@@ -287,7 +291,9 @@ def test_csv_route_serves_the_jobs_result_as_an_attachment(aws, client, db):
     job_id, result = done_job(aws, db)
     resp = client.get(f"/api/jobs/{job_id}/result.csv")
     assert resp.status_code == 200
-    assert resp.headers["Content-Disposition"] == (f'attachment; filename="neurolens-{job_id}.csv"')
+    assert resp.headers["Content-Disposition"] == (
+        f'attachment; filename="ad-{job_id[:8]} \u2013 NeuroLens.csv"'
+    )
     rows = parse_csv(resp.get_data(as_text=True))
     assert rows[0] == CSV_COLUMNS
     assert rows[1:] == [expected_cells(t) for t in range(result["duration_seconds"])]

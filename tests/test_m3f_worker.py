@@ -123,9 +123,7 @@ def test_the_hash_is_recorded_before_a_copy_that_fails(
     aws.s3.upload_file(str(clip_path), aws.bucket, key)
     verify(db, job_id)
 
-    outcome = run_job(
-        aws, db, job_id, clip_path, make_cfg(), roi_masks_small, s3=CopyFails(aws.s3)
-    )
+    outcome = run_job(aws, db, job_id, clip_path, make_cfg(), roi_masks_small, s3=CopyFails(aws.s3))
 
     assert outcome is worker.Outcome.FAILED
     expected = hashlib.sha256(Path(clip_path).read_bytes()).hexdigest()

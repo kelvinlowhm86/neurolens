@@ -9,6 +9,7 @@ locals {
   repo_root = "${path.module}/../.."
   config    = jsondecode(file("${local.repo_root}/config.json"))
   lambda_files = [
+    "config.json",
     "neurolens/__init__.py",
     "neurolens/db.py",
     "neurolens/billing.py",
@@ -76,18 +77,17 @@ resource "aws_iam_role_policy" "m3a_lambda" {
     Version = "2012-10-17"
     Statement = concat(local.db_access_statements, [
       {
-        # Is there a result (settle), an upload, or a retention curve (reaper's dataset clean-up)?
-        Sid    = "ReadResultsUploadsAndDataset"
+        # Is there a result (settle), or an upload (refund)?
+        Sid    = "ReadResultsAndUploads"
         Effect = "Allow"
         Action = "s3:GetObject"
         Resource = [
           "${aws_s3_bucket.main.arn}/results/*",
           "${aws_s3_bucket.main.arn}/uploads/*",
-          "${aws_s3_bucket.main.arn}/dataset/*",
         ]
       },
       {
-        # A refund deletes every file the job has (M3a §7b).
+        # A refund deletes every file the job has (M3a §7b, M3f §5c).
         Sid    = "DeleteAJobsFilesAfterRefund"
         Effect = "Allow"
         Action = "s3:DeleteObject"
@@ -95,6 +95,7 @@ resource "aws_iam_role_policy" "m3a_lambda" {
           "${aws_s3_bucket.main.arn}/uploads/*",
           "${aws_s3_bucket.main.arn}/results/*",
           "${aws_s3_bucket.main.arn}/dataset/*",
+          "${aws_s3_bucket.main.arn}/academic/*",
         ]
       },
       {

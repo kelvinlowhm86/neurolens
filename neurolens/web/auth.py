@@ -1,22 +1,25 @@
-"""Who is asking (M3a §2, M3b §2). The only place the web app reads identity.
+"""Who is asking (M3a §2, M3b §2, M3f §6b). The only place the web app reads identity.
 
 Two modes. "dev" (laptop and tests): a fixed development user, allowed only on a local-only
 address and never on AWS, so it can never be exposed publicly; every request is signed in as it.
-"cognito" (AWS): sign-in through Amazon Cognito's hosted pages (Google or email and password),
-with a signed session cookie that holds only the user's ID, email and sign-in time.
+"cognito" (AWS): sign-in through Amazon Cognito's hosted pages (Google or email and password).
+The signed cookie holds only a random session token; the server stores its SHA-256 and reads the
+user id and email from the database. A session lasts 30 days from its last use.
 """
 
+import hashlib
 import secrets
-import time
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 
 from flask import current_app, session
 
-from neurolens import settings
+from neurolens import billing, settings
 
 LOCAL_HOST = "127.0.0.1"
 DEFAULT_AUTH = {"mode": "dev", "dev_user_id": "dev-user", "dev_email": "dev@localhost"}
-SESSION_HOURS = 12
+SESSION_DAYS = billing.SESSION_DAYS
+REFRESH_AFTER_S = 60 * 60  # `last_seen_at` moves at most once an hour
+SESSION_TOKEN_KEY = "session"
 SIGNED_IN_HINT_COOKIE = "nl_signed_in"
 SECRET_PARAMETERS = {
     "client_secret": "/neurolens/web/cognito_client_secret",
@@ -81,7 +84,7 @@ def init_auth(app, cfg, ssm_client, *, server_metadata=None):
         SESSION_COOKIE_SECURE=True,
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Lax",
-        PERMANENT_SESSION_LIFETIME=timedelta(hours=SESSION_HOURS),
+        PERMANENT_SESSION_LIFETIME=timedelta(days=SESSION_DAYS),
         SESSION_REFRESH_EACH_REQUEST=False,
     )
     if server_metadata is None:
@@ -100,11 +103,38 @@ def init_auth(app, cfg, ssm_client, *, server_metadata=None):
     )
 
 
-def start_session(user_id, email):
-    """A fresh session for a verified sign-in: nothing from before it survives."""
+def _hash_token(token):
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
+def _database():
+    return current_app.config.get("NEUROLENS_DB")
+
+
+def start_session(db, user_id):
+    """A fresh session for a verified sign-in: a new random token, its hash stored on the server."""
+    token = secrets.token_urlsafe(32)
+    with db.transaction() as tx:
+        tx.execute(
+            "INSERT INTO sessions (session_hash, user_id, last_seen_at) "
+            "VALUES (:session_hash, :user_id, now())",
+            {"session_hash": _hash_token(token), "user_id": user_id},
+        )
     session.clear()
     session.permanent = True
-    session.update(user_id=user_id, email=email, signed_in_at=int(time.time()))
+    session[SESSION_TOKEN_KEY] = token
+
+
+def end_session(db):
+    """Sign-out: remove this browser's session row, so the token can never be used again."""
+    token = session.get(SESSION_TOKEN_KEY)
+    if isinstance(token, str) and token and db is not None:
+        with db.transaction() as tx:
+            tx.execute(
+                "DELETE FROM sessions WHERE session_hash = :session_hash",
+                {"session_hash": _hash_token(token)},
+            )
+    session.clear()
 
 
 def set_signed_in_hint(response):
@@ -112,7 +142,7 @@ def set_signed_in_hint(response):
     response.set_cookie(
         SIGNED_IN_HINT_COOKIE,
         "1",
-        max_age=SESSION_HOURS * 3600,
+        max_age=SESSION_DAYS * 24 * 60 * 60,
         secure=current_app.config["SESSION_COOKIE_SECURE"],
         httponly=False,
         samesite="Lax",
@@ -128,17 +158,40 @@ def clear_signed_in_hint(response):
 
 
 def current_user():
-    """(user_id, email) of the request's user, or None when nobody is signed in. A Cognito
-    session ends 12 hours after sign-in however often it is used."""
+    """(user_id, email) of the request's user, or None when nobody is signed in.
+
+    Cognito mode trusts only the server's session row: the token must exist there and its last
+    use must be within SESSION_DAYS. The email comes from the database, never the cookie.
+    """
     auth = current_app.config["NEUROLENS_AUTH"]
     if auth["mode"] == "dev":
         return auth["dev_user_id"], auth["dev_email"]
-    signed_in_at = session.get("signed_in_at")
-    if not isinstance(signed_in_at, int) or "user_id" not in session:
+    token = session.get(SESSION_TOKEN_KEY)
+    db = _database()
+    if not isinstance(token, str) or not token or db is None:
         return None
-    if time.time() - signed_in_at >= SESSION_HOURS * 3600:
+    session_hash = _hash_token(token)
+    with db.transaction() as tx:
+        rows = tx.execute(
+            "SELECT s.user_id, u.email, s.last_seen_at FROM sessions s "
+            "JOIN users u ON u.user_id = s.user_id WHERE s.session_hash = :session_hash",
+            {"session_hash": session_hash},
+        )
+    if not rows:
         return None
-    return session["user_id"], session["email"]
+    row = rows[0]
+    now = datetime.now(UTC)
+    if now - row["last_seen_at"] >= timedelta(days=SESSION_DAYS):
+        return None
+    if now - row["last_seen_at"] >= timedelta(seconds=REFRESH_AFTER_S):
+        with db.transaction() as tx:
+            tx.execute(
+                "UPDATE sessions SET last_seen_at = now() WHERE session_hash = :session_hash",
+                {"session_hash": session_hash},
+            )
+        session.permanent = True
+        session.modified = True
+    return row["user_id"], row["email"]
 
 
 def email_is_verified(claims):

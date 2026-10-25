@@ -281,6 +281,32 @@ def retention_csv(pairs):
     return out.getvalue()
 
 
+MIN_CURVE_POINTS = 20
+MIN_WATCH_SPREAD = 0.02
+MAX_WATCH_RATIO = 10
+
+
+def curve_quality(pairs):
+    """The failed checks of an audience-retention curve, empty when it is valid (M3f §5d).
+
+    A full curve has at least 20 points, a watch-ratio spread of at least 0.02, ends no higher
+    than it started, and has no value above 10.
+    """
+    failed = []
+    if len(pairs) < MIN_CURVE_POINTS:
+        failed.append("too_few_points")
+    if not pairs:
+        return failed
+    watches = [watch for _, watch in pairs]
+    if max(watches) - min(watches) < MIN_WATCH_SPREAD:
+        failed.append("flat_curve")
+    if watches[-1] > watches[0]:
+        failed.append("rising_curve")
+    if max(watches) > MAX_WATCH_RATIO:
+        failed.append("watch_ratio_too_high")
+    return failed
+
+
 def to_csv(result):
     """One row per second, columns in COLUMNS order; muted cells beyond the shared length empty."""
     signals = result["signals"]

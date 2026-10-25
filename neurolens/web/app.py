@@ -7,6 +7,7 @@ sign-in on AWS, every /api/* route needs a signed-in user, POSTs take JSON only,
 history and CSV export, uploads refused while GPU work is paused.
 """
 
+import hashlib
 import logging
 import math
 import re
@@ -14,6 +15,7 @@ import threading
 import uuid
 from datetime import UTC, datetime, timedelta
 from pathlib import Path, PurePosixPath
+from urllib.parse import quote
 
 from flask import Flask, jsonify, redirect, request, send_from_directory, session
 from werkzeug.exceptions import HTTPException
@@ -33,6 +35,10 @@ RESULT_DAYS = 30  # the results/ lifecycle rule (Terraform)
 VIDEO_LINK_SECONDS = 3600  # a video is streamed in pieces; one hour outlives a paused viewer
 HISTORY_LIMIT, HISTORY_MAX = 50, 100
 RETENTION_MAX_BYTES = 64 * 1024
+RETENTION_VIEWS = {"lt_1k", "1k_10k", "10k_100k", "gt_100k"}
+RETENTION_PUBLISHED = {"week", "month", "older"}
+DEFAULT_REWARD_CAP = 5
+DEFAULT_REWARD_WINDOW_DAYS = 30
 JOB_ACTIVE_MESSAGE = "This video is still waiting or being processed. Try again when it finishes."
 
 
@@ -42,6 +48,16 @@ def _is_number(value):
 
 def _error(code, message, status=400, **extra):
     return jsonify({"error": code, "message": message, **extra}), status
+
+
+def _csv_disposition(filename):
+    """The CSV's attachment name: "<video name> – NeuroLens.csv" (M3f §4.7)."""
+    stem = PurePosixPath(filename).stem.strip() if isinstance(filename, str) else ""
+    base = stem or "NeuroLens result"
+    name = f"{base} – NeuroLens.csv"
+    if base.isascii():
+        return f'attachment; filename="{name}"'
+    return f"attachment; filename=\"NeuroLens result.csv\"; filename*=UTF-8''{quote(name, safe='')}"
 
 
 def _not_configured():
@@ -135,6 +151,12 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
     starter_cents = (cfg.get("billing") or {}).get("starter_cents", DEFAULT_STARTER_CENTS)
     max_bytes = cfg.get("max_upload_bytes")
     max_seconds = settings.max_duration(cfg or None)
+    upload_cfg = cfg.get("upload") or {}
+    max_batch_files = upload_cfg.get("max_batch_files")
+    max_waiting_jobs = upload_cfg.get("max_waiting_jobs")
+    research_cfg = cfg.get("research") or {}
+    reward_cap = research_cfg.get("curve_rewards_per_window", DEFAULT_REWARD_CAP)
+    reward_window_days = research_cfg.get("curve_reward_window_days", DEFAULT_REWARD_WINDOW_DAYS)
     static_dir = root / "static"
     autoscaling = None
     if gpu_endpoint:
@@ -156,6 +178,7 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
     app = Flask(__name__, static_folder=str(static_dir))
     app.config["MAX_DURATION"] = max_seconds
     app.config["NEUROLENS_AUTH"] = auth_cfg
+    app.config["NEUROLENS_DB"] = db
     oauth = auth.init_auth(app, cfg, ssm_client)
 
     @app.errorhandler(Exception)
@@ -181,19 +204,10 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
             return None
         user = auth.current_user()
         if user is None:
-            return _error("not_signed_in", "Please sign in.", status=401)
-        if cognito and db is not None:
-            # A different browser can hold a session for a deleted account (M3c §5).
-            with db.transaction() as tx:
-                exists = tx.execute(
-                    "SELECT 1 AS present FROM users WHERE user_id = :user_id",
-                    {"user_id": user[0]},
-                )
-            if not exists:
-                session.clear()
-                response, status = _error("not_signed_in", "Please sign in.", status=401)
-                return auth.clear_signed_in_hint(response), status
-        if request.method == "POST" and not request.is_json:
+            session.clear()
+            response, status = _error("not_signed_in", "Please sign in.", status=401)
+            return auth.clear_signed_in_hint(response), status
+        if request.method == "POST" and request.content_length and not request.is_json:
             return _error("json_required", "The request body must be JSON.", status=415)
         return None
 
@@ -259,12 +273,12 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
             if not isinstance(email, str) or not email:
                 return _error("sign_in_failed", "Sign-in failed. Please try again.")
             user_id = billing.sign_in(db, claims["iss"], claims["sub"], email, starter_cents)
-            auth.start_session(user_id, email)
+            auth.start_session(db, user_id)
             return auth.set_signed_in_hint(redirect("/app"))
 
     @app.route("/logout", methods=["POST"])
     def logout():
-        session.clear()
+        auth.end_session(db)
         return auth.clear_signed_in_hint(
             jsonify({"logout_url": auth.logout_url(auth_cfg) if cognito else "/"})
         )
@@ -272,13 +286,14 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
     @app.route("/api/limits")
     def get_limits():
         """The upload limits, so the page holds no copy of them (config.json is the one place)."""
-        return jsonify(
-            {
-                "max_video_duration_seconds": max_seconds,
-                "max_upload_bytes": max_bytes,
-                "colour_range": (response_cfg or {}).get("colour_range"),
-            }
-        )
+        limits = {
+            "max_video_duration_seconds": max_seconds,
+            "max_upload_bytes": max_bytes,
+            "colour_range": (response_cfg or {}).get("colour_range"),
+        }
+        if max_batch_files is not None:
+            limits["max_batch_files"] = max_batch_files
+        return jsonify(limits)
 
     @app.route("/api/me")
     def me():
@@ -357,6 +372,8 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
                 )
 
         user_id, _ = signed_in_user()
+        if research_consent and data.get("consent_version") != billing.CONSENT_VERSION:
+            return _error("consent_outdated", "Please refresh the page.", status=409)
         job_id = str(uuid.uuid4())
         key = storage.object_key(user_id, job_id, content_type)
         filename = data.get("filename")
@@ -370,6 +387,13 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
                 filename,
                 round(duration * 1000),
                 research_consent=research_consent,
+                max_waiting_jobs=max_waiting_jobs,
+            )
+        except billing.TooManyWaiting:
+            return _error(
+                "too_many_waiting",
+                "Too many videos waiting. Try again when some finish.",
+                status=429,
             )
         except billing.InsufficientCredit as err:
             return _error(
@@ -410,16 +434,10 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
         jobs = billing.list_jobs(db, user_id, int(limit))
         rows = []
         for job in jobs:
-            row = {
-                key: value
-                for key, value in job.items()
-                if key not in ("research_consent", "needs_retention")
-            }
+            row = {key: value for key, value in job.items() if key != "research_consent"}
             row["job_id"] = str(job["job_id"])
             row["created_at"] = storage.utc_text(job["created_at"])
             row["result_available"] = job["status"] == billing.DONE and job["created_at"] > cutoff
-            if job["research_consent"]:
-                row["needs_retention"] = job["needs_retention"]
             rows.append(row)
         return jsonify(rows)
 
@@ -436,8 +454,8 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
         with db.transaction() as tx:
             rows = tx.execute(
                 "SELECT job_id, object_key, filename, status, stage, stages, attempt, updated_at, "
-                "error_code, error_message, research_consent, retention_added_at, "
-                "dataset_removed_at, verified_duration_ms FROM jobs "
+                "claimed_at, error_code, error_message, research_consent, retention_added_at, "
+                "dataset_removed_at, dataset_removed_reason, verified_duration_ms FROM jobs "
                 "WHERE job_id = CAST(:job_id AS uuid) AND user_id = :user_id "
                 "AND deleted_at IS NULL",
                 {"job_id": job_id, "user_id": user_id},
@@ -484,8 +502,10 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
         # Consent gates the retention upload, which needs a done job, so it is reported only then.
         hidden = {
             "object_key",
+            "claimed_at",
             "retention_added_at",
             "dataset_removed_at",
+            "dataset_removed_reason",
             "verified_duration_ms",
         }
         public = {
@@ -504,16 +524,15 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
 
     @app.route("/api/jobs/<job_id>/result.csv")
     def job_result_csv(job_id):
-        result, _, error = owned_result(job_id)
+        result, job, error = owned_result(job_id)
         if error:
             return error
-        name = f"neurolens-{uuid.UUID(job_id)}.csv"
         return (
             results.to_csv(result),
             200,
             {
                 "Content-Type": "text/csv; charset=utf-8",
-                "Content-Disposition": f'attachment; filename="{name}"',
+                "Content-Disposition": _csv_disposition(job["filename"]),
             },
         )
 
@@ -594,22 +613,49 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
                 logger.error(f"S3 reported failed deletes for cancelled {job['job_id']}")
         return jsonify({"cancelled": True})
 
+    @app.route("/api/jobs/<job_id>/stop-sharing", methods=["POST"])
+    def stop_sharing(job_id):
+        """Delete a shared job's research copy, then record that it was stopped (M3f §5c)."""
+        job, error = owned_job(job_id)
+        if error:
+            return error
+        if job["status"] in OPEN:
+            return _job_active()
+        if (
+            job["status"] != billing.DONE
+            or not job["research_consent"]
+            or job["dataset_removed_at"] is not None
+        ):
+            return _error("not_shared", "This video is not shared.", status=409)
+        if s3 is None or not bucket:
+            return _not_configured()
+        try:
+            storage.delete_job_prefixes(s3, bucket, job["job_id"])
+        except Exception:
+            logger.exception(f"Could not delete the research copy of {job['job_id']}")
+            return _error(
+                "delete_failed",
+                "Could not delete this video's research copy. Please try again.",
+                status=500,
+            )
+        billing.mark_dataset_removed(db, job["job_id"], "stopped")
+        return jsonify({"stopped": True})
+
     @app.route("/api/jobs/<job_id>/retention", methods=["POST"])
     def job_retention(job_id):
-        """Store a consented, finished job's real audience-retention report (M3c §3c)."""
+        """Store a shared job's audience-retention snapshot and reward it when valid (M3f §5d)."""
         job, error = owned_job(job_id)
         if error:
             return error
         if job["status"] != billing.DONE:
             return _error("job_not_done", "The job is not done yet.", status=409)
         if not job["research_consent"]:
-            return _error("no_consent", "This video was not kept for research.", status=409)
+            return _error("no_consent", "This video was not shared for research.", status=409)
         if job["dataset_removed_at"] is not None:
-            return _error(
-                "dataset_removed",
-                "This video's research copy was deleted after 60 days without retention.",
-                status=409,
+            message = billing.CURVE_REMOVED_MESSAGES.get(
+                job["dataset_removed_reason"], billing.CURVE_REMOVED_MESSAGES["no_curve"]
             )
+            return _error("dataset_removed", message, status=409)
 
         data = request.get_json(silent=True)
         text = data.get("report") if isinstance(data, dict) else None
@@ -626,13 +672,33 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
         except ValueError as err:
             return _error("invalid_retention_report", str(err))
 
+        views = data.get("views")
+        if views not in RETENTION_VIEWS:
+            return _error("invalid_request", "views must be one of the listed choices.")
+        published = data.get("published")
+        if published not in RETENTION_PUBLISHED:
+            return _error("invalid_request", "published must be one of the listed choices.")
+        promoted = data.get("promoted")
+        if not isinstance(promoted, bool):
+            return _error("invalid_request", "promoted must be true or false.")
+
         if s3 is None or not bucket:
             return _not_configured()
+        snapshot_id = str(uuid.uuid4())
+        raw_key = f"dataset/{job['job_id']}/retention/{snapshot_id}.json"
+        csv_key = f"dataset/{job['job_id']}/retention/{snapshot_id}.csv"
+        csv_text = results.retention_csv(pairs)
         try:
             s3.put_object(
                 Bucket=bucket,
-                Key=f"dataset/{job['job_id']}/retention.csv",
-                Body=results.retention_csv(pairs).encode(),
+                Key=raw_key,
+                Body=text.encode(),
+                ContentType="application/json",
+            )
+            s3.put_object(
+                Bucket=bucket,
+                Key=csv_key,
+                Body=csv_text.encode(),
                 ContentType="text/csv",
             )
         except Exception:
@@ -642,12 +708,29 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
                 "Could not store the report. Please try again.",
                 status=500,
             )
-        with db.transaction() as tx:
-            tx.execute(
-                "UPDATE jobs SET retention_added_at = now() WHERE job_id = CAST(:job_id AS uuid)",
-                {"job_id": job["job_id"]},
+        user_id, _ = signed_in_user()
+        try:
+            stored = billing.add_curve(
+                db,
+                user_id,
+                job["job_id"],
+                snapshot_id=snapshot_id,
+                raw_key=raw_key,
+                csv_key=csv_key,
+                curve_sha256=hashlib.sha256(csv_text.encode()).hexdigest(),
+                points=pairs,
+                quality_flags=results.curve_quality(pairs),
+                views=views,
+                published=published,
+                promoted=promoted,
+                reward_cap=reward_cap,
+                reward_window_days=reward_window_days,
             )
-        return jsonify({"stored": True})
+        except billing.DuplicateCurve:
+            return _error("duplicate_curve", "This curve was already added.", status=409)
+        except billing.CurveRefused as err:
+            return _error(err.code, err.message, status=err.status)
+        return jsonify({"stored": True, **stored})
 
     @app.route("/api/jobs/<job_id>", methods=["DELETE"])
     def delete_job(job_id):
@@ -659,6 +742,13 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
             return _job_active()
         if s3 is None or not bucket:
             return _not_configured()
+        try:
+            storage.delete_job_prefixes(s3, bucket, job["job_id"])
+        except Exception:
+            logger.exception(f"Could not delete the research copy of {job['job_id']}")
+            return _error(
+                "delete_failed", "Could not delete this video's files. Please try again.", 500
+            )
         keys = storage.job_keys(job["job_id"], job["object_key"])
         if not storage.delete_keys(s3, bucket, keys):
             return _error(
@@ -688,6 +778,14 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
             return _job_active()
         if s3 is None or not bucket:
             return _not_configured()
+        try:
+            for job in jobs:
+                storage.delete_job_prefixes(s3, bucket, job["job_id"])
+        except Exception:
+            logger.exception(f"Could not delete a research copy of account {user_id}")
+            return _error(
+                "delete_failed", "Could not delete this account's files. Please try again.", 500
+            )
         keys = [key for job in jobs for key in storage.job_keys(job["job_id"], job["object_key"])]
         if not storage.delete_keys(s3, bucket, keys):
             return _error(

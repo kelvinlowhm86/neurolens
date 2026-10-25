@@ -9,6 +9,15 @@
   "hf_download_timeout": 300,
   "max_video_duration_seconds": 120,
   "max_upload_bytes": 300000000,
+  "upload": {
+    "max_batch_files": 5,
+    "max_waiting_jobs": 10
+  },
+  "research": {
+    "curve_rewards_per_window": 5,
+    "curve_reward_window_days": 30,
+    "no_curve_days": 90
+  },
   "response": {
     "colour_range": 0.5
   },

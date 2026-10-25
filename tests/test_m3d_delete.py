@@ -55,9 +55,9 @@ def seed_files(aws, job_id, key):
         f"results/{job_id}.json",
         f"results/{job_id}.brain",
         f"dataset/{job_id}/video{ext}",
-        f"dataset/{job_id}/result.json",
-        f"dataset/{job_id}/brain",
-        f"dataset/{job_id}/retention.csv",
+        f"academic/{job_id}/result.json",
+        f"academic/{job_id}/brain",
+        f"dataset/{job_id}/retention/snapshot.csv",
     ]
     for name in keys:
         aws.s3.put_object(Bucket=aws.bucket, Key=name, Body=b"x")
@@ -73,16 +73,6 @@ def object_exists(aws, key):
     return True
 
 
-def test_storage_lists_both_brain_keys():
-    job_id = str(uuid.uuid4())
-    job = {"job_id": job_id, "object_key": f"uploads/{WEB_USER_ID}/{job_id}.mp4"}
-
-    keys = storage.job_keys(job["job_id"], job["object_key"])
-
-    assert f"results/{job_id}.brain" in keys
-    assert f"dataset/{job_id}/brain" in keys
-
-
 def test_per_video_delete_removes_both_brain_files(client, aws, db):
     job_id, key = make_job(db)
     keys = seed_files(aws, job_id, key)
@@ -91,7 +81,7 @@ def test_per_video_delete_removes_both_brain_files(client, aws, db):
 
     assert resp.status_code in (200, 204)
     assert not object_exists(aws, f"results/{job_id}.brain")
-    assert not object_exists(aws, f"dataset/{job_id}/brain")
+    assert not object_exists(aws, f"academic/{job_id}/brain")
     assert not any(object_exists(aws, name) for name in keys)
 
 
@@ -105,4 +95,4 @@ def test_account_delete_removes_both_brain_files(cognito_client, idp, aws, db, p
 
     assert resp.status_code == 200
     assert not object_exists(aws, f"results/{job_id}.brain")
-    assert not object_exists(aws, f"dataset/{job_id}/brain")
+    assert not object_exists(aws, f"academic/{job_id}/brain")

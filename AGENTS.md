@@ -10,6 +10,7 @@ NeuroLens predicts brain activity for a video (TRIBE v2) and turns it into a sig
 ## Commands
 - Set up: `python3.12 -m venv .venv && source .venv/bin/activate && pip install -e . -r requirements/dev.txt`
 - Test: `pytest`. Lint: `ruff check .`. Format: `ruff format .`
+- Laptop, whole product with no real AWS: `python infra/local_stack.py` (local PostgreSQL at the default DSN; `--grant <email> <dollars>` adds credit). `python app.py` runs only against it.
 
 ## Rules
 - Heavy imports (`torch`, `tribev2`, `nilearn`, `huggingface_hub`) only inside functions, never at module top of `neurolens/`.

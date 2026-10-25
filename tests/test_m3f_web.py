@@ -154,6 +154,7 @@ def test_list_jobs_returns_claimed_at_as_utc_text(db, pg):
 
 def test_list_jobs_returns_the_sharing_and_curve_fields(db, pg):
     job_id, _ = make_job(db, consent=True, sha="a-video")
+    billing.grant_credit(db, f"{WEB_USER_ID}@example.com", 100)
     [row] = billing.list_jobs(db, WEB_USER_ID, 50)
     assert row["sharing"] is True
     assert row["curve_count"] == 0

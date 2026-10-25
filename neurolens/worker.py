@@ -7,6 +7,7 @@ the analysis, writes the result and charges or refunds it. `/ping` answers while
 
 import contextlib
 import enum
+import hashlib
 import json
 import logging
 import os
@@ -166,6 +167,15 @@ def job_temp_dir(feature_cache=None):
         _log_temp_state(base, feature_cache)
 
 
+def _sha256_file(path):
+    """The SHA-256 of a file, read in chunks so a long video never sits in memory."""
+    digest = hashlib.sha256()
+    with open(path, "rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def _error_text(err):
     """A short user-facing error: the exception's first line, never a traceback."""
     lines = [line.strip() for line in str(err).splitlines() if line.strip()]
@@ -199,6 +209,10 @@ def _fail(s3, db, bucket, job_id, object_key, attempt, err):
         logger.exception(f"Could not refund failed {job_id}; its claim will go stale")
         return Outcome.FAILED
     if refunded:
+        try:
+            storage.delete_job_prefixes(s3, bucket, job_id)
+        except Exception:
+            logger.exception(f"REFUND_DELETE_FAILED {job_id}")
         try:
             deleted = storage.delete_keys(s3, bucket, storage.job_keys(job_id, object_key))
         except Exception:
@@ -364,6 +378,8 @@ def _analyse(
 
     if research_consent:
         stage("saving_dataset")
+        # Recorded before the copy, so a copy that fails still leaves the hash (M3f §5b).
+        billing.record_video_hash(db, job_id, _sha256_file(video_path))
         storage.put_dataset(s3, bucket, job_id, object_key, result, brain=brain)
 
     stage("saving_result")

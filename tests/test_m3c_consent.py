@@ -172,6 +172,8 @@ def test_presign_stores_the_consent_box(client, pg, consent, expected):
     body = presign_body()
     if consent is not None:
         body["research_consent"] = consent
+    if consent:
+        body["consent_version"] = billing.CONSENT_VERSION
     resp = client.post("/api/uploads/presign", json=body)
     assert resp.status_code == 200
     assert pg.job(resp.get_json()["job_id"])["research_consent"] is expected
@@ -199,7 +201,7 @@ def test_a_consented_job_is_copied_to_the_dataset(
     outcome = run_job(aws, db, job_id, clip_path, make_cfg(), roi_masks_small)
     assert outcome is worker.Outcome.DONE
     video = f"dataset/{job_id}/video.mp4"
-    result_key = f"dataset/{job_id}/result.json"
+    result_key = f"academic/{job_id}/result.json"
     assert object_exists(aws, video) and object_exists(aws, result_key)
     body = aws.s3.get_object(Bucket=aws.bucket, Key=video)["Body"].read()
     assert body == Path(clip_path).read_bytes()
@@ -267,7 +269,7 @@ def test_the_dataset_is_written_before_put_result(
 
     written = [written_key(call) for call in s3.calls]
     video = written.index(f"dataset/{job_id}/video.mp4")
-    dataset_result = written.index(f"dataset/{job_id}/result.json")
+    dataset_result = written.index(f"academic/{job_id}/result.json")
     published = written.index(f"results/{job_id}.json")
     assert video < published and dataset_result < published
 
@@ -341,9 +343,9 @@ def test_put_dataset_copies_the_video_with_its_extension_and_stores_the_result(a
     storage.put_dataset(aws.s3, aws.bucket, job_id, key, result, brain=b"brain bytes")
     video = aws.s3.get_object(Bucket=aws.bucket, Key=f"dataset/{job_id}/video.mov")["Body"]
     assert video.read() == b"the video"
-    stored = aws.s3.get_object(Bucket=aws.bucket, Key=f"dataset/{job_id}/result.json")["Body"]
+    stored = aws.s3.get_object(Bucket=aws.bucket, Key=f"academic/{job_id}/result.json")["Body"]
     assert json.loads(stored.read()) == result
-    brain = aws.s3.get_object(Bucket=aws.bucket, Key=f"dataset/{job_id}/brain")["Body"]
+    brain = aws.s3.get_object(Bucket=aws.bucket, Key=f"academic/{job_id}/brain")["Body"]
     assert brain.read() == b"brain bytes"
 
 
@@ -363,5 +365,5 @@ def test_put_dataset_replaces_an_earlier_copy(aws, new_key):
     storage.put_dataset(aws.s3, aws.bucket, job_id, key, {"job_id": job_id, "n": 2}, brain=b"2")
     video = aws.s3.get_object(Bucket=aws.bucket, Key=f"dataset/{job_id}/video.mp4")["Body"]
     assert video.read() == b"second video"
-    stored = aws.s3.get_object(Bucket=aws.bucket, Key=f"dataset/{job_id}/result.json")["Body"]
+    stored = aws.s3.get_object(Bucket=aws.bucket, Key=f"academic/{job_id}/result.json")["Body"]
     assert json.loads(stored.read())["n"] == 2

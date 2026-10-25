@@ -2,8 +2,11 @@
 
 The reaper is the backstop for a lost GPU notification: any open job four hours after creation
 is refunded, every failed job's files are retried for two days, and a consented dataset copy
-without a retention curve is deleted after sixty days. Money and files are read directly.
+without a retention snapshot is deleted after the configured limit. Money and files are read
+directly.
 """
+
+import json
 
 import pytest
 from botocore.exceptions import ClientError
@@ -12,7 +15,7 @@ from neurolens import billing, storage
 
 DAY = 24 * 60 * 60
 DEADLINE_S = 4 * 60 * 60
-RETENTION_DAYS = 60
+RETENTION_DAYS = 90
 
 
 def reaper_module():
@@ -26,7 +29,7 @@ def run_reaper():
 
 
 @pytest.fixture
-def lambda_env(aws, db, monkeypatch, patch_everywhere):
+def lambda_env(aws, db, monkeypatch, tmp_path, patch_everywhere):
     """The handler builds its database through the same factory AWS gives it; S3 is moto."""
     monkeypatch.setenv(
         "NEUROLENS_DB_CLUSTER_ARN", "arn:aws:rds:us-east-1:000000000000:cluster:neurolens-db"
@@ -38,6 +41,10 @@ def lambda_env(aws, db, monkeypatch, patch_everywhere):
     monkeypatch.setenv("NEUROLENS_DB_NAME", "neurolens")
     monkeypatch.setenv("NEUROLENS_S3_BUCKET", aws.bucket)
     monkeypatch.setenv("AWS_REGION", "us-east-1")
+    root = tmp_path / "root"
+    (root / "data").mkdir(parents=True)
+    (root / "config.json").write_text(json.dumps({"research": {"no_curve_days": 90}}))
+    monkeypatch.setenv("NEUROLENS_ROOT", str(root))
 
     def data_api_database(*args, **kwargs):
         return db
@@ -73,24 +80,6 @@ class DeleteFails:
         return getattr(self._inner, name)
 
 
-class HeadFails:
-    """An S3 client whose HEAD for one key fails with a non-not-found error."""
-
-    def __init__(self, inner, key):
-        self._inner = inner
-        self.key = key
-
-    def head_object(self, **kwargs):
-        if kwargs.get("Key") == self.key:
-            raise ClientError(
-                {"Error": {"Code": "InternalError", "Message": "head failed"}}, "HeadObject"
-            )
-        return self._inner.head_object(**kwargs)
-
-    def __getattr__(self, name):
-        return getattr(self._inner, name)
-
-
 def upload(aws, key):
     aws.s3.put_object(Bucket=aws.bucket, Key=key, Body=b"an uploaded video")
 
@@ -119,8 +108,8 @@ def write_job_files(aws, job_id, key):
 def dataset_keys(job_id):
     return [
         f"dataset/{job_id}/video.mp4",
-        f"dataset/{job_id}/result.json",
-        f"dataset/{job_id}/brain",
+        f"academic/{job_id}/result.json",
+        f"academic/{job_id}/brain",
     ]
 
 
@@ -133,8 +122,14 @@ def user_keys(job_id, key):
     ]
 
 
-def retention_key(job_id):
-    return f"dataset/{job_id}/retention.csv"
+def add_snapshot(pg, job_id):
+    import uuid
+
+    pg.conn.execute(
+        "INSERT INTO retention_snapshots (snapshot_id, job_id, curve_sha256, points) "
+        "VALUES (%s::uuid, %s::uuid, %s, %s)",
+        (str(uuid.uuid4()), job_id, str(uuid.uuid4()), 20),
+    )
 
 
 def dataset_files_exist(aws, job_id):
@@ -248,7 +243,6 @@ def test_a_delete_that_still_fails_makes_the_run_raise(
 def test_clean_up_deletes_the_research_copy_and_marks_the_dataset_removed(
     aws, db, pg, lambda_env, new_key
 ):
-    assert reaper_module().DATASET_WITHOUT_RETENTION_DAYS == RETENTION_DAYS
     job_id, key = consented_done_job(db, new_key)
     write_job_files(aws, job_id, key)
     pg.age(job_id, created_s=(RETENTION_DAYS + 1) * DAY)
@@ -263,19 +257,17 @@ def test_clean_up_deletes_the_research_copy_and_marks_the_dataset_removed(
         assert object_exists(aws, kept)
 
 
-def test_a_retention_curve_skips_the_delete_and_marks_the_job(aws, db, pg, lambda_env, new_key):
+def test_a_retention_snapshot_skips_the_delete(aws, db, pg, lambda_env, new_key):
     job_id, key = consented_done_job(db, new_key)
     write_job_files(aws, job_id, key)
-    aws.s3.put_object(Bucket=aws.bucket, Key=retention_key(job_id), Body=b"0,0\n1,1\n")
+    add_snapshot(pg, job_id)
     pg.age(job_id, created_s=(RETENTION_DAYS + 1) * DAY)
 
     run_reaper()
 
     job = pg.job(job_id)
-    assert job["retention_added_at"] is not None
     assert job["dataset_removed_at"] is None
     assert set(dataset_files_exist(aws, job_id)) == set(dataset_keys(job_id))
-    assert object_exists(aws, retention_key(job_id))
     for kept in user_keys(job_id, key):
         assert object_exists(aws, kept)
 
@@ -305,10 +297,10 @@ def test_a_job_without_consent_is_left_alone(aws, db, pg, lambda_env, new_key):
     assert set(dataset_files_exist(aws, job_id)) == set(dataset_keys(job_id))
 
 
-def test_a_job_that_already_has_a_retention_curve_is_left_alone(aws, db, pg, lambda_env, new_key):
+def test_a_job_that_already_has_a_snapshot_is_left_alone(aws, db, pg, lambda_env, new_key):
     job_id, key = consented_done_job(db, new_key)
     write_job_files(aws, job_id, key)
-    pg.conn.execute("UPDATE jobs SET retention_added_at = now() WHERE job_id = %s::uuid", (job_id,))
+    add_snapshot(pg, job_id)
     pg.age(job_id, created_s=(RETENTION_DAYS + 1) * DAY)
 
     run_reaper()
@@ -354,25 +346,3 @@ def test_a_failed_dataset_delete_leaves_the_row_unmarked_and_raises(
     job = pg.job(job_id)
     assert job["dataset_removed_at"] is None
     assert job["retention_added_at"] is None
-
-
-def test_a_retention_head_error_other_than_not_found_raises(
-    aws, db, pg, lambda_env, new_key, monkeypatch
-):
-    job_id, key = consented_done_job(db, new_key)
-    write_job_files(aws, job_id, key)
-    pg.age(job_id, created_s=(RETENTION_DAYS + 1) * DAY)
-
-    import boto3
-
-    real_client = boto3.client
-
-    def client(service_name, *args, **kwargs):
-        inner = real_client(service_name, *args, **kwargs)
-        return HeadFails(inner, retention_key(job_id)) if service_name == "s3" else inner
-
-    monkeypatch.setattr(boto3, "client", client)
-    with pytest.raises(Exception):  # noqa: B017 - the spec says the run raises
-        run_reaper()
-
-    assert pg.job(job_id)["dataset_removed_at"] is None

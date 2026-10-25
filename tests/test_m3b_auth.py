@@ -1,8 +1,8 @@
 """M3b sign-in and the app-wide rules (Flask test client + moto + PostgreSQL). Written first from
 docs/M3b_spec.md §2b, §2c, §3a, §8 and §11: the callback through §8's seam (Authlib's real state,
 nonce and signature checks against a test RSA key; only HTTP is faked), the `email_verified`
-rule, failures without a session, the login and logout URLs built from config, the 12-hour limit
-counted from `signed_in_at`, 401 on every /api/* route, cookie flags, JSON-only POSTs, no CORS,
+rule, failures without a session, the login and logout URLs built from config, the 30-day server
+session (M3f §6b), 401 on every /api/* route, cookie flags, JSON-only POSTs, no CORS,
 /healthz without the database, and fail-fast startup.
 """
 
@@ -26,8 +26,9 @@ from conftest import (
 from neurolens import billing, settings
 from neurolens.web.app import create_app
 
-SESSION_KEYS = {"user_id", "email", "signed_in_at"}
+SESSION_KEYS = {"session"}
 HOUR = 3600
+SESSION_DAYS = 30
 PUBLIC_RULES = {"/", "/app", "/login", "/auth/callback", "/logout", "/healthz"}
 PUBLIC_PREFIXES = ("/static/", "/data/")
 STATIC = Path(__file__).resolve().parent.parent / "static"
@@ -71,18 +72,17 @@ class ExplodingDatabase:
 # ---------------------------------------------------------------- the callback
 
 
-def test_callback_signs_in_and_stores_only_user_id_email_and_signed_in_at(cognito_client, idp):
+def test_callback_signs_in_and_stores_only_a_session_token(cognito_client, idp):
     resp = sign_in(cognito_client, idp, email="ann@example.com")
     assert resp.status_code in (302, 303)
     assert urlparse(resp.headers["Location"]).path == "/app"
     sess = session_of(cognito_client)
     assert set(sess) == SESSION_KEYS
-    assert uuid.UUID(sess["user_id"])
-    assert sess["email"] == "ann@example.com"
-    assert abs(sess["signed_in_at"] - time.time()) < 60  # Unix seconds
+    assert isinstance(sess["session"], str) and sess["session"]
     me = cognito_client.get("/api/me")
     assert me.status_code == 200
-    assert me.get_json()["user_id"] == sess["user_id"]
+    assert uuid.UUID(me.get_json()["user_id"])
+    assert me.get_json()["email"] == "ann@example.com"
 
 
 def test_callback_clears_any_earlier_session(cognito_client, idp):
@@ -92,7 +92,7 @@ def test_callback_clears_any_earlier_session(cognito_client, idp):
     sign_in(cognito_client, idp)
     sess = session_of(cognito_client)
     assert set(sess) == SESSION_KEYS
-    assert sess["user_id"] != "someone-else"
+    assert sess["session"] != "someone-else"
 
 
 def test_callback_makes_a_permanent_session(cognito_client, idp):
@@ -133,7 +133,7 @@ def test_callback_redirects_to_app_never_to_a_url_from_the_request(cognito_clien
 def test_email_verified_true_or_the_string_true_is_accepted(cognito_client, idp, verified):
     resp = sign_in(cognito_client, idp, email_verified=verified)
     assert resp.status_code in (302, 303)
-    assert "user_id" in session_of(cognito_client)
+    assert set(session_of(cognito_client)) == SESSION_KEYS
 
 
 @pytest.mark.parametrize("verified", [False, "false", "True", "TRUE", 1, MISSING], ids=repr)
@@ -141,7 +141,7 @@ def test_anything_else_in_email_verified_is_403_with_no_session(cognito_client, 
     resp = sign_in(cognito_client, idp, email_verified=verified)
     assert resp.status_code == 403
     assert resp.get_json()["error"] == "email_not_verified"
-    assert "user_id" not in session_of(cognito_client)
+    assert "session" not in session_of(cognito_client)
     assert user_count(pg) == 0
     assert cognito_client.get("/api/me").status_code == 401
 
@@ -150,7 +150,7 @@ def test_a_wrong_state_is_400_sign_in_failed_with_no_session(cognito_client, idp
     resp = sign_in(cognito_client, idp, state="not-the-state-login-sent")
     assert resp.status_code == 400
     assert resp.get_json()["error"] == "sign_in_failed"
-    assert "user_id" not in session_of(cognito_client)
+    assert "session" not in session_of(cognito_client)
     assert user_count(pg) == 0
 
 
@@ -158,7 +158,7 @@ def test_a_token_signed_by_the_wrong_key_is_400_sign_in_failed(cognito_client, i
     resp = sign_in(cognito_client, idp, signing_key=idp.wrong_key)
     assert resp.status_code == 400
     assert resp.get_json()["error"] == "sign_in_failed"
-    assert "user_id" not in session_of(cognito_client)
+    assert "session" not in session_of(cognito_client)
     assert user_count(pg) == 0
 
 
@@ -170,7 +170,7 @@ def test_a_token_for_another_client_issuer_or_nonce_is_400(cognito_client, idp, 
     resp = sign_in(cognito_client, idp, **{claim: value})
     assert resp.status_code == 400
     assert resp.get_json()["error"] == "sign_in_failed"
-    assert "user_id" not in session_of(cognito_client)
+    assert "session" not in session_of(cognito_client)
     assert user_count(pg) == 0
 
 
@@ -182,7 +182,7 @@ def test_a_cancelled_sign_in_is_400_sign_in_failed(cognito_client, idp, pg):
     )
     assert resp.status_code == 400
     assert resp.get_json()["error"] == "sign_in_failed"
-    assert "user_id" not in session_of(cognito_client)
+    assert "session" not in session_of(cognito_client)
     assert user_count(pg) == 0
 
 
@@ -235,44 +235,11 @@ def test_logout_clears_the_session_and_returns_cognitos_logout_url(cognito_clien
     url = urlparse(resp.get_json()["logout_url"])
     assert (url.scheme, url.netloc, url.path) == ("https", COGNITO_DOMAIN, "/logout")
     assert parse_qs(url.query) == {"client_id": [CLIENT_ID], "logout_uri": [f"{PUBLIC_BASE_URL}/"]}
-    assert "user_id" not in session_of(cognito_client)
+    assert "session" not in session_of(cognito_client)
     assert cognito_client.get("/api/me").status_code == 401
 
 
-# ---------------------------------------------------------------- the 12-hour limit
-
-
-def test_a_session_used_every_hour_works_at_11_hours_and_is_refused_at_13(
-    cognito_client, idp, monkeypatch
-):
-    sign_in(cognito_client, idp)
-    start = time.time()
-    clock = {"now": start}
-    monkeypatch.setattr(time, "time", lambda: clock["now"])
-    for hour in range(1, 12):
-        clock["now"] = start + hour * HOUR
-        assert cognito_client.get("/api/me").status_code == 200, f"hour {hour}"
-    clock["now"] = start + 12 * HOUR - 60
-    assert cognito_client.get("/api/me").status_code == 200
-    clock["now"] = start + 13 * HOUR
-    resp = cognito_client.get("/api/me")
-    assert resp.status_code == 401
-    assert resp.get_json()["error"] == "not_signed_in"
-
-
-def test_a_fresh_cookie_is_refused_12_hours_after_signed_in_at(cognito_client, idp):
-    """However often the cookie is re-issued, the sign-in time decides (§2c)."""
-    sign_in(cognito_client, idp)
-    with cognito_client.session_transaction() as sess:  # re-signed now, with an old sign-in
-        sess["signed_in_at"] = int(time.time()) - 13 * HOUR
-    assert cognito_client.get("/api/me").status_code == 401
-
-
-def test_a_fresh_cookie_11_hours_after_signed_in_at_still_works(cognito_client, idp):
-    sign_in(cognito_client, idp)
-    with cognito_client.session_transaction() as sess:
-        sess["signed_in_at"] = int(time.time()) - 11 * HOUR
-    assert cognito_client.get("/api/me").status_code == 200
+# ---------------------------------------------------------------- the session lifetime
 
 
 def test_a_session_survives_a_new_app_with_the_same_secret_key(cognito_app, idp):
@@ -562,7 +529,7 @@ def test_sign_in_sets_the_hint_with_the_session_flags(cognito_client, idp):
     name_value, flags = cookie_flags(cookie)
     assert name_value == f"{HINT_COOKIE}=1"
     assert flags["path"].lower() == "path=/"
-    assert flags["max-age"].lower() == f"max-age={12 * HOUR}"
+    assert flags["max-age"].lower() == f"max-age={SESSION_DAYS * 24 * HOUR}"
     assert flags["samesite"].lower() == "samesite=lax"
     assert "secure" in flags
     assert "httponly" not in flags

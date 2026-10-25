@@ -238,24 +238,40 @@ def test_parse_retention_report_refuses_a_row_of_the_wrong_shape(row):
 # ---------------------------------------------------------------- the route
 
 
-def test_retention_post_stores_the_two_column_csv_for_a_done_consented_job(client, aws, db):
+def snapshot_keys(pg, job_id):
+    return pg.rows(
+        "SELECT raw_key, csv_key FROM retention_snapshots "
+        "WHERE job_id = %s::uuid ORDER BY added_at",
+        job_id,
+    )
+
+
+def test_retention_post_stores_the_two_column_csv_for_a_done_consented_job(client, aws, db, pg):
     job_id, _ = make_job(db, consent=True)
     text = report_text([[0.0, 0.0], [0.5, 1.2], [1.0, 0.9]])
-    resp = client.post(f"/api/jobs/{job_id}/retention", json={"report": text})
+    resp = client.post(
+        f"/api/jobs/{job_id}/retention",
+        json={"report": text, "views": "lt_1k", "published": "week", "promoted": False},
+    )
     assert 200 <= resp.status_code < 300
-    assert stored_pairs(aws, retention_key(job_id)) == parse(text)
-    assert stored_text(aws, retention_key(job_id)).splitlines()[0] == HEADER
+    [snapshot] = snapshot_keys(pg, job_id)
+    assert stored_pairs(aws, snapshot["csv_key"]) == parse(text)
+    assert stored_text(aws, snapshot["csv_key"]).splitlines()[0] == HEADER
+    assert stored_text(aws, snapshot["raw_key"]) == text
 
 
-def test_a_new_retention_upload_replaces_the_old_one(client, aws, db):
+def test_a_new_retention_upload_adds_a_snapshot(client, aws, db, pg):
     job_id, _ = make_job(db, consent=True)
     first = report_text([[0.0, 0.0], [1.0, 0.5]])
     second = report_text([[0.0, 0.2], [0.5, 0.6], [1.0, 0.9]])
-    first_resp = client.post(f"/api/jobs/{job_id}/retention", json={"report": first})
-    second_resp = client.post(f"/api/jobs/{job_id}/retention", json={"report": second})
+    body = {"views": "lt_1k", "published": "week", "promoted": False}
+    first_resp = client.post(f"/api/jobs/{job_id}/retention", json={"report": first, **body})
+    second_resp = client.post(f"/api/jobs/{job_id}/retention", json={"report": second, **body})
     assert 200 <= first_resp.status_code < 300
     assert 200 <= second_resp.status_code < 300
-    assert stored_pairs(aws, retention_key(job_id)) == parse(second)
+    first_snapshot, second_snapshot = snapshot_keys(pg, job_id)
+    assert stored_pairs(aws, first_snapshot["csv_key"]) == parse(first)
+    assert stored_pairs(aws, second_snapshot["csv_key"]) == parse(second)
 
 
 @pytest.mark.parametrize("processing", [False, True], ids=["queued", "processing"])
@@ -333,10 +349,14 @@ def test_retention_report_over_64_kb_is_refused(client, aws, db):
     assert not object_exists(aws, retention_key(job_id))
 
 
-def test_a_valid_report_just_under_64_kb_is_accepted(client, aws, db):
+def test_a_valid_report_just_under_64_kb_is_accepted(client, aws, db, pg):
     job_id, _ = make_job(db, consent=True)
     text = raw_report_text(49)
     assert 63 * 1024 < len(text.encode()) < 64 * 1024
-    resp = client.post(f"/api/jobs/{job_id}/retention", json={"report": text})
+    resp = client.post(
+        f"/api/jobs/{job_id}/retention",
+        json={"report": text, "views": "lt_1k", "published": "week", "promoted": False},
+    )
     assert 200 <= resp.status_code < 300
-    assert stored_pairs(aws, retention_key(job_id)) == parse(text)
+    [snapshot] = snapshot_keys(pg, job_id)
+    assert stored_pairs(aws, snapshot["csv_key"]) == parse(text)

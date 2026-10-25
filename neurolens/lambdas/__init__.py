@@ -82,6 +82,7 @@ def finish_job(db, s3, bucket, job_id):
     ):
         logger.warning(f"{job_id}: failed on the GPU, refunded")
         # A failed delete raises after the refund, never undoing it; the run then fails loudly.
+        storage.delete_job_prefixes(s3, bucket, job_id)
         if not storage.delete_keys(s3, bucket, storage.job_keys(job_id, state["object_key"])):
             raise RuntimeError(f"{job_id}: refunded, but S3 could not delete all of its files")
         return True
