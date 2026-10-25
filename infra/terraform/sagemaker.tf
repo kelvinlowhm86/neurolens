@@ -211,7 +211,8 @@ resource "awscc_sagemaker_endpoint_config" "main" {
 }
 
 # SageMaker created this group on day B; the import block takes it over instead of replacing it
-# (its lines carry user ids and object keys, so they are kept 14 days).
+# (its lines carry user ids and object keys, so they are kept 14 days). Delete this block right
+# after the first apply that imports the group.
 import {
   to = aws_cloudwatch_log_group.sagemaker_endpoint
   id = "/aws/sagemaker/Endpoints/neurolens"
@@ -228,6 +229,8 @@ resource "aws_sagemaker_endpoint" "main" {
 
   name                 = local.endpoint_name
   endpoint_config_name = awscc_sagemaker_endpoint_config.main[0].endpoint_config_name
+
+  depends_on = [aws_cloudwatch_log_group.sagemaker_endpoint]
 
   tags = { Milestone = "M3e" }
 }

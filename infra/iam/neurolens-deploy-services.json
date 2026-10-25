@@ -89,13 +89,9 @@
       ]
     },
     {
-      "Sid": "ReadEndpointLogs",
+      "Sid": "EndpointLogsOnlyNeurolens",
       "Effect": "Allow",
-      "Action": [
-        "logs:DescribeLogStreams",
-        "logs:GetLogEvents",
-        "logs:FilterLogEvents"
-      ],
+      "Action": "logs:*",
       "Resource": "arn:aws:logs:us-east-1:*:log-group:/aws/sagemaker/Endpoints/neurolens*"
     },
     {

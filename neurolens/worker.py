@@ -58,10 +58,11 @@ class _ClaimLost(Exception):
 class ClaimKeepAlive:
     """Calls `on_beat` every interval, and stops after max_seconds (logged as an error).
 
-    SageMaker's 60-minute invocation timeout is longer than the configured job limit, so a hung
-    job's claim goes stale before the error handler refunds it. `on_overrun` runs once at the
-    limit, after the error log: the container uses it to end the process so SageMaker replaces
-    the stuck instance.
+    A beat that reports the claim lost stops the renewals, but the deadline still applies:
+    `on_overrun` runs once at the limit, after the error log. SageMaker's 60-minute invocation
+    timeout is longer than the configured job limit, so a hung job's claim goes stale before the
+    error handler refunds it; even after a lost claim a hung model must end the process, so
+    SageMaker replaces the stuck instance. The context manager stops the loop at once.
     """
 
     def __init__(self, on_beat, interval_seconds, max_seconds, on_overrun=None):
@@ -84,6 +85,7 @@ class ClaimKeepAlive:
         return False
 
     def _beat(self):
+        claim_lost = False
         while not self._stopped.wait(self._interval):
             if time.monotonic() - self._entered >= self._max_seconds:
                 logger.error(
@@ -93,10 +95,12 @@ class ClaimKeepAlive:
                 if self._on_overrun is not None:
                     self._on_overrun()
                 return
+            if claim_lost:
+                continue
             try:
                 if self._on_beat() is False:
-                    logger.warning("The claim was lost; stopping the keep-alive")
-                    return
+                    logger.warning("The claim was lost; no longer extending it")
+                    claim_lost = True
             except Exception:
                 logger.warning("Keep-alive beat failed; trying again next interval", exc_info=True)
 

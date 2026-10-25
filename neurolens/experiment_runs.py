@@ -7,8 +7,6 @@ files. Shared by the experiment scripts and, later, M4's study export. boto3 cli
 import csv
 import io
 import json
-import subprocess
-from pathlib import Path
 
 from botocore.exceptions import ClientError
 
@@ -45,18 +43,6 @@ EXPERIMENT_1_COLUMNS = [
 
 def run_prefix(experiment, run_id):
     return f"experiments/{experiment}/{run_id}/"
-
-
-def code_revision(root=None):
-    """The git short hash of the code in use: REVISION on AWS, `git rev-parse` elsewhere."""
-    root = Path(root) if root else Path(__file__).resolve().parent.parent
-    revision = root / "REVISION"
-    if revision.exists():
-        return revision.read_text().strip()
-    out = subprocess.run(
-        ["git", "rev-parse", "--short", "HEAD"], cwd=root, capture_output=True, text=True
-    )
-    return out.stdout.strip() or "unknown"
 
 
 def put_text(s3, bucket, experiment, run_id, name, text):
@@ -109,10 +95,10 @@ def write_manifest(
     started_utc,
     finished_utc,
     environment,
-    revision=None,
+    revision,
 ):
     """Write manifest.json. Refuses (ValueError) if any file the experiment needs is missing.
-    `revision` is the code the run used; by default the code this runs from (code_revision)."""
+    `revision` is the code the run used (the deployed image digest on AWS)."""
     files = EXPERIMENT_FILES[experiment]
     prefix = run_prefix(experiment, run_id)
     missing = [name for name in files if not storage.object_exists(s3, bucket, prefix + name)]
@@ -124,7 +110,7 @@ def write_manifest(
         "series": series,
         "started_utc": started_utc,
         "finished_utc": finished_utc,
-        "code_revision": revision or code_revision(),
+        "code_revision": revision,
         "environment": environment,
         "files": files,
     }

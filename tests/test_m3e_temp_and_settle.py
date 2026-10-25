@@ -215,3 +215,25 @@ def test_a_beat_that_reports_a_lost_claim_stops_the_keep_alive(caplog):
     assert count >= 2
     assert len(beats) == count
     assert "claim" in caplog.text.lower()
+
+
+def test_a_lost_claim_still_overruns_once_at_the_deadline(caplog):
+    beats = []
+    overruns = []
+    started = time.monotonic()
+
+    def beat():
+        beats.append(time.monotonic())
+        return False  # the claim is gone on the first beat
+
+    with caplog.at_level(logging.WARNING):
+        with worker.ClaimKeepAlive(beat, 0.02, 0.15, lambda: overruns.append(time.monotonic())):
+            time.sleep(0.35)
+
+    count = len(beats)
+    time.sleep(0.1)
+    assert count == 1
+    assert len(beats) == count
+    assert len(overruns) == 1
+    assert overruns[0] - started >= 0.15
+    assert "claim" in caplog.text.lower()

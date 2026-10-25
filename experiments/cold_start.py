@@ -2,10 +2,12 @@
 
 Joins Application Auto Scaling's scaling activities with the container's own boot record
 (`container_start_utc`, `model_loaded_utc`, `warmup_done_utc`, `ready_utc`) and the first job's
-`transcribing` start. The instance type comes from the run manifest (the boot record has none).
+`transcribing` start. The instance type comes from --instance-type (the boot record has none,
+and the manifest can only be written after cold_start.csv).
 `rows()` is pure; the command line does the AWS calls.
 
-    python experiments/cold_start.py --since 2026-10-14 --run-id 20261014-burst
+    python experiments/cold_start.py --since 2026-10-14 --run-id 20261014-burst \
+        --instance-type ml.g6e.xlarge
 """
 
 import argparse
@@ -116,6 +118,7 @@ def main():
     parser = argparse.ArgumentParser(description="Build cold_start.csv for an experiment-2 run.")
     parser.add_argument("--since", required=True, help="first day to include, e.g. 2026-10-14")
     parser.add_argument("--run-id", required=True, help="the experiment-2 run to write into")
+    parser.add_argument("--instance-type", required=True, help="e.g. ml.g6e.xlarge")
     args = parser.parse_args()
 
     import boto3
@@ -145,11 +148,7 @@ def main():
     for boot in boots:
         boot["first_job_transcribing_s"] = _first_transcribing_s(boot, jobs)
 
-    manifest_text = experiment_runs.get_text(
-        s3, bucket, "experiment-2", args.run_id, "manifest.json"
-    )
-    environment = json.loads(manifest_text)["environment"] if manifest_text else {}
-    result = rows(boots, activities, instance_type=environment.get("instance_type"))
+    result = rows(boots, activities, instance_type=args.instance_type)
     experiment_runs.put_text(
         s3,
         bucket,

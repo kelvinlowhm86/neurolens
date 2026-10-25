@@ -71,6 +71,7 @@ def test_cold_start_command_line_takes_since_and_run_id():
     assert proc.returncode == 0, proc.stderr
     assert "--since" in proc.stdout
     assert "--run-id" in proc.stdout
+    assert "--instance-type" in proc.stdout
 
 
 # ---------------------------------------------------------------- export_cloudwatch.py
