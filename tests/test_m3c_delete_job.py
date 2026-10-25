@@ -189,7 +189,7 @@ def test_delete_with_no_files_still_marks_the_job_deleted(client, db, pg, conten
     assert pg.job(job_id)["deleted_at"] is not None
 
 
-def test_a_reported_s3_delete_error_is_500_and_leaves_the_job_visible(
+def test_a_reported_s3_delete_error_is_500_and_marks_the_job_deleted(
     app_for, aws, db, pg, content_type
 ):
     job_id, key = make_job(db, content_type=content_type)
@@ -198,9 +198,10 @@ def test_a_reported_s3_delete_error_is_500_and_leaves_the_job_visible(
     resp = app_for(s3_client=s3).delete(f"/api/jobs/{job_id}")
     assert resp.status_code == 500
     job = pg.job(job_id)
-    assert job["deleted_at"] is None and job["filename"] is not None
+    assert job["deleted_at"] is not None and job["filename"] is None
+    assert job["dataset_purged_at"] is None
     assert object_exists(aws, key)
-    assert job_id in history_ids(app_for())
+    assert job_id not in history_ids(app_for())
 
 
 def test_job_status_does_not_expose_the_object_key(client, aws, db, content_type):

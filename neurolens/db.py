@@ -35,6 +35,13 @@ class DatabaseWaking(Exception):
     """Aurora was still resuming from auto-pause when the wait budget ran out."""
 
 
+class DuplicateCurveViolation(Exception):
+    """The unique index on retention_snapshots.curve_sha256 refused the insert."""
+
+
+_CURVE_UNIQUE_CONSTRAINT = "retention_snapshots_curve_sha256_key"
+
+
 def check_sql(sql):
     """Refuse `%` and string literals in application SQL (§3d), on both backends alike, so a
     statement that works on a laptop never fails differently on AWS."""
@@ -82,7 +89,17 @@ class _PostgresTransaction:
         return self._run(sql, None)
 
     def _run(self, sql, params):
-        cur = self._conn.execute(sql, params)
+        try:
+            cur = self._conn.execute(sql, params)
+        except Exception as err:
+            from psycopg.errors import UniqueViolation
+
+            if (
+                isinstance(err, UniqueViolation)
+                and err.diag.constraint_name == _CURVE_UNIQUE_CONSTRAINT
+            ):
+                raise DuplicateCurveViolation("this curve was already added") from err
+            raise
         if cur.description is None:
             return []
         return [{k: _pg_value(v) for k, v in row.items()} for row in cur.fetchall()]
@@ -164,14 +181,20 @@ class DataApiDatabase:
 
     def _execute(self, transaction_id, sql, parameters):
         kwargs = {"parameters": parameters} if parameters else {}
-        resp = self._client.execute_statement(
-            **self._arns,
-            database=self._database,
-            transactionId=transaction_id,
-            sql=sql,
-            includeResultMetadata=True,
-            **kwargs,
-        )
+        try:
+            resp = self._client.execute_statement(
+                **self._arns,
+                database=self._database,
+                transactionId=transaction_id,
+                sql=sql,
+                includeResultMetadata=True,
+                **kwargs,
+            )
+        except ClientError as err:
+            message = err.response.get("Error", {}).get("Message", "")
+            if _CURVE_UNIQUE_CONSTRAINT in message:
+                raise DuplicateCurveViolation("this curve was already added") from err
+            raise
         columns = resp.get("columnMetadata")
         if not columns:
             return []

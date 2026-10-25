@@ -82,6 +82,15 @@ def _old_result():
     )
 
 
+def _delete_curve_files(s3, bucket, keys, job_id):
+    """Remove the two snapshot files a refused curve upload wrote (M3f §5d)."""
+    try:
+        if not storage.delete_keys(s3, bucket, keys):
+            logger.error(f"S3 reported failed deletes for the refused curve of {job_id}")
+    except Exception:
+        logger.exception(f"Could not delete the refused curve files of {job_id}")
+
+
 def _endpoint_paused(autoscaling, endpoint):
     """True when the SageMaker endpoint's scalable target has a maximum of 0 (stop_work.sh), so
     no upload could ever run. A missing target counts as paused. Raises if it cannot be read."""
@@ -615,7 +624,7 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
 
     @app.route("/api/jobs/<job_id>/stop-sharing", methods=["POST"])
     def stop_sharing(job_id):
-        """Delete a shared job's research copy, then record that it was stopped (M3f §5c)."""
+        """Mark a shared job's research copy removed, then delete it (M3f §5c)."""
         job, error = owned_job(job_id)
         if error:
             return error
@@ -629,16 +638,16 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
             return _error("not_shared", "This video is not shared.", status=409)
         if s3 is None or not bucket:
             return _not_configured()
+        user_id, _ = signed_in_user()
+        if not billing.mark_dataset_removed(db, job["job_id"], "stopped", user_id=user_id):
+            return _error("not_shared", "This video is not shared.", status=409)
         try:
             storage.delete_job_prefixes(s3, bucket, job["job_id"])
         except Exception:
+            # The copy is marked removed, so no curve can use it; the reaper retries the files.
             logger.exception(f"Could not delete the research copy of {job['job_id']}")
-            return _error(
-                "delete_failed",
-                "Could not delete this video's research copy. Please try again.",
-                status=500,
-            )
-        billing.mark_dataset_removed(db, job["job_id"], "stopped")
+            return jsonify({"stopped": True})
+        billing.mark_dataset_purged(db, job["job_id"])
         return jsonify({"stopped": True})
 
     @app.route("/api/jobs/<job_id>/retention", methods=["POST"])
@@ -684,10 +693,13 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
 
         if s3 is None or not bucket:
             return _not_configured()
+        csv_text = results.retention_csv(pairs)
+        curve_sha256 = hashlib.sha256(csv_text.encode()).hexdigest()
+        if billing.curve_exists(db, curve_sha256):
+            return _error("duplicate_curve", "This curve was already added.", status=409)
         snapshot_id = str(uuid.uuid4())
         raw_key = f"dataset/{job['job_id']}/retention/{snapshot_id}.json"
         csv_key = f"dataset/{job['job_id']}/retention/{snapshot_id}.csv"
-        csv_text = results.retention_csv(pairs)
         try:
             s3.put_object(
                 Bucket=bucket,
@@ -717,7 +729,7 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
                 snapshot_id=snapshot_id,
                 raw_key=raw_key,
                 csv_key=csv_key,
-                curve_sha256=hashlib.sha256(csv_text.encode()).hexdigest(),
+                curve_sha256=curve_sha256,
                 points=pairs,
                 quality_flags=results.curve_quality(pairs),
                 views=views,
@@ -726,15 +738,17 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
                 reward_cap=reward_cap,
                 reward_window_days=reward_window_days,
             )
-        except billing.DuplicateCurve:
+        except (billing.DuplicateCurve, dbmod.DuplicateCurveViolation):
+            _delete_curve_files(s3, bucket, [raw_key, csv_key], job["job_id"])
             return _error("duplicate_curve", "This curve was already added.", status=409)
         except billing.CurveRefused as err:
+            _delete_curve_files(s3, bucket, [raw_key, csv_key], job["job_id"])
             return _error(err.code, err.message, status=err.status)
         return jsonify({"stored": True, **stored})
 
     @app.route("/api/jobs/<job_id>", methods=["DELETE"])
     def delete_job(job_id):
-        """Delete the caller's video and every file belonging to its job (M3c §4)."""
+        """Mark the caller's job deleted, then delete every file it owns (M3c §4, M3f §5c)."""
         job, error = owned_job(job_id)
         if error:
             return error
@@ -742,6 +756,9 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
             return _job_active()
         if s3 is None or not bucket:
             return _not_configured()
+        user_id, _ = signed_in_user()
+        if not billing.delete_job(db, user_id, job["job_id"]):
+            return _not_found()
         try:
             storage.delete_job_prefixes(s3, bucket, job["job_id"])
         except Exception:
@@ -754,8 +771,7 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
             return _error(
                 "delete_failed", "Could not delete this video's files. Please try again.", 500
             )
-        user_id, _ = signed_in_user()
-        billing.delete_job(db, user_id, job["job_id"])
+        billing.mark_dataset_purged(db, job["job_id"])
         return jsonify({"deleted": True})
 
     @app.route("/api/account/delete", methods=["POST"])

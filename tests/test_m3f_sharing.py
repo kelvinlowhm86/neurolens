@@ -240,18 +240,19 @@ def test_stop_sharing_deletes_both_prefixes_then_marks_the_copy_removed(
     assert job["dataset_removed_reason"] == "stopped"
 
 
-def test_a_failed_delete_leaves_the_stop_sharing_row_unmarked(aws, db, pg, make_cfg, tmp_path):
+def test_a_failed_delete_still_marks_the_stop_sharing_row(aws, db, pg, make_cfg, tmp_path):
     client = app_for(aws, db, make_cfg, tmp_path, s3_client=DeleteReportsErrors(aws.s3))
     job_id, key = make_job(db)
     dataset, academic, _ = seed_research(aws, job_id, key)
 
     resp = client.post(f"/api/jobs/{job_id}/stop-sharing")
 
-    assert resp.status_code == 500
+    assert resp.status_code == 200
     assert all(object_exists(aws, name) for name in [*dataset, *academic])
     job = pg.job(job_id)
-    assert job["dataset_removed_at"] is None
-    assert job["dataset_removed_reason"] is None
+    assert job["dataset_removed_at"] is not None
+    assert job["dataset_removed_reason"] == "stopped"
+    assert job["dataset_purged_at"] is None
 
 
 def test_a_failed_stop_sharing_delete_marks_the_copy_and_the_reaper_finishes_it(

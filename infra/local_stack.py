@@ -28,11 +28,15 @@ WEB_PORT = 5003
 
 
 def _local_dsn(dsn):
-    from urllib.parse import urlparse
+    from urllib.parse import parse_qs, urlparse
 
-    host = urlparse(dsn).hostname
-    if host not in ("localhost", "127.0.0.1"):
-        raise SystemExit("The local stack needs a local PostgreSQL DSN (localhost or 127.0.0.1).")
+    parsed = urlparse(dsn)
+    query = parse_qs(parsed.query)
+    if parsed.hostname not in ("localhost", "127.0.0.1") or "host" in query or "hostaddr" in query:
+        raise SystemExit(
+            "The local stack needs a local PostgreSQL DSN (localhost or 127.0.0.1, "
+            "without host or hostaddr parameters)."
+        )
     return dsn
 
 
@@ -53,7 +57,8 @@ def _own_aws_environment(scratch):
         "AWS_SHARED_CREDENTIALS_FILE": str(scratch / "credentials"),
         "AWS_CONFIG_FILE": str(scratch / "config"),
     }
-    os.environ.pop("AWS_PROFILE", None)
+    for name in [name for name in os.environ if name.startswith("AWS_")]:
+        os.environ.pop(name, None)
     os.environ.update(env)
 
 

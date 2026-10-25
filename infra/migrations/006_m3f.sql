@@ -5,6 +5,7 @@ ALTER TABLE jobs ADD COLUMN consent_version TEXT;
 ALTER TABLE jobs ADD COLUMN consented_at TIMESTAMPTZ;
 ALTER TABLE jobs ADD COLUMN video_sha256 TEXT;
 ALTER TABLE jobs ADD COLUMN curve_rewarded_at TIMESTAMPTZ;
+ALTER TABLE jobs ADD COLUMN dataset_purged_at TIMESTAMPTZ;
 ALTER TABLE jobs ADD COLUMN dataset_removed_reason TEXT;
 ALTER TABLE jobs ADD CONSTRAINT jobs_dataset_removed_reason_check
   CHECK (dataset_removed_reason IS NULL OR dataset_removed_reason IN ('no_curve', 'stopped'));

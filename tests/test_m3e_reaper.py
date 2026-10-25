@@ -310,7 +310,7 @@ def test_a_job_that_already_has_a_snapshot_is_left_alone(aws, db, pg, lambda_env
     assert set(dataset_files_exist(aws, job_id)) == set(dataset_keys(job_id))
 
 
-def test_a_dataset_already_removed_is_left_alone(aws, db, pg, lambda_env, new_key):
+def test_a_dataset_already_removed_without_a_purge_is_finished(aws, db, pg, lambda_env, new_key):
     job_id, key = consented_done_job(db, new_key)
     write_job_files(aws, job_id, key)
     pg.conn.execute("UPDATE jobs SET dataset_removed_at = now() WHERE job_id = %s::uuid", (job_id,))
@@ -320,10 +320,13 @@ def test_a_dataset_already_removed_is_left_alone(aws, db, pg, lambda_env, new_ke
 
     job = pg.job(job_id)
     assert job["dataset_removed_at"] is not None
-    assert set(dataset_files_exist(aws, job_id)) == set(dataset_keys(job_id))
+    assert job["dataset_purged_at"] is not None
+    assert dataset_files_exist(aws, job_id) == []
+    for kept in user_keys(job_id, key):
+        assert object_exists(aws, kept)
 
 
-def test_a_failed_dataset_delete_leaves_the_row_unmarked_and_raises(
+def test_a_failed_dataset_delete_marks_the_row_and_raises(
     aws, db, pg, lambda_env, new_key, monkeypatch
 ):
     job_id, key = consented_done_job(db, new_key)
@@ -344,5 +347,8 @@ def test_a_failed_dataset_delete_leaves_the_row_unmarked_and_raises(
         run_reaper()
 
     job = pg.job(job_id)
-    assert job["dataset_removed_at"] is None
+    assert job["dataset_removed_at"] is not None
+    assert job["dataset_removed_reason"] == "no_curve"
+    assert job["dataset_purged_at"] is None
     assert job["retention_added_at"] is None
+    assert set(dataset_files_exist(aws, job_id)) == set(dataset_keys(job_id))

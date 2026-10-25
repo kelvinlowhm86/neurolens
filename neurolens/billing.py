@@ -2,7 +2,7 @@
 refund on every failure path.
 
 Every function takes a `Database` (neurolens.db) first and does its work in one transaction.
-Row locks are taken on the `jobs` row first, then the `balances` row, so two functions can never
+Row locks are taken on the `balances` row first, then the `jobs` row, so two functions can never
 deadlock each other. Every balance change writes its ledger row in the same transaction.
 
 The attempt number returned by `claim` is a worker's proof that it still holds a job: worker-side
@@ -73,7 +73,27 @@ class CurveRefused(Exception):
 # ---------------------------------------------------------------- helpers (inside a transaction)
 
 
+def _lock_balance(tx, user_id):
+    rows = tx.execute(
+        "SELECT available_cents FROM balances WHERE user_id = :user_id FOR UPDATE",
+        {"user_id": user_id},
+    )
+    return rows[0] if rows else None
+
+
+def _lock_job_balance(tx, job_id):
+    """Lock the job owner's balance before the job row itself (the one lock order)."""
+    owners = tx.execute(
+        "SELECT user_id FROM jobs WHERE job_id = CAST(:job_id AS uuid)",
+        {"job_id": job_id},
+    )
+    if owners:
+        _lock_balance(tx, owners[0]["user_id"])
+    return bool(owners)
+
+
 def _lock_job(tx, job_id):
+    _lock_job_balance(tx, job_id)
     rows = tx.execute(
         "SELECT user_id, status, attempt, reserved_cents FROM jobs "
         "WHERE job_id = CAST(:job_id AS uuid) FOR UPDATE",
@@ -267,32 +287,87 @@ def list_jobs(db, user_id, limit):
 
 
 def delete_job(db, user_id, job_id):
-    """Hide the user's job from every route, keeping its row and ledger (M3c §4)."""
+    """Mark the user's job deleted under its row lock, keeping its row and ledger (M3c §4).
+
+    This is the mark half of job deletion (M3f §5c): it happens before the files are purged, so
+    no curve can be added while the purge runs. False, changing nothing, when the job is not the
+    user's, already deleted, or still queued or processing.
+    """
     with db.transaction() as tx:
-        tx.execute(
+        rows = tx.execute(
             "UPDATE jobs SET deleted_at = now(), filename = NULL "
-            "WHERE job_id = CAST(:job_id AS uuid) AND user_id = :user_id",
-            {"job_id": job_id, "user_id": user_id},
+            "WHERE job_id = CAST(:job_id AS uuid) AND user_id = :user_id "
+            "AND deleted_at IS NULL AND status NOT IN (:queued, :processing) RETURNING job_id",
+            {
+                "job_id": job_id,
+                "user_id": user_id,
+                "queued": QUEUED,
+                "processing": PROCESSING,
+            },
         )
+    return bool(rows)
 
 
-def mark_dataset_removed(db, job_id, reason):
-    """Record that a job's research copy is gone, and why (M3f §5c)."""
+def mark_dataset_removed(db, job_id, reason, *, user_id=None, require_no_snapshot=False):
+    """Mark a job's shared copy removed under its row lock, if it is still eligible (M3f §5c).
+
+    One guarded update: the job must be done, consented, not already removed and not deleted.
+    With `user_id` it must also be that user's, and with `require_no_snapshot` it must still have
+    no curve (the reaper's 90-day rule). False, changing nothing, when it no longer qualifies.
+    """
+    clauses = [
+        "job_id = CAST(:job_id AS uuid)",
+        "status = :done",
+        "research_consent = TRUE",
+        "dataset_removed_at IS NULL",
+        "deleted_at IS NULL",
+    ]
+    params = {"job_id": job_id, "reason": reason, "done": DONE}
+    if user_id is not None:
+        clauses.append("user_id = :user_id")
+        params["user_id"] = user_id
+    if require_no_snapshot:
+        clauses.append(
+            "NOT EXISTS (SELECT 1 FROM retention_snapshots s WHERE s.job_id = jobs.job_id)"
+        )
     with db.transaction() as tx:
-        tx.execute(
+        rows = tx.execute(
             "UPDATE jobs SET dataset_removed_at = now(), dataset_removed_reason = :reason "
-            "WHERE job_id = CAST(:job_id AS uuid)",
-            {"job_id": job_id, "reason": reason},
+            f"WHERE {' AND '.join(clauses)} RETURNING job_id",
+            params,
         )
+    return bool(rows)
+
+
+def mark_dataset_purged(db, job_id):
+    """Record that a marked copy's files are gone (M3f §5c). False if it was not marked."""
+    with db.transaction() as tx:
+        rows = tx.execute(
+            "UPDATE jobs SET dataset_purged_at = now() "
+            "WHERE job_id = CAST(:job_id AS uuid) AND dataset_purged_at IS NULL "
+            "AND (dataset_removed_at IS NOT NULL OR deleted_at IS NOT NULL) RETURNING job_id",
+            {"job_id": job_id},
+        )
+    return bool(rows)
+
+
+def curve_exists(db, curve_sha256):
+    """True when any job or account already stored this exact curve (M3f §5d)."""
+    with db.transaction() as tx:
+        rows = tx.execute(
+            "SELECT 1 AS present FROM retention_snapshots WHERE curve_sha256 = :sha LIMIT 1",
+            {"sha": curve_sha256},
+        )
+    return bool(rows)
 
 
 def delete_account(db, user_id):
     """Delete all of a user's rows and return the deleted `(issuer, subject)` identities
     (M3c §5). Refuses with JobActive while any of their jobs is queued or processing.
 
-    Lock order: the rest of billing locks jobs before balances. This function locks only
-    `balances` and reads job statuses without locking them, so it cannot deadlock with those
-    callers; the balance lock is enough because every new job's `reserve` takes it first.
+    Lock order: every caller takes the balance row before job rows. Here the balance row is
+    locked first, job statuses are read without locking, and the rows are deleted after the
+    route has removed the files (M3f §5c), so no row is left to retry from.
     """
     with db.transaction() as tx:
         locked = tx.execute(
@@ -556,6 +631,7 @@ def issue_refund(
     if attempt is None and not queued and processing_stale_s is None:
         raise ValueError("issue_refund needs attempt, queued or processing_stale_s")
     with db.transaction() as tx:
+        _lock_job_balance(tx, job_id)
         rows = tx.execute(
             "SELECT user_id, status, attempt, reserved_cents, verified_duration_ms, "
             "updated_at <= now() - make_interval(secs => :stale_s) AS processing_old "
@@ -612,13 +688,14 @@ def add_curve(
 ):
     """Store one retention snapshot and reward the analysis when all the rules allow it.
 
-    One transaction with the job row locked (M3f §5d): the job must be the user's, done, shared,
-    not removed and not deleted. A curve already stored under the same hash, on any job or
-    account, raises DuplicateCurve and stores nothing. A valid curve of a charged job whose video
-    hash has never been rewarded, by an account that has had credit beyond the starter, and below
-    the per-window cap, returns the captured price once.
+    One transaction with the balance row locked before the job row (M3f §5c, §5d): the job must
+    be the user's, done, shared, not removed and not deleted. A curve already stored under the
+    same hash, on any job or account, raises DuplicateCurve and stores nothing. A valid curve of a
+    charged job whose video hash has never been rewarded, by an account that has had credit beyond
+    the starter, and below the per-window cap, returns the captured price once.
     """
     with db.transaction() as tx:
+        _lock_balance(tx, user_id)
         rows = tx.execute(
             "SELECT user_id, status, research_consent, dataset_removed_at, "
             "dataset_removed_reason, deleted_at, captured_cents, curve_rewarded_at, video_sha256 "
@@ -665,7 +742,8 @@ def add_curve(
             )
             recent = tx.execute(
                 "SELECT count(*) AS n FROM ledger WHERE user_id = :user_id "
-                "AND kind = :kind AND created_at > now() - make_interval(days => :days)",
+                "AND kind = :kind AND created_at > now() - "
+                "make_interval(days => CAST(:days AS integer))",
                 {"user_id": user_id, "kind": "curve_reward", "days": reward_window_days},
             )[0]["n"]
             if not same_video and funded and recent < reward_cap:

@@ -20,10 +20,21 @@ LOCAL_ONLY_MESSAGE = (
     "The real .env is for the admin scripts."
 )
 
+
+def _local_endpoint(value):
+    host = urlparse(value).hostname if value else None
+    return host in ("localhost", "127.0.0.1")
+
+
 if __name__ == "__main__":
-    endpoint = os.environ.get("AWS_ENDPOINT_URL")
-    host = urlparse(endpoint).hostname if endpoint else None
-    if host not in ("localhost", "127.0.0.1"):
+    service_endpoints = [
+        value for name, value in os.environ.items() if name.startswith("AWS_ENDPOINT_URL_")
+    ]
+    if (
+        not _local_endpoint(os.environ.get("AWS_ENDPOINT_URL"))
+        or any(not _local_endpoint(value) for value in service_endpoints)
+        or "AWS_IGNORE_CONFIGURED_ENDPOINT_URLS" in os.environ
+    ):
         print(LOCAL_ONLY_MESSAGE, file=sys.stderr)
         sys.exit(1)
     cfg = load_settings()
