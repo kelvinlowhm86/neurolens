@@ -289,6 +289,100 @@ def test_app_py_refuses_without_a_local_endpoint(tmp_path, endpoint):
     assert REFUSAL in result.stdout + result.stderr
 
 
+def run_app_with_environment(tmp_path, env_updates):
+    root = tmp_path / f"root-guard-{uuid.uuid4().hex}"
+    (root / "data").mkdir(parents=True)
+    (root / "models").mkdir()
+    config = {
+        "paths": {"models": str(root / "models"), "data": str(root / "data")},
+        "response": {"colour_range": 0.5},
+        "auth": {"mode": "dev", "dev_user_id": "u", "dev_email": "u@example.com"},
+        "server": {"host": "127.0.0.1", "port": 0},
+        "max_upload_bytes": 1000,
+    }
+    (root / "config.json").write_text(json.dumps(config))
+    env = os.environ.copy()
+    for name in list(env):
+        if name.startswith("AWS_ENDPOINT_URL") or name == "AWS_IGNORE_CONFIGURED_ENDPOINT_URLS":
+            env.pop(name, None)
+    env["NEUROLENS_ROOT"] = str(root)
+    env.update(env_updates)
+    try:
+        return subprocess.run(
+            [sys.executable, str(REPO_ROOT / "app.py")],
+            cwd=REPO_ROOT,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=8,
+        )
+    except subprocess.TimeoutExpired:
+        pytest.fail(f"app.py started with {env_updates!r}")
+
+
+@pytest.mark.parametrize(
+    "env_updates",
+    [
+        {
+            "AWS_ENDPOINT_URL": "http://localhost:5005",
+            "AWS_ENDPOINT_URL_S3": "https://s3.us-east-1.amazonaws.com",
+        },
+        {
+            "AWS_ENDPOINT_URL": "http://127.0.0.1:5005",
+            "AWS_ENDPOINT_URL_SQS": "https://sqs.us-east-1.amazonaws.com",
+        },
+        {
+            "AWS_ENDPOINT_URL": "http://localhost:5005",
+            "AWS_IGNORE_CONFIGURED_ENDPOINT_URLS": "true",
+        },
+    ],
+    ids=["service_s3", "service_sqs", "ignore_flag"],
+)
+def test_app_py_refuses_a_remote_service_endpoint_or_the_ignore_flag(tmp_path, env_updates):
+    result = run_app_with_environment(tmp_path, env_updates)
+
+    assert result.returncode != 0
+    assert REFUSAL in result.stdout + result.stderr
+
+
+@pytest.mark.parametrize(
+    "dsn",
+    [
+        "postgresql://postgres@db.example.com/postgres",
+        "postgresql://postgres@10.0.0.5:5432/postgres",
+        "postgresql://postgres@localhost:55432/postgres?host=db.example.com",
+        "postgresql://postgres@localhost:55432/postgres?hostaddr=10.0.0.5",
+        "postgresql://postgres@localhost:55432/postgres?host=localhost&hostaddr=127.0.0.1",
+    ],
+    ids=["remote_host", "remote_ip", "host_parameter", "hostaddr_parameter", "both_parameters"],
+)
+def test_local_stack_refuses_a_non_local_or_host_parameter_dsn(dsn):
+    from infra import local_stack
+
+    with pytest.raises(SystemExit):
+        local_stack._local_dsn(dsn)
+
+
+def test_local_stack_child_environment_holds_no_inherited_aws_variable(monkeypatch, tmp_path):
+    from infra import local_stack
+
+    monkeypatch.setattr(os, "environ", dict(os.environ))
+    monkeypatch.setenv("AWS_ENDPOINT_URL_S3", "https://s3.us-east-1.amazonaws.com")
+    monkeypatch.setenv("AWS_IGNORE_CONFIGURED_ENDPOINT_URLS", "true")
+    monkeypatch.setenv("AWS_PROFILE", "real-profile")
+    monkeypatch.setenv("AWS_CUSTOM_INHERITED", "1")
+
+    result = local_stack._own_aws_environment(tmp_path)
+    env = result if isinstance(result, dict) else os.environ
+
+    assert env["AWS_ENDPOINT_URL"] == f"http://127.0.0.1:{local_stack.MOTO_PORT}"
+    assert env["AWS_ACCESS_KEY_ID"] == "testing"
+    assert "AWS_ENDPOINT_URL_S3" not in env
+    assert "AWS_IGNORE_CONFIGURED_ENDPOINT_URLS" not in env
+    assert "AWS_PROFILE" not in env
+    assert "AWS_CUSTOM_INHERITED" not in env
+
+
 # ---------------------------------------------------------------- consent version
 
 

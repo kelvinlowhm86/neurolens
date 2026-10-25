@@ -105,6 +105,27 @@ class NoCallS3:
         return call
 
 
+def retention_curve():
+    return [(i / 19, 1.0 - 0.5 * i / 19) for i in range(20)]
+
+
+def curve_kwargs(job_id, *, sha="review-curve"):
+    snapshot_id = str(uuid.uuid4())
+    return {
+        "snapshot_id": snapshot_id,
+        "raw_key": f"dataset/{job_id}/retention/{snapshot_id}.json",
+        "csv_key": f"dataset/{job_id}/retention/{snapshot_id}.csv",
+        "curve_sha256": sha,
+        "points": retention_curve(),
+        "quality_flags": [],
+        "views": "lt_1k",
+        "published": "week",
+        "promoted": False,
+        "reward_cap": 5,
+        "reward_window_days": 30,
+    }
+
+
 class DeleteReportsErrors:
     """A real S3 client whose deletes fail for every key, as S3 may."""
 
@@ -120,6 +141,32 @@ class DeleteReportsErrors:
 
     def delete_object(self, **kwargs):
         raise RuntimeError("delete failed")
+
+    def __getattr__(self, name):
+        return getattr(self._inner, name)
+
+
+class CurveDuringPurge:
+    """Attempts a curve upload on the first delete, while a route is purging the copy."""
+
+    def __init__(self, inner, db, job_id):
+        self._inner = inner
+        self._db = db
+        self._job_id = job_id
+        self.attempted = False
+        self.succeeded = False
+        self.refused = None
+
+    def delete_objects(self, **kwargs):
+        if not self.attempted:
+            self.attempted = True
+            try:
+                billing.add_curve(self._db, WEB_USER_ID, self._job_id, **curve_kwargs(self._job_id))
+            except Exception as err:
+                self.refused = err
+            else:
+                self.succeeded = True
+        return self._inner.delete_objects(**kwargs)
 
     def __getattr__(self, name):
         return getattr(self._inner, name)
@@ -205,6 +252,39 @@ def test_a_failed_delete_leaves_the_stop_sharing_row_unmarked(aws, db, pg, make_
     job = pg.job(job_id)
     assert job["dataset_removed_at"] is None
     assert job["dataset_removed_reason"] is None
+
+
+def test_a_failed_stop_sharing_delete_marks_the_copy_and_the_reaper_finishes_it(
+    aws, db, pg, make_cfg, tmp_path, reaper_env
+):
+    reaper_env(90)
+    client = app_for(aws, db, make_cfg, tmp_path, s3_client=DeleteReportsErrors(aws.s3))
+    job_id, key = make_job(db)
+    dataset, academic, own = seed_research(aws, job_id, key)
+    billing.grant_credit(db, f"{WEB_USER_ID}@example.com", 100)
+    balance = pg.balance(WEB_USER_ID)
+
+    resp = client.post(f"/api/jobs/{job_id}/stop-sharing")
+
+    assert resp.status_code == 200
+    job = pg.job(job_id)
+    assert job["dataset_removed_at"] is not None
+    assert job["dataset_removed_reason"] == "stopped"
+    assert job["dataset_purged_at"] is None
+    assert all(object_exists(aws, name) for name in [*dataset, *academic])
+
+    with pytest.raises(billing.CurveRefused):
+        billing.add_curve(db, WEB_USER_ID, job_id, **curve_kwargs(job_id))
+    assert pg.balance(WEB_USER_ID) == balance
+    assert "curve_reward" not in pg.kinds(WEB_USER_ID)
+    assert pg.rows("SELECT * FROM retention_snapshots WHERE job_id = %s::uuid", job_id) == []
+
+    run_reaper()
+
+    job = pg.job(job_id)
+    assert job["dataset_purged_at"] is not None
+    assert not any(object_exists(aws, name) for name in [*dataset, *academic])
+    assert all(object_exists(aws, name) for name in own)
 
 
 @pytest.mark.parametrize("processing", [False, True], ids=["queued", "processing"])
@@ -356,6 +436,26 @@ def test_the_reaper_keeps_a_job_that_has_any_snapshot(aws, db, pg, reaper_env):
     assert all(object_exists(aws, name) for name in [*dataset, *academic])
 
 
+def test_the_90_day_rule_keeps_a_job_that_gained_a_snapshot_after_selection(
+    aws, db, pg, reaper_env
+):
+    from neurolens.lambdas import reaper
+
+    reaper_env(90)
+    job_id, key = make_job(db)
+    dataset, academic, _ = seed_research(aws, job_id, key)
+    pg.age(job_id, created_s=91 * DAY)
+    [stale] = reaper.expired_dataset_jobs(db, 90)
+
+    insert_snapshot(pg, job_id)
+    reaper.clean_dataset(db, aws.s3, aws.bucket, stale)
+
+    job = pg.job(job_id)
+    assert job["dataset_removed_at"] is None
+    assert job["dataset_purged_at"] is None
+    assert all(object_exists(aws, name) for name in [*dataset, *academic])
+
+
 # ---------------------------------------------------------------- consent
 
 
@@ -387,6 +487,24 @@ def test_job_delete_removes_both_prefixes(aws, db, pg, make_cfg, tmp_path):
     assert resp.status_code in (200, 204)
     assert not any(object_exists(aws, name) for name in [*dataset, *academic, *own])
     assert pg.job(job_id)["deleted_at"] is not None
+
+
+def test_job_delete_marks_the_job_before_it_purges_the_copy(aws, db, pg, make_cfg, tmp_path):
+    job_id, key = make_job(db)
+    dataset, academic, _ = seed_research(aws, job_id, key)
+    billing.grant_credit(db, f"{WEB_USER_ID}@example.com", 100)
+    curve = CurveDuringPurge(aws.s3, db, job_id)
+    client = app_for(aws, db, make_cfg, tmp_path, s3_client=curve)
+
+    resp = client.delete(f"/api/jobs/{job_id}")
+
+    assert resp.status_code in (200, 204)
+    assert curve.attempted is True
+    assert curve.succeeded is False
+    assert isinstance(curve.refused, billing.CurveRefused)
+    assert pg.rows("SELECT * FROM retention_snapshots WHERE job_id = %s::uuid", job_id) == []
+    assert "curve_reward" not in pg.kinds(WEB_USER_ID)
+    assert not any(object_exists(aws, name) for name in [*dataset, *academic])
 
 
 @pytest.fixture

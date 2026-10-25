@@ -10,12 +10,14 @@ validates its fields and writes nothing when S3 or the checks fail.
 Money, snapshots and ledger rows are read directly from PostgreSQL (`pg`); S3 objects from moto.
 """
 
+import hashlib
 import json
+import threading
 import uuid
 
 import pytest
 from conftest import WEB_USER_ID
-from neurolens import billing, storage
+from neurolens import billing, results, storage
 from neurolens.web.app import create_app
 
 STARTER_CENTS = 10_000
@@ -350,6 +352,48 @@ def test_a_user_at_the_cap_is_not_rewarded_until_the_window_passes(db, pg):
     assert pg.balance(WEB_USER_ID) == (STARTER_CENTS + 100 - PRICE_CENTS, 0)
 
 
+def test_two_concurrent_curves_for_one_user_never_exceed_the_reward_cap(db, pg):
+    cap = 1
+    jobs = [make_job(db, sha=f"video-{number}")[0] for number in range(2)]
+    billing.grant_credit(db, f"{WEB_USER_ID}@example.com", 100)
+    barrier = threading.Barrier(2)
+    outcomes = []
+    errors = []
+
+    def add(job_id, number):
+        try:
+            barrier.wait(timeout=10)
+            outcomes.append(
+                billing.add_curve(
+                    db,
+                    WEB_USER_ID,
+                    job_id,
+                    **curve_args(job_id, sha=f"curve-{number}", reward_cap=cap),
+                )
+            )
+        except BaseException as err:  # noqa: BLE001 - reported below
+            errors.append(err)
+
+    threads = [
+        threading.Thread(target=add, args=(job_id, number)) for number, job_id in enumerate(jobs)
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=30)
+
+    assert not any(thread.is_alive() for thread in threads)
+    assert errors == []
+    assert len(outcomes) == 2
+    assert sum(1 for result in outcomes if result["rewarded_cents"] > 0) == cap
+    rewards = pg.one(
+        "SELECT count(*) AS n FROM ledger WHERE user_id = %s AND kind = 'curve_reward'",
+        WEB_USER_ID,
+    )["n"]
+    assert rewards == cap
+    assert pg.balance(WEB_USER_ID) == (STARTER_CENTS + 100 - PRICE_CENTS, 0)
+
+
 def test_a_duplicate_curve_is_refused_and_stores_nothing(db, pg):
     first, _ = make_job(db)
     second, _ = make_job(db, sha="b" * 64)
@@ -526,3 +570,104 @@ def test_a_removed_copy_says_why(db, aws, make_cfg, tmp_path, pg, reason, messag
     assert resp.status_code == 409
     assert message in resp.get_json()["message"]
     assert snapshot_rows(pg, job_id) == []
+
+
+def test_the_route_writes_no_s3_object_for_a_duplicate_curve(db, aws, make_cfg, tmp_path, pg):
+    client = app_for(aws, db, make_cfg, tmp_path)
+    first, _ = make_job(db)
+    second, _ = make_job(db, sha="b" * 64)
+    points = curve()
+    csv_text = results.retention_csv(points)
+    sha = hashlib.sha256(csv_text.encode()).hexdigest()
+    billing.add_curve(db, WEB_USER_ID, first, **curve_args(first, sha=sha, points=points))
+
+    resp = client.post(
+        f"/api/jobs/{second}/retention",
+        json={
+            "report": report_text(points),
+            "views": VIEWS,
+            "published": PUBLISHED,
+            "promoted": False,
+        },
+    )
+
+    assert resp.status_code == 409
+    assert resp.get_json()["error"] == "duplicate_curve"
+    assert snapshot_rows(pg, second) == []
+    assert not aws.s3.list_objects_v2(Bucket=aws.bucket, Prefix=f"dataset/{second}/retention/").get(
+        "Contents"
+    )
+
+
+def test_any_refused_curve_deletes_the_files_the_route_wrote(
+    db, aws, make_cfg, tmp_path, pg, monkeypatch
+):
+    client = app_for(aws, db, make_cfg, tmp_path)
+    job_id, _ = make_job(db)
+
+    def refuse(*args, **kwargs):
+        raise billing.CurveRefused(
+            "dataset_removed",
+            "This video's research copy was deleted after 90 days without a curve.",
+        )
+
+    monkeypatch.setattr(billing, "add_curve", refuse)
+
+    resp = client.post(
+        f"/api/jobs/{job_id}/retention",
+        json={
+            "report": report_text(curve()),
+            "views": VIEWS,
+            "published": PUBLISHED,
+            "promoted": False,
+        },
+    )
+
+    assert resp.status_code == 409
+    assert resp.get_json()["error"] == "dataset_removed"
+    assert not aws.s3.list_objects_v2(Bucket=aws.bucket, Prefix=f"dataset/{job_id}/retention/").get(
+        "Contents"
+    )
+
+
+def test_a_unique_constraint_race_answers_409_duplicate_curve(db, aws, make_cfg, tmp_path, pg):
+    client = app_for(aws, db, make_cfg, tmp_path)
+    job_id, _ = make_job(db)
+    conflict = str(uuid.uuid4())
+    pg.conn.execute(
+        f"""
+        CREATE FUNCTION m3f_conflict_snapshot() RETURNS trigger AS $$
+        BEGIN
+            IF pg_trigger_depth() = 1 THEN
+                INSERT INTO retention_snapshots (snapshot_id, job_id, curve_sha256)
+                VALUES ('{conflict}'::uuid, NEW.job_id, NEW.curve_sha256);
+            END IF;
+            RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql
+        """
+    )
+    pg.conn.execute(
+        "CREATE TRIGGER m3f_conflict_snapshot BEFORE INSERT ON retention_snapshots "
+        "FOR EACH ROW EXECUTE FUNCTION m3f_conflict_snapshot()"
+    )
+
+    try:
+        resp = client.post(
+            f"/api/jobs/{job_id}/retention",
+            json={
+                "report": report_text(curve()),
+                "views": VIEWS,
+                "published": PUBLISHED,
+                "promoted": False,
+            },
+        )
+    except Exception as err:
+        pytest.fail(f"the unique-constraint race raised {type(err).__name__} instead of 409: {err}")
+
+    assert resp.status_code == 409
+    assert resp.get_json()["error"] == "duplicate_curve"
+    assert snapshot_rows(pg, job_id) == []
+    assert not aws.s3.list_objects_v2(Bucket=aws.bucket, Prefix=f"dataset/{job_id}/retention/").get(
+        "Contents"
+    )
