@@ -1,164 +1,39 @@
-// Measured from public/music2.mp3 and the actual edit. 30 fps.
-// Source 100 BPM; every cut below sits on a measured edited beat or moment.
-// moments: stop = end of build, drop, endingHit = final source hit, duck = muted start.
+// Hand-written 120 BPM grid: beat n at n * 0.5 - 0.06 s; no pulses in stops/silences.
 export const FPS = 30;
-export const DURATION = 1290;
-export const beats = [
-  {"frame": 5, "seconds": 0.173, "strength": 0.8538, "sourceSeconds": 31.522},
-  {"frame": 14, "seconds": 0.472, "strength": 0.5645, "sourceSeconds": 31.821},
-  {"frame": 23, "seconds": 0.772, "strength": 1.02, "sourceSeconds": 32.121},
-  {"frame": 37, "seconds": 1.22, "strength": 0.8168, "sourceSeconds": 32.569},
-  {"frame": 50, "seconds": 1.669, "strength": 1.195, "sourceSeconds": 33.018},
-  {"frame": 59, "seconds": 1.969, "strength": 1.033, "sourceSeconds": 33.318},
-  {"frame": 73, "seconds": 2.418, "strength": 0.8849, "sourceSeconds": 33.767},
-  {"frame": 79, "seconds": 2.637, "strength": 0.1752, "sourceSeconds": 33.986},
-  {"frame": 86, "seconds": 2.867, "strength": 1.1919, "sourceSeconds": 34.216},
-  {"frame": 95, "seconds": 3.176, "strength": 0.9271, "sourceSeconds": 34.525},
-  {"frame": 108, "seconds": 3.615, "strength": 1.0393, "sourceSeconds": 34.964},
-  {"frame": 122, "seconds": 4.064, "strength": 1.1661, "sourceSeconds": 35.413},
-  {"frame": 131, "seconds": 4.363, "strength": 1.0166, "sourceSeconds": 35.712},
-  {"frame": 140, "seconds": 4.673, "strength": 0.1557, "sourceSeconds": 36.022},
-  {"frame": 148, "seconds": 4.922, "strength": 0.7615, "sourceSeconds": 38.566},
-  {"frame": 161, "seconds": 5.371, "strength": 0.9194, "sourceSeconds": 39.015},
-  {"frame": 170, "seconds": 5.67, "strength": 0.8049, "sourceSeconds": 39.314},
-  {"frame": 179, "seconds": 5.97, "strength": 1.0981, "sourceSeconds": 39.614},
-  {"frame": 186, "seconds": 6.189, "strength": 0.1314, "sourceSeconds": 39.833},
-  {"frame": 193, "seconds": 6.429, "strength": 0.8867, "sourceSeconds": 40.073},
-  {"frame": 206, "seconds": 6.868, "strength": 1.2821, "sourceSeconds": 40.512},
-  {"frame": 213, "seconds": 7.087, "strength": 0.0902, "sourceSeconds": 40.731},
-  {"frame": 219, "seconds": 7.307, "strength": 0.7118, "sourceSeconds": 43.371},
-  {"frame": 226, "seconds": 7.536, "strength": 0.1394, "sourceSeconds": 43.6},
-  {"frame": 233, "seconds": 7.756, "strength": 1.155, "sourceSeconds": 43.82},
-  {"frame": 242, "seconds": 8.055, "strength": 1.1189, "sourceSeconds": 44.119},
-  {"frame": 251, "seconds": 8.354, "strength": 1.3066, "sourceSeconds": 44.418},
-  {"frame": 264, "seconds": 8.803, "strength": 1.15, "sourceSeconds": 44.867},
-  {"frame": 278, "seconds": 9.252, "strength": 1.0449, "sourceSeconds": 45.316},
-  {"frame": 287, "seconds": 9.552, "strength": 1.0517, "sourceSeconds": 45.616},
-  {"frame": 300, "seconds": 10.001, "strength": 0.9828, "sourceSeconds": 46.065},
-  {"frame": 307, "seconds": 10.22, "strength": 0.1088, "sourceSeconds": 46.284},
-  {"frame": 314, "seconds": 10.45, "strength": 0.9214, "sourceSeconds": 46.514},
-  {"frame": 322, "seconds": 10.749, "strength": 1.0845, "sourceSeconds": 46.813},
-  {"frame": 332, "seconds": 11.058, "strength": 0.8814, "sourceSeconds": 47.122},
-  {"frame": 342, "seconds": 11.387, "strength": 0.2736, "sourceSeconds": 47.451},
-  {"frame": 350, "seconds": 11.657, "strength": 1.1855, "sourceSeconds": 47.721},
-  {"frame": 359, "seconds": 11.956, "strength": 0.8865, "sourceSeconds": 48.02},
-  {"frame": 368, "seconds": 12.255, "strength": 0.6601, "sourceSeconds": 48.319},
-  {"frame": 377, "seconds": 12.555, "strength": 1.0316, "sourceSeconds": 48.619},
-  {"frame": 386, "seconds": 12.854, "strength": 1.0574, "sourceSeconds": 48.918},
-  {"frame": 395, "seconds": 13.153, "strength": 1.2724, "sourceSeconds": 49.217},
-  {"frame": 401, "seconds": 13.373, "strength": 0.133, "sourceSeconds": 49.437},
-  {"frame": 408, "seconds": 13.602, "strength": 1.1096, "sourceSeconds": 49.666},
-  {"frame": 422, "seconds": 14.051, "strength": 1.1265, "sourceSeconds": 50.115},
-  {"frame": 431, "seconds": 14.361, "strength": 0.8649, "sourceSeconds": 50.425},
-  {"frame": 440, "seconds": 14.66, "strength": 0.8595, "sourceSeconds": 50.724},
-  {"frame": 449, "seconds": 14.959, "strength": 0.9119, "sourceSeconds": 51.023},
-  {"frame": 458, "seconds": 15.259, "strength": 0.9451, "sourceSeconds": 51.323},
-  {"frame": 467, "seconds": 15.558, "strength": 1.0041, "sourceSeconds": 51.622},
-  {"frame": 474, "seconds": 15.787, "strength": 0.1, "sourceSeconds": 51.851},
-  {"frame": 480, "seconds": 16.007, "strength": 0.9901, "sourceSeconds": 52.071},
-  {"frame": 493, "seconds": 16.446, "strength": 1.1712, "sourceSeconds": 52.51},
-  {"frame": 507, "seconds": 16.905, "strength": 0.6938, "sourceSeconds": 52.969},
-  {"frame": 514, "seconds": 17.134, "strength": 0.1437, "sourceSeconds": 53.198},
-  {"frame": 521, "seconds": 17.354, "strength": 1.294, "sourceSeconds": 53.418},
-  {"frame": 530, "seconds": 17.653, "strength": 1.1031, "sourceSeconds": 53.717},
-  {"frame": 539, "seconds": 17.952, "strength": 1.3284, "sourceSeconds": 54.016},
-  {"frame": 552, "seconds": 18.401, "strength": 0.8895, "sourceSeconds": 54.465},
-  {"frame": 561, "seconds": 18.701, "strength": 0.9368, "sourceSeconds": 54.765},
-  {"frame": 575, "seconds": 19.16, "strength": 0.9145, "sourceSeconds": 55.224},
-  {"frame": 584, "seconds": 19.459, "strength": 0.9264, "sourceSeconds": 55.523},
-  {"frame": 593, "seconds": 19.758, "strength": 0.9256, "sourceSeconds": 55.822},
-  {"frame": 602, "seconds": 20.058, "strength": 0.9791, "sourceSeconds": 56.122},
-  {"frame": 611, "seconds": 20.357, "strength": 1.1186, "sourceSeconds": 56.421},
-  {"frame": 617, "seconds": 20.577, "strength": 0.1037, "sourceSeconds": 56.641},
-  {"frame": 624, "seconds": 20.806, "strength": 1.1443, "sourceSeconds": 56.87},
-  {"frame": 637, "seconds": 21.245, "strength": 0.9127, "sourceSeconds": 57.309},
-  {"frame": 647, "seconds": 21.564, "strength": 0.3237, "sourceSeconds": 57.628},
-  {"frame": 656, "seconds": 21.854, "strength": 0.9925, "sourceSeconds": 57.918},
-  {"frame": 665, "seconds": 22.163, "strength": 0.3675, "sourceSeconds": 58.227},
-  {"frame": 674, "seconds": 22.452, "strength": 0.9862, "sourceSeconds": 58.516},
-  {"frame": 683, "seconds": 22.752, "strength": 0.8865, "sourceSeconds": 58.816},
-  {"frame": 692, "seconds": 23.061, "strength": 0.777, "sourceSeconds": 59.125},
-  {"frame": 705, "seconds": 23.51, "strength": 1.071, "sourceSeconds": 59.574},
-  {"frame": 719, "seconds": 23.959, "strength": 1.0843, "sourceSeconds": 60.023},
-  {"frame": 728, "seconds": 24.258, "strength": 1.0654, "sourceSeconds": 60.322},
-  {"frame": 737, "seconds": 24.567, "strength": 0.3699, "sourceSeconds": 60.631},
-  {"frame": 746, "seconds": 24.857, "strength": 0.9415, "sourceSeconds": 60.921},
-  {"frame": 755, "seconds": 25.156, "strength": 1.1889, "sourceSeconds": 61.22},
-  {"frame": 768, "seconds": 25.605, "strength": 1.0423, "sourceSeconds": 61.669},
-  {"frame": 782, "seconds": 26.054, "strength": 0.7633, "sourceSeconds": 62.118},
-  {"frame": 789, "seconds": 26.284, "strength": 0.1538, "sourceSeconds": 62.348},
-  {"frame": 796, "seconds": 26.523, "strength": 0.5782, "sourceSeconds": 62.587},
-  {"frame": 813, "seconds": 27.112, "strength": 0.9406, "sourceSeconds": 63.176},
-  {"frame": 827, "seconds": 27.561, "strength": 0.9376, "sourceSeconds": 63.625},
-  {"frame": 836, "seconds": 27.86, "strength": 0.791, "sourceSeconds": 63.924},
-  {"frame": 849, "seconds": 28.309, "strength": 1.0839, "sourceSeconds": 64.373},
-  {"frame": 863, "seconds": 28.758, "strength": 1.1247, "sourceSeconds": 64.822},
-  {"frame": 872, "seconds": 29.057, "strength": 1.0612, "sourceSeconds": 65.121},
-  {"frame": 881, "seconds": 29.367, "strength": 0.3681, "sourceSeconds": 65.431},
-  {"frame": 890, "seconds": 29.656, "strength": 0.9834, "sourceSeconds": 65.72},
-  {"frame": 899, "seconds": 29.955, "strength": 1.1237, "sourceSeconds": 66.019},
-  {"frame": 908, "seconds": 30.255, "strength": 0.9477, "sourceSeconds": 66.319},
-  {"frame": 918, "seconds": 30.584, "strength": 0.2841, "sourceSeconds": 66.648},
-  {"frame": 926, "seconds": 30.853, "strength": 0.9943, "sourceSeconds": 66.917},
-  {"frame": 935, "seconds": 31.152, "strength": 0.6226, "sourceSeconds": 67.216},
-  {"frame": 944, "seconds": 31.462, "strength": 0.5348, "sourceSeconds": 67.526},
-  {"frame": 957, "seconds": 31.911, "strength": 0.8245, "sourceSeconds": 67.975},
-  {"frame": 970, "seconds": 32.35, "strength": 0.8411, "sourceSeconds": 68.414},
-  {"frame": 980, "seconds": 32.659, "strength": 0.7783, "sourceSeconds": 68.723},
-  {"frame": 992, "seconds": 33.078, "strength": 0.9582, "sourceSeconds": 108.021},
-  {"frame": 1001, "seconds": 33.377, "strength": 0.645, "sourceSeconds": 108.32},
-  {"frame": 1015, "seconds": 33.826, "strength": 0.8989, "sourceSeconds": 108.769},
-  {"frame": 1024, "seconds": 34.126, "strength": 0.44, "sourceSeconds": 109.069},
-  {"frame": 1033, "seconds": 34.425, "strength": 0.8777, "sourceSeconds": 109.368},
-  {"frame": 1046, "seconds": 34.874, "strength": 0.9676, "sourceSeconds": 109.817},
-  {"frame": 1055, "seconds": 35.173, "strength": 0.9201, "sourceSeconds": 110.116},
-  {"frame": 1069, "seconds": 35.622, "strength": 0.5571, "sourceSeconds": 110.565},
-  {"frame": 1082, "seconds": 36.071, "strength": 0.9559, "sourceSeconds": 111.014},
-  {"frame": 1091, "seconds": 36.381, "strength": 0.7406, "sourceSeconds": 111.324},
-  {"frame": 1098, "seconds": 36.6, "strength": 0.1037, "sourceSeconds": 111.543},
-  {"frame": 1105, "seconds": 36.83, "strength": 0.913, "sourceSeconds": 111.773},
-  {"frame": 1114, "seconds": 37.129, "strength": 0.8767, "sourceSeconds": 112.072},
-  {"frame": 1123, "seconds": 37.428, "strength": 0.9641, "sourceSeconds": 112.371},
-  {"frame": 1132, "seconds": 37.728, "strength": 0.5197, "sourceSeconds": 112.671},
-  {"frame": 1141, "seconds": 38.027, "strength": 0.7632, "sourceSeconds": 112.97},
-  {"frame": 1150, "seconds": 38.326, "strength": 0.9555, "sourceSeconds": 113.269},
-  {"frame": 1159, "seconds": 38.625, "strength": 0.9922, "sourceSeconds": 113.568},
-  {"frame": 1168, "seconds": 38.935, "strength": 0.3899, "sourceSeconds": 113.878},
-  {"frame": 1177, "seconds": 39.224, "strength": 0.883, "sourceSeconds": 114.167},
-  {"frame": 1186, "seconds": 39.523, "strength": 0.9431, "sourceSeconds": 114.466},
-  {"frame": 1195, "seconds": 39.823, "strength": 0.9407, "sourceSeconds": 114.766},
-  {"frame": 1204, "seconds": 40.132, "strength": 0.431, "sourceSeconds": 115.075},
-  {"frame": 1213, "seconds": 40.431, "strength": 0.6082, "sourceSeconds": 115.374},
-  {"frame": 1220, "seconds": 40.671, "strength": 0.0792, "sourceSeconds": 115.614}
-] as const;
-export const downbeats = [
-  {"frame": 0, "seconds": 0.0, "strength": 0.3, "sourceSeconds": 31.349},
-  {"frame": 73, "seconds": 2.418, "strength": 0.8849, "sourceSeconds": 33.749},
-  {"frame": 143, "seconds": 4.772, "strength": 0.3, "sourceSeconds": 38.416},
-  {"frame": 215, "seconds": 7.161, "strength": 0.3, "sourceSeconds": 43.225},
-  {"frame": 287, "seconds": 9.552, "strength": 1.0517, "sourceSeconds": 45.62},
-  {"frame": 359, "seconds": 11.956, "strength": 0.8865, "sourceSeconds": 48.014},
-  {"frame": 431, "seconds": 14.361, "strength": 0.8649, "sourceSeconds": 50.414},
-  {"frame": 502, "seconds": 16.75, "strength": 0.3, "sourceSeconds": 52.814},
-  {"frame": 575, "seconds": 19.16, "strength": 0.9145, "sourceSeconds": 55.214},
-  {"frame": 647, "seconds": 21.564, "strength": 0.3237, "sourceSeconds": 57.614},
-  {"frame": 719, "seconds": 23.959, "strength": 1.0843, "sourceSeconds": 60.014},
-  {"frame": 790, "seconds": 26.35, "strength": 0.3, "sourceSeconds": 62.414},
-  {"frame": 863, "seconds": 28.758, "strength": 1.1247, "sourceSeconds": 64.814},
-  {"frame": 935, "seconds": 31.152, "strength": 0.6226, "sourceSeconds": 67.214},
-  {"frame": 992, "seconds": 33.078, "strength": 0.9582, "sourceSeconds": 108.01},
-  {"frame": 1064, "seconds": 35.467, "strength": 0.3, "sourceSeconds": 110.41},
-  {"frame": 1136, "seconds": 37.867, "strength": 0.3, "sourceSeconds": 112.81},
-  {"frame": 1208, "seconds": 40.267, "strength": 0.3, "sourceSeconds": 115.21},
-  {"frame": 1218, "seconds": 40.588, "strength": 0.0792, "sourceSeconds": 115.531}
-] as const;
-export const moments = {"stop":337, "drop":359, "endingHit":1218, "duck":719} as const;
-export const cuts = {"open":0, "build":143, "stop":337, "drop":359, "hooked":431, "drift":502, "signals":575, "muted":719, "compare":790, "model":935, "ending":992, "credits":1218, "end":1290} as const;
-export const musicPieces = [
-  {"name":"breakdown", "sourceStart":31.349, "sourceEnd":36.136, "editStart":0.0, "editEnd":4.787},
-  {"name":"build-a", "sourceStart":38.416, "sourceEnd":40.82, "editStart":4.772, "editEnd":7.176},
-  {"name":"build-b", "sourceStart":43.225, "sourceEnd":45.62, "editStart":7.161, "editEnd":9.556},
-  {"name":"stop-drop", "sourceStart":45.62, "sourceEnd":48.014, "editStart":9.556, "editEnd":11.95},
-  {"name":"drop", "sourceStart":48.014, "sourceEnd":69.146, "editStart":11.95, "editEnd":33.082},
-  {"name":"ending", "sourceStart":108.01, "sourceEnd":117.943, "editStart":33.067, "editEnd":43.0}
-] as const;
+export const DURATION = 2370;
+export const f = (seconds: number) => Math.round(seconds * FPS);
+
+const BEAT = 0.5;
+const OFFSET = 0.06;
+const LAST_BEAT = 152;
+const SILENCES: ReadonlyArray<readonly [number, number]> = [
+  [22.25, 24], [48.25, 49], [64.25, 65], [72.25, 73.75], [74.25, 79],
+];
+const MUFFLED: readonly [number, number] = [44, 48.25];
+
+const silent = (seconds: number) => SILENCES.some(([a, b]) => seconds > a && seconds < b);
+
+export const beats = Array.from({length: LAST_BEAT}, (_, i) => {
+  const seconds = (i + 1) * BEAT - OFFSET;
+  return {frame: f(seconds), seconds, strength: seconds > MUFFLED[0] && seconds < MUFFLED[1] ? 0.35 : 1};
+}).filter(({seconds}) => !silent(seconds));
+
+export const moments = {
+  bigHit: f(16), stop: f(22.25), drop: f(24), breakSmall: f(43.25), muteStop: f(48.25),
+  muteBack: f(49), weeksStop: f(64.25), minutesBack: f(65), silence: f(72.25),
+  finalHit: f(73.75), musicEnd: f(76.05),
+} as const;
+
+export const cuts = {
+  open: f(0), sintelOpen: f(4), scanner: f(8), lab: f(12), scannerWord: f(14), weeks: f(16),
+  question: f(20), drop: f(24), hooked: f(28), drift: f(32), signals: f(36), groups: f(40),
+  mute: f(44), compare: f(50), model: f(58), weeksAgain: f(62), minutes: f(65),
+  title: f(73.75), credits: f(76), end: f(79),
+} as const;
+
+// HIT_OFFSET: seconds from the file's start to its main hit (measured from the files).
+export const SFX = {
+  impact: {file: 'sfx/impact.mp3', HIT_OFFSET: 0.35},
+  mute: {file: 'sfx/mute_chime.wav', HIT_OFFSET: 0.28},
+  scribble: {file: 'sfx/scribble.wav', HIT_OFFSET: 0},
+} as const;
