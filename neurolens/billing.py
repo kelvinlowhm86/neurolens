@@ -18,8 +18,8 @@ import logging
 import uuid
 from datetime import UTC, datetime
 
+from neurolens import storage
 from neurolens.pricing import estimate_cost_cents
-from neurolens.storage import TIME_FORMAT
 
 logger = logging.getLogger("neurolens")
 
@@ -282,7 +282,7 @@ def list_jobs(db, user_id, limit):
         )
     for row in rows:
         if row["claimed_at"] is not None:
-            row["claimed_at"] = row["claimed_at"].astimezone(UTC).strftime(TIME_FORMAT)
+            row["claimed_at"] = row["claimed_at"].astimezone(UTC).strftime(storage.TIME_FORMAT)
     return rows
 
 
@@ -306,6 +306,26 @@ def delete_job(db, user_id, job_id):
             },
         )
     return bool(rows)
+
+
+def purge_job_files(db, s3, bucket, job_id):
+    """Delete a marked job's files, then record that they are gone (M3f §5c).
+
+    Both research prefixes always go. A deleted job's own files (upload, result, brain,
+    thumbnail) go too; a copy that was only removed keeps the user's own result.
+    """
+    with db.transaction() as tx:
+        rows = tx.execute(
+            "SELECT object_key, deleted_at FROM jobs WHERE job_id = CAST(:job_id AS uuid)",
+            {"job_id": job_id},
+        )
+    job = rows[0] if rows else None
+    storage.delete_job_prefixes(s3, bucket, job_id)
+    if job is not None and job["deleted_at"] is not None:
+        keys = storage.job_keys(job_id, job["object_key"])
+        if not storage.delete_keys(s3, bucket, keys):
+            raise RuntimeError(f"{job_id}: S3 reported a failed delete")
+    mark_dataset_purged(db, job_id)
 
 
 def mark_dataset_removed(db, job_id, reason, *, user_id=None, require_no_snapshot=False):
@@ -533,7 +553,7 @@ def touch(db, job_id, attempt):
 
 def set_stage(db, job_id, attempt, stage, now=None):
     """Set `stage` and append {"stage", "at"} to `stages` (UTC, M2b §4's format)."""
-    at = (now or datetime.now(UTC)).astimezone(UTC).strftime(TIME_FORMAT)
+    at = (now or datetime.now(UTC)).astimezone(UTC).strftime(storage.TIME_FORMAT)
     return _update_held(
         db,
         job_id,

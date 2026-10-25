@@ -59,10 +59,10 @@ def expired_dataset_jobs(db, no_curve_days):
 
 
 def unpurged_dataset_jobs(db):
-    """Consented copies already marked removed or deleted whose files are still there."""
+    """Marked jobs (removed or deleted) whose files are still there, consented or not."""
     with db.transaction() as tx:
         return tx.execute(
-            "SELECT job_id FROM jobs WHERE research_consent AND dataset_purged_at IS NULL "
+            "SELECT job_id FROM jobs WHERE dataset_purged_at IS NULL "
             "AND (dataset_removed_at IS NOT NULL OR deleted_at IS NOT NULL)",
         )
 
@@ -105,18 +105,12 @@ def reap(db, s3, bucket, job):
         _delete_job_files(s3, bucket, job_id, job["object_key"])
 
 
-def purge_dataset(db, s3, bucket, job_id):
-    """Delete a marked copy's files, then record that they are gone (M3f §5c)."""
-    storage.delete_job_prefixes(s3, bucket, job_id)
-    billing.mark_dataset_purged(db, job_id)
-
-
 def clean_dataset(db, s3, bucket, job):
     """Mark and delete one shared copy past the limit (M3f §5c)."""
     job_id = job["job_id"]
     if not billing.mark_dataset_removed(db, job_id, "no_curve", require_no_snapshot=True):
         return
-    purge_dataset(db, s3, bucket, job_id)
+    billing.purge_job_files(db, s3, bucket, job_id)
     logger.warning(f"{job_id}: research copy deleted without a curve")
 
 
@@ -149,10 +143,10 @@ def handler(event, context):
             failed.append(job["job_id"])
     for job in unpurged_dataset_jobs(db):
         try:
-            purge_dataset(db, s3, bucket, job["job_id"])
-            logger.warning(f"{job['job_id']}: finished deleting its research copy")
+            billing.purge_job_files(db, s3, bucket, job["job_id"])
+            logger.warning(f"{job['job_id']}: finished deleting its files")
         except Exception:
-            logger.exception(f"{job['job_id']}: could not finish deleting its research copy")
+            logger.exception(f"{job['job_id']}: could not finish deleting its files")
             failed.append(job["job_id"])
     try:
         expired_sessions(db)

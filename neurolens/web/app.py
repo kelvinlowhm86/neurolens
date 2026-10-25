@@ -642,12 +642,10 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
         if not billing.mark_dataset_removed(db, job["job_id"], "stopped", user_id=user_id):
             return _error("not_shared", "This video is not shared.", status=409)
         try:
-            storage.delete_job_prefixes(s3, bucket, job["job_id"])
+            billing.purge_job_files(db, s3, bucket, job["job_id"])
         except Exception:
             # The copy is marked removed, so no curve can use it; the reaper retries the files.
             logger.exception(f"Could not delete the research copy of {job['job_id']}")
-            return jsonify({"stopped": True})
-        billing.mark_dataset_purged(db, job["job_id"])
         return jsonify({"stopped": True})
 
     @app.route("/api/jobs/<job_id>/retention", methods=["POST"])
@@ -760,18 +758,10 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
         if not billing.delete_job(db, user_id, job["job_id"]):
             return _not_found()
         try:
-            storage.delete_job_prefixes(s3, bucket, job["job_id"])
+            billing.purge_job_files(db, s3, bucket, job["job_id"])
         except Exception:
-            logger.exception(f"Could not delete the research copy of {job['job_id']}")
-            return _error(
-                "delete_failed", "Could not delete this video's files. Please try again.", 500
-            )
-        keys = storage.job_keys(job["job_id"], job["object_key"])
-        if not storage.delete_keys(s3, bucket, keys):
-            return _error(
-                "delete_failed", "Could not delete this video's files. Please try again.", 500
-            )
-        billing.mark_dataset_purged(db, job["job_id"])
+            # The job is already hidden, so the user cannot retry; the reaper finishes the purge.
+            logger.exception(f"Could not delete the files of {job['job_id']}")
         return jsonify({"deleted": True})
 
     @app.route("/api/account/delete", methods=["POST"])

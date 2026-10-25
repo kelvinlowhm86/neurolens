@@ -1,8 +1,9 @@
 """M3c per-video deletion (docs/M3c_spec.md §4, §8).
 
 `DELETE /api/jobs/<job_id>`: every file gone, the job hidden from every route, its ledger intact,
-refused while active, safe to repeat, and a reported S3 error leaves the job visible. Also
-`billing.delete_job`, `list_jobs` skipping deleted jobs and `job_state` deliberately not.
+refused while active, safe to repeat, and a reported S3 error still answers success and leaves the
+purge to the reaper. Also `billing.delete_job`, `list_jobs` skipping deleted jobs and `job_state`
+deliberately not.
 """
 
 import uuid
@@ -189,14 +190,15 @@ def test_delete_with_no_files_still_marks_the_job_deleted(client, db, pg, conten
     assert pg.job(job_id)["deleted_at"] is not None
 
 
-def test_a_reported_s3_delete_error_is_500_and_marks_the_job_deleted(
+def test_a_reported_s3_delete_error_still_answers_success_and_hides_the_job(
     app_for, aws, db, pg, content_type
 ):
     job_id, key = make_job(db, content_type=content_type)
     seed_files(aws, job_id, key)
     s3 = DeleteReportsError(aws.s3)
     resp = app_for(s3_client=s3).delete(f"/api/jobs/{job_id}")
-    assert resp.status_code == 500
+    assert resp.status_code == 200
+    assert resp.get_json() == {"deleted": True}
     job = pg.job(job_id)
     assert job["deleted_at"] is not None and job["filename"] is None
     assert job["dataset_purged_at"] is None

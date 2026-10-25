@@ -8,12 +8,14 @@ reserving nothing in both cases. The CSV is named after the video. `python app.p
 start unless `AWS_ENDPOINT_URL` points at the local fake stack.
 """
 
+import importlib.util
 import json
 import os
 import subprocess
 import sys
 import urllib.parse
 import uuid
+from pathlib import Path
 
 import pytest
 from conftest import REPO_ROOT, STARTER_CENTS, WEB_USER_ID
@@ -345,6 +347,15 @@ def test_app_py_refuses_a_remote_service_endpoint_or_the_ignore_flag(tmp_path, e
     assert REFUSAL in result.stdout + result.stderr
 
 
+def load_local_stack():
+    """infra/local_stack.py is a script, not a package module: load it by path."""
+    path = Path(__file__).resolve().parents[1] / "infra" / "local_stack.py"
+    spec = importlib.util.spec_from_file_location("local_stack", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 @pytest.mark.parametrize(
     "dsn",
     [
@@ -357,14 +368,14 @@ def test_app_py_refuses_a_remote_service_endpoint_or_the_ignore_flag(tmp_path, e
     ids=["remote_host", "remote_ip", "host_parameter", "hostaddr_parameter", "both_parameters"],
 )
 def test_local_stack_refuses_a_non_local_or_host_parameter_dsn(dsn):
-    from infra import local_stack
+    local_stack = load_local_stack()
 
     with pytest.raises(SystemExit):
         local_stack._local_dsn(dsn)
 
 
 def test_local_stack_child_environment_holds_no_inherited_aws_variable(monkeypatch, tmp_path):
-    from infra import local_stack
+    local_stack = load_local_stack()
 
     monkeypatch.setattr(os, "environ", dict(os.environ))
     monkeypatch.setenv("AWS_ENDPOINT_URL_S3", "https://s3.us-east-1.amazonaws.com")
