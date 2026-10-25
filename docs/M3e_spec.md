@@ -246,7 +246,7 @@ The same rules as the old `verify` (length limit first, then record the duration
   - the M3a Lambda role also reads `dataset/*` (`s3:GetObject`): the reaper's 60-day clean-up checks for `retention.csv`, and without read rights S3 answers 403, not 404;
   - `gpu_guard`: §6c's permissions, the Data API and the database secret, its logs;
 - the lifecycle rules: `sagemaker-output/` 1 day, `build/` 7 days;
-- the container's log group `/aws/sagemaker/Endpoints/neurolens` with 14-day retention (its lines carry user ids and object keys). SageMaker created it on day B, so Terraform takes it over with an `import` block, which is deleted right after the first apply that imports it (an import block fails in an account without the group, such as a fresh deploy). The endpoint depends on the group, so on a fresh deploy Terraform creates it before SageMaker could;
+- the container's log group `/aws/sagemaker/Endpoints/neurolens` with 14-day retention (its lines carry user ids and object keys). The endpoint depends on the group, so Terraform creates it before SageMaker could;
 - on the jobs queue: `delay_seconds` 15 and visibility 1080 s (§3); the dispatcher's timeout 180 s;
 
 **Deleted:**

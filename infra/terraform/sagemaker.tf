@@ -210,13 +210,7 @@ resource "awscc_sagemaker_endpoint_config" "main" {
   }
 }
 
-# SageMaker created this group on day B; the import block takes it over instead of replacing it
-# (its lines carry user ids and object keys, so they are kept 14 days). Delete this block right
-# after the first apply that imports the group.
-import {
-  to = aws_cloudwatch_log_group.sagemaker_endpoint
-  id = "/aws/sagemaker/Endpoints/neurolens"
-}
+# The container's log group: its lines carry user ids and object keys, so they are kept 14 days.
 
 resource "aws_cloudwatch_log_group" "sagemaker_endpoint" {
   name              = "/aws/sagemaker/Endpoints/neurolens"
