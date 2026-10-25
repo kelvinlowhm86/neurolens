@@ -24,19 +24,18 @@ varying vec3 vNormal;
 varying vec3 vView;
 varying float vActivity;
 void main() {
-  vec3 n = normalize(vNormal);
+  vec3 n = normalize(vNormal), v = normalize(vView);
   vec3 key = normalize(vec3(.35, .45, .9));
   float d = max(0., dot(n, key));
-  float rim = pow(1. - max(0., dot(n, normalize(vView))), 3.);
-  // Trailer presentation emphasis: retain the exact app colour beneath this
-  // mask, but reveal only its upper response tail against the sulcal base.
-  // This fixed threshold never normalises or changes the signed predictions.
-  vec3 displayColour = mix(vec3(vBase), vColor, smoothstep(0., .30, vActivity));
-  vec3 colour = displayColour * (.48 + .52 * d);
-  float sheen = pow(max(0., dot(reflect(-key, n), normalize(vView))), 24.);
-  colour += vec3(.9, .94, 1.) * sheen * .035;
-  colour += vec3(.68, .76, .88) * rim * .085;
-  colour += vec3(1., .36, .055) * vActivity * .065;
+  float rim = pow(1. - max(0., dot(n, v)), 2.6);
+  // Trailer look: dark graphite cortex (sulcal depth kept as shading), cool rim light,
+  // and the real response tail (vActivity, from the app's fixed colour range) as emitted light.
+  vec3 colour = vec3(.17, .185, .21) * (.45 + 1.6 * (vBase - .6)) * (.45 + .85 * d);
+  float sheen = pow(max(0., dot(reflect(-key, n), v)), 28.);
+  colour += vec3(.75, .82, .95) * sheen * .18;
+  colour += vec3(.40, .50, .66) * rim * .55;
+  float glow = smoothstep(0., .10, vActivity) * (.16 + .62 * vActivity) * (.45 + .55 * d) * (.7 + .6 * (vBase - .6) / .37);
+  colour += mix(vec3(1., .36, .04), vec3(1., .62, .18), clamp(vActivity, 0., 1.)) * glow;
   gl_FragColor = vec4(colour, 1.);
 }`;
 const glowVertex = `
@@ -46,7 +45,7 @@ varying vec3 vNormal;
 varying vec3 vView;
 void main() {
  vActivity = activity;
- vec4 mv = modelViewMatrix * vec4(position + normal * 1.4, 1.);
+ vec4 mv = modelViewMatrix * vec4(position + normal * 2.2, 1.);
  vNormal = normalize(normalMatrix * normal); vView = normalize(-mv.xyz);
  gl_Position = projectionMatrix * mv;
 }`;
@@ -56,7 +55,7 @@ varying vec3 vNormal;
 varying vec3 vView;
 void main() {
  float fresnel = pow(1. - abs(dot(normalize(vNormal), normalize(vView))), 2.);
- gl_FragColor = vec4(1., .40, .07, vActivity * fresnel * .15);
+ gl_FragColor = vec4(1., .40, .07, min(1., vActivity * 1.4) * (.15 + fresnel) * .3);
 }`;
 export const Cortex: React.FC<{data: BrainData; second: number; progress: number}> = ({data, second, progress}) => {
   const {camera} = useThree();
@@ -77,7 +76,7 @@ export const Cortex: React.FC<{data: BrainData; second: number; progress: number
   resources.colourAttribute.needsUpdate = true; resources.activityAttribute.needsUpdate = true;
   useLayoutEffect(() => {
     // The anatomy uses superior = Z, matching the product's OrbitControls camera.
-    const azimuth = .35 + progress * .20, distance = 432 - progress * 24;
+    const azimuth = .22 + progress * .45, distance = 470 - progress * 95;
     camera.up.set(0, 0, 1);
     camera.position.set(Math.cos(azimuth) * -distance, Math.sin(azimuth) * -distance, 165 - progress * 13);
     camera.lookAt(0, 0, 0); camera.updateMatrixWorld();
