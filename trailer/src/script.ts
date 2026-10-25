@@ -55,6 +55,7 @@ export const LABEL = {
   sameScale: 'same signed scale',
   withAudio: 'With sound',
   mutedLabel: 'On mute',
+  typical: 'typical viewing',
   seconds: 's',
   signals: SIGNAL_NAMES,
 } as const;

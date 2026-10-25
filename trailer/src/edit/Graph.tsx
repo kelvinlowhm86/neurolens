@@ -26,8 +26,10 @@ export type GraphProps = {
   comparisonDashed?: boolean;
   axes?: boolean;
   label: string;
-  marker?: {second: number; label: string};
+  marker?: {second: number; label: string; size?: number; pop?: number};
   comparisonMarker?: {second: number; label: string};
+  playhead?: number;
+  zeroLabel?: string;
   strokeWidth?: number;
   background?: boolean;
 };
@@ -49,6 +51,8 @@ export const Graph: React.FC<GraphProps> = ({
   label,
   marker,
   comparisonMarker,
+  playhead,
+  zeroLabel,
   strokeWidth = 5,
   background = false,
 }) => {
@@ -100,14 +104,29 @@ export const Graph: React.FC<GraphProps> = ({
     <path d={main} fill="none" stroke={color} strokeWidth={strokeWidth * 4} strokeOpacity=".13" strokeLinejoin="round" strokeLinecap="round" filter={`url(#glow-${uid})`} />
     <path d={main} fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinejoin="round" strokeLinecap="round" />
     {comparison && <path d={compare} fill="none" stroke={comparisonColor} strokeWidth={strokeWidth * .78} strokeDasharray={comparisonDashed ? '12 11' : undefined} strokeLinejoin="round" strokeLinecap="round" />}
+    {axes && zeroLabel && <text x={padL + 12} y={zero - 9} fill="#A0A6AF" fontSize="20" textAnchor="start" letterSpacing=".02em">{zeroLabel}</text>}
+    {playhead !== undefined && playhead >= from && playhead <= to && (() => {
+      const px = x(playhead);
+      const py = y(at(values, playhead));
+      return <g>
+        <line x1={px} x2={px} y1={padT} y2={height - padB} stroke="#ECEDEF" strokeOpacity=".28" strokeWidth="1.5" />
+        <circle cx={px} cy={py} r="6" fill={color} stroke="#0E0F11" strokeWidth="2.5" />
+      </g>;
+    })()}
     {marker && marker.second <= end + .001 && (() => {
       const px = x(marker.second);
       const py = y(at(values, marker.second));
+      const pop = Math.max(0, marker.pop ?? 1);
+      const size = marker.size ?? 24;
+      const dx = px < width * .66 ? px + size * .8 : px - size * .8;
+      const anchor = px < width * .66 ? 'start' : 'end';
       return <g>
         <line x1={px} x2={px} y1={padT} y2={height - padB} stroke="#ECEDEF" strokeOpacity=".17" />
-        <circle cx={px} cy={py} r="15" fill={color} opacity=".16" />
-        <circle cx={px} cy={py} r="6" fill={color} stroke="#0E0F11" strokeWidth="2.5" />
-        <text x={px < width * .66 ? px + 19 : px - 19} y={py - 19} fill="#ECEDEF" fontSize="24" fontWeight="500" textAnchor={px < width * .66 ? 'start' : 'end'} fontVariant="tabular-nums">{marker.label}</text>
+        <g transform={`translate(${px} ${py}) scale(${pop}) translate(${-px} ${-py})`}>
+          <circle cx={px} cy={py} r="15" fill={color} opacity=".16" />
+          <circle cx={px} cy={py} r="6" fill={color} stroke="#0E0F11" strokeWidth="2.5" />
+          <text x={dx} y={py - size * .8} fill="#ECEDEF" fontSize={size} fontWeight="500" textAnchor={anchor} fontVariant="tabular-nums">{marker.label}</text>
+        </g>
       </g>;
     })()}
     {comparisonMarker && comparison && comparisonMarker.second <= from + (to - from) * clamp(comparisonProgress) + .001 && (() => {
