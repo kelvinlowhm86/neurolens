@@ -87,7 +87,7 @@ The same rules as the old `verify` (length limit first, then record the duration
   - The stages from `transcribing` on, the dataset copy, the claim checks before every write, the thumbnail, brain file, result and `settle_success` are unchanged (M3c §3b, M3d §5, §5b).
   - **Once the result is published, nothing refunds.** If `settle_success` raises, the handler logs `SETTLE_FAILED <job_id>` and returns `FAILED` (500) without refunding or deleting; the error handler's `finish_job` finds the result and settles (§5).
 - **Per-job temporary folder:** each invocation gets a new folder under the base temporary folder (never inside the feature cache). The body is streamed into it, and for the length of the job the process's temporary folder (`tempfile.tempdir` and `TMPDIR`) points at it, so the WAV that neuralset extracts and our `.tsv` transcript (written next to the WAV) land there too. It is deleted whole after the job, whatever the outcome, so no user's audio or words stay on the instance. This is safe because one job runs at a time (§4a). The warm-up uses the same folder rule. After each job the container logs the free space on that disk and the number of entries left in the base temporary folder besides the feature cache (expected: none).
-- **Claim keep-alive:** `ClaimKeepAlive(on_beat, interval_seconds, max_seconds)`. It is the old `Heartbeat` minus SQS: it calls `billing.touch` every `worker.heartbeat_seconds` (50) and stops after `worker.max_job_minutes` (now **55**), logging an error and then calling `on_overrun` (`ClaimKeepAlive(on_beat, interval_seconds, max_seconds, on_overrun)`). In the container `on_overrun` ends the process (`os._exit(1)`): a Python thread stuck in the model cannot be stopped, and while it runs it holds the busy lock, so every later job sent to that instance would be refused with 503 and refunded untried. Ending the process fails the request, SageMaker replaces the unhealthy container, the claim goes stale within 90 s and the error handler refunds the job. A beat whose `touch` returns False (the claim is lost) logs a warning and stops the keep-alive; the next stage check ends the job as `LOST_CLAIM`.
+- **Claim keep-alive:** `ClaimKeepAlive(on_beat, interval_seconds, max_seconds)`. It is the old `Heartbeat` minus SQS: it calls `billing.touch` every `worker.heartbeat_seconds` (50) and stops after `worker.max_job_minutes` (now **55**), logging an error and then calling `on_overrun` (`ClaimKeepAlive(on_beat, interval_seconds, max_seconds, on_overrun)`). In the container `on_overrun` ends the process (`os._exit(1)`): a Python thread stuck in the model cannot be stopped, and while it runs it holds the busy lock, so every later job sent to that instance would be refused with 503 and refunded untried. Ending the process fails the request, SageMaker replaces the unhealthy container, the claim goes stale within 90 s and the error handler refunds the job. A beat whose `touch` returns False (the claim is lost) logs a warning and stops renewing the claim, but the `max_job_minutes` deadline and `on_overrun` still apply (a model that hangs after a lost claim must still end the process); the next stage check ends the job as `LOST_CLAIM`.
 
 ### 4c. Failure inside the container
 - Any exception after the claim and before the result is published: `issue_refund(db, job_id, "processing_failed", _error_text(err), attempt=attempt)`. **Only if it returned True**, delete every file of the job (`storage.job_keys`). Answer 500.
@@ -246,7 +246,7 @@ The same rules as the old `verify` (length limit first, then record the duration
   - the M3a Lambda role also reads `dataset/*` (`s3:GetObject`): the reaper's 60-day clean-up checks for `retention.csv`, and without read rights S3 answers 403, not 404;
   - `gpu_guard`: §6c's permissions, the Data API and the database secret, its logs;
 - the lifecycle rules: `sagemaker-output/` 1 day, `build/` 7 days;
-- the container's log group `/aws/sagemaker/Endpoints/neurolens` with 14-day retention (its lines carry user ids and object keys). SageMaker created it on day B, so Terraform takes it over with an `import` block;
+- the container's log group `/aws/sagemaker/Endpoints/neurolens` with 14-day retention (its lines carry user ids and object keys). SageMaker created it on day B, so Terraform takes it over with an `import` block, which is deleted right after the first apply that imports it (an import block fails in an account without the group, such as a fresh deploy). The endpoint depends on the group, so on a fresh deploy Terraform creates it before SageMaker could;
 - on the jobs queue: `delay_seconds` 15 and visibility 1080 s (§3); the dispatcher's timeout 180 s;
 
 **Deleted:**
@@ -264,6 +264,7 @@ The same rules as the old `verify` (length limit first, then record the duration
 - **Application Auto Scaling cannot be scoped by name** (a scalable target's ARN ends in a random id, and policies and scheduled actions have no ARN of their own). The scalable target is tagged `Project=neurolens`; changing actions are allowed on `*` only with `aws:ResourceTag/Project=neurolens` (`aws:RequestTag/Project=neurolens` when registering a new one), checked against the AWS Service Authorization Reference; describes are on `*`;
 - the service-linked role allowed for scaling is `sagemaker.application-autoscaling.amazonaws.com` (`AWSServiceRoleForApplicationAutoScaling_SageMakerEndpoint`);
 - the role boundary gains the SageMaker execution role's, the guard's and CodeBuild's actions (including the base-image pull);
+- `neurolens-deploy-services` may create, delete, set the retention of and tag the log group `/aws/sagemaker/Endpoints/neurolens` (Terraform manages it, above), as for the CodeBuild log group;
 - `neurolens-deploy-compute` loses the rights only the EC2 worker and NAT used: `ec2:GetLaunchTemplateData`, `ec2:GetConsoleOutput`, the instance-profile actions, and the route-table create/associate/delete actions. It keeps the VPC, subnet, security-group (including rule changes: Terraform removes the default egress rule), tag and describe actions, and `iam:ListInstanceProfilesForRole` (read-only: Terraform calls it before deleting any role, so teardown needs it).
 
 ## 10. Scripts, experiments and records
@@ -271,8 +272,8 @@ The same rules as the old `verify` (length limit first, then record the duration
 - **Boot record:** at start-up the container writes `experiments/boots/<host>-<start time>.json` with `container_start_utc`, `model_loaded_utc`, `warmup_done_utc` and `ready_utc`. Never fatal.
 - **`experiments/cold_start.py`:** one row per scale-out, joining Application Auto Scaling's scaling activities (`describe_scaling_activities`), the boot records, and the first job's `transcribing` start.
 - **`experiments/export_cloudwatch.py`:** the series become `ApproximateBacklogSize` and the instance count (`CPUUtilization` sample count, AWS's documented method).
-- **`experiments/finish_run.py`:** `--ami-id` becomes `--image-digest`, and the manifest's `code_revision` is that digest (it identifies the code exactly; nothing reads S3).
-- **`experiments/cold_start.py`:** the `instance_type` column comes from the run manifest's `environment.instance_type` (the boot record does not know it).
+- **`experiments/finish_run.py`:** `--ami-id` becomes `--image-digest`, and the manifest's `code_revision` is that digest (it identifies the code exactly; nothing reads S3). `experiment_runs.write_manifest` requires `revision`; the guessing `code_revision()` (REVISION file or the laptop's git) is deleted.
+- **`experiments/cold_start.py`:** the `instance_type` column comes from a required `--instance-type` (the boot record does not know it, and the manifest can only be written after `cold_start.csv`).
 - **Unchanged:** `latency_run.py` and `latency_breakdown.py` (they use the web API and job stages).
 - **`infra/check_aurora.py`** (the one check of the Data API's value formats): runs `verify_queued` instead of `verify`, drops `release_for_retry`, and checks the types of migration 005's columns too.
 - **Docs:**
@@ -300,7 +301,7 @@ The same rules as the old `verify` (length limit first, then record the duration
   - `settle_success` that commits and then raises leaves the job `done`, charged once, with every result file kept;
   - `settle_success` that raises without committing leaves the job `processing` with every result file kept, no refund, logs `SETTLE_FAILED`, returns `FAILED`; `finish_job` then charges it once;
   - the job's temporary folder (video, a WAV and a `.tsv` the fake job writes through `tempfile`) is gone after a done, a failed and a rejected job, and the feature cache is untouched;
-  - a keep-alive beat that returns False stops the beats;
+  - a keep-alive beat that returns False stops the beats, and `on_overrun` still runs at `max_seconds`;
   - `max_job_minutes * 60` is less than the invocation timeout (3600);
   - `not_verified` is refunded;
   - the body is streamed to disk;
