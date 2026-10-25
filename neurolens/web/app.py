@@ -88,6 +88,13 @@ def _old_result():
     )
 
 
+def _not_signed_in():
+    """The one not-signed-in answer: clear the session and its hint cookie (M3c §5)."""
+    session.clear()
+    response, status = _error("not_signed_in", "Please sign in.", status=401)
+    return auth.clear_signed_in_hint(response), status
+
+
 def _delete_curve_files(s3, bucket, keys, job_id):
     """Remove the two snapshot files a refused curve upload wrote (M3f §5d)."""
     try:
@@ -219,9 +226,7 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
             return None
         user = auth.current_user()
         if user is None:
-            session.clear()
-            response, status = _error("not_signed_in", "Please sign in.", status=401)
-            return auth.clear_signed_in_hint(response), status
+            return _not_signed_in()
         if request.method == "POST" and request.content_length and not request.is_json:
             return _error("json_required", "The request body must be JSON.", status=415)
         return None
@@ -248,7 +253,11 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
 
     @app.route("/app")
     def app_page():
-        return send_from_directory(str(static_dir), "app.html")
+        page = send_from_directory(str(static_dir), "app.html")
+        # The landing page's hint follows the sliding session (M3f §6b).
+        if cognito and auth.current_user() is not None:
+            return auth.set_signed_in_hint(page)
+        return page
 
     @app.route("/healthz")
     def healthz():
@@ -410,6 +419,8 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
                 "Too many videos waiting. Try again when some finish.",
                 status=429,
             )
+        except billing.AccountDeleted:
+            return _not_signed_in()
         except billing.InsufficientCredit as err:
             return _error(
                 "insufficient_credit",
@@ -446,7 +457,13 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
             return _not_configured()
         user_id, _ = signed_in_user()
         cutoff = datetime.now(UTC) - timedelta(days=RESULT_DAYS)
-        jobs = billing.list_jobs(db, user_id, int(limit))
+        jobs = billing.list_jobs(
+            db,
+            user_id,
+            int(limit),
+            reward_cap=reward_cap,
+            reward_window_days=reward_window_days,
+        )
         rows = []
         for job in jobs:
             row = {key: value for key, value in job.items() if key != "research_consent"}
@@ -704,6 +721,7 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
         snapshot_id = str(uuid.uuid4())
         raw_key = f"dataset/{job['job_id']}/retention/{snapshot_id}.json"
         csv_key = f"dataset/{job['job_id']}/retention/{snapshot_id}.csv"
+        written = []
         try:
             s3.put_object(
                 Bucket=bucket,
@@ -711,14 +729,18 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
                 Body=text.encode(),
                 ContentType="application/json",
             )
+            written.append(raw_key)
             s3.put_object(
                 Bucket=bucket,
                 Key=csv_key,
                 Body=csv_text.encode(),
                 ContentType="text/csv",
             )
+            written.append(csv_key)
         except Exception:
             logger.exception(f"Could not store the retention report for {job['job_id']}")
+            if written:
+                _delete_curve_files(s3, bucket, written, job["job_id"])
             return _error(
                 "retention_store_failed",
                 "Could not store the report. Please try again.",
@@ -772,41 +794,21 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
 
     @app.route("/api/account/delete", methods=["POST"])
     def delete_account():
-        """Delete the caller's files, rows and Cognito logins (M3c §5)."""
+        """Mark the caller's account deleted, remove its logins, purge its files and rows
+        (M3c §5)."""
         if not cognito:
             return _not_found()
         data = request.get_json(silent=True)
         if not isinstance(data, dict) or data.get("confirm") != "DELETE":
             return _error("confirmation_required", "Type DELETE to confirm.", status=400)
-        if db is None:
+        if db is None or s3 is None or not bucket:
             return _not_configured()
         user_id, _ = signed_in_user()
-        with db.transaction() as tx:
-            jobs = tx.execute(
-                "SELECT job_id, object_key, status FROM jobs WHERE user_id = :user_id",
-                {"user_id": user_id},
-            )
-        if any(job["status"] in OPEN for job in jobs):
-            return _job_active()
-        if s3 is None or not bucket:
-            return _not_configured()
-        try:
-            for job in jobs:
-                storage.delete_job_prefixes(s3, bucket, job["job_id"])
-        except Exception:
-            logger.exception(f"Could not delete a research copy of account {user_id}")
-            return _error(
-                "delete_failed", "Could not delete this account's files. Please try again.", 500
-            )
-        keys = [key for job in jobs for key in storage.job_keys(job["job_id"], job["object_key"])]
-        if not storage.delete_keys(s3, bucket, keys):
-            return _error(
-                "delete_failed", "Could not delete this account's files. Please try again.", 500
-            )
         try:
             identities = billing.delete_account(db, user_id)
         except billing.JobActive:
             return _job_active()
+
         failed = False
         for issuer, subject in identities:
             if issuer != auth_cfg["cognito_issuer"]:
@@ -825,6 +827,21 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
                     f"COGNITO_DELETE_FAILED sub={subject} username={username}", exc_info=True
                 )
                 failed = True
+
+        with db.transaction() as tx:
+            jobs = tx.execute(
+                "SELECT job_id FROM jobs WHERE user_id = :user_id", {"user_id": user_id}
+            )
+        for job in jobs:
+            try:
+                billing.purge_job_files(db, s3, bucket, job["job_id"])
+            except Exception:
+                # The account is marked, so the reaper retries; the user cannot act on it now.
+                logger.exception(f"Could not delete a research copy of account {user_id}")
+        try:
+            billing.remove_deleted_account(db, user_id)
+        except Exception:
+            logger.exception(f"Could not remove the rows of account {user_id}; the reaper retries")
         session.clear()
         if failed:
             response, status = _error(

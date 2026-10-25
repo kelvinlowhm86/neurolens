@@ -3,8 +3,9 @@
 Backstop for a lost GPU notification: a job still open four hours after creation is settled if
 its result exists, else refunded ``deadline_passed``. Every run also retries the file deletes of
 recently failed jobs, removes shared copies that still have no retention curve (the limit comes
-from config.json), finishes purging copies already marked removed or deleted, and deletes expired
-sign-in sessions.
+from config.json), finishes purging copies already marked removed or deleted, finishes deleting
+marked accounts, deletes snapshots past the S3 lifecycle's age, and deletes expired sign-in
+sessions.
 """
 
 import logging
@@ -17,6 +18,8 @@ logger = logging.getLogger(__name__)
 DEADLINE_S = 4 * 60 * 60
 HEARTBEAT_STALE_S = 10 * 60
 FAILED_RETRY_S = 2 * 24 * 60 * 60
+# Matches the dataset/ and academic/ S3 lifecycle rule (M3f §5c).
+SNAPSHOT_RETENTION_DAYS = 1095
 
 
 def stuck_jobs(db):
@@ -74,6 +77,22 @@ def expired_sessions(db):
             "DELETE FROM sessions WHERE last_seen_at < now() "
             "- make_interval(days => CAST(:days AS integer))",
             {"days": billing.SESSION_DAYS},
+        )
+
+
+def deleted_accounts(db):
+    """The users whose account delete has marked but not yet removed (M3c §5)."""
+    with db.transaction() as tx:
+        return tx.execute("SELECT user_id FROM users WHERE deleted_at IS NOT NULL")
+
+
+def expired_snapshots(db):
+    """Delete curve snapshots past the S3 lifecycle's age (M3f §5c)."""
+    with db.transaction() as tx:
+        tx.execute(
+            "DELETE FROM retention_snapshots WHERE added_at < now() "
+            "- make_interval(days => CAST(:days AS integer))",
+            {"days": SNAPSHOT_RETENTION_DAYS},
         )
 
 
@@ -148,6 +167,18 @@ def handler(event, context):
         except Exception:
             logger.exception(f"{job['job_id']}: could not finish deleting its files")
             failed.append(job["job_id"])
+    for user in deleted_accounts(db):
+        try:
+            if billing.remove_deleted_account(db, user["user_id"]):
+                logger.warning(f"{user['user_id']}: finished deleting its account")
+        except Exception:
+            logger.exception(f"{user['user_id']}: could not finish deleting its account")
+            failed.append(user["user_id"])
+    try:
+        expired_snapshots(db)
+    except Exception:
+        logger.exception("could not delete expired snapshots")
+        failed.append("snapshots")
     try:
         expired_sessions(db)
     except Exception:

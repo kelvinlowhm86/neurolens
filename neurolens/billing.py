@@ -34,6 +34,9 @@ STALE_AFTER_S = 90
 CONSENT_VERSION = "2026-10-25"
 # A session row older than this (by its last use) no longer signs anybody in (M3f §6b).
 SESSION_DAYS = 30
+# The reward preview's defaults when a caller does not supply config.json's research limits.
+DEFAULT_REWARD_CAP = 5
+DEFAULT_REWARD_WINDOW_DAYS = 30
 
 CURVE_REMOVED_MESSAGES = {
     "stopped": "You stopped sharing this video.",
@@ -50,6 +53,10 @@ class InsufficientCredit(Exception):
 
 class JobActive(Exception):
     """A job is queued or processing, so deleting it (or its account) is refused."""
+
+
+class AccountDeleted(Exception):
+    """The account has been marked deleted, so it can no longer start work (M3c §5)."""
 
 
 class TooManyWaiting(Exception):
@@ -247,23 +254,53 @@ def grant_credit(db, email, cents):
     return user_id
 
 
-def list_jobs(db, user_id, limit):
+def _reward_eligible(tx, user_id, reward_cap, reward_window_days):
+    """The reward conditions that belong to the user, not the job (M3f §5d): the account has
+    had credit beyond the starter, and has fewer than `reward_cap` rewards in the window. Shared
+    by `add_curve` and `list_jobs`, so the preview cannot drift from the payment."""
+    funded = tx.execute(
+        "SELECT 1 AS present FROM ledger WHERE user_id = :user_id "
+        "AND (kind = :grant OR kind = :topup) LIMIT 1",
+        {"user_id": user_id, "grant": "grant", "topup": "test_topup"},
+    )
+    if not funded:
+        return False
+    recent = tx.execute(
+        "SELECT count(*) AS n FROM ledger WHERE user_id = :user_id "
+        "AND kind = :kind AND created_at > now() - "
+        "make_interval(days => CAST(:days AS integer))",
+        {"user_id": user_id, "kind": "curve_reward", "days": reward_window_days},
+    )[0]["n"]
+    return recent < reward_cap
+
+
+def list_jobs(
+    db,
+    user_id,
+    limit,
+    *,
+    reward_cap=DEFAULT_REWARD_CAP,
+    reward_window_days=DEFAULT_REWARD_WINDOW_DAYS,
+):
     """The user's jobs, newest first, at most `limit` (M3b §4a, M3f §3, §5d).
 
     Deleted and cancelled jobs are left out. `claimed_at` is UTC text; `cancellable` marks a
-    queued job the dispatcher has not priced yet (M3e §8). For a shared job, `sharing` is true
-    while its research copy is present, `curve_count` is its stored curves, and
-    `curve_reward_cents` is what a valid curve would return now (0 when it cannot).
+    queued job the dispatcher has not priced yet (M3e §8). For a done, shared job, `sharing` is
+    true while its research copy is present, `curve_count` is its stored curves, and
+    `curve_reward_cents` is what a valid curve would return now (0 when it cannot). The user's
+    reward conditions are read once for the whole call.
     """
     with db.transaction() as tx:
+        reward_ok = _reward_eligible(tx, user_id, reward_cap, reward_window_days)
         rows = tx.execute(
             "SELECT j.job_id, j.filename, j.status, j.created_at, j.verified_duration_ms, "
             "j.captured_cents, j.error_code, j.research_consent, j.claimed_at, "
             "(j.status = :queued AND j.verified_duration_ms IS NULL) AS cancellable, "
-            "(j.research_consent AND j.dataset_removed_at IS NULL) AS sharing, "
+            "(j.status = :done AND j.research_consent "
+            "AND j.dataset_removed_at IS NULL) AS sharing, "
             "(SELECT count(*) FROM retention_snapshots s "
             "WHERE s.job_id = j.job_id) AS curve_count, "
-            "CASE WHEN j.status = :done AND j.research_consent "
+            "CASE WHEN :reward_ok AND j.status = :done AND j.research_consent "
             "AND j.dataset_removed_at IS NULL AND j.captured_cents > 0 "
             "AND j.curve_rewarded_at IS NULL AND NOT EXISTS "
             "(SELECT 1 FROM jobs other WHERE other.video_sha256 = j.video_sha256 "
@@ -278,6 +315,7 @@ def list_jobs(db, user_id, limit):
                 "done": DONE,
                 "queued": QUEUED,
                 "cancelled": "cancelled",
+                "reward_ok": reward_ok,
             },
         )
     for row in rows:
@@ -290,12 +328,14 @@ def delete_job(db, user_id, job_id):
     """Mark the user's job deleted under its row lock, keeping its row and ledger (M3c §4).
 
     This is the mark half of job deletion (M3f §5c): it happens before the files are purged, so
-    no curve can be added while the purge runs. False, changing nothing, when the job is not the
-    user's, already deleted, or still queued or processing.
+    no curve can be added while the purge runs. A copy purged earlier (Stop sharing, the 90-day
+    rule) has its `dataset_purged_at` cleared, so its own files are purged now too. False,
+    changing nothing, when the job is not the user's, already deleted, or still queued or
+    processing.
     """
     with db.transaction() as tx:
         rows = tx.execute(
-            "UPDATE jobs SET deleted_at = now(), filename = NULL "
+            "UPDATE jobs SET deleted_at = now(), filename = NULL, dataset_purged_at = NULL "
             "WHERE job_id = CAST(:job_id AS uuid) AND user_id = :user_id "
             "AND deleted_at IS NULL AND status NOT IN (:queued, :processing) RETURNING job_id",
             {
@@ -311,8 +351,9 @@ def delete_job(db, user_id, job_id):
 def purge_job_files(db, s3, bucket, job_id):
     """Delete a marked job's files, then record that they are gone (M3f §5c).
 
-    Both research prefixes always go. A deleted job's own files (upload, result, brain,
-    thumbnail) go too; a copy that was only removed keeps the user's own result.
+    Both research prefixes always go, and the job's `retention_snapshots` rows go with them. A
+    deleted job's own files (upload, result, brain, thumbnail) go too; a copy that was only
+    removed keeps the user's own result.
     """
     with db.transaction() as tx:
         rows = tx.execute(
@@ -325,6 +366,11 @@ def purge_job_files(db, s3, bucket, job_id):
         keys = storage.job_keys(job_id, job["object_key"])
         if not storage.delete_keys(s3, bucket, keys):
             raise RuntimeError(f"{job_id}: S3 reported a failed delete")
+    with db.transaction() as tx:
+        tx.execute(
+            "DELETE FROM retention_snapshots WHERE job_id = CAST(:job_id AS uuid)",
+            {"job_id": job_id},
+        )
     mark_dataset_purged(db, job_id)
 
 
@@ -382,12 +428,14 @@ def curve_exists(db, curve_sha256):
 
 
 def delete_account(db, user_id):
-    """Delete all of a user's rows and return the deleted `(issuer, subject)` identities
+    """Mark a user's account and jobs deleted and return its `(issuer, subject)` identities
     (M3c §5). Refuses with JobActive while any of their jobs is queued or processing.
 
     Lock order: every caller takes the balance row before job rows. Here the balance row is
-    locked first, job statuses are read without locking, and the rows are deleted after the
-    route has removed the files (M3f §5c), so no row is left to retry from.
+    locked first, so a racing `reserve` either wins before the mark or is refused after it. The
+    email is replaced at once, and the sessions and identities are gone, so every tab is signed
+    out and signing in again makes a new, empty account. `remove_deleted_account` deletes the
+    rows once every job's files are purged (M3f §5c).
     """
     with db.transaction() as tx:
         locked = tx.execute(
@@ -403,16 +451,52 @@ def delete_account(db, user_id):
         )
         if active:
             raise JobActive(f"user {user_id!r} has an active job")
+        tx.execute(
+            "UPDATE jobs SET deleted_at = now(), filename = NULL, dataset_purged_at = NULL "
+            "WHERE user_id = :user_id",
+            {"user_id": user_id},
+        )
         tx.execute("DELETE FROM sessions WHERE user_id = :user_id", {"user_id": user_id})
-        tx.execute("DELETE FROM ledger WHERE user_id = :user_id", {"user_id": user_id})
-        tx.execute("DELETE FROM jobs WHERE user_id = :user_id", {"user_id": user_id})
-        tx.execute("DELETE FROM balances WHERE user_id = :user_id", {"user_id": user_id})
         identities = tx.execute(
             "DELETE FROM identities WHERE user_id = :user_id RETURNING issuer, subject",
             {"user_id": user_id},
         )
-        tx.execute("DELETE FROM users WHERE user_id = :user_id", {"user_id": user_id})
+        tx.execute(
+            "UPDATE users SET deleted_at = now(), email = :email WHERE user_id = :user_id",
+            {"user_id": user_id, "email": f"deleted:{user_id}"},
+        )
     return [(row["issuer"], row["subject"]) for row in identities]
+
+
+def remove_deleted_account(db, user_id):
+    """Delete a marked account's rows once every job's files are gone (M3c §5, M3f §5c).
+
+    Only when the user has `deleted_at` and every job has `dataset_purged_at`; otherwise change
+    nothing and return False. Credit is free, so no financial record is kept. Locks the balance
+    row first, like every money-or-job transaction.
+    """
+    with db.transaction() as tx:
+        tx.execute(
+            "SELECT user_id FROM balances WHERE user_id = :user_id FOR UPDATE",
+            {"user_id": user_id},
+        )
+        current = tx.execute(
+            "SELECT deleted_at FROM users WHERE user_id = :user_id", {"user_id": user_id}
+        )
+        if not current or current[0]["deleted_at"] is None:
+            return False
+        pending = tx.execute(
+            "SELECT 1 AS pending FROM jobs WHERE user_id = :user_id "
+            "AND dataset_purged_at IS NULL LIMIT 1",
+            {"user_id": user_id},
+        )
+        if pending:
+            return False
+        tx.execute("DELETE FROM ledger WHERE user_id = :user_id", {"user_id": user_id})
+        tx.execute("DELETE FROM jobs WHERE user_id = :user_id", {"user_id": user_id})
+        tx.execute("DELETE FROM balances WHERE user_id = :user_id", {"user_id": user_id})
+        tx.execute("DELETE FROM users WHERE user_id = :user_id", {"user_id": user_id})
+    return True
 
 
 def get_balance(db, user_id):
@@ -456,7 +540,8 @@ def reserve(
     Raises InsufficientCredit (changing nothing) if the available credit is lower. With consent,
     the current CONSENT_VERSION and the time are stored too (M3f §5a). `max_waiting_jobs` refuses
     with TooManyWaiting when the user already has that many queued jobs (M3f §2a); the balance
-    row lock makes the count and the new job one decision per user.
+    row lock makes the count and the new job one decision per user. Raises AccountDeleted
+    (changing nothing) once the account's delete has marked it (M3c §5).
     """
     price = estimate_cost_cents(client_duration_ms / 1000)
     consent_version = CONSENT_VERSION if research_consent else None
@@ -467,6 +552,13 @@ def reserve(
         )
         if not rows:
             raise LookupError(f"no balance for user {user_id!r}: call ensure_user first")
+        deleted = tx.execute(
+            "SELECT 1 AS deleted FROM users WHERE user_id = :user_id "
+            "AND deleted_at IS NOT NULL LIMIT 1",
+            {"user_id": user_id},
+        )
+        if deleted:
+            raise AccountDeleted(f"user {user_id!r} has been deleted")
         if max_waiting_jobs is not None:
             waiting = tx.execute(
                 "SELECT count(*) AS n FROM jobs WHERE user_id = :user_id AND status = :queued",
@@ -755,18 +847,7 @@ def add_curve(
                 "LIMIT 1",
                 {"sha": job["video_sha256"]},
             )
-            funded = tx.execute(
-                "SELECT 1 AS present FROM ledger WHERE user_id = :user_id "
-                "AND (kind = :grant OR kind = :topup) LIMIT 1",
-                {"user_id": user_id, "grant": "grant", "topup": "test_topup"},
-            )
-            recent = tx.execute(
-                "SELECT count(*) AS n FROM ledger WHERE user_id = :user_id "
-                "AND kind = :kind AND created_at > now() - "
-                "make_interval(days => CAST(:days AS integer))",
-                {"user_id": user_id, "kind": "curve_reward", "days": reward_window_days},
-            )[0]["n"]
-            if not same_video and funded and recent < reward_cap:
+            if not same_video and _reward_eligible(tx, user_id, reward_cap, reward_window_days):
                 reward = job["captured_cents"]
 
         tx.execute(

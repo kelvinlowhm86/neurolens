@@ -187,6 +187,7 @@ def _dispatch_loop(sqs, queue_url, s3, sagemaker, db, cfg):
             VisibilityTimeout=1080,
         )
         for message in response.get("Messages", []):
+            failed = False
             for bucket, key in storage.parse_s3_event(message["Body"]):
                 try:
                     result = dispatcher.dispatch(
@@ -202,7 +203,10 @@ def _dispatch_loop(sqs, queue_url, s3, sagemaker, db, cfg):
                     print(f"{key}: {result}")
                 except Exception as err:  # leave the message for a retry
                     print(f"{key}: dispatch failed: {type(err).__name__}: {err}", file=sys.stderr)
-                    continue
+                    failed = True
+                    break
+            if failed:
+                continue
             sqs.delete_message(QueueUrl=queue_url, ReceiptHandle=message["ReceiptHandle"])
         time.sleep(0.2)
 

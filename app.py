@@ -27,6 +27,7 @@ def _local_endpoint(value):
 
 
 if __name__ == "__main__":
+    cfg = load_settings()
     service_endpoints = [
         value for name, value in os.environ.items() if name.startswith("AWS_ENDPOINT_URL_")
     ]
@@ -37,7 +38,6 @@ if __name__ == "__main__":
     ):
         print(LOCAL_ONLY_MESSAGE, file=sys.stderr)
         sys.exit(1)
-    cfg = load_settings()
     app = create_app(cfg=cfg)
     host, port = server_address(cfg)
     logger.info(f"Starting NeuroLens web app on http://{host}:{port}")

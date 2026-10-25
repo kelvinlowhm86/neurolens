@@ -160,8 +160,9 @@ def clear_signed_in_hint(response):
 def current_user():
     """(user_id, email) of the request's user, or None when nobody is signed in.
 
-    Cognito mode trusts only the server's session row: the token must exist there and its last
-    use must be within SESSION_DAYS. The email comes from the database, never the cookie.
+    Cognito mode trusts only the server's session row: the token must exist there, its account
+    must not be marked deleted, and its last use must be within SESSION_DAYS. The email comes
+    from the database, never the cookie.
     """
     auth = current_app.config["NEUROLENS_AUTH"]
     if auth["mode"] == "dev":
@@ -174,7 +175,8 @@ def current_user():
     with db.transaction() as tx:
         rows = tx.execute(
             "SELECT s.user_id, u.email, s.last_seen_at FROM sessions s "
-            "JOIN users u ON u.user_id = s.user_id WHERE s.session_hash = :session_hash",
+            "JOIN users u ON u.user_id = s.user_id AND u.deleted_at IS NULL "
+            "WHERE s.session_hash = :session_hash",
             {"session_hash": session_hash},
         )
     if not rows:
