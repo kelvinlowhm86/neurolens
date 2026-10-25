@@ -116,7 +116,7 @@ place in line among other users, waking the database from the landing page.
 10. **Retention on a result:** one quiet link "Add audience retention" (§5d), no box, title or
     sentence.
 11. **Privacy page and retention guide** use the app's dark look and font, plain words ("up to 31
-    days", not S3 rule wording) and the contact address from `config.json` `contact_email`.
+    days", not S3 rule wording) and the contact address joshualumzy@gmail.com as a mailto link.
 12. **Landing:** "How it works" step 2 ends "A result takes about 10 minutes."; a gap between "How it
     works" and the closing band; the sample credit only in the footer.
 13. Start-up text: "Starting up; this can take up to a minute."
