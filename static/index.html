@@ -41,24 +41,24 @@
 
   .hero { background: var(--stage); color: var(--stage-text); display: grid; grid-template-columns: minmax(320px, 0.9fr) 1.1fr; gap: 48px; padding: 56px 48px; min-height: calc(100vh - 52px); align-items: center; }
   .hero-copy { display: flex; flex-direction: column; gap: 22px; }
-  .hero-player { display: grid; grid-template-rows: minmax(0, 1fr) minmax(0, 1.25fr); gap: 12px; height: min(80vh, 760px); }
-  .hero-player.one { grid-template-rows: 1fr; }
+  /* The video keeps its own 16:9 height; the brain panel takes the rest of the column. */
+  .hero-player { display: flex; flex-direction: column; gap: 12px; height: min(80vh, 760px); }
 
-  .video-box { position: relative; background: #000; border-radius: 6px; overflow: hidden; aspect-ratio: 16 / 9; }
+  .video-box { position: relative; background: #000; border-radius: 6px; overflow: hidden; aspect-ratio: 16 / 9; flex: none; }
   .video-box video { width: 100%; height: 100%; display: block; object-fit: cover; cursor: pointer; }
   .sound-toggle { position: absolute; right: 12px; bottom: 12px; width: 34px; height: 34px; border: 0; border-radius: 50%; background: var(--ink); color: var(--paper); display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 2px 8px rgba(0, 0, 0, .35); }
   .sound-toggle:hover { background: #fff; }
   .sound-toggle svg { width: 16px; height: 16px; display: block; }
-  .brain-box { position: relative; background: #15161A; border-radius: 6px; overflow: hidden; min-height: 200px; }
+  .brain-box { position: relative; background: #15161A; border-radius: 6px; overflow: hidden; flex: 1; min-height: 0; }
   .brain-box canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
   .brain-message { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 20px; text-align: center; font-size: 13px; color: var(--stage-muted); }
   .brain-legend { position: absolute; left: 14px; bottom: 12px; display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--stage-muted); pointer-events: none; }
   .brain-legend i { width: 86px; height: 6px; border-radius: 3px; background: linear-gradient(90deg, #D9DCE1, #800000 10%, #E61A0A 40%, #FF800A 66%, #FFD926 88%, #FFFFD9); }
   .brain-time { position: absolute; right: 14px; top: 12px; font: 600 13px var(--display); color: var(--stage-muted); font-variant-numeric: tabular-nums; }
   .brain-hint { position: absolute; right: 14px; bottom: 12px; font-size: 11px; color: var(--stage-muted); pointer-events: none; }
-  .coming-soon { background: var(--stage-2); border: 1px solid var(--stage-rule); border-radius: 6px; display: flex; align-items: center; justify-content: center; min-height: 300px; padding: 28px; text-align: center; color: var(--stage-muted); font-size: 15px; }
+  .coming-soon { background: var(--stage-2); border: 1px solid var(--stage-rule); border-radius: 6px; display: flex; align-items: center; justify-content: center; flex: 1; min-height: 300px; padding: 28px; text-align: center; color: var(--stage-muted); font-size: 15px; }
 
-  .how { max-width: 1120px; margin: 0 auto; padding: 72px 48px; background: var(--surface); border-radius: 18px; display: grid; grid-template-columns: 260px 1fr; gap: 48px; }
+  .how { max-width: 1120px; margin: 0 auto 24px; padding: 72px 48px; background: var(--surface); border-radius: 18px; display: grid; grid-template-columns: 260px 1fr; gap: 48px; }
   .steps { list-style: none; display: grid; gap: 28px; grid-template-columns: repeat(3, 1fr); }
   .steps li { counter-increment: step; }
   .steps { counter-reset: step; }
@@ -73,8 +73,8 @@
   @media (max-width: 860px) {
     .bar { padding: 0 16px; }
     .hero { grid-template-columns: 1fr; padding: 32px 16px; gap: 28px; min-height: 0; }
-    .hero-player { height: auto; grid-template-rows: auto 300px; }
-    .hero-player.one { grid-template-rows: 1fr; }
+    .hero-player { height: auto; }
+    .brain-box { min-height: 300px; }
     .video-box { aspect-ratio: 16 / 9; }
     .how { grid-template-columns: 1fr; padding: 48px 16px; gap: 24px; }
     .steps { grid-template-columns: 1fr; }
@@ -98,7 +98,6 @@
         <a class="btn-white explore" href="/app">Explore samples</a>
         <a class="btn-line" id="heroSignIn" href="/login">Sign in to upload</a>
       </div>
-      <p class="credit" id="heroCredit" hidden></p>
     </div>
     <div class="hero-player" id="heroPlayer">
       <div class="video-box" id="videoBox" hidden>
@@ -126,7 +125,7 @@
       </li>
       <li>
         <h3>A brain model predicts the response</h3>
-        <p>TRIBE v2, a research model from Meta trained on brain scans of people watching films, estimates activity at 20,484 points across the brain for every second.</p>
+        <p>TRIBE v2, a research model from Meta trained on brain scans of people watching films, estimates activity at 20,484 points across the brain for every second. A result takes about 10 minutes.</p>
       </li>
       <li>
         <h3>Read the report</h3>
@@ -172,7 +171,6 @@ const videoBox = $('videoBox');
 const brainBox = $('brainBox');
 const brainSecond = $('brainSecond');
 const comingSoon = $('comingSoon');
-const heroCredit = $('heroCredit');
 const footerCredit = $('footerCredit');
 const heroVideo = $('heroVideo');
 const soundToggle = $('soundToggle');
@@ -200,18 +198,14 @@ async function loadLimit() {
 }
 
 function showComingSoon() {
-  player.classList.add('one');
   videoBox.hidden = true;
   brainBox.hidden = true;
   comingSoon.hidden = false;
-  heroCredit.hidden = true;
   footerCredit.hidden = true;
 }
 
 function showAttribution(text) {
   if (!text) return;
-  heroCredit.textContent = text;
-  heroCredit.hidden = false;
   footerCredit.textContent = text;
   footerCredit.hidden = false;
 }
@@ -255,7 +249,6 @@ async function loadHero() {
     showComingSoon();
     return;
   }
-  player.classList.remove('one');
   comingSoon.hidden = true;
   videoBox.hidden = false;
   brainBox.hidden = false;

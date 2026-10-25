@@ -228,6 +228,7 @@ export function createBrainView(host, message) {
     resize();
     applyState();
     renderer.setAnimationLoop(() => {
+      if (!host.clientWidth) return;  // the player is hidden; stop drawing until it shows again
       controls.update();
       renderer.render(scene, camera);
     });

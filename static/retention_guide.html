@@ -4,16 +4,19 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>NeuroLens — How to get your audience-retention report</title>
+<link rel="icon" href="data:,">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-  :root { --bg: #FAFBFC; --text: #0F1629; --muted: #475569; --accent: #0D7C8F; --border: #E2E8F0; }
+  :root { --bg: #0E0F11; --text: #ECEDEF; --muted: #A0A6AF; --ink-2: #B4B9C0; --rule: #24262B; --heat: #FF8A2A; }
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.6 -apple-system, "Plus Jakarta Sans", sans-serif; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.6 'Geist', system-ui, sans-serif; letter-spacing: -0.003em; }
   main { max-width: 680px; margin: 0 auto; padding: 32px 16px 64px; }
-  h1 { font-size: 24px; margin: 0 0 4px; }
-  h2 { font-size: 16px; margin: 28px 0 6px; }
-  p, li { color: var(--muted); }
+  h1 { font: 600 24px/1.2 'Geist', system-ui, sans-serif; letter-spacing: -0.02em; margin: 0 0 4px; }
+  h2 { font: 600 16px/1.3 'Geist', system-ui, sans-serif; margin: 28px 0 6px; }
+  p, li { color: var(--ink-2); }
   ul, ol { padding-left: 20px; }
-  a { color: var(--accent); }
+  a { color: var(--heat); }
   code { font-size: 13px; color: var(--text); }
   .updated { font-size: 13px; color: var(--muted); }
 </style>
@@ -23,8 +26,9 @@
   <h1>How to get your audience-retention report</h1>
 
   <p>YouTube keeps a real audience-retention curve for each of your own videos: how much of the
-  audience is still watching at each point. You can add that curve to the brain response analysis
-  of a finished video in NeuroLens, if you agreed to keep the video for research.</p>
+  audience is still watching at each point. You can add that curve to the analysis of a finished
+  video in NeuroLens that you share for research. A valid curve makes that video's analysis
+  free.</p>
 
   <h2>Get the report</h2>
   <ol>
@@ -46,14 +50,14 @@
     </li>
     <li>Run it.</li>
     <li>Copy the whole response and save it as a text file ending in <code>.json</code>.</li>
-    <li>In NeuroLens, open the finished video and click "Add real audience retention".</li>
+    <li>In NeuroLens, click "Add audience retention" on the finished video's row or result.</li>
   </ol>
 
   <h2>Things to know</h2>
   <ul>
     <li>Only the channel owner can get this report.</li>
     <li>One video per request.</li>
-    <li>Leave out any other dimensions. Adding one gives repeated time points, and the upload
+    <li>Leave out any other dimensions. Adding one gives repeated time points, and the form
     refuses them.</li>
     <li>A response with no rows means YouTube has no data yet for the video. This happens with
     new videos or ones with very few views.</li>
@@ -62,6 +66,8 @@
 
   <p class="updated">Written from the YouTube Analytics API documentation as of 15 October 2026;
   Google may change its tools.</p>
+
+  <p>Questions? Email <a href="mailto:joshualumzy@gmail.com">joshualumzy@gmail.com</a>.</p>
 
   <p><a href="/">Back to NeuroLens</a></p>
 </main>

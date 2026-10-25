@@ -4,23 +4,27 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>NeuroLens — Privacy policy</title>
+<link rel="icon" href="data:,">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-  :root { --bg: #FAFBFC; --text: #0F1629; --muted: #475569; --accent: #0D7C8F; --border: #E2E8F0; }
+  :root { --bg: #0E0F11; --text: #ECEDEF; --muted: #A0A6AF; --ink-2: #B4B9C0; --rule: #24262B; --heat: #FF8A2A; }
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.6 -apple-system, "Plus Jakarta Sans", sans-serif; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.6 'Geist', system-ui, sans-serif; letter-spacing: -0.003em; }
   main { max-width: 680px; margin: 0 auto; padding: 32px 16px 64px; }
-  h1 { font-size: 24px; margin: 0 0 4px; }
-  h2 { font-size: 16px; margin: 28px 0 6px; }
-  p, li { color: var(--muted); }
-  ul { padding-left: 20px; }
-  a { color: var(--accent); }
+  h1 { font: 600 24px/1.2 'Geist', system-ui, sans-serif; letter-spacing: -0.02em; margin: 0 0 4px; }
+  h2 { font: 600 16px/1.3 'Geist', system-ui, sans-serif; margin: 28px 0 6px; }
+  p, li { color: var(--ink-2); }
+  ul, ol { padding-left: 20px; }
+  a { color: var(--heat); }
+  strong { color: var(--text); }
   .updated { font-size: 13px; color: var(--muted); }
 </style>
 </head>
 <body>
 <main>
   <h1>NeuroLens privacy policy</h1>
-  <p class="updated">Last updated: 21 October 2026</p>
+  <p class="updated">Last updated: 25 October 2026</p>
 
   <p>NeuroLens is a university course project. It predicts the brain response to a video and
   shows the main brain response chart, the strongest and weakest moments, and a 3D brain map.
@@ -34,51 +38,60 @@
     <li><strong>A job record</strong> for each upload: the file name, when it ran, how long the
     video was and what it cost in credit.</li>
     <li><strong>A small picture from each video</strong> (its thumbnail, shown in History). It is
-    kept and deleted with the result and is not part of the research copy.</li>
-    <li><strong>Your consent choice</strong> for each upload: whether you agreed to keep it for
-    future research. The box is unticked by default and the analysis works either way.</li>
-    <li><strong>A real audience-retention report</strong>, if you choose to add one to a video you
-    consented to keep.</li>
+    kept with the result and is not part of any research copy.</li>
+    <li><strong>Your sharing choice</strong> for each upload: whether you agreed to share it for
+    research (below). The box is unticked by default and the analysis works either way.</li>
+    <li><strong>A real audience-retention curve</strong>, if you choose to add one to a video you
+    share, together with the few details the form asks for (rough views, when it was published,
+    whether it was promoted with ads).</li>
   </ul>
-  <p>The 3D brain data is part of the analysis result and, for a video you consent to keep, of
-  the dataset copy. Deleting a video removes both.</p>
+  <p>The 3D brain data is part of the analysis result. Deleting a video removes it.</p>
   <p>We do not receive your Google password or your contacts. If you sign in with Google, we
   receive only your email address and whether Google has verified it.</p>
 
   <h2>How long we keep it</h2>
   <ul>
-    <li>Uploaded videos that are not kept for research are deleted automatically after 30 days
-    (S3 rounds to midnight UTC, so up to 31 days). They are deleted at once when the job is
+    <li>Uploaded videos that are not shared for research are deleted automatically after 30 days
+    (up to 31 days, since deletion happens overnight). They are deleted at once when the job is
     cancelled or refunded.</li>
     <li>Results are deleted automatically after 30 days.</li>
-    <li>A video you consented to keep, its analysis and any real audience-retention report you add
-    are kept for up to 12 months, then deleted automatically. A consented copy without an
-    audience-retention curve is deleted 60 days after upload. They are used only to help build a
-    future model linking brain response to real audience behaviour.</li>
+    <li>A video you share for research, and any retention curve you add, are kept for up to 3
+    years. If no curve is added, the research copy is deleted 90 days after upload.</li>
     <li>Your email address and job records stay until you delete your account, or until the
     project is taken down.</li>
   </ul>
 
-  <h2 id="research">Consent for research</h2>
-  <p>Each upload has a separate, optional consent box. If you tick it, you confirm that you own
-  the rights to the video and agree that NeuroLens may keep the video and its analysis for up to
-  12 months to help build a future model linking brain response to real audience behaviour. We
-  ask for the video's real audience-retention report once it is published (<a
-  href="/static/retention_guide.html">how to get it</a>); without that report, the research copy
-  is deleted 60 days after upload. If you leave the box unticked, your video is analysed exactly
-  the same way and is not kept beyond the normal retention periods above.</p>
+  <h2 id="research">Sharing a video for research</h2>
+  <p>Each upload has a separate, optional box: "Share for research and to train NeuroLens's own
+  models. I own the rights to it." Sharing is never required and changes nothing about the
+  analysis — the same prediction runs either way.</p>
+  <p>If you share a video, we keep the video itself, its file details, and any audience-retention
+  curve you add with the details given alongside it. We use them to study how what is on screen
+  relates to how audiences watch, and to build and test NeuroLens's own engagement models, which
+  may later be offered as a paid product — with notice first. The models are trained on videos and
+  real audience data, never on NeuroLens's brain predictions. Nothing is published, sold or given
+  outside the team; anything shown publicly is only statistics. Everything is stored with Amazon
+  Web Services in the United States.</p>
+  <p>The research copy is kept for up to 3 years, or deleted 90 days after upload if no curve was
+  added. "Stop sharing" in the video's menu, deleting the video, or deleting your account removes
+  the research copy at once. A model trained before that is not retrained, but your data is not
+  used again.</p>
+  <p>By sharing, you confirm that you own the rights to the video and that any identifiable people
+  in it agreed to appear. You keep all rights to the video and give us a free, non-exclusive
+  licence to use it for the purposes above. As a thank-you, adding a valid audience-retention
+  curve makes that video's analysis free.</p>
 
   <h2>Who can see it</h2>
   <p>Only you, and the NeuroLens team, can see your videos and results. We do not sell or share
-  them, and we do not use them for advertising. Everything is stored with Amazon Web Services in
-  the United States (us-east-1). Sign-in is handled by Amazon Cognito.</p>
+  them, and we do not use them for advertising. Sign-in is handled by Amazon Cognito.</p>
 
   <h2>Deleting your data</h2>
   <p>You can delete any analysis from your history on the main page: this removes its video,
-  result (including the 3D brain data) and dataset files. You can also delete your whole account there by typing DELETE to
-  confirm; this removes every video, analysis and row we hold, and your NeuroLens login. A
-  deletion is refused while one of your videos is still queued or processing. To ask what we
-  hold about you, email the team at the contact address shown on the Google sign-in screen.</p>
+  result (including the 3D brain data) and any research copy. You can also delete your whole
+  account there by typing DELETE to confirm; this removes every video, analysis and row we hold,
+  and your NeuroLens login. A deletion is refused while one of your videos is still queued or
+  processing. To ask what we hold about you, email
+  <a href="mailto:joshualumzy@gmail.com">joshualumzy@gmail.com</a>.</p>
 
   <p><a href="/">Back to NeuroLens</a></p>
 </main>

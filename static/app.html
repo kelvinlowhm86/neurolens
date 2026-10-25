@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NeuroLens — Video Brain Response Analysis</title>
+<title>NeuroLens</title>
 <link rel="icon" href="data:,">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&display=swap" rel="stylesheet">
@@ -49,11 +49,7 @@
   .D .report { background: var(--paper); padding: 22px 30px 16px; display: flex; flex-direction: column; gap: 18px; min-height: 0; overflow: hidden; }
 
   .chooser { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; scrollbar-width: thin; }
-  .chooser-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--stage-rule); flex: none; }
-  .chooser-tab { background: none; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; color: var(--stage-muted); padding: 8px 12px; font-size: 13px; font-weight: 500; }
-  .chooser-tab:hover { color: var(--stage-text); }
-  .chooser-tab[aria-selected="true"] { color: var(--stage-text); border-bottom-color: var(--heat); }
-  .tab-panel { display: flex; flex-direction: column; gap: 12px; }
+  .chooser-panel { display: flex; flex-direction: column; gap: 12px; }
   .box { background: var(--stage-2); border: 1px solid var(--stage-rule); border-radius: 6px; padding: 14px 16px; display: none; flex-direction: column; gap: 8px; }
   .box.active { display: flex; }
   .box h2 { font: 600 16px/1.25 var(--display); }
@@ -64,24 +60,39 @@
   #signedOutNote:empty { display: none; }
   .upload-zone { border: 1px dashed var(--stage-rule); border-radius: 6px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; cursor: pointer; position: relative; padding: 22px 16px; text-align: center; background: var(--stage-2); }
   .upload-zone:hover { border-color: var(--stage-muted); }
-  .upload-zone.hidden, .consent-row.hidden { display: none; }
+  .upload-zone.hidden { display: none; }
   .upload-zone .up-title { font-weight: 600; font-size: 14px; }
   .upload-zone .up-sub { font-size: 12px; color: var(--stage-muted); }
-  .upload-zone input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
-  .upload-note { font-size: 12px; color: #FCA5A5; }
-  .upload-note:empty { display: none; }
-  .upload-panel .file-name { font-weight: 600; font-size: 13px; word-break: break-all; }
-  .upload-panel .line { font-size: 12px; color: var(--stage-muted); }
-  .upload-panel .msg { font-size: 12px; color: var(--stage-muted); }
-  .upload-panel .msg.error { color: #FCA5A5; }
+  .dialog-zone.dragover, .upload-zone.dragover { border-color: var(--heat); color: var(--stage-text); }
+  .dialog-zone { border: 1px dashed var(--stage-rule); border-radius: 6px; padding: 18px 16px; text-align: center; color: var(--stage-muted); font-size: 13px; cursor: pointer; position: relative; background: var(--stage); }
+  .dialog-zone:hover { border-color: var(--stage-muted); color: var(--stage-text); }
+  .dialog-zone input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+  .batch-list { display: flex; flex-direction: column; max-height: 40vh; overflow-y: auto; scrollbar-width: thin; }
+  .batch-list:empty { display: none; }
+  .batch-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--stage-rule); font-size: 12px; }
+  .batch-row:first-child { border-top: 0; }
+  .batch-thumb { width: 64px; height: 40px; flex: none; border-radius: 5px; overflow: hidden; background: var(--stage-rule); display: flex; align-items: center; justify-content: center; color: var(--stage-muted); }
+  .batch-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .batch-main { min-width: 0; flex: 1; }
+  .batch-name { font-weight: 600; word-break: break-all; }
+  .batch-meta { color: var(--stage-muted); font-size: 11.5px; margin-top: 2px; }
+  .batch-meta.error { color: #FCA5A5; }
+  .batch-curve { background: none; border: 0; padding: 0; color: var(--stage-muted); font-size: 11.5px; text-decoration: underline; text-underline-offset: 2px; margin-top: 2px; }
+  .batch-curve:hover { color: var(--stage-text); }
+  .batch-x { width: 26px; height: 24px; flex: none; border: 1px solid var(--stage-rule); border-radius: 6px; background: none; color: var(--stage-muted); font-size: 14px; line-height: 1; }
+  .batch-x:hover { color: var(--stage-text); border-color: var(--stage-muted); }
+  .batch-total { font-size: 12.5px; color: var(--stage-text); }
+  .batch-total.error { color: #FCA5A5; }
+  .batch-signed-out { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; font-size: 13px; }
   .consent-row { display: flex; align-items: flex-start; gap: 8px; font-size: 12px; line-height: 1.45; color: var(--stage-muted); }
   .consent-row input { margin-top: 3px; flex-shrink: 0; }
   .consent-row a { color: var(--stage-text); }
   .upload-progress { display: none; height: 5px; background: var(--stage); border-radius: 3px; overflow: hidden; }
   .upload-progress.active { display: block; }
   .upload-bar { height: 100%; width: 0; background: var(--heat); transition: width .15s; }
-  .samples-section .label { font-size: 11px; font-weight: 600; color: var(--stage-muted); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 8px; }
-  .samples-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 12px; }
+  .report-empty { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: thin; }
+  .samples-section .label { font-size: 11px; font-weight: 600; color: var(--ink-3); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 10px; }
+  .samples-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 16px 12px; }
   .sample-card { border: 0; border-radius: 6px; cursor: pointer; background: none; text-align: left; color: var(--stage-text); padding: 0; }
   .sample-thumb { width: 100%; aspect-ratio: 16 / 9; border-radius: 6px; overflow: hidden; background: #1E2024; display: flex; align-items: center; justify-content: center; color: var(--stage-muted); transition: filter .15s; }
   .sample-card:hover .sample-thumb { filter: brightness(1.18); }
@@ -99,6 +110,7 @@
   .history-main { min-width: 0; flex: 1; }
   .history-name { font-weight: 600; word-break: break-all; }
   .history-sub { color: var(--stage-muted); font-size: 11px; margin-top: 2px; }
+  .history-sub.error { color: #FCA5A5; }
   .history-running-bar { position: relative; height: 2px; margin-top: 6px; overflow: hidden; border-radius: 1px; background: var(--stage-rule); }
   .history-running-bar::before { content: ""; position: absolute; top: 0; bottom: 0; left: -40%; width: 40%; border-radius: 1px; background: var(--heat); animation: history-slide 1.2s linear infinite; }
   @keyframes history-slide { to { left: 100%; } }
@@ -121,6 +133,21 @@
   .modal .field-row { margin-top: 12px; }
   .modal .actions { display: flex; gap: 8px; align-items: center; margin-top: 12px; }
   .modal a { color: inherit; }
+  .modal .upload-progress { margin-top: 10px; }
+  .choice-row { display: flex; align-items: baseline; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
+  .choice-row > span { flex: none; width: 96px; font-size: 12.5px; color: var(--stage-muted); }
+  .choices { display: flex; gap: 6px; flex-wrap: wrap; }
+  .choices label { border: 1px solid var(--stage-rule); border-radius: 16px; padding: 4px 12px; font-size: 12.5px; color: var(--stage-muted); cursor: pointer; }
+  .choices label:hover { color: var(--stage-text); border-color: var(--stage-muted); }
+  .choices input { position: absolute; opacity: 0; pointer-events: none; }
+  .choices input:checked + span { color: var(--stage-text); }
+  .choices input:focus-visible + span { outline: 2px solid var(--heat); outline-offset: 2px; border-radius: 10px; }
+  .choices label:has(input:checked) { border-color: var(--heat); color: var(--stage-text); }
+  .curve-file { font-size: 12px; color: var(--stage-muted); word-break: break-all; }
+  .curve-file:empty { display: none; }
+  .reward-note { font-size: 12.5px; color: var(--stage-text); }
+  .reward-note:empty { display: none; }
+  .account-icon { display: none; width: 16px; height: 16px; }
   .privacy-note { font-size: 11px; color: var(--stage-muted); margin-top: auto; padding: 4px 2px; }
   .privacy-note a { color: var(--stage-muted); }
   .spinner { width: 28px; height: 28px; border: 3px solid var(--stage-rule); border-top-color: var(--heat); border-radius: 50%; animation: spin .9s linear infinite; }
@@ -130,7 +157,6 @@
   .player.active { display: flex; }
   .side-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: nowrap; min-height: 20px; }
   .clip-title { font: 600 15px/1.2 var(--display); letter-spacing: -0.01em; white-space: nowrap; flex: none; }
-  .clip-credit { font-size: 12px; color: var(--stage-muted); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .side-head .btn-ghost { padding: 3px 9px; font-size: 12px; margin-left: auto; flex: none; }
   .video-box { position: relative; background: #000; border-radius: 6px; overflow: hidden; aspect-ratio: 16 / 9; flex: none; }
   .video-box video { width: 100%; height: 100%; display: block; object-fit: contain; cursor: pointer; }
@@ -143,12 +169,6 @@
   .brain-time { position: absolute; right: 14px; top: 12px; font: 600 13px var(--display); color: var(--stage-muted); font-variant-numeric: tabular-nums; }
   .sample-meta { font-size: 11.5px; color: var(--stage-muted); line-height: 1.45; margin-top: -4px; }
   .sample-meta:empty { display: none; }
-  .retention { display: none; flex: none; flex-direction: column; gap: 6px; border-top: 1px solid var(--rule); padding-top: 10px; }
-  .retention.active { display: flex; }
-  .retention .rt-title { font-size: 12.5px; font-weight: 600; color: var(--ink); }
-  .retention .rt-text { font-size: 12px; color: var(--ink-2); }
-  .retention .rt-text.error { color: #FCA5A5; }
-  .retention .actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 
   .timeline { display: grid; grid-template-columns: auto auto 1fr auto auto; gap: 10px; align-items: center; flex: none; }
   .tl-btn { width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--stage-rule); background: var(--stage-2); color: var(--stage-text); display: grid; place-items: center; padding: 0; }
@@ -159,8 +179,6 @@
   .tl-track { position: relative; height: 50px; cursor: pointer; touch-action: none; }
   .tl-track svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
 
-  .charts-empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: var(--ink-3); font-size: 14px; text-align: center; }
-  .charts-empty svg { width: 46px; height: 46px; opacity: .35; }
   .report-body { flex: 1; min-height: 0; display: none; flex-direction: column; gap: 18px; }
   .report-body.active { display: flex; }
   .result-message { background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 18px 20px; font-size: 13px; line-height: 1.55; color: var(--ink-2); }
@@ -252,6 +270,20 @@
     .bar { padding: 0 14px; gap: 10px; }
     .header-meta { display: none; }
   }
+  @media (max-width: 600px) {
+    .credit-label, .credit-held { display: none; }
+    .account-email { display: none; }
+    .account { padding: 6px; }
+    .account-icon { display: block; }
+    .bar-hide-sm { display: none; }
+    .mset { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+    .mset .mlabel { grid-column: 1 / -1; width: auto; }
+    .mrow { grid-template-columns: 1fr; gap: 4px; }
+    .mrow .thumb { width: 100%; }
+    .timeline { grid-template-columns: auto auto auto 1fr; }
+    .tl-track { grid-column: 1 / -1; grid-row: 1; }
+    .tl-right { justify-self: end; }
+  }
   @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto; } }
   @media (prefers-reduced-motion: reduce) { .history-running-bar::before { animation: none; left: 0; width: 100%; opacity: .6; } }
 </style>
@@ -263,23 +295,21 @@
   <span class="header-meta" id="headerMeta"></span>
   <span class="credit" id="balance"></span>
   <div class="account-wrap" id="accountWrap" hidden>
-    <button class="account" id="account" aria-haspopup="menu" aria-expanded="false" aria-controls="accountMenu"></button>
+    <button class="account" id="account" aria-haspopup="menu" aria-expanded="false" aria-controls="accountMenu">
+      <span class="account-email" id="accountEmail"></span>
+      <svg class="account-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="8" cy="5.5" r="2.5"/><path d="M2.5 13.5c1-2.5 3-3.5 5.5-3.5s4.5 1 5.5 3.5"/></svg>
+    </button>
     <div class="account-menu" id="accountMenu" role="menu" hidden>
       <button role="menuitem" id="signOut">Sign out</button>
       <button role="menuitem" id="deleteAccountMenuItem">Delete account</button>
     </div>
   </div>
-  <button class="btn-white" id="topUpload" hidden>Upload a video</button>
+  <button class="btn-white" id="topUpload" hidden>Upload <span class="bar-hide-sm">a video</span></button>
 </header>
 
 <div class="D">
   <aside class="side">
     <div class="chooser" id="chooser">
-      <div class="chooser-tabs" id="chooserTabs" role="tablist" aria-label="Chooser" hidden>
-        <button class="chooser-tab" id="tabAnalyses" role="tab" aria-selected="true" aria-controls="analysesTab">Your analyses</button>
-        <button class="chooser-tab" id="tabSamples" role="tab" aria-selected="false" aria-controls="samplesTab">Samples</button>
-      </div>
-
       <div class="box active" id="startupPanel">
         <h2 id="startupTitle">Starting up…</h2>
         <p id="startupText"></p>
@@ -293,42 +323,17 @@
         <div class="actions"><a class="btn-white" href="/login" style="display:inline-block;text-decoration:none;text-align:center">Sign in</a></div>
       </div>
 
-      <div class="tab-panel" id="analysesTab" hidden>
-        <div class="upload-zone hidden" id="uploadZone">
-          <div class="up-title">Drop a video or click to choose</div>
-          <div class="up-sub" id="limitsText">MP4, MOV or WebM</div>
-          <input type="file" accept="video/mp4,video/quicktime,video/webm" id="fileInput" title="">
-        </div>
-        <div class="upload-note" id="uploadNote"></div>
-        <div class="box" id="noCreditPanel"><p>You have no credit yet. Ask the NeuroLens team for test credit.</p></div>
-
-        <div class="box upload-panel" id="uploadPanel">
-          <div class="file-name" id="upFileName"></div>
-          <div class="line" id="upDetail"></div>
-          <div class="consent-row" id="consentRow">
-            <input type="checkbox" id="consentBox">
-            <label for="consentBox">Keep this video for research (<a href="/static/privacy.html#research" target="_blank" rel="noopener">details</a>). I own the rights to it.</label>
-          </div>
-          <div class="upload-progress" id="upProgress"><div class="upload-bar" id="upBar"></div></div>
-          <div class="msg" id="upMsg"></div>
-          <div class="actions">
-            <button class="btn-white" id="upConfirm">Upload</button>
-            <button class="btn-ghost" id="upCancel">Cancel</button>
-          </div>
-        </div>
+      <div class="chooser-panel" id="analysesPanel">
+        <button class="upload-zone hidden" id="uploadZone" type="button">
+          <span class="up-title" id="uploadZoneTitle">Drop videos or click to choose</span>
+          <span class="up-sub" id="limitsText">MP4, MOV or WebM</span>
+        </button>
+        <div class="box" id="noCreditPanel"><p>You don't have enough credit for a video. Ask the NeuroLens team for test credit.</p></div>
 
         <div class="box" id="historyPanel">
           <div id="historyList"></div>
           <p class="history-empty" id="historyEmpty" hidden>No analyses yet.</p>
           <p id="historyNote"></p>
-        </div>
-      </div>
-
-      <div class="tab-panel" id="samplesTab" hidden>
-        <div class="samples-section" id="samplesSection">
-          <div class="label">Sample videos</div>
-          <div class="samples-grid" id="samplesGrid"></div>
-          <p class="up-sub" id="samplesEmpty" hidden>Sample videos coming soon.</p>
         </div>
       </div>
 
@@ -338,7 +343,6 @@
     <div class="player" id="player" hidden>
       <div class="side-head">
         <span class="clip-title" id="clipTitle"></span>
-        <span class="clip-credit" id="clipCredit"></span>
         <button class="btn-ghost" id="btnNew">Back</button>
       </div>
       <div class="video-box" id="videoBox">
@@ -352,13 +356,17 @@
         <span class="brain-time" id="brainSecond"></span>
       </div>
       <div class="timeline" id="timeline"></div>
+      <button class="history-link" id="retentionLink" type="button" hidden>Add audience retention</button>
     </div>
   </aside>
 
   <div class="report">
-    <div class="charts-empty" id="chartsEmpty">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 3v18h18"/><path d="M7 16l4-8 4 4 5-9"/></svg>
-      <div>Select a sample or upload a video to see its brain response.</div>
+    <div class="report-empty" id="reportEmpty">
+      <div class="samples-section">
+        <div class="label">Samples</div>
+        <div class="samples-grid" id="samplesGrid"></div>
+        <p class="up-sub" id="samplesEmpty" hidden>Sample videos coming soon.</p>
+      </div>
     </div>
     <div class="report-body" id="reportBody">
       <div class="result-message" id="resultMessage" hidden></div>
@@ -382,18 +390,13 @@
         <p class="note">Same scale on all three.</p>
         <div class="strips" id="stripsHost"></div>
       </section>
-      <div class="retention" id="retentionPanel">
-        <div class="rt-title">Real audience retention</div>
-        <div class="rt-text">Add the video's real audience-retention curve to keep with its analysis.</div>
-        <div class="actions"><button class="btn-ghost" id="retentionOpen">Add real audience retention</button></div>
-      </div>
     </div>
   </div>
 </div>
 
 <dialog class="modal" id="deleteDialog" aria-labelledby="deleteDialogTitle">
   <h2 id="deleteDialogTitle">Delete my account</h2>
-  <p>This deletes every video, analysis and login for this account. Type DELETE to confirm.</p>
+  <p id="deleteAccountText">This deletes every video, analysis and login for this account. Type DELETE to confirm.</p>
   <div class="field-row">
     <input id="deleteAccountConfirm" placeholder="DELETE" autocomplete="off" aria-label="Type DELETE to confirm">
     <button class="btn-danger" id="deleteAccountBtn">Delete</button>
@@ -412,16 +415,58 @@
   <p id="deleteJobMsg"></p>
 </dialog>
 
-<dialog class="modal" id="retentionDialog" aria-labelledby="retentionDialogTitle">
-  <h2 id="retentionDialogTitle">Add real audience retention</h2>
-  <p id="retentionVideo"></p>
-  <p>Choose the video's audience-retention report (the .json file from YouTube) to keep with its analysis. A new report replaces the old one. <a href="/static/retention_guide.html" target="_blank" rel="noopener">How to get the report</a></p>
-  <div class="actions">
-    <button class="btn-ghost" id="retentionPick">Choose file</button>
-    <button class="btn-ghost" id="retentionClose">Close</button>
+<dialog class="modal" id="uploadDialog" aria-labelledby="uploadDialogTitle">
+  <h2 id="uploadDialogTitle">Upload videos</h2>
+  <div class="batch-signed-out" id="batchSignedOut" hidden>
+    <span>You've been signed out.</span>
+    <a class="btn-white" href="/login" style="text-decoration:none;text-align:center">Sign in</a>
   </div>
-  <p id="retentionMsg"></p>
-  <input type="file" accept=".json,application/json" id="retentionInput" hidden>
+  <div id="batchBody">
+    <div class="dialog-zone" id="dialogZone">
+      <span id="dialogZoneTitle">Drop videos or click to choose</span>
+      <input type="file" accept="video/mp4,video/quicktime,video/webm" id="batchInput" multiple title="">
+    </div>
+    <div class="batch-list" id="batchList"></div>
+    <div class="batch-total" id="batchTotal" hidden></div>
+    <div class="consent-row">
+      <input type="checkbox" id="consentBox">
+      <label for="consentBox">Share for research and to train NeuroLens's own models (<a href="/static/privacy.html#research" target="_blank" rel="noopener">details</a>). I own the rights to it.</label>
+    </div>
+    <div class="actions">
+      <button class="btn-white" id="batchUpload" disabled>Upload</button>
+      <button class="btn-ghost" id="batchCancel">Cancel</button>
+    </div>
+  </div>
+</dialog>
+
+<dialog class="modal" id="stopShareDialog" aria-labelledby="stopShareTitle">
+  <h2 id="stopShareTitle">Stop sharing</h2>
+  <p>Stop sharing this video? Its research copy is deleted now.</p>
+  <div class="actions">
+    <button class="btn-danger" id="stopShareBtn">Stop sharing</button>
+    <button class="btn-ghost" id="stopShareCancel">Cancel</button>
+  </div>
+  <p id="stopShareMsg"></p>
+</dialog>
+
+<dialog class="modal" id="curveDialog" aria-labelledby="curveDialogTitle">
+  <h2 id="curveDialogTitle">Add audience retention</h2>
+  <p id="curveVideo"></p>
+  <p>Choose the video's audience-retention report (the .json file from YouTube). <a href="/static/retention_guide.html" target="_blank" rel="noopener">How to get the report</a></p>
+  <p class="reward-note" id="curveReward"></p>
+  <div class="actions" style="margin-top:12px">
+    <button class="btn-ghost" id="curvePick">Choose file</button>
+    <span class="curve-file" id="curveFileName"></span>
+  </div>
+  <div class="choice-row"><span>Views</span><div class="choices" id="curveViews"></div></div>
+  <div class="choice-row"><span>Published</span><div class="choices" id="curvePublished"></div></div>
+  <div class="choice-row"><span>Promoted with ads</span><div class="choices" id="curvePromoted"></div></div>
+  <p id="curveMsg"></p>
+  <div class="actions">
+    <button class="btn-white" id="curveSave" disabled>Save</button>
+    <button class="btn-ghost" id="curveClose">Cancel</button>
+  </div>
+  <input type="file" accept=".json,application/json" id="curveInput" hidden>
 </dialog>
 
 <script>
@@ -442,7 +487,6 @@ let samplesData = null, jobsCache = [];
 let currentResult = null, currentSummary = null, currentContext = null;
 let comparison = null, mutedOn = false, resultSeq = 0, compareRequest = 0, pendingCompareId = null;
 let signedIn = false, me = null, limits = null;
-let activeTab = 'analyses', playerOriginTab = 'analyses';
 let virtualTime = 0, virtualPlaying = false, virtualAnchor = 0, virtualRaf = 0, videoRaf = 0;
 let videoJob = null, videoRetried = false, videoRequest = 0, videoPlaying = false;
 let playheads = [];
@@ -510,34 +554,8 @@ const params = new URLSearchParams(window.location.search);
 const dollars = cents => `$${(cents / 100).toFixed(2)}`;
 
 function applyChooser() {
-  $('chooserTabs').hidden = !signedIn;
-  $('tabAnalyses').setAttribute('aria-selected', String(activeTab === 'analyses'));
-  $('tabSamples').setAttribute('aria-selected', String(activeTab === 'samples'));
-  $('tabAnalyses').tabIndex = activeTab === 'analyses' ? 0 : -1;
-  $('tabSamples').tabIndex = activeTab === 'samples' ? 0 : -1;
-  if (signedIn) {
-    $('analysesTab').hidden = activeTab !== 'analyses';
-    $('samplesTab').hidden = activeTab !== 'samples';
-  } else {
-    $('analysesTab').hidden = true;
-    $('samplesTab').hidden = false;
-  }
+  $('analysesPanel').hidden = !signedIn;
 }
-
-function setChooserTab(tab) {
-  activeTab = tab === 'samples' ? 'samples' : 'analyses';
-  applyChooser();
-}
-
-$('tabAnalyses').addEventListener('click', () => setChooserTab('analyses'));
-$('tabSamples').addEventListener('click', () => setChooserTab('samples'));
-$('chooserTabs').addEventListener('keydown', e => {
-  if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
-  e.preventDefault();
-  const tab = activeTab === 'analyses' ? 'samples' : 'analyses';
-  setChooserTab(tab);
-  $(tab === 'analyses' ? 'tabAnalyses' : 'tabSamples').focus();
-});
 
 const accountWrap = $('accountWrap'), accountBtn = $('account'), accountMenu = $('accountMenu');
 function closeAccountMenu(returnFocus) {
@@ -584,7 +602,9 @@ function closeRowMenu(returnFocus) {
 function historyMenuItems(job) {
   const items = [];
   if (job.cancellable) items.push({ label: 'Cancel', run: () => cancelJob(job.job_id) });
+  if (job.sharing) items.push({ label: 'Stop sharing', run: () => openStopShare(job) });
   if (job.result_available) items.push({ label: 'Download CSV', href: `/api/jobs/${job.job_id}/result.csv` });
+  if (job.status === 'done' && job.sharing) items.push({ label: 'Add audience retention', run: () => openCurve(jobCurveTarget(job)) });
   if (job.status === 'done' || job.status === 'failed') items.push({ label: 'Delete', run: () => openDeleteJob(job) });
   return items;
 }
@@ -635,6 +655,9 @@ document.addEventListener('keydown', e => {
 
 const deleteDialog = $('deleteDialog');
 function openDeleteDialog() {
+  const credit = me && me.balance ? me.balance.available_cents + me.balance.reserved_cents : 0;
+  $('deleteAccountText').textContent = 'This deletes every video, analysis and login for this account'
+    + (credit > 0 ? `, and your ${dollars(credit)} credit.` : '.') + ' Type DELETE to confirm.';
   $('deleteAccountConfirm').value = '';
   $('deleteAccountMsg').textContent = '';
   $('deleteAccountMsg').classList.remove('error');
@@ -699,9 +722,9 @@ function setViewName(name) {
 
 function showBalance() {
   const b = me.balance;
-  const held = b.reserved_cents ? ` (${dollars(b.reserved_cents)} held)` : '';
-  $('balance').textContent = `Credit: ${dollars(b.available_cents)}${held}`;
-  $('noCreditPanel').classList.toggle('active', b.available_cents === 0 && b.reserved_cents === 0);
+  const held = b.reserved_cents ? `<span class="credit-held"> (${dollars(b.reserved_cents)} held)</span>` : '';
+  $('balance').innerHTML = `<span class="credit-label">Credit: </span><span class="credit-amt">${dollars(b.available_cents)}</span>${held}`;
+  $('noCreditPanel').classList.toggle('active', b.available_cents < estimateCostCents(1));
 }
 
 async function loadBalance() {
@@ -727,7 +750,7 @@ function startupFailed() {
 }
 async function start(attempt = 0) {
   $('startupPanel').classList.add('active');
-  $('startupTitle').textContent = 'Starting up…';
+  $('startupTitle').textContent = 'Starting up; this can take up to a minute.';
   $('startupText').textContent = '';
   $('startupRetry').hidden = true;
   let res;
@@ -735,7 +758,6 @@ async function start(attempt = 0) {
   if (res.status === 200) return showApp(await res.json());
   if (res.status === 401) { clearSignedInHint(); return showSignedOut(); }
   if (res.status === 503 && attempt < STARTUP_RETRIES) {
-    $('startupText').textContent = 'Waking the database; this can take up to a minute.';
     return setTimeout(() => start(attempt + 1), STARTUP_RETRY_MS);
   }
   startupFailed();
@@ -749,18 +771,15 @@ function showSignedOut() {
   closeAccountMenu();
   $('startupPanel').classList.remove('active');
   $('signInPanel').classList.add('active');
-  $('uploadZone').classList.add('hidden');
-  $('uploadPanel').classList.remove('active');
-  $('historyPanel').classList.remove('active');
+  applyChooser();
   $('historyEmpty').hidden = true;
   $('noCreditPanel').classList.remove('active');
-  $('account').textContent = '';
+  $('accountEmail').textContent = '';
   $('accountWrap').hidden = true;
   $('balance').textContent = '';
   $('topUpload').textContent = 'Sign in';
   $('topUpload').hidden = false;
   $('headerMeta').textContent = '';
-  applyChooser();
   loadLimits();
   loadSamples();
 }
@@ -769,15 +788,14 @@ function showApp(meJson) {
   me = meJson; signedIn = true;
   $('startupPanel').classList.remove('active');
   $('signInPanel').classList.remove('active');
-  $('account').textContent = me.email;
+  applyChooser();
+  $('accountEmail').textContent = me.email;
   $('accountWrap').hidden = false;
-  $('topUpload').textContent = 'Upload a video';
+  $('topUpload').innerHTML = 'Upload <span class="bar-hide-sm">a video</span>';
   $('topUpload').hidden = false;
   $('uploadZone').classList.remove('hidden');
   $('historyPanel').classList.add('active');
   $('headerMeta').textContent = '';
-  activeTab = 'analyses';
-  applyChooser();
   showBalance();
   loadLimits();
   loadHistory();
@@ -825,10 +843,13 @@ async function loadHistory() {
 function renderHistory(jobs) {
   jobsCache = jobs;
   closeRowMenu();
+  updateTabTitle(jobs);
+  sendPendingCurves(jobs);
   const list = $('historyList');
-  list.replaceChildren(...jobs.map(historyRow));
+  const queueRows = uploadQueue.map(queueRow);
+  list.replaceChildren(...queueRows, ...jobs.map(historyRow));
   $('historyPanel').classList.add('active');
-  $('historyEmpty').hidden = jobs.length > 0;
+  $('historyEmpty').hidden = queueRows.length + jobs.length > 0;
   $('historyNote').textContent = '';
   if (currentResult) showCompareRow();
 
@@ -838,18 +859,40 @@ function renderHistory(jobs) {
   if ([...openJobIds].some(jobId => !openNow.has(jobId))) loadBalance();
   openJobIds = openNow;
   clearTimeout(historyPollTimer);
-  if (openNow.size > 0) historyPollTimer = setTimeout(loadHistory, POLL_MS);
+  if (openNow.size > 0 || uploadQueue.length > 0) historyPollTimer = setTimeout(loadHistory, POLL_MS);
+}
+
+// The user's oldest queued job carries the waiting clock; the rest are just "In line".
+function oldestQueuedJob(jobs) {
+  let oldest = null;
+  jobs.forEach(job => {
+    if (job.status !== 'queued') return;
+    if (!oldest || new Date(job.created_at) < new Date(oldest.created_at)) oldest = job;
+  });
+  return oldest;
+}
+
+function minutesSince(iso) {
+  return Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 60000));
 }
 
 // History redraws on every poll, so each job's thumbnail element is made once and reused.
 const historyThumbs = new Map();
+// Frames taken from local files this tab uploaded; shown while the job waits.
+const localFrames = new Map();
 
 function historyThumb(job) {
   const key = `${job.job_id}:${job.status}`;
   let box = historyThumbs.get(key);
   if (box) return box;
   box = document.createElement('div'); box.className = 'history-thumb';
-  if (job.status === 'done') {
+  const frame = job.status === 'queued' || job.status === 'processing' ? localFrames.get(job.job_id) : null;
+  if (frame) {
+    const img = document.createElement('img');
+    img.alt = '';
+    img.src = frame;
+    box.append(img);
+  } else if (job.status === 'done') {
     const img = document.createElement('img');
     img.alt = '';
     img.addEventListener('error', () => img.remove());
@@ -858,6 +901,65 @@ function historyThumb(job) {
   }
   historyThumbs.set(key, box);
   return box;
+}
+
+function queueRow(entry) {
+  const row = document.createElement('div');
+  row.className = 'history-row';
+  const item = entry.item;
+  const box = document.createElement('div'); box.className = 'history-thumb';
+  if (item.thumb) {
+    const img = document.createElement('img');
+    img.alt = '';
+    img.src = item.thumb;
+    box.append(img);
+  }
+  const main = document.createElement('div'); main.className = 'history-main';
+  const name = document.createElement('div'); name.className = 'history-name';
+  name.textContent = shortName(item.name);
+  name.title = item.name;
+  const sub = document.createElement('div'); sub.className = 'history-sub';
+  main.append(name);
+  if (entry.state === 'uploading') {
+    const bar = document.createElement('div');
+    bar.className = 'upload-progress active';
+    const fill = document.createElement('div');
+    fill.className = 'upload-bar';
+    fill.style.width = `${Math.round(entry.progress * 100)}%`;
+    bar.append(fill);
+    entry.barEl = fill;
+    main.append(bar);
+    sub.textContent = 'Uploading…';
+  } else if (entry.state === 'failed') {
+    sub.textContent = entry.reason;
+    sub.classList.add('error');
+    if (entry.signedOut) {
+      const link = document.createElement('a');
+      link.href = '/login';
+      link.textContent = 'Sign in';
+      link.style.marginLeft = '6px';
+      sub.append(link);
+    }
+  } else {
+    sub.textContent = 'Waiting to upload';
+  }
+  main.append(sub);
+  const actions = document.createElement('div'); actions.className = 'history-actions';
+  const remove = document.createElement('button');
+  remove.type = 'button';
+  remove.className = 'history-more';
+  remove.textContent = '×';
+  remove.setAttribute('aria-label', `Remove ${item.name} from the queue`);
+  remove.addEventListener('click', e => {
+    e.stopPropagation();
+    entry.removed = true;
+    if (entry.xhr) entry.xhr.abort();
+    uploadQueue = uploadQueue.filter(other => other !== entry);
+    renderHistory(jobsCache);
+  });
+  actions.append(remove);
+  row.append(box, main, actions);
+  return row;
 }
 
 function historyRow(job) {
@@ -881,7 +983,8 @@ function historyRow(job) {
   name.textContent = shortName(label);
   name.title = label;
   const sub = document.createElement('div'); sub.className = 'history-sub';
-  sub.textContent = historyDetail(job);
+  const failure = curveFailures.get(job.job_id);
+  sub.textContent = failure ? `${historyDetail(job)} · ${failure}` : historyDetail(job);
   main.append(name);
   if (running) {
     const bar = document.createElement('div');
@@ -890,15 +993,24 @@ function historyRow(job) {
   }
   main.append(sub);
   const actions = document.createElement('div'); actions.className = 'history-actions';
-  if (job.needs_retention) {
+  if (job.status === 'done' && job.sharing && job.curve_count === 0) {
     const add = document.createElement('button');
     add.type = 'button';
     add.className = 'history-link';
-    add.textContent = 'Add retention';
-    add.addEventListener('click', e => { e.stopPropagation(); openRetention(job.job_id, label); });
+    add.textContent = 'Add audience retention';
+    add.addEventListener('click', e => { e.stopPropagation(); openCurve(jobCurveTarget(job)); });
     actions.append(add);
   }
-  if (job.status !== 'processing' && historyMenuItems(job).length) {
+  const cancelUntil = cancelWindows.get(job.job_id);
+  if (cancelUntil != null) {
+    const cancel = document.createElement('button');
+    cancel.type = 'button';
+    cancel.className = 'history-link';
+    cancel.dataset.cancelId = job.job_id;
+    cancel.textContent = `Cancel ${Math.max(1, Math.ceil((cancelUntil - Date.now()) / 1000))}`;
+    cancel.addEventListener('click', e => { e.stopPropagation(); cancelNewJob(job.job_id); });
+    actions.append(cancel);
+  } else if (job.status !== 'processing' && historyMenuItems(job).length) {
     const more = document.createElement('button');
     more.type = 'button';
     more.className = 'history-more';
@@ -954,16 +1066,25 @@ function historyDetail(job) {
   if (job.status === 'done') {
     const cost = job.captured_cents != null ? ` · ${dollars(job.captured_cents)}` : '';
     if (!job.result_available) return `${day}${cost} · result expired`;
+    const msLeft = created.getTime() + RESULT_DAYS * 86400000 - Date.now();
+    if (msLeft <= 7 * 86400000) {
+      const days = Math.max(1, Math.ceil(msLeft / 86400000));
+      return `${day}${cost} · Deleted in ${days} day${days === 1 ? '' : 's'}`;
+    }
     const expires = longDate(new Date(created.getTime() + RESULT_DAYS * 86400000));
     return `${day}${cost} · kept until ${expires}`;
   }
-  if (job.status === 'failed') return `${day} · ${failureText(job.error_code)}${NOT_CHARGED}`;
+  if (job.status === 'failed') return `${day} · ${failureText(job.error_code)} · not charged`;
   if (job.status === 'queued') {
-    return Date.now() - created.getTime() > QUEUED_SLOW_MS
-      ? 'Waiting for the GPU · taking longer than usual'
-      : 'Waiting for the GPU · up to 10 min';
+    if (oldestQueuedJob(jobsCache) !== job) return 'In line';
+    const mins = minutesSince(job.created_at);
+    const slow = Date.now() - created.getTime() >= QUEUED_SLOW_MS ? ' · slower than usual' : '';
+    return `Waiting for the GPU · ${mins} min${slow}`;
   }
-  if (job.status === 'processing') return 'Analysing';
+  if (job.status === 'processing') {
+    const mins = job.claimed_at ? ` · ${minutesSince(job.claimed_at)} min` : '';
+    return `Analysing${mins}`;
+  }
   return `${day} · ${job.status}`;
 }
 
@@ -1024,10 +1145,7 @@ function loadSample(idx) {
   if (!s || !s.result) return;
   document.querySelectorAll('.sample-card').forEach(c => c.classList.toggle('active', +c.dataset.idx === idx));
   stopTracking();
-  playerOriginTab = 'samples';
-  setChooserTab('samples');
   showRetention(null);
-  $('uploadPanel').classList.remove('active');
   clearVideoSource();
   video.src = `/data/${s.video_file}`;
   showVideo(true);
@@ -1041,7 +1159,6 @@ function loadSample(idx) {
   });
   $('clipTitle').textContent = shortName(s.title || 'Sample');
   $('clipTitle').title = s.title || 'Sample';
-  $('clipCredit').textContent = '';
   $('sampleMeta').textContent = s.attribution || '';
   video.muted = true;
   updateTransport();
@@ -1061,22 +1178,16 @@ const ACCEPTED_TYPES = ['video/mp4', 'video/quicktime', 'video/webm'];
 const EXTENSION_TYPES = { mp4: 'video/mp4', mov: 'video/quicktime', webm: 'video/webm' };
 function estimateCostCents(d) { return 90 * Math.max(1, Math.ceil((d - 0.5) / 30)); }
 
-const uploadZone = $('uploadZone'), fileInput = $('fileInput');
-let pendingFile = null, pendingType = '', pendingDuration = 0;
-let uploadCancel = null, uploadWindowTimer = null;
+const uploadZone = $('uploadZone');
 ['dragenter','dragover'].forEach(e => uploadZone.addEventListener(e, ev => { ev.preventDefault(); uploadZone.classList.add('dragover'); }));
 ['dragleave','drop'].forEach(e => uploadZone.addEventListener(e, ev => { ev.preventDefault(); uploadZone.classList.remove('dragover'); }));
-uploadZone.addEventListener('drop', ev => { const f = ev.dataTransfer.files; if (f.length) handleFile(f[0]); });
-fileInput.addEventListener('change', ev => { if (ev.target.files.length) handleFile(ev.target.files[0]); });
+uploadZone.addEventListener('drop', ev => { const f = ev.dataTransfer.files; if (f.length) openBatchDialog([...f]); });
+uploadZone.addEventListener('click', () => openBatchDialog());
 $('topUpload').addEventListener('click', () => {
-  if (signedIn) { setChooserTab('analyses'); fileInput.click(); }
+  if (signedIn) openBatchDialog();
   else window.location.href = '/login';
 });
 $('btnNew').addEventListener('click', resetUI);
-$('upConfirm').addEventListener('click', startUpload);
-$('upCancel').addEventListener('click', () => { if (uploadCancel) uploadCancel(); else resetUpload(); });
-
-function rejectFile(message) { $('uploadNote').textContent = message; fileInput.value = ''; }
 
 function readDuration(file) {
   return new Promise((resolve, reject) => {
@@ -1099,236 +1210,408 @@ function readDuration(file) {
   });
 }
 
-async function handleFile(file) {
-  $('uploadNote').textContent = '';
-  let type = file.type;
-  if (!type) {
-    const ext = file.name.split('.').pop().toLowerCase();
-    type = EXTENSION_TYPES[ext] || '';
+// A frame from the local file, for the dialog row and the waiting History row.
+function captureFrame(file, duration) {
+  return new Promise(resolve => {
+    const v = document.createElement('video'), url = URL.createObjectURL(file);
+    const finish = out => {
+      URL.revokeObjectURL(url);
+      v.removeAttribute('src');
+      v.load();
+      resolve(out);
+    };
+    const timer = setTimeout(() => finish(null), 10000);
+    v.muted = true;
+    v.preload = 'auto';
+    v.onloadeddata = () => {
+      v.currentTime = Math.min(Math.max(0.1, duration / 2), Math.max(0.1, (v.duration || duration) - 0.1));
+    };
+    v.onseeked = () => {
+      clearTimeout(timer);
+      const canvas = document.createElement('canvas');
+      canvas.width = 160; canvas.height = 100;
+      try {
+        canvas.getContext('2d').drawImage(v, 0, 0, canvas.width, canvas.height);
+        finish(canvas.toDataURL('image/jpeg', 0.7));
+      } catch (e) { finish(null); }
+    };
+    v.onerror = () => { clearTimeout(timer); finish(null); };
+    v.src = url;
+  });
+}
+
+// ---- Batch upload dialog (§2a) ----
+
+const uploadDialog = $('uploadDialog'), dialogZone = $('dialogZone'), batchInput = $('batchInput');
+const COARSE_POINTER = matchMedia('(pointer: coarse)').matches;
+$('uploadZoneTitle').textContent = COARSE_POINTER ? 'Choose a video' : 'Drop videos or click to choose';
+$('dialogZoneTitle').textContent = COARSE_POINTER ? 'Choose videos' : 'Drop videos or click to choose';
+
+let batchItems = [], batchSeq = 0;
+
+function maxBatchFiles() {
+  const n = limits && limits.max_batch_files;
+  return Number.isFinite(n) && n > 0 ? n : 5;
+}
+
+function openBatchDialog(files) {
+  $('batchSignedOut').hidden = true;
+  $('batchBody').hidden = false;
+  batchItems = [];
+  $('consentBox').checked = false;
+  renderBatch();
+  if (!uploadDialog.open) uploadDialog.showModal();
+  if (files && files.length) addFiles(files);
+}
+
+function closeBatchDialog() { if (uploadDialog.open) uploadDialog.close(); }
+
+['dragenter','dragover'].forEach(e => dialogZone.addEventListener(e, ev => { ev.preventDefault(); dialogZone.classList.add('dragover'); }));
+['dragleave','drop'].forEach(e => dialogZone.addEventListener(e, ev => { ev.preventDefault(); dialogZone.classList.remove('dragover'); }));
+dialogZone.addEventListener('drop', ev => { const f = ev.dataTransfer.files; if (f.length) addFiles([...f]); });
+batchInput.addEventListener('change', ev => {
+  const f = [...ev.target.files];
+  ev.target.value = '';
+  if (f.length) addFiles(f);
+});
+$('batchCancel').addEventListener('click', closeBatchDialog);
+$('batchUpload').addEventListener('click', startBatchUpload);
+$('consentBox').addEventListener('change', renderBatch);
+closeOnBackdrop(uploadDialog);
+
+// Picking files checks sign-in first: a 401 shows the signed-out state before any file is checked.
+async function addFiles(files) {
+  try {
+    const res = await fetch('/api/me');
+    if (res.status === 401) {
+      $('batchSignedOut').hidden = false;
+      $('batchBody').hidden = true;
+      return;
+    }
+    if (res.ok) { me = await res.json(); showBalance(); }
+  } catch (e) { /* the per-file checks below still run */ }
+  for (const file of files) {
+    const item = {
+      id: ++batchSeq, file, name: file.name, type: '', duration: 0, price: 0,
+      state: 'checking', reason: '', thumb: null, curve: null, removed: false,
+    };
+    if (batchItems.filter(i => i.state === 'valid' || i.state === 'checking').length >= maxBatchFiles()) {
+      item.state = 'overflow';
+      item.reason = `${maxBatchFiles()} at a time`;
+      batchItems.push(item);
+      renderBatch();
+      continue;
+    }
+    batchItems.push(item);
+    renderBatch();
+    checkBatchItem(item);
   }
-  if (!ACCEPTED_TYPES.includes(type)) return rejectFile('Unsupported file type. Use MP4, MOV or WebM.');
+}
+
+async function checkBatchItem(item) {
+  let type = item.file.type;
+  if (!type) type = EXTENSION_TYPES[item.name.split('.').pop().toLowerCase()] || '';
+  if (!ACCEPTED_TYPES.includes(type)) return finishBatchItem(item, 'invalid', 'Use MP4, MOV or WebM.');
   if (!limits) await loadLimits();
-  if (!limits) return rejectFile("Couldn't reach the server to check the upload limits. Try again.");
-  const maxBytes = limits.max_upload_bytes, maxSeconds = limits.max_video_duration_seconds;
-  if (maxBytes != null && file.size > maxBytes) return rejectFile(`File is too large (max ${Math.round(maxBytes / 1e6)} MB).`);
+  if (!limits) return finishBatchItem(item, 'invalid', "Couldn't check the upload limits. Try again.");
+  if (limits.max_upload_bytes != null && item.file.size > limits.max_upload_bytes) {
+    return finishBatchItem(item, 'invalid', `File is too large (max ${Math.round(limits.max_upload_bytes / 1e6)} MB).`);
+  }
   let duration;
-  try { duration = await readDuration(file); } catch (e) { return rejectFile("Couldn't read this video."); }
-  if (!Number.isFinite(duration) || duration <= 0) return rejectFile("Couldn't read this video's length. Try saving it as MP4.");
-  if (duration > maxSeconds) return rejectFile(`Video is too long (${duration.toFixed(0)}s). The maximum is ${maxSeconds}s.`);
-  showConfirm(file, duration, type);
+  try { duration = await readDuration(item.file); } catch (e) { return finishBatchItem(item, 'invalid', "Couldn't read this video."); }
+  if (!Number.isFinite(duration) || duration <= 0) return finishBatchItem(item, 'invalid', "Couldn't read this video's length. Try saving it as MP4.");
+  if (duration > limits.max_video_duration_seconds) {
+    return finishBatchItem(item, 'invalid', `Video too long (max ${limits.max_video_duration_seconds}s).`);
+  }
+  item.type = type;
+  item.duration = duration;
+  item.price = estimateCostCents(duration);
+  item.thumb = await captureFrame(item.file, duration);
+  if (item.removed) return;
+  finishBatchItem(item, 'valid', '');
 }
 
-function showConfirm(file, duration, type) {
-  clearUploadWindow();  // a new file ends the last upload's cancel window, or its timer would wipe this one
-  pendingFile = file; pendingType = type; pendingDuration = duration;
-  setViewName('chooser');
-  setChooserTab('analyses');
-  uploadZone.classList.add('hidden');
-  $('consentBox').checked = false; $('consentBox').disabled = false;
-  $('consentRow').classList.remove('hidden');
-  $('upFileName').textContent = file.name;
-  $('upDetail').textContent = `${duration.toFixed(1)} s · ${(file.size / 1e6).toFixed(1)} MB · ${dollars(estimateCostCents(duration))} · charged only if it succeeds · cancel within 15 s`;
-  $('upMsg').textContent = ''; $('upMsg').classList.remove('error');
-  $('upProgress').classList.remove('active'); $('upBar').style.width = '0';
-  $('upConfirm').disabled = false; $('upConfirm').style.display = '';
-  $('upCancel').hidden = false;
-  $('upCancel').textContent = 'Cancel';
-  $('uploadPanel').classList.add('active');
-  $('headerMeta').textContent = `Ready to upload: ${file.name}`;
+function finishBatchItem(item, state, reason) {
+  item.state = state;
+  item.reason = reason;
+  renderBatch();
 }
 
-function uploadFailed(message) {
-  clearUploadWindow();
-  $('upMsg').textContent = message; $('upMsg').classList.add('error');
-  $('upProgress').classList.remove('active');
-  $('upConfirm').disabled = false; $('upConfirm').style.display = '';
-  $('consentBox').disabled = false;
-  $('upCancel').hidden = false;
-  $('upCancel').textContent = 'Cancel';
+function renderBatch() {
+  const list = $('batchList');
+  list.replaceChildren(...batchItems.map(batchRow));
+  updateBatchTotal();
+}
+
+function batchRow(item) {
+  const row = document.createElement('div');
+  row.className = 'batch-row';
+  const box = document.createElement('div'); box.className = 'batch-thumb';
+  if (item.thumb) {
+    const img = document.createElement('img');
+    img.alt = '';
+    img.src = item.thumb;
+    box.append(img);
+  }
+  const main = document.createElement('div'); main.className = 'batch-main';
+  const name = document.createElement('div'); name.className = 'batch-name';
+  name.textContent = shortName(item.name);
+  name.title = item.name;
+  const meta = document.createElement('div'); meta.className = 'batch-meta';
+  if (item.state === 'valid') {
+    meta.textContent = `${fmt(item.duration)} · ${dollars(item.price)}`;
+  } else if (item.state === 'checking') {
+    meta.textContent = 'Checking…';
+  } else {
+    meta.textContent = item.reason;
+    if (item.state === 'invalid') meta.classList.add('error');
+  }
+  main.append(name, meta);
+  if (item.state === 'valid' && $('consentBox').checked) {
+    const curve = document.createElement('button');
+    curve.type = 'button';
+    curve.className = 'batch-curve';
+    curve.textContent = item.curve ? 'Curve added' : 'Add retention curve';
+    curve.addEventListener('click', () => openCurve({ kind: 'item', item, title: item.name }));
+    main.append(curve);
+  }
+  const remove = document.createElement('button');
+  remove.type = 'button';
+  remove.className = 'batch-x';
+  remove.textContent = '×';
+  remove.setAttribute('aria-label', `Remove ${item.name}`);
+  remove.addEventListener('click', () => {
+    item.removed = true;
+    batchItems = batchItems.filter(other => other !== item);
+    renderBatch();
+  });
+  row.append(box, main, remove);
+  return row;
+}
+
+function updateBatchTotal() {
+  const valid = batchItems.filter(i => i.state === 'valid');
+  const total = valid.reduce((sum, i) => sum + i.price, 0);
+  const totalEl = $('batchTotal');
+  const upload = $('batchUpload');
+  const available = me && me.balance ? me.balance.available_cents : 0;
+  upload.disabled = valid.length === 0 || total > available;
+  totalEl.hidden = valid.length === 0;
+  totalEl.classList.remove('error');
+  if (valid.length === 0) { totalEl.textContent = ''; return; }
+  if (total > available) {
+    totalEl.textContent = `Needs ${dollars(total)}; you have ${dollars(available)}`;
+    totalEl.classList.add('error');
+  } else {
+    totalEl.textContent = `${dollars(total)} · charged only for videos that finish · cancel within 15 s`;
+  }
+}
+
+function startBatchUpload() {
+  const valid = batchItems.filter(i => i.state === 'valid');
+  const total = valid.reduce((sum, i) => sum + i.price, 0);
+  const available = me && me.balance ? me.balance.available_cents : 0;
+  if (!valid.length || total > available) return;
+  const consent = $('consentBox').checked;
+  closeBatchDialog();
+  resetUI();  // the player stops and History shows; the upload box is free at once
+  valid.forEach(item => uploadQueue.push({ item, consent, state: 'waiting', progress: 0, reason: '' }));
+  renderHistory(jobsCache);
+  loadHistory();
+  processQueue();
+}
+
+// ---- Upload queue (§2b): one file at a time, one presign just before its upload ----
+
+let uploadQueue = [], queueRunning = false;
+const cancelWindows = new Map();      // job_id → when its 15-second window ends
+const pendingCurves = new Map();      // job_id → { curve, name } held until the job is done
+const curveFailures = new Map();      // job_id → row message
+
+window.addEventListener('beforeunload', e => {
+  if (uploadQueue.some(en => en.state === 'waiting' || en.state === 'uploading')) {
+    e.preventDefault();
+    e.returnValue = '';
+  }
+});
+
+async function processQueue() {
+  if (queueRunning) return;
+  queueRunning = true;
+  try {
+    while (true) {
+      const entry = uploadQueue.find(en => en.state === 'waiting' && !en.removed);
+      if (!entry) break;
+      await uploadEntry(entry);
+    }
+  } finally { queueRunning = false; }
+}
+
+function stopQueueAfter(entry, reason, signedOut) {
+  entry.state = 'failed';
+  entry.reason = reason;
+  entry.signedOut = !!signedOut;
+  uploadQueue.forEach(en => {
+    if (en !== entry && en.state === 'waiting') {
+      en.state = 'failed';
+      en.reason = reason;
+      en.signedOut = !!signedOut;
+    }
+  });
+  renderHistory(jobsCache);
 }
 
 const UPLOAD_STALL_MS = 60000;
-async function abandonUpload(jobId, message) {
-  let res;
-  try {
-    res = await postJSON(`/api/jobs/${jobId}/cancel`, {});
-  } catch (e) {
-    uploadFailed(message + ' If it shows in your history as waiting, cancel it there.');
-    return refreshAccount();
-  }
-  if (res.status === 401) return window.location.reload();
-  if (res.ok) {
-    uploadFailed(message + NOT_CHARGED);
-  } else if (res.status === 409) {
-    resetUpload();
-  } else {
-    uploadFailed(message + ' If it shows in your history as waiting, cancel it there.');
-  }
-  refreshAccount();
-}
 
-async function startUpload() {
-  const file = pendingFile, duration = pendingDuration;
-  pendingCompareId = null;
-  $('upConfirm').disabled = true; $('consentBox').disabled = true;
-  $('upMsg').classList.remove('error'); $('upMsg').textContent = 'Preparing upload...';
+// The version of the consent wording shown in the upload dialog; the server records it per job and
+// refuses an outdated one (M3f §5a). Change it together with the wording and billing.CONSENT_VERSION.
+const CONSENT_VERSION = '2026-10-25';
 
+async function uploadEntry(entry) {
+  const item = entry.item;
+  entry.state = 'uploading';
+  entry.progress = 0;
+  renderHistory(jobsCache);
   let presign;
   try {
     const res = await postJSON('/api/uploads/presign', {
-      filename: file.name, content_type: pendingType,
-      client_duration_seconds: duration, client_declared_bytes: file.size,
-      research_consent: $('consentBox').checked,
+      filename: item.name, content_type: item.type,
+      client_duration_seconds: item.duration, client_declared_bytes: item.file.size,
+      research_consent: entry.consent,
+      ...(entry.consent ? { consent_version: CONSENT_VERSION } : {}),
     });
-    presign = await res.json();
-    if (res.status === 401) return window.location.reload();
+    presign = await res.json().catch(() => ({}));
+    if (res.status === 401) return stopQueueAfter(entry, 'Signed out', true);
     if (res.status === 402) {
-      return uploadFailed(`${knownFailure('insufficient_credit')} It needs ${dollars(presign.required_cents)}; ` +
-        `you have ${dollars(presign.available_cents)}.${NOT_CHARGED}`);
+      entry.state = 'failed';
+      entry.reason = 'Not enough credit';
+      renderHistory(jobsCache);
+      return;
     }
     if (!res.ok) {
-      const known = knownFailure(presign.error);
-      return uploadFailed(known ? known + NOT_CHARGED : (presign.message || `HTTP ${res.status}`) + NOT_CHARGED);
+      if (presign.error === 'processing_paused') return stopQueueAfter(entry, 'Processing is paused');
+      if (presign.error === 'consent_outdated') return stopQueueAfter(entry, presign.message);
+      entry.state = 'failed';
+      entry.reason = presign.message || `Upload didn't start (HTTP ${res.status}).`;
+      renderHistory(jobsCache);
+      return;
     }
-  } catch (err) { return uploadFailed(`Couldn't start the upload: ${err.message}`); }
+  } catch (e) {
+    entry.state = 'failed';
+    entry.reason = "Couldn't reach the server. Please try again.";
+    renderHistory(jobsCache);
+    return;
+  }
   const jobId = presign.job_id;
   loadBalance();
 
   const fd = new FormData();
   Object.entries(presign.fields).forEach(([k, v]) => fd.append(k, v));
-  fd.append('file', file);
+  fd.append('file', item.file);
 
-  const xhr = new XMLHttpRequest();
-  let stallTimer = null, finished = false;
-  const clearStallTimer = () => clearTimeout(stallTimer);
-  const armStallTimer = () => {
-    clearStallTimer();
-    stallTimer = setTimeout(() => xhr.abort(), UPLOAD_STALL_MS);
-  };
-  const failUpload = message => {
-    if (finished) return;
-    finished = true;
-    clearStallTimer();
-    uploadCancel = null;
-    abandonUpload(jobId, message);
-  };
-  uploadCancel = () => {
-    if (finished) return;
-    finished = true;
-    clearStallTimer();
-    uploadCancel = null;
-    xhr.abort();
-    abandonUpload(jobId, 'Upload cancelled.');
-  };
-  xhr.open('POST', presign.url);
-  xhr.upload.onprogress = ev => {
-    if (finished) return;
-    armStallTimer();
-    if (!ev.lengthComputable) return;
-    $('upBar').style.width = `${Math.round(100 * ev.loaded / ev.total)}%`;
-  };
-  xhr.onload = () => {
-    if (finished) return;
-    clearStallTimer();
-    if (xhr.status === 204) {
+  // The queue waits for this file to finish before the next presign (one file at a time).
+  await new Promise(resolve => {
+    const xhr = new XMLHttpRequest();
+    entry.xhr = xhr;
+    let stallTimer = null, finished = false;
+    const clearStallTimer = () => clearTimeout(stallTimer);
+    const armStallTimer = () => {
+      clearStallTimer();
+      stallTimer = setTimeout(() => xhr.abort(), UPLOAD_STALL_MS);
+    };
+    // The upload ended without the file arriving: cancel the reserved job (§2b).
+    const failUpload = message => {
+      if (finished) return;
       finished = true;
-      $('upBar').style.width = '100%';
-      showCancelWindow(jobId);
+      clearStallTimer();
+      entry.xhr = null;
+      cancelReservedJob(jobId);
+      if (entry.removed) {
+        uploadQueue = uploadQueue.filter(en => en !== entry);
+      } else {
+        entry.state = 'failed';
+        entry.reason = message;
+      }
+      renderHistory(jobsCache);
+      resolve();
+    };
+    xhr.open('POST', presign.url);
+    xhr.upload.onprogress = ev => {
+      if (finished) return;
+      armStallTimer();
+      if (!ev.lengthComputable || !entry.barEl) return;
+      entry.progress = ev.loaded / ev.total;
+      entry.barEl.style.width = `${Math.round(100 * entry.progress)}%`;
+    };
+    xhr.onload = () => {
+      if (finished) return;
+      finished = true;
+      clearStallTimer();
+      entry.xhr = null;
+      if (xhr.status !== 204) return failUpload(`Upload didn't finish (HTTP ${xhr.status}).`);
+      uploadQueue = uploadQueue.filter(en => en !== entry);
+      cancelWindows.set(jobId, Date.now() + 15000);
+      tabJobs.add(jobId);
+      if (item.thumb) localFrames.set(jobId, item.thumb);
+      if (item.curve) pendingCurves.set(jobId, { curve: item.curve, name: item.name });
+      renderHistory(jobsCache);
       refreshAccount();
-    } else { failUpload(`Upload failed (HTTP ${xhr.status}).`); }
-  };
-  xhr.onerror = () => failUpload('Upload failed: network error.');
-  xhr.onabort = () => failUpload('Upload failed: no progress for 60 seconds.');
-  armStallTimer();
-  $('upMsg').textContent = 'Uploading… keep this page open';
-  $('upProgress').classList.add('active');
-  xhr.send(fd);
+      resolve();
+    };
+    xhr.onerror = () => failUpload("Upload didn't finish: network error.");
+    xhr.onabort = () => failUpload("Upload didn't finish: no progress for 60 seconds.");
+    armStallTimer();
+    xhr.send(fd);
+  });
 }
 
-function clearUploadWindow() {
-  clearInterval(uploadWindowTimer);
-  uploadWindowTimer = null;
-  uploadCancel = null;
-}
-
-function showCancelWindow(jobId) {
-  clearUploadWindow();
-  const button = $('upCancel');
-  let left = 15;
-  button.hidden = false;
-  button.textContent = `Cancel (${left})`;
-  $('upConfirm').style.display = 'none';
-  $('upMsg').textContent = '';
-  $('upMsg').classList.remove('error');
-  $('upProgress').classList.add('active');
-  $('upBar').style.width = '100%';
-  uploadWindowTimer = setInterval(() => {
-    left -= 1;
-    if (left <= 0) { resetUpload(); return; }
-    button.textContent = `Cancel (${left})`;
-  }, 1000);
-  uploadCancel = async () => {
-    let res;
-    try {
-      res = await postJSON(`/api/jobs/${jobId}/cancel`, {});
-    } catch (e) { return; }
+async function cancelReservedJob(jobId) {
+  try {
+    const res = await postJSON(`/api/jobs/${jobId}/cancel`, {});
     if (res.status === 401) return window.location.reload();
-    if (res.ok) {
-      resetUpload();
-      refreshAccount();
-    } else if (res.status === 409) {
-      uploadCancel = null;
-      button.hidden = true;
-      refreshAccount();
-    }
-  };
+    if (res.ok || res.status === 409) refreshAccount();
+  } catch (e) { /* the row keeps its state; the job can be cancelled from History */ }
 }
 
-function resetUpload() {
-  clearUploadWindow();
-  stopTracking();
-  pendingFile = null; pendingType = ''; pendingDuration = 0;
-  $('uploadPanel').classList.remove('active');
-  $('uploadNote').textContent = '';
-  $('upFileName').textContent = '';
-  $('upDetail').textContent = '';
-  $('upMsg').textContent = '';
-  $('upMsg').classList.remove('error');
-  $('upProgress').classList.remove('active');
-  $('upBar').style.width = '0';
-  fileInput.value = '';
-  $('upCancel').hidden = false;
-  $('upCancel').textContent = 'Cancel';
-  if (signedIn) uploadZone.classList.remove('hidden');
-  $('headerMeta').textContent = '';
+// The 15-second cancel window counts down each second in place of the "⋯" menu.
+setInterval(() => {
+  if (cancelWindows.size === 0) return;
+  let changed = false;
+  for (const [jobId, until] of cancelWindows) {
+    if (Date.now() >= until) { cancelWindows.delete(jobId); changed = true; continue; }
+    const button = document.querySelector(`[data-cancel-id="${jobId}"]`);
+    if (button) button.textContent = `Cancel ${Math.max(1, Math.ceil((until - Date.now()) / 1000))}`;
+  }
+  if (changed) renderHistory(jobsCache);
+}, 1000);
+
+async function cancelNewJob(jobId) {
+  try {
+    const res = await postJSON(`/api/jobs/${jobId}/cancel`, {});
+    if (res.status === 401) return window.location.reload();
+    cancelWindows.delete(jobId);
+    if (res.status === 409) { renderHistory(jobsCache); return; }  // already dispatched: just loses the button
+    if (res.ok) { loadBalance(); loadHistory(); }
+  } catch (e) { /* the window keeps counting; the job can still be cancelled from the menu */ }
 }
 
 const POLL_MS = 5000;
-const NOT_CHARGED = ' You have not been charged.';
-function knownFailure(code, message) {
-  const maxSeconds = limits ? limits.max_video_duration_seconds : 120;
-  switch (code) {
-    case 'insufficient_credit': return 'Not enough credit for this video.';
-    case 'insufficient_credit_for_actual_duration':
-      return "Your video is longer than the length we estimated, and your credit doesn't cover the difference.";
-    case 'duration_exceeds_max_estimated':
-    case 'duration_exceeds_max_verified': return `This video is longer than the ${maxSeconds}-second maximum.`;
-    case 'file_too_large': return 'This file is larger than the upload limit.';
-    case 'unreadable_video': return 'This file is not a readable video.';
-    case 'video_changed': return 'The video was replaced after it was checked. Please upload it again.';
-    case 'processing_failed':
-    case 'stalled': return 'Processing failed after retrying.' + (message ? ` ${message}` : '');
-    case 'cancelled': return 'Cancelled.';
-    case 'deadline_passed': return "This job didn't start or finish within 4 hours. Please try again.";
-    case 'upload_not_received': return "The upload didn't finish. Please try again.";
-    case 'upload_missing':
-      return 'The uploaded file was no longer available (uploads are kept 30 days). Please upload it again.';
-    case 'presign_failed': return "The upload couldn't be started. Please try again.";
-    case 'processing_paused': return 'Processing is paused right now, so no video can be analysed.';
-    default: return null;
-  }
-}
-const failureText = (code, message) => knownFailure(code, message) || 'Processing failed.';
+// Short History failure texts, each shown with "· not charged" (§4.5).
+const FAILURE_TEXTS = {
+  unreadable_video: 'Not a readable video',
+  deadline_passed: "Didn't finish in time",
+  processing_failed: 'Failed',
+  stalled: 'Failed',
+  upload_not_received: "Upload didn't finish",
+  upload_missing: "Upload didn't finish",
+  duration_exceeds_max_estimated: 'Video too long',
+  duration_exceeds_max_verified: 'Video too long',
+  insufficient_credit: 'Not enough credit',
+  insufficient_credit_for_actual_duration: 'Not enough credit',
+  video_changed: 'Video replaced after checking',
+  processing_paused: 'Processing paused',
+};
+const failureText = code => FAILURE_TEXTS[code] || 'Failed';
 window.neurolensTimings = {};
 let trackedJob = null, pollTimer = null;
 
@@ -1352,7 +1635,6 @@ function trackJob(jobId) {
   clearTimeout(pollTimer);
   trackedJob = jobId;
   setJobInUrl(jobId);
-  playerOriginTab = 'analyses';
   pollJob(jobId);
 }
 
@@ -1372,17 +1654,20 @@ async function pollJob(jobId) {
     const res = await fetch(`/api/jobs/${jobId}/status`);
     if (trackedJob !== jobId) return;
     if (res.status === 404) {
+      // A failed or unknown job opens History, not the player (§4.8); the row shows the reason.
       again = false;
-      showResultUnavailable('No such job for this account.');
+      resetUI();
+      loadHistory();
     } else if (res.ok) {
       const st = await res.json();
       if (trackedJob !== jobId) return;
       if (st.status === 'done') {
-        again = !(await showResult(jobId, st.research_consent));
+        again = !(await showResult(jobId));
         if (!again) refreshAccount();
       } else if (st.status === 'failed') {
         again = false;
-        showResultUnavailable(failureText(st.error_code, st.error_message) + NOT_CHARGED);
+        resetUI();
+        loadHistory();
         refreshAccount();
       }
     }
@@ -1409,12 +1694,6 @@ function showVideoMessage(message) {
   showVideo(false);
 }
 
-function showVideoCredit(jobId) {
-  if (!currentResult || !currentContext || currentContext.jobId !== jobId) return;
-  const analysed = currentResult.processing_time_seconds ? ` · analysed in ${Math.round(currentResult.processing_time_seconds)}s` : '';
-  $('clipCredit').textContent = `${currentResult.duration_seconds}s${analysed}`;
-}
-
 async function loadJobVideo(jobId, seq, resume) {
   const request = ++videoRequest;
   let res, data = {};
@@ -1429,6 +1708,7 @@ async function loadJobVideo(jobId, seq, resume) {
   videoJob = jobId;
   videoRetried = !!(resume && resume.retried);
   video.muted = resume ? resume.muted : true;
+  video.crossOrigin = 'anonymous';
   video.src = data.url;
   if (resume) {
     video.addEventListener('loadedmetadata', () => {
@@ -1438,7 +1718,8 @@ async function loadJobVideo(jobId, seq, resume) {
     }, { once: true });
   }
   showVideo(true);
-  showVideoCredit(jobId);
+  // The video link arrived, so the strongest and weakest moments get their pictures.
+  buildTop();
   updateTransport();
   return { ok: true };
 }
@@ -1459,7 +1740,7 @@ function showResultUnavailable(message) {
   $('compareRow').hidden = true;
   $('compareSelect').replaceChildren();
   $('compareMsg').textContent = '';
-  $('chartsEmpty').style.display = 'none';
+  $('reportEmpty').style.display = 'none';
   $('reportBody').classList.add('active');
   $('mutedToggle').checked = false;
   $('brainSecond').textContent = '';
@@ -1471,10 +1752,9 @@ function showResultUnavailable(message) {
   $('videoMissing').textContent = '';
   $('clipTitle').textContent = '';
   $('clipTitle').title = '';
-  $('clipCredit').textContent = '';
 }
 
-async function showResult(jobId, consented) {
+async function showResult(jobId) {
   const seq = resultSeq;
   let res;
   try {
@@ -1505,14 +1785,13 @@ async function showResult(jobId, consented) {
   const t0 = performance.now();
   const cached = jobsCache.find(j => j.job_id === jobId);
   const title = cached && cached.filename ? cached.filename : `Job ${jobId.slice(0, 8)}`;
-  showRetention(consented ? jobId : null, title);
+  showRetention(jobId, title);
   clearVideoSource();
   $('videoMissing').textContent = '';
   setViewName('player');
   const name = videoBaseName(title);
   $('clipTitle').textContent = shortName(name);
   $('clipTitle').title = name;
-  $('clipCredit').textContent = '';
   try {
     renderResult(result, result.summary || {}, { jobId, brainUrl: `/api/jobs/${jobId}/brain`, title, fileName: title });
   } catch (e) {
@@ -1530,52 +1809,231 @@ async function showResult(jobId, consented) {
   return true;
 }
 
-// The results page shows a button for a consented job; it and the history row's
-// "Add retention" open the same dialog.
-let resultRetention = null;
+// The results page shows the quiet link for a shared job until its first snapshot;
+// it and the History row's link and "⋯" item open the same curve form (§5d).
+let resultCurve = null;
 function showRetention(jobId, title) {
-  resultRetention = jobId ? { jobId, title } : null;
-  $('retentionPanel').classList.toggle('active', !!jobId);
+  if (jobId) {
+    const cached = jobsCache.find(j => j.job_id === jobId);
+    const sharing = cached ? !!cached.sharing : true;
+    const noCurve = cached ? cached.curve_count === 0 : true;
+    resultCurve = sharing && noCurve ? { jobId, title } : null;
+  } else {
+    resultCurve = null;
+  }
+  $('retentionLink').hidden = !resultCurve;
 }
-$('retentionOpen').addEventListener('click', () => {
-  if (resultRetention) openRetention(resultRetention.jobId, resultRetention.title);
-});
-
-const retentionDialog = $('retentionDialog');
-let retentionJob = null;
-function setRetentionMsg(text, isError) {
-  $('retentionMsg').textContent = text;
-  $('retentionMsg').classList.toggle('error', !!isError);
-}
-function openRetention(jobId, title) {
-  retentionJob = jobId;
-  $('retentionVideo').textContent = title;
-  setRetentionMsg('');
-  if (!retentionDialog.open) retentionDialog.showModal();
-}
-$('retentionClose').addEventListener('click', () => retentionDialog.close());
-closeOnBackdrop(retentionDialog);
-
-$('retentionPick').addEventListener('click', () => $('retentionInput').click());
-$('retentionInput').addEventListener('change', async ev => {
-  const file = ev.target.files[0];
-  ev.target.value = '';
-  const jobId = retentionJob;
-  if (!file || !jobId) return;
-  // A reply for a job whose dialog is no longer the open one is dropped.
-  const show = (text, isError) => { if (retentionJob === jobId) setRetentionMsg(text, isError); };
-  show('Reading the report...');
-  try {
-    const res = await postJSON(`/api/jobs/${jobId}/retention`, { report: await file.text() });
-    const data = await res.json().catch(() => ({}));
-    if (res.status === 401) return window.location.reload();
-    if (!res.ok) return show(data.message || `Couldn't save the report (HTTP ${res.status}).`, true);
-    show('Real audience retention saved.');
-    loadHistory();
-  } catch (e) {
-    show("Couldn't reach the server. Please try again.", true);
+$('retentionLink').addEventListener('click', () => {
+  if (resultCurve) {
+    const cached = jobsCache.find(j => j.job_id === resultCurve.jobId);
+    openCurve(jobCurveTarget(cached || { job_id: resultCurve.jobId, filename: resultCurve.title }));
   }
 });
+
+function jobCurveTarget(job) {
+  return { kind: 'job', job, jobId: job.job_id, title: job.filename || `Job ${job.job_id.slice(0, 8)}`, rewardCents: job.curve_reward_cents || 0 };
+}
+
+// ---- Curve form (§5d) ----
+
+const curveDialog = $('curveDialog');
+const CURVE_VIEWS = [['lt_1k', 'Under 1k'], ['1k_10k', '1k–10k'], ['10k_100k', '10k–100k'], ['gt_100k', 'Over 100k']];
+const CURVE_PUBLISHED = [['week', 'This week'], ['month', 'This month'], ['older', 'Earlier']];
+const CURVE_PROMOTED = [['yes', 'Yes'], ['no', 'No']];
+choiceGroup($('curveViews'), 'curveViews', CURVE_VIEWS);
+choiceGroup($('curvePublished'), 'curvePublished', CURVE_PUBLISHED);
+choiceGroup($('curvePromoted'), 'curvePromoted', CURVE_PROMOTED);
+
+function choiceGroup(host, name, options) {
+  host.replaceChildren();
+  options.forEach(([value, label]) => {
+    const el = document.createElement('label');
+    const input = document.createElement('input');
+    input.type = 'radio';
+    input.name = name;
+    input.value = value;
+    input.addEventListener('change', updateCurveSave);
+    const text = document.createElement('span');
+    text.textContent = label;
+    el.append(input, text);
+    host.append(el);
+  });
+}
+
+let curveTarget = null, curveFile = null;
+
+function setCurveMsg(text, isError) {
+  $('curveMsg').textContent = text;
+  $('curveMsg').classList.toggle('error', !!isError);
+}
+
+function openCurve(target) {
+  curveTarget = target;
+  curveFile = null;
+  $('curveVideo').textContent = target.title;
+  $('curveFileName').textContent = '';
+  $('curveReward').textContent = target.kind === 'job' && target.rewardCents > 0
+    ? `Add a valid curve and this analysis is free (${dollars(target.rewardCents)} back).`
+    : '';
+  setCurveMsg('');
+  $('curveSave').disabled = true;
+  ['curveViews', 'curvePublished', 'curvePromoted'].forEach(id => {
+    $(id).querySelectorAll('input').forEach(input => { input.checked = false; });
+  });
+  if (!curveDialog.open) curveDialog.showModal();
+}
+
+function curveChoice(name) {
+  const picked = document.querySelector(`input[name="${name}"]:checked`);
+  return picked ? picked.value : null;
+}
+
+function updateCurveSave() {
+  $('curveSave').disabled = !(curveFile && curveChoice('curveViews') && curveChoice('curvePublished') && curveChoice('curvePromoted'));
+}
+
+$('curvePick').addEventListener('click', () => $('curveInput').click());
+$('curveInput').addEventListener('change', ev => {
+  curveFile = ev.target.files[0] || null;
+  ev.target.value = '';
+  $('curveFileName').textContent = curveFile ? curveFile.name : '';
+  updateCurveSave();
+});
+$('curveClose').addEventListener('click', () => curveDialog.close());
+closeOnBackdrop(curveDialog);
+
+$('curveSave').addEventListener('click', async () => {
+  if (!curveTarget || $('curveSave').disabled) return;
+  const target = curveTarget;
+  const report = curveFile ? await curveFile.text() : '';
+  const body = {
+    report,
+    views: curveChoice('curveViews'),
+    published: curveChoice('curvePublished'),
+    promoted: curveChoice('curvePromoted') === 'yes',
+  };
+  if (target.kind === 'item') {
+    target.item.curve = body;
+    setCurveMsg('Saved.');
+    renderBatch();
+    return;
+  }
+  setCurveMsg('Saving…');
+  $('curveSave').disabled = true;
+  try {
+    const res = await postJSON(`/api/jobs/${target.jobId}/retention`, body);
+    const data = await res.json().catch(() => ({}));
+    if (res.status === 401) return window.location.reload();
+    if (!res.ok) {
+      const message = data.message || `Couldn't save the curve (HTTP ${res.status}).`;
+      $('curveSave').disabled = false;
+      return setCurveMsg(message, true);
+    }
+    const rewarded = data.rewarded_cents || 0;
+    if (rewarded > 0) setCurveMsg(`Saved. This analysis is now free: ${dollars(rewarded)} is back in your credit.`);
+    else if (Array.isArray(data.quality) && data.quality.length) setCurveMsg("Saved. It doesn't look like a full retention curve, so it isn't free.");
+    else setCurveMsg('Saved.');
+    loadHistory();
+    loadBalance();
+  } catch (e) {
+    setCurveMsg("Couldn't reach the server. Please try again.", true);
+    $('curveSave').disabled = false;
+  }
+});
+
+// A curve chosen in the upload dialog is sent once its job is done, while the tab is open.
+async function sendPendingCurves(jobs) {
+  if (pendingCurves.size === 0) return;
+  for (const [jobId, entry] of [...pendingCurves]) {
+    const job = jobs.find(j => j.job_id === jobId);
+    if (!job) { pendingCurves.delete(jobId); continue; }  // cancelled jobs are not listed
+    if (job.status !== 'done' || !job.sharing) continue;
+    pendingCurves.delete(jobId);
+    try {
+      const res = await postJSON(`/api/jobs/${jobId}/retention`, entry.curve);
+      if (res.status === 401) return window.location.reload();
+      if (!res.ok) curveFailures.set(jobId, `Couldn't add the curve for ${entry.name}.`);
+    } catch (e) {
+      curveFailures.set(jobId, `Couldn't add the curve for ${entry.name}.`);
+    }
+    loadHistory();
+    loadBalance();
+  }
+}
+
+// ---- Stop sharing (§5c) ----
+
+const stopShareDialog = $('stopShareDialog');
+let stopShareTarget = null;
+function openStopShare(job) {
+  stopShareTarget = job;
+  $('stopShareMsg').textContent = '';
+  $('stopShareMsg').classList.remove('error');
+  $('stopShareBtn').disabled = false;
+  if (!stopShareDialog.open) stopShareDialog.showModal();
+}
+$('stopShareCancel').addEventListener('click', () => stopShareDialog.close());
+closeOnBackdrop(stopShareDialog);
+$('stopShareBtn').addEventListener('click', async () => {
+  const job = stopShareTarget;
+  if (!job) return;
+  $('stopShareBtn').disabled = true;
+  try {
+    const res = await postJSON(`/api/jobs/${job.job_id}/stop-sharing`, {});
+    const data = await res.json().catch(() => ({}));
+    if (res.status === 401) return window.location.reload();
+    if (!res.ok) {
+      $('stopShareMsg').textContent = data.message || `Couldn't stop sharing (HTTP ${res.status}).`;
+      $('stopShareMsg').classList.add('error');
+      $('stopShareBtn').disabled = false;
+      return;
+    }
+    stopShareTarget = null;
+    stopShareDialog.close();
+    loadHistory();
+  } catch (e) {
+    $('stopShareMsg').textContent = "Couldn't reach the server. Please try again.";
+    $('stopShareMsg').classList.add('error');
+    $('stopShareBtn').disabled = false;
+  }
+});
+
+// ---- Tab title (§3) ----
+
+let tabJobs = new Set(), tabTitleDone = false, tabTitleVisHandler = null;
+function updateTabTitle(jobs) {
+  if (tabJobs.size === 0) return;
+  const present = new Set(jobs.map(job => job.job_id));
+  for (const id of [...tabJobs]) if (!present.has(id)) tabJobs.delete(id);  // a cancelled job leaves the count
+  const tracked = jobs.filter(job => tabJobs.has(job.job_id));
+  const total = tabJobs.size;
+  const done = tracked.filter(job => job.status === 'done').length;
+  const failed = tracked.filter(job => job.status === 'failed').length;
+  if (done + failed >= total) {
+    document.title = failed ? `✓ ${done} done · ${failed} failed · NeuroLens` : `✓ ${done} done · NeuroLens`;
+    if (!tabTitleDone) { tabTitleDone = true; armTabTitleReset(); }
+  } else if (done + failed > 0) {
+    document.title = `${done + failed} of ${total} done · NeuroLens`;
+  } else {
+    document.title = 'Waiting · NeuroLens';
+  }
+}
+function resetTabTitle() {
+  if (!tabTitleDone) return;
+  tabTitleDone = false;
+  tabJobs.clear();
+  document.title = 'NeuroLens';
+  if (tabTitleVisHandler) {
+    document.removeEventListener('visibilitychange', tabTitleVisHandler);
+    tabTitleVisHandler = null;
+  }
+}
+function armTabTitleReset() {
+  tabTitleVisHandler = () => { if (!document.hidden) resetTabTitle(); };
+  document.addEventListener('visibilitychange', tabTitleVisHandler);
+  window.addEventListener('click', resetTabTitle, { once: true });
+  window.addEventListener('keydown', resetTabTitle, { once: true });
+}
 
 function openingText(s) {
   return s && s.opening && s.opening.word ? cap(s.opening.word) : 'Too short to compare';
@@ -1629,7 +2087,12 @@ function currentVideoName() {
 function compareTable() {
   const other = comparison ? comparison.summary || {} : {};
   const row = (name, a, b) => `<tr><th scope="row">${name}</th><td class="v">${a}</td><td class="v">${b}</td></tr>`;
-  const audio = s => { const pct = audioPercent(s); return pct === null ? '—' : `${pct}%`; };
+  // A sound share of 0 keeps its value; the cell just says so on hover (§4.3).
+  const audio = s => {
+    const pct = audioPercent(s);
+    if (pct === 0) return '<span title="Responds as strongly with the sound off">—</span>';
+    return pct === null ? '—' : `${pct}%`;
+  };
   const name = currentVideoName();
   const otherName = comparison ? comparison.label : '';
   const swap = comparison && currentContext && currentContext.jobId
@@ -1655,14 +2118,16 @@ function swapComparison() {
 function updateSoundLine() {
   const line = $('soundLine');
   if (!line) return;
-  if (!currentResult) {
-    line.textContent = '';
+  if (!currentResult || comparison) {  // while comparing, the table's Sound share row has it
     line.hidden = true;
+    line.textContent = '';
     return;
   }
   const pct = audioPercent(currentSummary);
   line.hidden = false;
-  line.textContent = pct === null ? 'No strong response to measure' : `${pct}% of the response comes from the sound`;
+  line.textContent = pct === 0 ? 'Responds as strongly with the sound off'
+    : pct === null ? 'No strong response to measure'
+    : `${pct}% of the response comes from the sound`;
 }
 
 function buildTop() {
@@ -1724,7 +2189,7 @@ function renderResult(result, summary, ctx) {
   $('resultMessage').textContent = '';
   $('chartCard').hidden = false;
   $('stripsCard').hidden = false;
-  $('chartsEmpty').style.display = 'none';
+  $('reportEmpty').style.display = 'none';
   $('reportBody').classList.add('active');
   $('compareMsg').textContent = '';
   $('compareMsg').classList.remove('error');
@@ -1733,11 +2198,6 @@ function renderResult(result, summary, ctx) {
   const name = videoBaseName(ctx.title || '');
   $('clipTitle').textContent = shortName(name);
   $('clipTitle').title = name;
-  if (hasLocalVideo()) {
-    $('clipCredit').textContent = `${result.duration_seconds}s` + (result.processing_time_seconds ? ` · analysed in ${Math.round(result.processing_time_seconds)}s` : '');
-  } else {
-    $('clipCredit').textContent = `${result.duration_seconds}s · no local video`;
-  }
   buildTop();
   buildAllCharts();
   showCompareRow();
@@ -2336,17 +2796,13 @@ function resetUI() {
   $('sampleMeta').textContent = '';
   $('clipTitle').textContent = '';
   $('clipTitle').title = '';
-  $('clipCredit').textContent = '';
   window.brainMap.clear(BRAIN_UNAVAILABLE);
   $('reportBody').classList.remove('active');
-  $('chartsEmpty').style.display = '';
+  $('reportEmpty').style.display = '';
   setViewName('chooser');
   if (signedIn) $('uploadZone').classList.remove('hidden');
   $('headerMeta').textContent = '';
   showRetention(null);
-  resetUpload();
-  activeTab = playerOriginTab;
-  applyChooser();
   document.querySelectorAll('.sample-card').forEach(c => c.classList.remove('active'));
 }
 
@@ -2370,12 +2826,6 @@ $('deleteAccountBtn').addEventListener('click', async () => {
     deleteDialog.close();
     signedIn = false;
     resetUI();
-    $('account').textContent = '';
-    $('accountWrap').hidden = true;
-    $('balance').textContent = '';
-    $('uploadZone').classList.add('hidden');
-    $('historyPanel').classList.remove('active');
-    $('noCreditPanel').classList.remove('active');
     showSignedOut();
     $('signedOutNote').textContent = 'Your account and data have been deleted.';
   } catch (e) {
