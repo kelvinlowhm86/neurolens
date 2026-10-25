@@ -491,7 +491,7 @@ const NS = 'http://www.w3.org/2000/svg';
 
 let samplesData = null, jobsCache = [];
 let currentResult = null, currentSummary = null, currentContext = null;
-let comparison = null, mutedOn = false, resultSeq = 0, compareRequest = 0, pendingCompareId = null;
+let comparison = null, mutedOn = false, resultSeq = 0, compareRequest = 0;
 let signedIn = false, me = null, limits = null;
 let virtualTime = 0, virtualPlaying = false, virtualAnchor = 0, virtualRaf = 0, videoRaf = 0;
 let videoJob = null, videoRetried = false, videoRequest = 0, videoPlaying = false;
@@ -1657,7 +1657,6 @@ const setJobInUrl = jobId => setParam('job', jobId);
 
 function stopTracking() {
   trackedJob = null;
-  pendingCompareId = null;
   clearTimeout(pollTimer);
   setJobInUrl(null);
 }
@@ -1759,7 +1758,6 @@ function showResultUnavailable(message) {
   resultSeq += 1;
   stopVirtual();
   currentResult = null; currentSummary = null; currentContext = null; comparison = null;
-  pendingCompareId = null;
   mutedOn = false; virtualTime = 0;
   clearAllCharts();
   $('resultMessage').textContent = message;
@@ -1813,6 +1811,11 @@ async function showResult(jobId) {
     return false;
   }
   if (seq !== resultSeq) return true;
+  return openResult(jobId, result);
+}
+
+// Draws a result already in hand (opened from History, or the other side of a Swap).
+function openResult(jobId, result) {
   const t0 = performance.now();
   const cached = jobsCache.find(j => j.job_id === jobId);
   const title = cached && cached.filename ? cached.filename : `Job ${jobId.slice(0, 8)}`;
@@ -2173,13 +2176,20 @@ function compareTable() {
   </tbody></table>`;
 }
 
+// Both results are already loaded: redraw from them, so the page never blanks or refetches.
 function swapComparison() {
   const previousId = currentContext && currentContext.jobId;
-  const otherId = comparison && comparison.jobId;
-  if (!previousId || !otherId) return;
-  resetUI();
-  pendingCompareId = previousId;
-  trackJob(otherId);
+  if (!previousId || !comparison) return;
+  const previous = { result: currentResult, label: currentContext.title };
+  const other = comparison;
+  clearTimeout(pollTimer);
+  trackedJob = other.jobId;
+  setJobInUrl(other.jobId);
+  openResult(other.jobId, other.result);
+  const canCompare = [...$('compareSelect').options].some(option => option.value === previousId);
+  if (currentContext && currentContext.jobId === other.jobId && canCompare) {
+    useComparison(previousId, previous.label, previous.result);
+  }
 }
 
 function updateSoundLine() {
@@ -2599,16 +2609,13 @@ function showCompareRow() {
   const currentId = currentContext && currentContext.jobId;
   const candidates = (jobsCache || []).filter(j => j.result_available && j.status === 'done' && j.job_id !== currentId);
   if (!signedIn || !currentResult || candidates.length === 0) {
-    pendingCompareId = null;
     row.hidden = true;
     select.replaceChildren();
     if (comparison) { comparison = null; buildTop(); buildMainChart(); buildStrips(); }
     return;
   }
-  const pending = pendingCompareId;
-  pendingCompareId = null;
   row.hidden = false;
-  const keep = comparison ? comparison.jobId : pending || '';
+  const keep = comparison ? comparison.jobId : '';
   select.replaceChildren();
   const none = document.createElement('option');
   none.value = ''; none.textContent = 'None';
@@ -2623,7 +2630,6 @@ function showCompareRow() {
   });
   if (keep && candidates.some(job => job.job_id === keep)) {
     select.value = keep;
-    if (pending) loadComparison();
   } else {
     select.value = '';
     if (comparison) { comparison = null; buildTop(); buildMainChart(); buildStrips(); }
@@ -2659,13 +2665,7 @@ async function loadComparison() {
       buildTop(); buildMainChart(); buildStrips();
       return;
     }
-    comparison = { result: data, summary: data.summary || {}, label, jobId: id };
-    select.value = id;
-    mutedOn = false;
-    $('mutedToggle').checked = false;
-    $('mutedToggle').disabled = true;
-    msg.textContent = '';
-    buildTop(); buildMainChart(); buildStrips(); tick();
+    useComparison(id, label, data);
   } catch (e) {
     if (request !== compareRequest || seq !== resultSeq) return;
     msg.textContent = "Couldn't reach the server. Please try again.";
@@ -2674,6 +2674,17 @@ async function loadComparison() {
     $('mutedToggle').disabled = false;
     buildTop(); buildMainChart(); buildStrips();
   }
+}
+function useComparison(id, label, data) {
+  ++compareRequest;
+  comparison = { result: data, summary: data.summary || {}, label, jobId: id };
+  $('compareSelect').value = id;
+  mutedOn = false;
+  $('mutedToggle').checked = false;
+  $('mutedToggle').disabled = true;
+  $('compareMsg').textContent = '';
+  $('compareMsg').classList.remove('error');
+  buildTop(); buildMainChart(); buildStrips(); tick();
 }
 $('compareSelect').addEventListener('change', loadComparison);
 
@@ -2841,7 +2852,6 @@ function resetUI() {
   resultSeq += 1;
   stopVirtual();
   currentResult = null; currentSummary = null; currentContext = null; comparison = null;
-  pendingCompareId = null;
   mutedOn = false; virtualTime = 0;
   clearAllCharts();
   clearVideoSource();
