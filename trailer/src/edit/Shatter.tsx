@@ -14,8 +14,8 @@ type Shard = {
   rot: number;
 };
 
-const COLS = 7;
-const ROWS = 5;
+const COLS = 16;
+const ROWS = 8;
 
 const seeded = (seed: number) => {
   let s = seed >>> 0;
