@@ -43,7 +43,7 @@ export const Trailer: React.FC = () => {
     <Audio src={staticFile('music3.wav')} trimBefore={f(MUSIC_START)} volume={(t) => .8 * musicLevel(t) * MASTER} />
     <Audio src={staticFile('music3-muffled.wav')} trimBefore={f(MUSIC_START)} volume={(t) => .8 * (1 - musicLevel(t)) * MASTER} />
     <Sequence from={impactFrom} durationInFrames={impactDuration}>
-      <Audio src={staticFile(SFX.impact.file)} volume={(t) => interpolate(t, [impactDuration - impactFade, impactDuration], [.6, 0], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'}) * MASTER} />
+      <Audio src={staticFile(SFX.impact.file)} volume={(t) => interpolate(t, [impactDuration - impactFade, impactDuration], [.45, 0], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'}) * MASTER} />
     </Sequence>
     <Sequence from={muteFrom}>
       <Audio src={staticFile(SFX.mute.file)} volume={.5 * MASTER} />

@@ -7,14 +7,14 @@ A 75-second, 1920 × 1080, 30 fps Remotion film (2,250 frames). No voice-over. F
 From this directory:
 
 ```sh
-npx remotion render src/index.ts NeuroLensTrailer out/neurolens_trailer_v4.mp4
+npx remotion render src/index.ts NeuroLensTrailer out/neurolens_trailer_v5.mp4
 ```
 
 To keep caches and temporary files inside the project:
 
 ```sh
 XDG_CACHE_HOME="$PWD/.cache" npm_config_cache="$PWD/.npm-cache" TMPDIR="$PWD/out" \
-  npx remotion render src/index.ts NeuroLensTrailer out/neurolens_trailer_v4.mp4
+  npx remotion render src/index.ts NeuroLensTrailer out/neurolens_trailer_v5.mp4
 ```
 
 Dependencies are pinned in `package.json` and `package-lock.json` (Remotion 4.0.538). If they need reinstalling: `npm ci --cache .npm-cache`, then once `npx remotion browser ensure`. Remotion's headless Chrome is the only browser used; `tools/chrome-local.sh` keeps its renderer and GPU in one process on Apple Silicon. No app or browser UI is controlled.
@@ -77,7 +77,7 @@ Extract frames and make readable contact sheets:
 
 ```sh
 mkdir -p out/frames_v4
-ffmpeg -hide_banner -loglevel error -i out/neurolens_trailer_v4.mp4 \
+ffmpeg -hide_banner -loglevel error -i out/neurolens_trailer_v5.mp4 \
   -vf "select='not(mod(n,1))'" -fps_mode vfr -q:v 2 out/frames_v4/frame_%04d.jpg
 ../.venv/bin/python tools/contact_sheets.py --input out/frames_v4 --step 1 \
   --prefix contact_v4 --per-sheet 6 --width 640
