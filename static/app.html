@@ -147,7 +147,7 @@
   .account-icon { display: none; width: 16px; height: 16px; }
   .privacy-note { font-size: 11px; color: var(--stage-muted); margin-top: auto; padding: 4px 2px; }
   .privacy-note a { color: var(--stage-muted); }
-  .privacy-note.page-end { display: none; margin-top: 4px; }
+  .privacy-note.page-end { display: none; margin-top: 4px; padding: 4px 16px; }
   .spinner { width: 28px; height: 28px; border: 3px solid var(--stage-rule); border-top-color: var(--heat); border-radius: 50%; animation: spin .9s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
 
@@ -277,9 +277,11 @@
     .account::after { content: none; }
     .account-icon { display: block; }
     .bar-hide-sm { display: none; }
-    .history-row { display: grid; grid-template-columns: 64px minmax(0, 1fr) auto; }
+    .history-row { display: grid; grid-template-columns: 64px minmax(0, 1fr) auto; align-items: center; }
     .history-actions { display: contents; }
-    .history-row .history-link:not([data-cancel-id]) { grid-column: 2 / -1; justify-self: start; margin-top: 2px; }
+    .history-row .history-link:not([data-cancel-id]) { grid-row: 2; grid-column: 2 / -1; justify-self: start; margin-top: 2px; }
+    .history-row .history-more, .history-row [data-cancel-id] { grid-row: 1; grid-column: 3; }
+    .samples-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px 14px; }
     .mset { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
     .mset .mlabel { grid-column: 1 / -1; width: auto; }
     .mrow { grid-template-columns: 1fr; gap: 4px; }
@@ -867,11 +869,12 @@ function renderHistory(jobs) {
 }
 
 // The user's oldest unfinished job carries the waiting clock; the rest are just "In line".
+// The list is newest first, so among equal created_at times the last one in the list is the oldest.
 function oldestUnfinishedJob(jobs) {
   let oldest = null;
   jobs.forEach(job => {
     if (job.status !== 'queued' && job.status !== 'processing') return;
-    if (!oldest || new Date(job.created_at) < new Date(oldest.created_at)) oldest = job;
+    if (!oldest || new Date(job.created_at) <= new Date(oldest.created_at)) oldest = job;
   });
   return oldest;
 }
@@ -1903,8 +1906,7 @@ function setCurveMsg(text, isError, withGuideLink) {
     a.rel = 'noopener';
     a.className = 'curve-guide-link';
     a.textContent = 'How to get it';
-    a.style.marginLeft = '6px';
-    el.append(a);
+    el.append(' ', a);
   }
 }
 
