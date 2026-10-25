@@ -184,7 +184,8 @@ place in line among other users, waking the database from the landing page.
   that are marked (removed or deleted) and not purged. For a deleted job the purge also deletes the job's own files (upload, result, brain,
   thumbnail), so `dataset_purged_at` means all its files are gone; the reaper's retry covers every
   marked job, consented or not. A route that has marked answers success even if the purge failed (it
-  logs an error; the reaper finishes), since the user can no longer see or retry it. Marking a job
+  logs an error; the reaper finishes), since the user can no longer see or retry it. A purge that did not delete the job's own files records nothing if the job was
+  deleted meanwhile. Marking a job
   deleted also clears `dataset_purged_at`, so a copy purged earlier (Stop sharing, 90 days) still gets
   its own files purged. Account delete marks too (M3c §5).
 - **Curve details go with the copy:** the purge deletes the job's `retention_snapshots` rows (after

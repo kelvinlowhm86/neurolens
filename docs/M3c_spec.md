@@ -79,7 +79,9 @@ S3 is deleted first, so a failure part-way leaves a job that still shows but who
 - **Refused** while any of the user's jobs is `queued` or `processing` → 409 `job_active`, with the same message as §4.
 - **Steps (mark first, then purge, as for a job: M3f §5c):**
   1. **Mark**, in one transaction, `billing.delete_account(db, user_id)`:
-     - lock the `balances` row (`FOR UPDATE`, the same lock `reserve` takes);
+     - lock the `balances` row (`FOR UPDATE`, the same lock `reserve` takes), then the `users` row
+       (sign-in locks the user row it finds and never finds a marked account, so a racing sign-in
+       either links before the mark, and loses that link, or makes a new account after it);
      - refuse with `JobActive` if any job is queued or processing;
      - mark every job deleted (`deleted_at = now()`, `filename = NULL`, `dataset_purged_at = NULL`);
      - delete the user's `sessions` and `identities` (`RETURNING issuer, subject`), so every other tab
