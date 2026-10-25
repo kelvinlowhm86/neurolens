@@ -55,7 +55,8 @@ place in line among other users, waking the database from the landing page.
   file still waiting in the queue gets the same reason and nothing more is sent), or "Signed out"
   (likewise for the rest of the queue, with a "Sign in" link). Nothing is charged for such a row.
 - History rows for the batch appear at once, newest first, in the dialog's order:
-  - waiting to upload: "Waiting to upload", with × (removes it from the queue; no job exists yet);
+  - waiting to upload: "Waiting to upload", with × (removes it from the queue; no job exists yet;
+    if its presign is already in flight, the job it creates is cancelled at once and nothing uploads);
   - uploading: a progress bar, with × (aborts the upload, then cancels the reserved job, as now);
   - uploaded: "Cancel 15", counting down each second in place of the "⋯" menu, then the "⋯" menu
     returns. A 409 on click (already dispatched) removes the button with no error.
@@ -124,7 +125,16 @@ place in line among other users, waking the database from the landing page.
     works" and the closing band; the sample credit only in the footer.
 13. Start-up text: "Starting up; this can take up to a minute."
 14. The 3D brain stops drawing while the player is hidden.
-15. `docs/M3d_spec.md` §8: `deadline_passed` reads "within 4 hours".
+15. `docs/M3d_spec.md` §8: the `deadline_passed` error message reads "within 4 hours"; its History
+    label is the short "Didn't finish in time" (item 5).
+16. **Opening a result from History** switches to the player at once with a loading line. A result
+    that keeps failing to load (5xx) shows "Couldn't open this result. Try again later." instead of
+    retrying silently.
+17. **Results page from a `?job=` link:** its title and "Add audience retention" link are re-checked
+    once History has loaded (the job may not be in the first list).
+18. A row's curve-failure note clears when a later send for that job succeeds; "Show if muted" is
+    enabled again when a comparison is cleared; a job the page itself cancels leaves the tab title's
+    count.
 
 ## 5. Research sharing
 ### 5a. Consent
@@ -174,16 +184,20 @@ place in line among other users, waking the database from the landing page.
   that are marked (removed or deleted) and not purged. For a deleted job the purge also deletes the job's own files (upload, result, brain,
   thumbnail), so `dataset_purged_at` means all its files are gone; the reaper's retry covers every
   marked job, consented or not. A route that has marked answers success even if the purge failed (it
-  logs an error; the reaper finishes), since the user can no longer see or retry it. Account delete
-  keeps its order (files, then rows) since no row is left to retry from.
+  logs an error; the reaper finishes), since the user can no longer see or retry it. Marking a job
+  deleted also clears `dataset_purged_at`, so a copy purged earlier (Stop sharing, 90 days) still gets
+  its own files purged. Account delete marks too (M3c §5).
+- **Curve details go with the copy:** the purge deletes the job's `retention_snapshots` rows (after
+  the files), and every reaper run deletes snapshot rows older than 1095 days, matching the S3 rule.
+  The reward guard does not depend on them: it is `jobs.curve_rewarded_at` and the video hash.
 - **Lock order:** any transaction that locks both takes the user's balance row first, then the job row
   (`add_curve`, account delete, `reserve`), so two of them can never deadlock.
 - **Stop sharing:** `POST /api/jobs/<id>/stop-sharing` on a done, shared, not-removed job marks it
   (`dataset_removed_reason = 'stopped'`) and purges, as above. A failed purge still answers 200 (the
   copy is no longer used and the reaper finishes the delete) and logs an error. A queued
   or processing job → 409 `job_active`; not shared or already removed → 409 `not_shared`. The user's
-  own result, brain and thumbnail are untouched. History's "⋯" menu shows "Stop sharing" on shared
-  rows, with a one-line confirm ("Stop sharing this video? Its research copy is deleted now.").
+  own result, brain and thumbnail are untouched. History's "⋯" menu shows "Stop sharing" on done,
+  shared rows (`list_jobs` `sharing` requires status done), with a one-line confirm ("Stop sharing this video? Its research copy is deleted now.").
 - **No curve after 90 days:** the reaper's clean-up (M3e §7) uses `config.json`
   `research.no_curve_days` (90), deletes both prefixes and sets reason `'no_curve'`. It counts from
   `created_at` and skips jobs with any snapshot. The old `retention.csv` check is removed (§5f).
@@ -210,7 +224,7 @@ place in line among other users, waking the database from the landing page.
   wrote.
 - Order: parse the report (`results.parse_retention_report`, unchanged) → compute the quality flags
   (below) → write the raw `.json` and the `.csv` to S3 under a new `snapshot_id` → `billing.add_curve`.
-  An S3 failure → 500, nothing recorded. A database failure after the writes leaves two orphan files
+  An S3 failure → 500, nothing recorded, and a file already written is deleted. A database failure after the writes leaves two orphan files
   under the job's prefix, removed with it.
 - **Quality (`results.curve_quality(pairs)`, pure):** valid when there are at least 20 points, the
   watch ratio spread is at least 0.02 (not flat), the last value is not above the first (not rising
@@ -239,8 +253,10 @@ place in line among other users, waking the database from the landing page.
 - Replies on the form: "Saved. This analysis is now free: $0.72 is back in your credit.", "Saved.",
   or "Saved. It doesn't look like a full retention curve, so it isn't free." (invalid), and the
   credit in the top bar refreshes.
-- `list_jobs` returns, for shared jobs, `sharing` (shared and not removed), `curve_count` and
-  `curve_reward_cents` (what a valid curve would give now, 0 if not possible). `needs_retention` is
+- `list_jobs` returns, for shared jobs, `sharing` (done, shared and not removed), `curve_count` and
+  `curve_reward_cents` (what a valid curve would give now, 0 if not possible). It applies every reward
+  condition above except the curve's own validity; the per-user ones (funded, under the cap) come from
+  one helper shared with `add_curve`, so the preview and the payment cannot drift apart. `needs_retention` is
   replaced by `curve_count = 0`.
 
 ### 5e. Migration 006 (`infra/migrations/006_m3f.sql`)
@@ -280,13 +296,14 @@ whether the instance stays. Only if it does is the start built, as a separate ch
   with it, so an active user stays signed in and a request costs no extra write most of the time.
 - Sign-out deletes the row. Delete account deletes all the user's rows. Expired rows are deleted by
   the reaper's run.
-- The landing page's hint cookie follows the session's lifetime.
+- The landing page's hint cookie follows the session's lifetime: `/app` re-sets it for a signed-in
+  user, so it lasts as long as the sliding session.
 - Dev mode is unchanged. The 12-hour rule (`SESSION_HOURS`) is removed.
 
 ## 7. Laptop (`app.py`, `infra/local_stack.py`)
 - `python app.py` refuses to start unless `AWS_ENDPOINT_URL` is set to a `localhost` or `127.0.0.1`
   address, no `AWS_ENDPOINT_URL_<SERVICE>` points elsewhere, and `AWS_IGNORE_CONFIGURED_ENDPOINT_URLS`
-  is not set, with the message "python app.py runs only against the local fake stack: python
+  is not set (checked after `.env` is loaded), with the message "python app.py runs only against the local fake stack: python
   infra/local_stack.py. The real .env is for the admin scripts." Nothing else reads this rule.
 - `python infra/local_stack.py` runs the whole product on the laptop with no real AWS: it requires a
   local PostgreSQL DSN (host `localhost` or `127.0.0.1`, no `host`/`hostaddr` query parameters) (`--dsn`, default `postgresql://postgres@localhost:55432/postgres`), starts
@@ -294,7 +311,8 @@ whether the instance stays. Only if it does is the start built, as a separate ch
   region and endpoint in its own environment (never the real profile), creates the bucket (with the page's CORS) and the jobs queue and
   notification, applies the schema, then runs the web app on 5003 (Postgres backend) and a loop that
   passes each queued upload through the real `dispatcher.dispatch` (with a stand-in SageMaker client
-  that hands the job straight to the fake-mode worker's handler). Ctrl-C stops everything it started.
+  that hands the job straight to the fake-mode worker's handler; a dispatch error leaves the message
+  on the queue for a retry). Ctrl-C stops everything it started.
   `--grant <email> <dollars>` gives local credit.
 
 ## 8. Docs
@@ -326,10 +344,15 @@ Money and data paths get full treatment:
 - `curve_quality`: each check, at its edge.
 - `delete_job_prefixes`: deletes everything under both prefixes across pages; refuses a non-UUID
   (including empty and `../`); raises on a failed delete.
-- Stop sharing: deletes then marks; a delete failure leaves the row unmarked; 409s; another user's job
-  → 404.
+- Stop sharing: marks then purges; a purge failure still answers 200 and the reaper finishes it; 409s
+  (including a queued or failed job); another user's job → 404.
+- Purge: a job stopped then deleted gets its own files purged (reaper retry included); snapshot rows go
+  with the purge and after 1095 days; a stopped job's video cannot be rewarded again.
+- Reward preview: `curve_reward_cents` is 0 for an account with only starter credit and at the cap,
+  and equals what `add_curve` then pays.
 - Reaper: 90 days from config; a job with a snapshot is kept; reason `'no_curve'`.
-- Retention route: field validation; S3 failure records nothing; the removed-copy messages.
+- Retention route: field validation; an S3 failure on either write records nothing and leaves no
+  file; the removed-copy messages.
 - Worker: result and brain go to `academic/`, the video to `dataset/`, the hash recorded; nothing of
   NeuroLens's output under `dataset/`.
 - Consent: version and time stored only when consent is true.
@@ -341,7 +364,8 @@ Money and data paths get full treatment:
 - Reward: refused for an account with only starter credit.
 - Presign: 429 at `max_waiting_jobs` queued jobs, nothing reserved.
 - CSV header: ASCII and non-ASCII names, missing name.
-- `app.py` refuses without a local endpoint.
+- `app.py` refuses without a local endpoint, including one set only in `.env`.
+- Local stack: a dispatch error leaves the queue message for a retry.
 Page work (light treatment): one walk on the local stack at 1440 px and 390 px covering §2–§4.
 
 ## 11. Real run (cost estimate first)

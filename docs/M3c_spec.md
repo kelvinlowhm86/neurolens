@@ -77,23 +77,31 @@ S3 is deleted first, so a failure part-way leaves a job that still shows but who
 ## 5. Deleting the account: `POST /api/account/delete`
 - **Who:** Cognito mode only (404 in dev mode). The body must be `{"confirm": "DELETE"}`; anything else → 400 `confirmation_required`. The page asks the user to type DELETE.
 - **Refused** while any of the user's jobs is `queued` or `processing` → 409 `job_active`, with the same message as §4.
-- **Steps:**
-  1. List the user's jobs. If none is active, delete all their S3 files as in §4 step 2, using `delete_objects` batches of up to 1000 keys.
-  2. In one transaction, `billing.delete_account(db, user_id)`:
-     - lock the `balances` row (`FOR UPDATE`, the same lock `reserve` takes, so no new job can start in between);
-     - refuse with `JobActive` if any job is active. A job created after step 1 is necessarily `queued`, so it is refused too, and no job's files are left behind;
-     - delete the user's `ledger` and `jobs` rows, then `balances`, then `identities` (`DELETE … RETURNING issuer, subject`), then `users`.
-
-     Credit is free, so no financial record needs to be kept.
-
-     Lock order: billing.py locks jobs before balances. This function locks only `balances` and only reads job statuses before deleting, so it cannot deadlock with them; the code comment says so.
-  3. Delete the Cognito accounts. For each returned identity whose issuer is our Cognito pool, call `ListUsers` with filter `sub = "<subject>"`, then `AdminDeleteUser` with the returned username. No match counts as already deleted. One NeuroLens user can have both a Google and an email login.
-  4. Clear the session and answer 200. The page then shows "Your account and data have been deleted."
+- **Steps (mark first, then purge, as for a job: M3f §5c):**
+  1. **Mark**, in one transaction, `billing.delete_account(db, user_id)`:
+     - lock the `balances` row (`FOR UPDATE`, the same lock `reserve` takes);
+     - refuse with `JobActive` if any job is queued or processing;
+     - mark every job deleted (`deleted_at = now()`, `filename = NULL`, `dataset_purged_at = NULL`);
+     - delete the user's `sessions` and `identities` (`RETURNING issuer, subject`), so every other tab
+       is signed out at once and signing in again creates a new, empty account;
+     - set `users.deleted_at = now()` and replace the email with `deleted:<user_id>` (migration 007),
+       so the address is gone at once and is free for a new account.
+     After this nothing can write to the account: `reserve` refuses a user with `deleted_at` under the
+     same lock, a curve needs a job that is not deleted, and no worker holds a job.
+  2. Delete the Cognito accounts. For each returned identity whose issuer is our Cognito pool, call `ListUsers` with filter `sub = "<subject>"`, then `AdminDeleteUser` with the returned username. No match counts as already deleted. One NeuroLens user can have both a Google and an email login.
+  3. **Purge** each job with `billing.purge_job_files` (both research prefixes and the job's own
+     files). A failed purge is logged and left to the reaper.
+  4. **Remove the rows**, `billing.remove_deleted_account(db, user_id)`: only when the user has
+     `deleted_at` and every job has `dataset_purged_at`, delete the ledger, jobs (snapshots cascade),
+     balance and user rows, else change nothing. Credit is free, so no financial record needs to be kept.
+  5. Clear the session and answer 200. The page then shows "Your account and data have been deleted."
 - **Failures:**
-  - Steps 1 and 2 behave like §4: a failure leaves the account in place, and repeating the request finishes the deletion.
-  - If step 3 fails, the user's data is already gone. The route logs a line starting `COGNITO_DELETE_FAILED` with the Cognito `sub` (and the username if found), then answers 500 `login_delete_failed`: "Your data has been deleted. Removing your login failed; we have been notified."
+  - A failure in step 1 changes nothing; repeating the request is safe.
+  - After step 1 the user sees the account as deleted whatever happens next. The reaper retries every
+    marked job's purge (M3f §5c) and then calls `remove_deleted_account` for every user with
+    `deleted_at`, so the deletion always finishes.
+  - If step 2 fails, the route logs a line starting `COGNITO_DELETE_FAILED` with the Cognito `sub` (and the username if found), then answers 500 `login_delete_failed`: "Your data has been deleted. Removing your login failed; we have been notified."
   - A log metric filter on that marker feeds the alarm `neurolens-cognito-delete-failed`, which emails the operator, who deletes the login by hand. The existing Lambda error alarms would not fire, because the function itself does not fail.
-  - Signing in again later creates a new, empty account.
 - **Other browsers** still hold a valid session cookie for up to 12 hours. Any route that finds no `users` row for the signed-in user answers 401 `not_signed_in` and clears the session, instead of a server error.
 
 ## 6. Stripe removal
@@ -122,7 +130,7 @@ S3 is deleted first, so a failure part-way leaves a job that still shows but who
   - `billing.reserve(db, user_id, job_id, object_key, filename, client_duration_ms, research_consent=False)`;
   - `billing.delete_job(db, user_id, job_id) -> None`;
   - `storage.put_dataset(s3, bucket, job_id, upload_key, result)`;
-  - `billing.delete_account(db, user_id) -> list[tuple[str, str]]` (the deleted `(issuer, subject)` identities; raises `JobActive`);
+  - `billing.delete_account(db, user_id) -> list[tuple[str, str]]` (marks the account; the deleted `(issuer, subject)` identities; raises `JobActive`), `billing.remove_deleted_account(db, user_id) -> bool`;
   - `billing.list_jobs` skips deleted jobs;
   - `results.parse_retention_report`.
 - **Tests** (`tests/test_m3c_*.py`, written first; PostgreSQL for the billing ones):
@@ -132,9 +140,11 @@ S3 is deleted first, so a failure part-way leaves a job that still shows but who
   - retention refused for jobs not done, without consent, or not owned;
   - per-video delete: the S3 keys are gone, the job is hidden from every route, its ledger is intact, it is refused while active, repeating it is safe, and a failed S3 delete leaves `deleted_at` empty;
   - account delete:
-    - every row is gone, and the ledger invariant holds for other users;
+    - after the route every row is gone, and the ledger invariant holds for other users;
     - it is refused while active;
-    - a `reserve` racing the delete cannot leave a job behind (the lock);
+    - a `reserve` after the mark is refused, and one before it makes the delete answer 409 (the lock);
+    - a failed purge still answers 200; the rows stay until the reaper's purge succeeds, then go;
+    - signing in again with the same Google login or email gives a new, empty account;
     - Cognito is called once per Cognito identity;
     - `ListUsers` finding nothing counts as done;
     - a Cognito failure answers 500 `login_delete_failed` and logs the `COGNITO_DELETE_FAILED` line with the sub;
