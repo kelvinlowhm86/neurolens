@@ -13,8 +13,8 @@ const loadData = () => {
   return dataPromise;
 };
 /** A live anatomical response map; source t seconds is used by both video and cortex. */
-export const BrainHero: React.FC<{start?: number; layout?: 'card' | 'solo'}> = ({start = 12, layout = 'card'}) => {
-  const frame = useCurrentFrame();
+export const BrainHero: React.FC<{start?: number; layout?: 'card' | 'solo'; frameOffset?: number}> = ({start = 12, layout = 'card', frameOffset = 0}) => {
+  const frame = useCurrentFrame() + frameOffset;
   const {fps, durationInFrames, width, height} = useVideoConfig();
   const [hold] = useState(() => delayRender('Loading real cortical mesh and predictions'));
   const [data, setData] = useState<BrainData | null>(null);

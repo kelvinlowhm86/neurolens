@@ -19,6 +19,16 @@ export const C = {
   hot: '#FF8A2A', cool: '#6F7E99', surface: '#17181B',
 };
 
+export const PulseStage: React.FC<{children: React.ReactNode}> = ({children}) => {
+  const frame = useCurrentFrame();
+  const pulse = beatPulse(frame);
+  return <AbsoluteFill style={{transform: `scale(${1 + pulse * .0035})`, transformOrigin: '50% 50%'}}>
+    {children}
+    <AbsoluteFill style={{background: `radial-gradient(ellipse at 52% 48%, transparent 34%, rgba(0,0,0,${.42 + pulse * .13}) 100%)`, pointerEvents: 'none'}} />
+    <AbsoluteFill style={{background: `radial-gradient(ellipse at 50% 48%, rgba(255,138,42,${.016 + pulse * .028}), transparent 62%)`, mixBlendMode: 'screen', pointerEvents: 'none'}} />
+  </AbsoluteFill>;
+};
+
 export const Caption: React.FC<{
   cue: Cue; offset: number; size: number; y?: number; maxWidth?: number;
   color?: string; weight?: number; letterSpacing?: number; loosen?: number; outFrames?: number;

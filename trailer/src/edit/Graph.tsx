@@ -31,6 +31,8 @@ export type GraphProps = {
   playhead?: number;
   zeroLabel?: string;
   strokeWidth?: number;
+  comparisonStrokeWidth?: number;
+  comparisonGlow?: number;
   background?: boolean;
 };
 
@@ -54,6 +56,8 @@ export const Graph: React.FC<GraphProps> = ({
   playhead,
   zeroLabel,
   strokeWidth = 5,
+  comparisonStrokeWidth = strokeWidth * .78,
+  comparisonGlow = 0,
   background = false,
 }) => {
   const uid = useId().replace(/[^a-zA-Z0-9_-]/g, '');
@@ -103,7 +107,8 @@ export const Graph: React.FC<GraphProps> = ({
     <path d={fill} fill={`url(#fill-${uid})`} opacity={.9} />
     <path d={main} fill="none" stroke={color} strokeWidth={strokeWidth * 4} strokeOpacity=".13" strokeLinejoin="round" strokeLinecap="round" filter={`url(#glow-${uid})`} />
     <path d={main} fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinejoin="round" strokeLinecap="round" />
-    {comparison && <path d={compare} fill="none" stroke={comparisonColor} strokeWidth={strokeWidth * .78} strokeDasharray={comparisonDashed ? '12 11' : undefined} strokeLinejoin="round" strokeLinecap="round" />}
+    {comparison && comparisonGlow > 0 && <path d={compare} fill="none" stroke={comparisonColor} strokeWidth={comparisonStrokeWidth * 4} strokeOpacity={comparisonGlow * .13} strokeLinejoin="round" strokeLinecap="round" filter={`url(#glow-${uid})`} />}
+    {comparison && <path d={compare} fill="none" stroke={comparisonColor} strokeWidth={comparisonStrokeWidth} strokeDasharray={comparisonDashed ? '12 11' : undefined} strokeLinejoin="round" strokeLinecap="round" />}
     {axes && zeroLabel && <text x={padL + 12} y={zero - 9} fill="#A0A6AF" fontSize="20" textAnchor="start" letterSpacing=".02em">{zeroLabel}</text>}
     {playhead !== undefined && playhead >= from && playhead <= to && (() => {
       const px = x(playhead);
