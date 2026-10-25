@@ -44,7 +44,7 @@ export const CUE = {
   weeks: cue('weeks', 'Weeks', 58, 61),
   minutes: cue('minutes', 'Minutes.', 61, 68.25),
   endingTitle: cue('ending-title', 'NeuroLens', 69.75, 72),
-  endingSub: cue('ending-sub', 'See how your video lands.', 70.5, 72),
+  endingSub: cue('ending-sub', 'Watch a brain watch your video.', 70.5, 72),
   credits: cue('credits', CREDIT_LINES.join(' '), 72, 75),
 } as const;
 

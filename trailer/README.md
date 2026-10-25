@@ -54,7 +54,7 @@ Music and sound effects (impact, scribble) made with ElevenLabs; the mute chime 
 | 1,740–1,830 | Drained `Scanner` placeholder with “Weeks”; stage 2 adds the counter, scribble and fade. |
 | 1,830–2,048 | `BrainHero` and “Minutes.” |
 | 2,048–2,093 | Black through the silence; the Minutes scene and brain fade out by 68.25 s. |
-| 2,093–2,160 | “NeuroLens” appears on the final hit on plain black with a flash and a warm glow that fades back to white, then “See how your video lands.” |
+| 2,093–2,160 | “NeuroLens” appears on the final hit on plain black with a flash and a warm glow that fades back to white, then “Watch a brain watch your video.” (the site's headline) |
 | 2,160–2,250 | Three credit lines and a fade to black over the last 16 frames. |
 
 ## Data fidelity
