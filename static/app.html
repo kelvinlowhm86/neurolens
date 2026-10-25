@@ -143,6 +143,7 @@
   .curve-file { font-size: 12px; color: var(--stage-muted); word-break: break-all; }
   .curve-file:empty { display: none; }
   .reward-note { font-size: 12.5px; color: var(--stage-text); }
+  .reward-amount { color: var(--heat); }
   .reward-note:empty { display: none; }
   .account-icon { display: none; width: 16px; height: 16px; }
   .privacy-note { font-size: 11px; color: var(--stage-muted); margin-top: auto; padding: 4px 2px; }
@@ -846,9 +847,32 @@ async function loadHistory() {
   }
 }
 
+// Keep each keyed row (and unchanged buttons) through polls and other rows' updates.
+function reconcileRows(list, entries) {
+  const old = new Map([...list.children].map(row => [row.dataset.rowKey, row]));
+  const rows = entries.map(([key, version, create]) => {
+    let row = old.get(key);
+    if (!row || row.rowVersion !== version) {
+      const next = create();
+      if (row) {
+        if (row.contains(rowMenuTrigger)) closeRowMenu();
+        row.className = next.className; row.onclick = next.onclick; row.onkeydown = next.onkeydown;
+        for (const attr of ['role', 'tabindex']) {
+          if (next.hasAttribute(attr)) row.setAttribute(attr, next.getAttribute(attr)); else row.removeAttribute(attr);
+        }
+        row.replaceChildren(...next.childNodes);
+      } else row = next;
+      row.dataset.rowKey = key; row.rowVersion = version;
+    }
+    old.delete(key); return row;
+  });
+  if (rowMenu && (old.size || rows.some((row, i) => list.children[i] !== row))) closeRowMenu();
+  old.forEach(row => row.remove());
+  rows.forEach((row, i) => { if (list.children[i] !== row) list.insertBefore(row, list.children[i] || null); });
+}
+
 function renderHistory(jobs) {
   jobsCache = jobs;
-  closeRowMenu();
   // A result opened from a ?job= link predates this list, so re-check its title and link (§4.17).
   const shown = currentContext && currentContext.jobId
     ? jobs.find(job => job.job_id === currentContext.jobId) : null;
@@ -862,10 +886,12 @@ function renderHistory(jobs) {
   updateTabTitle(jobs);
   sendPendingCurves(jobs);
   const list = $('historyList');
-  const queueRows = uploadQueue.map(queueRow);
-  list.replaceChildren(...queueRows, ...jobs.map(historyRow));
+  reconcileRows(list, [
+    ...uploadQueue.map(entry => [`queue:${entry.item.id}`, JSON.stringify([entry.state, entry.reason, entry.signedOut, entry.item.thumb]), () => queueRow(entry)]),
+    ...jobs.map(job => [`job:${job.job_id}`, JSON.stringify([job, historyDetail(job), curveFailures.get(job.job_id), cancelWindows.has(job.job_id), localFrames.has(job.job_id)]), () => historyRow(job)]),
+  ]);
   $('historyPanel').classList.add('active');
-  $('historyEmpty').hidden = queueRows.length + jobs.length > 0;
+  $('historyEmpty').hidden = uploadQueue.length + jobs.length > 0;
   $('historyNote').textContent = '';
   if (currentResult) showCompareRow();
 
@@ -987,12 +1013,12 @@ function historyRow(job) {
   if (canOpen) {
     row.tabIndex = 0;
     row.setAttribute('role', 'button');
-    row.addEventListener('click', () => openJob(job));
-    row.addEventListener('keydown', e => {
-      if (e.target !== row || e.key !== 'Enter') return;
+    row.onclick = () => openJob(job);
+    row.onkeydown = e => {
+      if (e.target !== e.currentTarget || e.key !== 'Enter') return;
       e.preventDefault();
       openJob(job);
-    });
+    };
   }
   const label = job.filename || `Job ${job.job_id.slice(0, 8)}`;
   const main = document.createElement('div'); main.className = 'history-main';
@@ -1373,7 +1399,7 @@ function finishBatchItem(item, state, reason) {
 
 function renderBatch() {
   const list = $('batchList');
-  list.replaceChildren(...batchItems.map(batchRow));
+  reconcileRows(list, batchItems.map(item => [String(item.id), JSON.stringify([item.state, item.reason, item.thumb, item.duration, item.price, !!item.curve, $('consentBox').checked]), () => batchRow(item)]));
   updateBatchTotal();
 }
 
@@ -1405,7 +1431,7 @@ function batchRow(item) {
     const curve = document.createElement('button');
     curve.type = 'button';
     curve.className = 'batch-curve';
-    curve.textContent = item.curve ? 'Curve added' : 'Add retention curve';
+    curve.textContent = item.curve ? 'Audience retention added' : 'Add audience retention';
     curve.addEventListener('click', () => openCurve({ kind: 'item', item, title: item.name }));
     main.append(curve);
   }
@@ -1449,6 +1475,7 @@ function startBatchUpload() {
   const consent = $('consentBox').checked;
   closeBatchDialog();
   resetUI();  // the player stops and History shows; the upload box is free at once
+  resetTabTitle();  // acknowledge an earlier completion before this click queues new jobs
   valid.forEach(item => uploadQueue.push({ item, consent, state: 'waiting', progress: 0, reason: '', tracked: true }));
   tabTotal += valid.length;
   renderHistory(jobsCache);
@@ -1951,9 +1978,14 @@ function openCurve(target) {
   curveFile = null;
   $('curveVideo').textContent = target.title;
   $('curveFileName').textContent = '';
-  $('curveReward').textContent = target.kind === 'job' && target.rewardCents > 0
-    ? `Add a valid curve and this analysis is free (${dollars(target.rewardCents)} back).`
-    : '';
+  const reward = $('curveReward');
+  reward.textContent = '';
+  if (target.kind === 'job' && target.rewardCents > 0) {
+    const amount = document.createElement('span');
+    amount.className = 'reward-amount';
+    amount.textContent = dollars(target.rewardCents);
+    reward.append('Add a valid curve and this analysis is free (', amount, ' back).');
+  }
   setCurveMsg('');
   $('curveSave').hidden = false;
   $('curveSave').disabled = true;
@@ -2001,7 +2033,7 @@ $('curveSave').addEventListener('click', async () => {
   };
   if (target.kind === 'item') {
     target.item.curve = body;
-    setCurveMsg('Saved.');
+    setCurveMsg('Thanks, saved.');
     curveSaved();
     renderBatch();
     return;
@@ -2023,9 +2055,9 @@ $('curveSave').addEventListener('click', async () => {
     }
     curveFailures.delete(target.jobId);
     const rewarded = data.rewarded_cents || 0;
-    if (rewarded > 0) setCurveMsg(`Saved. This analysis is now free: ${dollars(rewarded)} is back in your credit.`);
-    else if (Array.isArray(data.quality) && data.quality.length) setCurveMsg("Saved. It doesn't look like a full retention curve, so it isn't free.");
-    else setCurveMsg('Saved.');
+    if (rewarded > 0) setCurveMsg(`Thanks! This analysis is now free: ${dollars(rewarded)} is back in your credit.`);
+    else if (Array.isArray(data.quality) && data.quality.length) setCurveMsg("Thanks, saved. It doesn't look like a full retention curve, so it isn't free.");
+    else setCurveMsg('Thanks, saved.');
     curveSaved();
     loadHistory();
     loadBalance();
@@ -2106,14 +2138,15 @@ function forgetTabJob(jobId) {
   updateTabTitle(jobsCache);
 }
 function updateTabTitle(jobs) {
-  if (tabTotal === 0) {
-    if (!tabTitleDone) document.title = 'NeuroLens';
-    return;
-  }
   const present = new Set(jobs.map(job => job.job_id));
   for (const [id, seen] of tabJobs) {
     if (present.has(id)) tabJobs.set(id, true);
     else if (seen) { tabJobs.delete(id); tabTotal -= 1; }  // cancelled: leaves the count
+  }
+  if (tabTotal === 0) {
+    resetTabTitle();
+    document.title = 'NeuroLens';
+    return;
   }
   const tracked = jobs.filter(job => tabJobs.has(job.job_id));
   const done = tracked.filter(job => job.status === 'done').length;
@@ -2134,6 +2167,8 @@ function resetTabTitle() {
   tabJobs.clear();
   tabTotal = 0;
   document.title = 'NeuroLens';
+  window.removeEventListener('click', resetTabTitle);
+  window.removeEventListener('keydown', resetTabTitle);
   if (tabTitleVisHandler) {
     document.removeEventListener('visibilitychange', tabTitleVisHandler);
     tabTitleVisHandler = null;
