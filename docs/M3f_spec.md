@@ -291,6 +291,9 @@ whether the instance stays. Only if it does is the start built, as a separate ch
   one reward per video hash across accounts, a cap per user, and the right to remove fake data.
 - Two accounts sharing the same video at the same moment could each be rewarded once (no lock across
   jobs). Needs deliberate abuse; the cap bounds it.
+- No request rate limit. The costly paths are bounded already: a GPU run needs credit, and a caller
+  keeping the database awake trips the 6-hour database alarm. A rate limit is added when abuse or real
+  traffic appears.
 - A curve chosen in the upload dialog is lost if the tab closes before its job is done; the row's
   link still offers it.
 

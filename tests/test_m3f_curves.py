@@ -190,6 +190,29 @@ def test_a_valid_curve_rewards_the_captured_price_once(db, pg):
     assert snapshot["promoted"] is False
 
 
+def test_an_account_with_only_starter_credit_is_not_rewarded(db, pg):
+    job_id, _ = make_job(db)
+    balance = pg.balance()
+
+    result = billing.add_curve(db, WEB_USER_ID, job_id, **curve_args(job_id))
+
+    assert result["rewarded_cents"] == 0
+    assert pg.balance() == balance
+    assert "curve_reward" not in pg.kinds()
+    assert pg.job(job_id)["curve_rewarded_at"] is None
+
+
+def test_a_curve_is_rewarded_once_the_account_has_a_grant(db, pg):
+    job_id, _ = make_job(db)
+    billing.grant_credit(db, f"{WEB_USER_ID}@example.com", 100)
+
+    result = billing.add_curve(db, WEB_USER_ID, job_id, **curve_args(job_id))
+
+    assert result["rewarded_cents"] == PRICE_CENTS
+    assert pg.balance() == (STARTER_CENTS + 100, 0)
+    assert pg.kinds() == ["starter", "reserve", "capture", "grant", "curve_reward"]
+
+
 def test_a_second_curve_on_the_same_job_is_stored_without_another_reward(db, pg):
     job_id, _ = make_job(db)
     billing.add_curve(db, WEB_USER_ID, job_id, **curve_args(job_id))

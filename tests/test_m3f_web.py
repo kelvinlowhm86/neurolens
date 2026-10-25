@@ -1,8 +1,11 @@
-"""M3f web changes (docs/M3f_spec.md §3, §4 item 7, §5d, §7, §10 "claim", "CSV header", "app.py").
+"""M3f web changes (docs/M3f_spec.md §2a, §3, §4 item 7, §5a, §5d, §7, §10 "claim",
+"Consent version", "Presign", "CSV header", "app.py").
 
 `claim` records `claimed_at`; `list_jobs` leaves out cancelled jobs and returns `claimed_at`,
-`cancellable`, `sharing`, `curve_count` and `curve_reward_cents`. The CSV is named after the
-video. `python app.py` refuses to start unless `AWS_ENDPOINT_URL` points at the local fake stack.
+`cancellable`, `sharing`, `curve_count` and `curve_reward_cents`. Presign accepts only the current
+`billing.CONSENT_VERSION` with consent and refuses at `upload.max_waiting_jobs` queued jobs,
+reserving nothing in both cases. The CSV is named after the video. `python app.py` refuses to
+start unless `AWS_ENDPOINT_URL` points at the local fake stack.
 """
 
 import json
@@ -283,3 +286,79 @@ def test_app_py_refuses_without_a_local_endpoint(tmp_path, endpoint):
 
     assert result.returncode != 0
     assert REFUSAL in result.stdout + result.stderr
+
+
+# ---------------------------------------------------------------- consent version
+
+
+def presign_body(**overrides):
+    data = {
+        "filename": "ad.mp4",
+        "content_type": "video/mp4",
+        "client_duration_seconds": 27.4,
+        "research_consent": False,
+    }
+    data.update(overrides)
+    return data
+
+
+def test_presign_accepts_the_current_consent_version(aws, db, make_cfg, tmp_path, pg):
+    client = app_for(aws, db, make_cfg, tmp_path)
+
+    resp = client.post(
+        "/api/uploads/presign",
+        json=presign_body(research_consent=True, consent_version=billing.CONSENT_VERSION),
+    )
+
+    assert resp.status_code == 200
+    job = pg.job(resp.get_json()["job_id"])
+    assert job["consent_version"] == billing.CONSENT_VERSION
+    assert job["consented_at"] is not None
+
+
+@pytest.mark.parametrize("version", ["2025-01-01", None], ids=["outdated", "missing"])
+def test_consent_with_an_outdated_or_missing_version_is_409_and_reserves_nothing(
+    aws, db, make_cfg, tmp_path, pg, version
+):
+    client = app_for(aws, db, make_cfg, tmp_path)
+    body = presign_body(research_consent=True)
+    if version is not None:
+        body["consent_version"] = version
+
+    resp = client.post("/api/uploads/presign", json=body)
+
+    assert resp.status_code == 409
+    assert resp.get_json()["error"] == "consent_outdated"
+    assert pg.rows("SELECT job_id FROM jobs") == []
+    assert pg.balance(WEB_USER_ID) == (STARTER_CENTS, 0)
+
+
+def test_no_consent_version_is_needed_without_consent(aws, db, make_cfg, tmp_path, pg):
+    client = app_for(aws, db, make_cfg, tmp_path)
+
+    resp = client.post("/api/uploads/presign", json=presign_body(research_consent=False))
+
+    assert resp.status_code == 200
+    job = pg.job(resp.get_json()["job_id"])
+    assert job["consent_version"] is None
+    assert job["consented_at"] is None
+
+
+# ---------------------------------------------------------------- the waiting-jobs cap
+
+
+def test_presign_refuses_at_max_waiting_jobs_with_nothing_reserved(aws, db, make_cfg, tmp_path, pg):
+    cfg = make_cfg(upload={"max_waiting_jobs": 2, "max_batch_files": 5})
+    app = create_app(cfg=cfg, data_dir=tmp_path / "data", db=db, s3_client=aws.s3)
+    app.config["TESTING"] = True
+    client = app.test_client()
+    for _ in range(2):
+        assert client.post("/api/uploads/presign", json=presign_body()).status_code == 200
+
+    before = pg.snapshot()
+    resp = client.post("/api/uploads/presign", json=presign_body())
+
+    assert resp.status_code == 429
+    assert resp.get_json()["error"] == "too_many_waiting"
+    assert "Too many videos waiting" in resp.get_json()["message"]
+    assert pg.snapshot() == before
