@@ -808,6 +808,12 @@ function showApp(meJson) {
   loadHistory();
   const jobParam = params.get('job');
   if (jobParam && /^[0-9a-f-]{36}$/i.test(jobParam)) trackJob(jobParam);
+  if (params.get('upload')) {
+    openBatchDialog();
+    const url = new URL(window.location.href);
+    url.searchParams.delete('upload');
+    history.replaceState(null, '', url);
+  }
 }
 
 $('signOut').addEventListener('click', async () => {
