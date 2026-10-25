@@ -278,13 +278,14 @@ deploy, Josh stops sharing each one in the page (which also removes any old `ret
 `result.json` under `dataset/`). Nothing in the code reads the old layout afterwards.
 
 ## 6. GPU start and sign-in
-### 6a. GPU start from the dispatcher: measured first
+### 6a. GPU start from the dispatcher: not built
 Starting the GPU from the dispatcher (`UpdateEndpointWeightsAndCapacities`) would save about 4 minutes
 of a cold start, but the scale-in alarm is in ALARM whenever the GPU is off, and AWS keeps applying a
-step policy while its alarm stays in ALARM. The two could fight over the capacity. Nothing is built
-now. In the real run (§11), one cold start is made by hand from the dispatcher's position (invoke,
-then set the desired count to 1), and the scale-in alarm's history and the endpoint's events show
-whether the instance stays. Only if it does is the start built, as a separate change with its tests.
+step policy while its alarm stays in ALARM. The two could fight over the capacity. Nothing is built and
+the idle wait stays 7 minutes (the backlog metric arrives about 3 minutes late, so a shorter wait would
+shut the GPU as a job arrives). Decided 25 Oct: revisit before M4 as one design, our own GPU on/off
+control (the dispatcher starts the GPU; an off-switch reads the database only while the GPU is on; the
+AWS alarm stays as a backstop of about 30 minutes), with full money-path tests.
 
 ### 6b. Sign-in sessions (`neurolens/web/auth.py`)
 - **Migration 006** adds `sessions`: `session_hash TEXT PRIMARY KEY` (SHA-256 of the token),
@@ -370,16 +371,15 @@ Money and data paths get full treatment:
 Page work (light treatment): one walk on the local stack at 1440 px and 390 px covering §2–§4.
 
 ## 11. Real run (cost estimate first)
-One GPU session after deploy (estimate about $1–1.50: two cold starts plus a 5-file batch):
-1. The GPU-start measurement of §6a: from a cold endpoint, upload one file and set the desired count
-   to 1 at once; record whether the instance stays, and the time from upload to the job's claim.
-2. A 5-file batch: each job charged once, all done on one warm GPU, title count and rows correct,
+One GPU session right after deploy, on the GPU the deploy starts (estimate about $0.50–1: the deploy's
+cold start plus a 5-file batch and its idle wait):
+1. A 5-file batch: each job charged once, all done on one warm GPU, title count and rows correct,
    cancel one file within 15 s (refunded, not listed).
-3. Add a curve to a shared result: reward appears in the credit and the ledger once; a second curve
+2. Add a curve to a shared result: reward appears in the credit and the ledger once; a second curve
    is stored without a reward; stop sharing removes both prefixes.
-4. Stop sharing the six old jobs (§5f).
+3. Stop sharing the six old jobs (§5f).
 
 ## 12. Acceptance criteria
 - All tests pass; `ruff check .` clean; `terraform validate` and `plan` show only the expected changes.
 - The page walk shows every item of §2–§4 at both widths.
-- The real run's four checks pass, or a failure is recorded with its cause.
+- The real run's three checks pass, or a failure is recorded with its cause.
