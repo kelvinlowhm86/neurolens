@@ -40,9 +40,9 @@ place in line among other users, waking the database from the landing page.
   consent box (§5a, one for the whole batch), and Upload.
 - If the total is more than the available credit: "Needs $4.50; you have $3.70" and Upload stays
   disabled until rows are removed. With no valid row Upload is disabled.
-- When the consent box is ticked, each valid row shows a quiet "Add retention curve" link (the
+- When the consent box is ticked, each valid row shows a quiet "Add audience retention" link (the
   video is already on YouTube). It opens the curve form (§5d) for that row; the curve is held by the
-  page and sent when that job is done (§5d).
+  page and sent when that job is done (§5d). Once a curve is added the link reads "Audience retention added".
 - Upload closes the dialog and any open result (the player stops, the brain stops drawing) and shows
   History. The upload box is free at once: a new dialog can add more files, which queue behind.
 
@@ -64,6 +64,9 @@ place in line among other users, waking the database from the landing page.
   "Ready to upload: <name>" text are removed.
 - **Leave warning:** the browser's "leave site?" prompt shows only while a file in this tab is
   uploading or waiting to upload.
+- History keeps rows keyed by job id and local queue key; the upload dialog keeps rows keyed by
+  file key. Refreshes update changed contents in place, preserve unchanged buttons, remove gone rows
+  and retain the list's order.
 
 ### 2c. Credit notes
 - The "no credit" note shows whenever the available credit is below the price of the shortest
@@ -88,6 +91,8 @@ place in line among other users, waking the database from the landing page.
   when all have ("✓ 4 done · 1 failed · NeuroLens" if any failed; a cancelled job leaves the count).
   Once all are finished, the plain "NeuroLens" returns on the next visit to the tab (`visibilitychange`
   to visible) or the next click or key press in it. The long default title goes.
+  Starting a new batch acknowledges an earlier completion before counting the new files; its
+  click and later visits cannot clear the new batch's waiting title.
 
 ## 4. The rest of the page (UX review of 25 Oct)
 1. **Phone top bar** fits in 390 px with no sideways scroll: below 600 px the credit shows as the
@@ -213,7 +218,8 @@ place in line among other users, waking the database from the landing page.
 - The form (a small pop-up): the video name, the guide link, "Choose file", and three required choice
   rows: views ("Under 1k", "1k–10k", "10k–100k", "Over 100k"), published ("This week", "This month",
   "Earlier"), promoted with ads ("Yes", "No"). When a reward is possible (below) the form says "Add a
-  valid curve and this analysis is free ($0.72 back)." Save, then the saved or error message.
+  valid curve and this analysis is free ($0.72 back)." The reward amount uses the heat orange
+  (`--heat`, `#FF8A2A`). Save, then the saved or error message.
 - A curve chosen in the upload dialog is sent once its job is done, while the tab is open. If that
   fails, or the tab closed first, the row's link still offers it; a failed send shows "Couldn't add
   the curve for <name>." on the row.
@@ -251,9 +257,11 @@ place in line among other users, waking the database from the landing page.
   for one job impossible even if the code is wrong.
 - Settings in `config.json` `research`: `curve_rewards_per_window` (5), `curve_reward_window_days`
   (30), `no_curve_days` (90). These are anti-abuse product limits, not budget limits.
-- Replies on the form: "Saved. This analysis is now free: $0.72 is back in your credit.", "Saved.",
-  or "Saved. It doesn't look like a full retention curve, so it isn't free." (invalid), and the
-  credit in the top bar refreshes.
+- Replies on the form: "Thanks! This analysis is now free: $0.72 is back in your credit." when
+  rewarded (the amount comes from the reply's `rewarded_cents`); "Thanks, saved. It doesn't look like a
+  full retention curve, so it isn't free." when the curve is invalid; otherwise "Thanks, saved."
+  A curve held in the upload dialog also says "Thanks, saved." The credit in the top bar refreshes
+  after a server save.
 - `list_jobs` returns, for shared jobs, `sharing` (done, shared and not removed), `curve_count` and
   `curve_reward_cents` (what a valid curve would give now, 0 if not possible). It applies every reward
   condition above except the curve's own validity; the per-user ones (funded, under the cap) come from
