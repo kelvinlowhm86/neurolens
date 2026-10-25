@@ -58,7 +58,7 @@
   .box .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 2px; align-items: center; }
   .box a:not(.btn-white) { color: var(--stage-text); }
   #signedOutNote:empty { display: none; }
-  .upload-zone { border: 1px dashed var(--stage-rule); border-radius: 6px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; cursor: pointer; position: relative; padding: 22px 16px; text-align: center; background: var(--stage-2); }
+  .upload-zone { border: 1px dashed var(--stage-rule); border-radius: 6px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; cursor: pointer; position: relative; padding: 22px 16px; text-align: center; background: var(--stage-2); color: var(--stage-text); }
   .upload-zone:hover { border-color: var(--stage-muted); }
   .upload-zone.hidden { display: none; }
   .upload-zone .up-title { font-weight: 600; font-size: 14px; }
@@ -69,6 +69,7 @@
   .dialog-zone input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
   .batch-list { display: flex; flex-direction: column; max-height: 40vh; overflow-y: auto; scrollbar-width: thin; }
   .batch-list:empty { display: none; }
+  .batch-list:not(:empty) { border-bottom: 1px solid var(--stage-rule); padding-bottom: 8px; margin-bottom: 10px; }
   .batch-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--stage-rule); font-size: 12px; }
   .batch-row:first-child { border-top: 0; }
   .batch-thumb { width: 64px; height: 40px; flex: none; border-radius: 5px; overflow: hidden; background: var(--stage-rule); display: flex; align-items: center; justify-content: center; color: var(--stage-muted); }
@@ -91,16 +92,16 @@
   .upload-progress.active { display: block; }
   .upload-bar { height: 100%; width: 0; background: var(--heat); transition: width .15s; }
   .report-empty { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: thin; }
-  .samples-section .label { font-size: 11px; font-weight: 600; color: var(--ink-3); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 10px; }
-  .samples-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 16px 12px; }
+  .samples-section .label { font-size: 12px; font-weight: 600; color: var(--ink-3); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 14px; }
+  .samples-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 24px 20px; }
   .sample-card { border: 0; border-radius: 6px; cursor: pointer; background: none; text-align: left; color: var(--stage-text); padding: 0; }
   .sample-thumb { width: 100%; aspect-ratio: 16 / 9; border-radius: 6px; overflow: hidden; background: #1E2024; display: flex; align-items: center; justify-content: center; color: var(--stage-muted); transition: filter .15s; }
   .sample-card:hover .sample-thumb { filter: brightness(1.18); }
   .sample-card.active .sample-thumb { outline: 2px solid var(--heat); outline-offset: 2px; }
   .sample-thumb img { width: 100%; height: 100%; object-fit: cover; }
-  .sample-info { padding: 7px 1px 0; }
-  .sample-title { font-size: 12px; font-weight: 500; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-  .sample-dur { font-size: 11px; color: var(--stage-muted); margin-top: 1px; }
+  .sample-info { padding: 9px 1px 0; }
+  .sample-title { font-size: 13px; font-weight: 500; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .sample-dur { font-size: 11.5px; color: var(--stage-muted); margin-top: 2px; }
   .history-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0; border-top: 1px solid var(--stage-rule); font-size: 12px; }
   .history-row:first-child { border-top: 0; }
   .history-row.openable { cursor: pointer; }
@@ -108,12 +109,9 @@
   .history-thumb { width: 64px; height: 40px; flex: none; border-radius: 5px; overflow: hidden; background: var(--stage-rule); }
   .history-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
   .history-main { min-width: 0; flex: 1; }
-  .history-name { font-weight: 600; word-break: break-all; }
+  .history-name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .history-sub { color: var(--stage-muted); font-size: 11px; margin-top: 2px; }
   .history-sub.error { color: #FCA5A5; }
-  .history-running-bar { position: relative; height: 2px; margin-top: 6px; overflow: hidden; border-radius: 1px; background: var(--stage-rule); }
-  .history-running-bar::before { content: ""; position: absolute; top: 0; bottom: 0; left: -40%; width: 40%; border-radius: 1px; background: var(--heat); animation: history-slide 1.2s linear infinite; }
-  @keyframes history-slide { to { left: 100%; } }
   .history-actions { display: flex; gap: 6px; flex-shrink: 0; align-items: center; }
   .history-link { background: none; border: 0; padding: 0; color: var(--stage-muted); font-size: 11.5px; text-decoration: underline; text-underline-offset: 2px; }
   .history-link:hover { color: var(--stage-text); }
@@ -133,9 +131,8 @@
   .modal .field-row { margin-top: 12px; }
   .modal .actions { display: flex; gap: 8px; align-items: center; margin-top: 12px; }
   .modal a { color: inherit; }
-  .modal .upload-progress { margin-top: 10px; }
-  .choice-row { display: flex; align-items: baseline; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
-  .choice-row > span { flex: none; width: 96px; font-size: 12.5px; color: var(--stage-muted); }
+  .choice-row { margin-top: 12px; }
+  .choice-row > span { display: block; font-size: 12.5px; color: var(--stage-muted); margin-bottom: 6px; }
   .choices { display: flex; gap: 6px; flex-wrap: wrap; }
   .choices label { border: 1px solid var(--stage-rule); border-radius: 16px; padding: 4px 12px; font-size: 12.5px; color: var(--stage-muted); cursor: pointer; }
   .choices label:hover { color: var(--stage-text); border-color: var(--stage-muted); }
@@ -150,6 +147,7 @@
   .account-icon { display: none; width: 16px; height: 16px; }
   .privacy-note { font-size: 11px; color: var(--stage-muted); margin-top: auto; padding: 4px 2px; }
   .privacy-note a { color: var(--stage-muted); }
+  .privacy-note.page-end { display: none; margin-top: 4px; }
   .spinner { width: 28px; height: 28px; border: 3px solid var(--stage-rule); border-top-color: var(--heat); border-radius: 50%; animation: spin .9s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
 
@@ -269,13 +267,19 @@
   @media (max-width: 860px) {
     .bar { padding: 0 14px; gap: 10px; }
     .header-meta { display: none; }
+    .privacy-note { display: none; }
+    .privacy-note.page-end { display: block; }
   }
   @media (max-width: 600px) {
     .credit-label, .credit-held { display: none; }
     .account-email { display: none; }
     .account { padding: 6px; }
+    .account::after { content: none; }
     .account-icon { display: block; }
     .bar-hide-sm { display: none; }
+    .history-row { display: grid; grid-template-columns: 64px minmax(0, 1fr) auto; }
+    .history-actions { display: contents; }
+    .history-row .history-link:not([data-cancel-id]) { grid-column: 2 / -1; justify-self: start; margin-top: 2px; }
     .mset { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
     .mset .mlabel { grid-column: 1 / -1; width: auto; }
     .mrow { grid-template-columns: 1fr; gap: 4px; }
@@ -285,7 +289,6 @@
     .tl-right { justify-self: end; }
   }
   @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto; } }
-  @media (prefers-reduced-motion: reduce) { .history-running-bar::before { animation: none; left: 0; width: 100%; opacity: .6; } }
 </style>
 </head>
 <body>
@@ -392,6 +395,7 @@
       </section>
     </div>
   </div>
+  <div class="privacy-note page-end"><a href="/static/privacy.html">Privacy policy</a></div>
 </div>
 
 <dialog class="modal" id="deleteDialog" aria-labelledby="deleteDialogTitle">
@@ -862,11 +866,11 @@ function renderHistory(jobs) {
   if (openNow.size > 0 || uploadQueue.length > 0) historyPollTimer = setTimeout(loadHistory, POLL_MS);
 }
 
-// The user's oldest queued job carries the waiting clock; the rest are just "In line".
-function oldestQueuedJob(jobs) {
+// The user's oldest unfinished job carries the waiting clock; the rest are just "In line".
+function oldestUnfinishedJob(jobs) {
   let oldest = null;
   jobs.forEach(job => {
-    if (job.status !== 'queued') return;
+    if (job.status !== 'queued' && job.status !== 'processing') return;
     if (!oldest || new Date(job.created_at) < new Date(oldest.created_at)) oldest = job;
   });
   return oldest;
@@ -953,6 +957,7 @@ function queueRow(entry) {
   remove.addEventListener('click', e => {
     e.stopPropagation();
     entry.removed = true;
+    untrackQueueEntry(entry);
     if (entry.xhr) entry.xhr.abort();
     uploadQueue = uploadQueue.filter(other => other !== entry);
     renderHistory(jobsCache);
@@ -963,7 +968,6 @@ function queueRow(entry) {
 }
 
 function historyRow(job) {
-  const running = job.status === 'queued' || job.status === 'processing';
   const canOpen = !!job.result_available;
   const row = document.createElement('div');
   row.className = 'history-row' + (canOpen ? ' openable' : '');
@@ -986,11 +990,6 @@ function historyRow(job) {
   const failure = curveFailures.get(job.job_id);
   sub.textContent = failure ? `${historyDetail(job)} · ${failure}` : historyDetail(job);
   main.append(name);
-  if (running) {
-    const bar = document.createElement('div');
-    bar.className = 'history-running-bar';
-    main.append(bar);
-  }
   main.append(sub);
   const actions = document.createElement('div'); actions.className = 'history-actions';
   if (job.status === 'done' && job.sharing && job.curve_count === 0) {
@@ -1071,13 +1070,13 @@ function historyDetail(job) {
       const days = Math.max(1, Math.ceil(msLeft / 86400000));
       return `${day}${cost} · Deleted in ${days} day${days === 1 ? '' : 's'}`;
     }
-    const expires = longDate(new Date(created.getTime() + RESULT_DAYS * 86400000));
-    return `${day}${cost} · kept until ${expires}`;
+    return `${day}${cost}`;
   }
   if (job.status === 'failed') return `${day} · ${failureText(job.error_code)} · not charged`;
   if (job.status === 'queued') {
-    if (oldestQueuedJob(jobsCache) !== job) return 'In line';
+    if (oldestUnfinishedJob(jobsCache) !== job) return 'In line';
     const mins = minutesSince(job.created_at);
+    if (mins < 1) return 'Waiting for the GPU';
     const slow = Date.now() - created.getTime() >= QUEUED_SLOW_MS ? ' · slower than usual' : '';
     return `Waiting for the GPU · ${mins} min${slow}`;
   }
@@ -1326,9 +1325,23 @@ async function checkBatchItem(item) {
   item.type = type;
   item.duration = duration;
   item.price = estimateCostCents(duration);
-  item.thumb = await captureFrame(item.file, duration);
-  if (item.removed) return;
   finishBatchItem(item, 'valid', '');
+  captureItemThumb(item);
+}
+
+// The frame is taken in the background: rows show the grey square until it arrives.
+function captureItemThumb(item) {
+  captureFrame(item.file, item.duration)
+    .then(thumb => thumb || captureFrame(item.file, item.duration))
+    .then(thumb => {
+      if (!thumb || item.removed) return;
+      item.thumb = thumb;
+      renderBatch();
+      const entry = uploadQueue.find(en => en.item === item);
+      if (entry && entry.jobId) localFrames.set(entry.jobId, thumb);
+      renderHistory(jobsCache);
+    })
+    .catch(() => { /* the row keeps its grey square */ });
 }
 
 function finishBatchItem(item, state, reason) {
@@ -1415,7 +1428,8 @@ function startBatchUpload() {
   const consent = $('consentBox').checked;
   closeBatchDialog();
   resetUI();  // the player stops and History shows; the upload box is free at once
-  valid.forEach(item => uploadQueue.push({ item, consent, state: 'waiting', progress: 0, reason: '' }));
+  valid.forEach(item => uploadQueue.push({ item, consent, state: 'waiting', progress: 0, reason: '', tracked: true }));
+  tabTotal += valid.length;
   renderHistory(jobsCache);
   loadHistory();
   processQueue();
@@ -1427,6 +1441,13 @@ let uploadQueue = [], queueRunning = false;
 const cancelWindows = new Map();      // job_id → when its 15-second window ends
 const pendingCurves = new Map();      // job_id → { curve, name } held until the job is done
 const curveFailures = new Map();      // job_id → row message
+
+// A queued entry stops counting for the tab title when it can no longer become a finished job.
+function untrackQueueEntry(entry) {
+  if (!entry.tracked) return;
+  entry.tracked = false;
+  tabTotal = Math.max(0, tabTotal - 1);
+}
 
 window.addEventListener('beforeunload', e => {
   if (uploadQueue.some(en => en.state === 'waiting' || en.state === 'uploading')) {
@@ -1451,11 +1472,13 @@ function stopQueueAfter(entry, reason, signedOut) {
   entry.state = 'failed';
   entry.reason = reason;
   entry.signedOut = !!signedOut;
+  untrackQueueEntry(entry);
   uploadQueue.forEach(en => {
     if (en !== entry && en.state === 'waiting') {
       en.state = 'failed';
       en.reason = reason;
       en.signedOut = !!signedOut;
+      untrackQueueEntry(en);
     }
   });
   renderHistory(jobsCache);
@@ -1485,6 +1508,7 @@ async function uploadEntry(entry) {
     if (res.status === 402) {
       entry.state = 'failed';
       entry.reason = 'Not enough credit';
+      untrackQueueEntry(entry);
       renderHistory(jobsCache);
       return;
     }
@@ -1493,16 +1517,19 @@ async function uploadEntry(entry) {
       if (presign.error === 'consent_outdated') return stopQueueAfter(entry, presign.message);
       entry.state = 'failed';
       entry.reason = presign.message || `Upload didn't start (HTTP ${res.status}).`;
+      untrackQueueEntry(entry);
       renderHistory(jobsCache);
       return;
     }
   } catch (e) {
     entry.state = 'failed';
     entry.reason = "Couldn't reach the server. Please try again.";
+    untrackQueueEntry(entry);
     renderHistory(jobsCache);
     return;
   }
   const jobId = presign.job_id;
+  entry.jobId = jobId;
   loadBalance();
 
   const fd = new FormData();
@@ -1525,6 +1552,7 @@ async function uploadEntry(entry) {
       finished = true;
       clearStallTimer();
       entry.xhr = null;
+      untrackQueueEntry(entry);
       cancelReservedJob(jobId);
       if (entry.removed) {
         uploadQueue = uploadQueue.filter(en => en !== entry);
@@ -1551,7 +1579,7 @@ async function uploadEntry(entry) {
       if (xhr.status !== 204) return failUpload(`Upload didn't finish (HTTP ${xhr.status}).`);
       uploadQueue = uploadQueue.filter(en => en !== entry);
       cancelWindows.set(jobId, Date.now() + 15000);
-      tabJobs.add(jobId);
+      tabJobs.set(jobId, false);
       if (item.thumb) localFrames.set(jobId, item.thumb);
       if (item.curve) pendingCurves.set(jobId, { curve: item.curve, name: item.name });
       renderHistory(jobsCache);
@@ -1862,9 +1890,22 @@ function choiceGroup(host, name, options) {
 
 let curveTarget = null, curveFile = null;
 
-function setCurveMsg(text, isError) {
-  $('curveMsg').textContent = text;
-  $('curveMsg').classList.toggle('error', !!isError);
+function setCurveMsg(text, isError, withGuideLink) {
+  const el = $('curveMsg');
+  el.textContent = text;
+  el.classList.toggle('error', !!isError);
+  const old = el.querySelector('.curve-guide-link');
+  if (old) old.remove();
+  if (withGuideLink) {
+    const a = document.createElement('a');
+    a.href = '/static/retention_guide.html';
+    a.target = '_blank';
+    a.rel = 'noopener';
+    a.className = 'curve-guide-link';
+    a.textContent = 'How to get it';
+    a.style.marginLeft = '6px';
+    el.append(a);
+  }
 }
 
 function openCurve(target) {
@@ -1876,7 +1917,9 @@ function openCurve(target) {
     ? `Add a valid curve and this analysis is free (${dollars(target.rewardCents)} back).`
     : '';
   setCurveMsg('');
+  $('curveSave').hidden = false;
   $('curveSave').disabled = true;
+  $('curveClose').textContent = 'Cancel';
   ['curveViews', 'curvePublished', 'curvePromoted'].forEach(id => {
     $(id).querySelectorAll('input').forEach(input => { input.checked = false; });
   });
@@ -1902,6 +1945,12 @@ $('curveInput').addEventListener('change', ev => {
 $('curveClose').addEventListener('click', () => curveDialog.close());
 closeOnBackdrop(curveDialog);
 
+// After a saved curve the form is read-only: one Close button instead of Save/Cancel.
+function curveSaved() {
+  $('curveSave').hidden = true;
+  $('curveClose').textContent = 'Close';
+}
+
 $('curveSave').addEventListener('click', async () => {
   if (!curveTarget || $('curveSave').disabled) return;
   const target = curveTarget;
@@ -1915,6 +1964,7 @@ $('curveSave').addEventListener('click', async () => {
   if (target.kind === 'item') {
     target.item.curve = body;
     setCurveMsg('Saved.');
+    curveSaved();
     renderBatch();
     return;
   }
@@ -1925,6 +1975,10 @@ $('curveSave').addEventListener('click', async () => {
     const data = await res.json().catch(() => ({}));
     if (res.status === 401) return window.location.reload();
     if (!res.ok) {
+      if (res.status === 400 && data.error === 'invalid_retention_report') {
+        $('curveSave').disabled = false;
+        return setCurveMsg("This doesn't look like a YouTube retention report.", true, true);
+      }
       const message = data.message || `Couldn't save the curve (HTTP ${res.status}).`;
       $('curveSave').disabled = false;
       return setCurveMsg(message, true);
@@ -1933,6 +1987,7 @@ $('curveSave').addEventListener('click', async () => {
     if (rewarded > 0) setCurveMsg(`Saved. This analysis is now free: ${dollars(rewarded)} is back in your credit.`);
     else if (Array.isArray(data.quality) && data.quality.length) setCurveMsg("Saved. It doesn't look like a full retention curve, so it isn't free.");
     else setCurveMsg('Saved.');
+    curveSaved();
     loadHistory();
     loadBalance();
   } catch (e) {
@@ -2000,20 +2055,29 @@ $('stopShareBtn').addEventListener('click', async () => {
 
 // ---- Tab title (§3) ----
 
-let tabJobs = new Set(), tabTitleDone = false, tabTitleVisHandler = null;
+// Jobs uploaded from this tab (§3). tabTotal counts them from the moment they are queued;
+// tabJobs holds a job's id once it exists, with whether it has appeared in the list yet.
+let tabTotal = 0, tabTitleDone = false, tabTitleVisHandler = null;
+const tabJobs = new Map();
 function updateTabTitle(jobs) {
-  if (tabJobs.size === 0) return;
+  if (tabTotal === 0) {
+    if (!tabTitleDone) document.title = 'NeuroLens';
+    return;
+  }
   const present = new Set(jobs.map(job => job.job_id));
-  for (const id of [...tabJobs]) if (!present.has(id)) tabJobs.delete(id);  // a cancelled job leaves the count
+  for (const [id, seen] of tabJobs) {
+    if (present.has(id)) tabJobs.set(id, true);
+    else if (seen) { tabJobs.delete(id); tabTotal -= 1; }  // cancelled: leaves the count
+  }
   const tracked = jobs.filter(job => tabJobs.has(job.job_id));
-  const total = tabJobs.size;
   const done = tracked.filter(job => job.status === 'done').length;
   const failed = tracked.filter(job => job.status === 'failed').length;
-  if (done + failed >= total) {
+  const unfinished = Math.max(0, tabTotal - done - failed);
+  if (unfinished === 0) {
     document.title = failed ? `✓ ${done} done · ${failed} failed · NeuroLens` : `✓ ${done} done · NeuroLens`;
     if (!tabTitleDone) { tabTitleDone = true; armTabTitleReset(); }
   } else if (done + failed > 0) {
-    document.title = `${done + failed} of ${total} done · NeuroLens`;
+    document.title = `${done + failed} of ${done + failed + unfinished} done · NeuroLens`;
   } else {
     document.title = 'Waiting · NeuroLens';
   }
@@ -2022,6 +2086,7 @@ function resetTabTitle() {
   if (!tabTitleDone) return;
   tabTitleDone = false;
   tabJobs.clear();
+  tabTotal = 0;
   document.title = 'NeuroLens';
   if (tabTitleVisHandler) {
     document.removeEventListener('visibilitychange', tabTitleVisHandler);
@@ -2153,6 +2218,7 @@ async function fillThumbs(seq) {
   if (!els.length) return;
   const run = ++thumbSeq;
   const v = document.createElement('video');
+  v.crossOrigin = 'anonymous';  // needed before src, or toDataURL throws on the S3 video
   v.src = src; v.muted = true; v.preload = 'auto';
   try {
     await new Promise((resolve, reject) => {
@@ -2171,7 +2237,7 @@ async function fillThumbs(seq) {
       g.drawImage(v, 0, 0, canvas.width, canvas.height);
       el.style.backgroundImage = `url(${canvas.toDataURL('image/jpeg', 0.75)})`;
     }
-  } catch (e) { /* thumbnails are a nicety */ }
+  } catch (e) { console.warn('Moment pictures failed:', e); }
 }
 
 function renderResult(result, summary, ctx) {
