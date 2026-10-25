@@ -14,10 +14,9 @@ export const TitleScene: React.FC = () => {
   const out = 1 - ease(g, cuts.credits - 8, cuts.credits);
   const glow = g < moments.finalHit ? 0 : 1 - ease(g, moments.finalHit, moments.finalHit + GLOW);
   return <AbsoluteFill style={{background: '#050607'}}>
-    <AbsoluteFill style={{background: 'radial-gradient(ellipse at 50% 46%, rgba(255,138,42,.07), transparent 48%), radial-gradient(ellipse at 50% 50%, rgba(111,126,153,.12), transparent 64%)'}} />
     <div style={{position: 'absolute', left: 0, right: 0, top: 430, textAlign: 'center', opacity: out, transform: 'translateY(-50%)'}}>
       <div style={{fontSize: 238, lineHeight: 1, fontWeight: 600, letterSpacing: '-.07em', color: C.text,
-        textShadow: `0 24px 90px rgba(0,0,0,.8), 0 0 90px rgba(255,138,42,${.16 + .45 * glow}), 0 0 ${40 + 60 * glow}px rgba(255,170,90,${.55 * glow})`}}>
+        textShadow: `0 24px 90px rgba(0,0,0,.8), 0 0 90px rgba(255,138,42,${.45 * glow}), 0 0 ${40 + 60 * glow}px rgba(255,170,90,${.55 * glow})`}}>
         {CUE.endingTitle.text}
       </div>
     </div>

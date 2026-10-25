@@ -72,8 +72,8 @@ export const Trailer: React.FC = () => {
       <Sequence from={cuts.model} durationInFrames={span(cuts.model, cuts.weeksAgain)}><ModelScene /></Sequence>
       <Sequence from={cuts.weeksAgain} durationInFrames={span(cuts.weeksAgain, cuts.minutes)}><WeeksAgainScene /></Sequence>
       <Sequence from={cuts.minutes} durationInFrames={span(cuts.minutes, moments.silence)}><MinutesScene /></Sequence>
-      <Sequence from={cuts.title} durationInFrames={span(cuts.title, cuts.credits)}><TitleScene /></Sequence>
-      <Sequence from={cuts.credits} durationInFrames={span(cuts.credits, cuts.end)}><CreditsScene /></Sequence>
     </PulseStage>
+    <Sequence from={cuts.title} durationInFrames={span(cuts.title, cuts.credits)}><TitleScene /></Sequence>
+    <Sequence from={cuts.credits} durationInFrames={span(cuts.credits, cuts.end)}><CreditsScene /></Sequence>
   </AbsoluteFill>;
 };
