@@ -16,11 +16,11 @@ import {CompareScene} from './scenes/v3/CompareScene';
 import {ModelScene} from './scenes/v3/ModelScene';
 import {WeeksAgainScene} from './scenes/v3/WeeksAgainScene';
 import {MinutesScene} from './scenes/v3/MinutesScene';
-import {GatherScene} from './scenes/v3/GatherScene';
 import {TitleScene} from './scenes/v3/TitleScene';
 import {CreditsScene} from './scenes/v3/CreditsScene';
 
 const span = (a: number, b: number) => Math.max(1, b - a);
+const MASTER = 0.891;
 
 const musicLevel = (frame: number) => {
   const down = interpolate(frame, [cuts.mute, cuts.mute + f(.15)], [1, 0], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'});
@@ -39,17 +39,17 @@ const muteFrom = cuts.mute - f(SFX.mute.HIT_OFFSET);
 const scribbleFrom = moments.weeksStop - f(SFX.scribble.HIT_OFFSET);
 
 export const Trailer: React.FC = () => {
-  return <AbsoluteFill style={{background: C.bg, color: C.text, fontFamily}}>
-    <Audio src={staticFile('music3.wav')} trimBefore={f(MUSIC_START)} volume={(t) => .8 * musicLevel(t)} />
-    <Audio src={staticFile('music3-muffled.wav')} trimBefore={f(MUSIC_START)} volume={(t) => .8 * (1 - musicLevel(t))} />
+  return <AbsoluteFill style={{background: '#050607', color: C.text, fontFamily}}>
+    <Audio src={staticFile('music3.wav')} trimBefore={f(MUSIC_START)} volume={(t) => .8 * musicLevel(t) * MASTER} />
+    <Audio src={staticFile('music3-muffled.wav')} trimBefore={f(MUSIC_START)} volume={(t) => .8 * (1 - musicLevel(t)) * MASTER} />
     <Sequence from={impactFrom} durationInFrames={impactDuration}>
-      <Audio src={staticFile(SFX.impact.file)} volume={(t) => interpolate(t, [impactDuration - impactFade, impactDuration], [.6, 0], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'})} />
+      <Audio src={staticFile(SFX.impact.file)} volume={(t) => interpolate(t, [impactDuration - impactFade, impactDuration], [.6, 0], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'}) * MASTER} />
     </Sequence>
     <Sequence from={muteFrom}>
-      <Audio src={staticFile(SFX.mute.file)} volume={.5} />
+      <Audio src={staticFile(SFX.mute.file)} volume={.5 * MASTER} />
     </Sequence>
     <Sequence from={scribbleFrom}>
-      <Audio src={staticFile(SFX.scribble.file)} volume={.5} />
+      <Audio src={staticFile(SFX.scribble.file)} volume={.5 * MASTER} />
     </Sequence>
     <PulseStage>
       <Sequence from={cuts.open} durationInFrames={span(cuts.open, cuts.scanner)}><OpenScene /></Sequence>
@@ -68,7 +68,6 @@ export const Trailer: React.FC = () => {
       <Sequence from={cuts.model} durationInFrames={span(cuts.model, cuts.weeksAgain)}><ModelScene /></Sequence>
       <Sequence from={cuts.weeksAgain} durationInFrames={span(cuts.weeksAgain, cuts.minutes)}><WeeksAgainScene /></Sequence>
       <Sequence from={cuts.minutes} durationInFrames={span(cuts.minutes, moments.silence)}><MinutesScene /></Sequence>
-      <Sequence from={moments.silence} durationInFrames={span(moments.silence, cuts.title)}><GatherScene /></Sequence>
       <Sequence from={titleAssembleFrom} durationInFrames={moments.finalHit - titleAssembleFrom + 1}>
         <Shatter text={CUE.endingTitle.text} at={moments.finalHit} offset={titleAssembleFrom} mode="assemble"
           size={238} y={430} weight={600} letterSpacing={-.07} lineHeight={1}

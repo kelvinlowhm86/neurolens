@@ -20,12 +20,10 @@ export const C = {
 };
 
 export const PulseStage: React.FC<{children: React.ReactNode}> = ({children}) => {
-  const frame = useCurrentFrame();
-  const pulse = beatPulse(frame);
-  return <AbsoluteFill style={{transform: `scale(${1 + pulse * .0035})`, transformOrigin: '50% 50%'}}>
+  return <AbsoluteFill>
     {children}
-    <AbsoluteFill style={{background: `radial-gradient(ellipse at 52% 48%, transparent 34%, rgba(0,0,0,${.42 + pulse * .13}) 100%)`, pointerEvents: 'none'}} />
-    <AbsoluteFill style={{background: `radial-gradient(ellipse at 50% 48%, rgba(255,138,42,${.016 + pulse * .028}), transparent 62%)`, mixBlendMode: 'screen', pointerEvents: 'none'}} />
+    <AbsoluteFill style={{background: 'radial-gradient(ellipse at 52% 48%, transparent 34%, rgba(0,0,0,.42) 100%)', pointerEvents: 'none'}} />
+    <AbsoluteFill style={{background: 'radial-gradient(ellipse at 50% 48%, rgba(255,138,42,.016), transparent 62%)', mixBlendMode: 'screen', pointerEvents: 'none'}} />
   </AbsoluteFill>;
 };
 

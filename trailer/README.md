@@ -27,7 +27,7 @@ Dependencies are pinned in `package.json` and `package-lock.json` (Remotion 4.0.
 ffmpeg -i public/music3.wav -af "lowpass=f=450,volume=0.8" public/music3-muffled.wav
 ```
 
-Both `<Audio>` beds use `trimBefore` from `MUSIC_START` in `src/beats.ts`; the normal and muffled beds are crossfaded by volume in `src/Trailer.tsx`, and exactly one is audible at a time. The three effects in `public/sfx/` are the impact at 20.0 s, the mute chime at 40.0 s (made with ffmpeg, a tap and two tones in the song's key) and the scribble at 60.25 s. `HIT_OFFSET` in `src/beats.ts` records each file's offset from its start to the main hit.
+Both `<Audio>` beds use `trimBefore` from `MUSIC_START` in `src/beats.ts`; the normal and muffled beds are crossfaded by volume in `src/Trailer.tsx`, and exactly one is audible at a time. The three effects in `public/sfx/` are the impact at 20.0 s, the mute chime at 40.0 s (made with ffmpeg, a tap and two tones in the song's key) and the scribble at 60.25 s. `HIT_OFFSET` in `src/beats.ts` records each file's offset from its start to the main hit. The whole mix is trimmed by -1 dB: `MASTER = 0.891` in `src/Trailer.tsx` scales every audio element.
 
 Music and sound effects (impact, scribble) made with ElevenLabs; the mute chime is our own.
 
@@ -39,7 +39,7 @@ Music and sound effects (impact, scribble) made with ElevenLabs; the mute chime 
 
 | Frames | Shot |
 | --- | --- |
-| 0–90 | Big Buck Bunny (source 5 s, smiling close-up), full-bleed. “You made a video.” |
+| 0–90 | Big Buck Bunny (source frames 153–242, smiling close-up; the shot runs 153–246), full-bleed. “You made a video.” |
 | 90–180 | Sintel (source 12 s), full-bleed. “Will it grab them?” |
 | 180–548 | One continuous `Scanner` push. 6–14 s slow push; 14–18.25 s accelerated fly-in through the open bore. “The real answer is in the brain.” / “A lab.” / “A scanner.” / “Weeks.” / “What if all you needed” |
 | 548–600 | Black at the stop. “was the video?” It shatters on the drop. |
@@ -53,7 +53,7 @@ Music and sound effects (impact, scribble) made with ElevenLabs; the mute chime 
 | 1,620–1,740 | `BrainHero`. “Built on a model trained on real brain scans.” |
 | 1,740–1,830 | Drained `Scanner` placeholder with “Weeks”; stage 2 adds the counter, scribble and fade. |
 | 1,830–2,048 | `BrainHero` and “Minutes.” |
-| 2,048–2,093 | Gather: the brain holds as the vignette closes; no pulse. |
+| 2,048–2,093 | Black through the silence; the Minutes scene and brain fade out by 68.25 s. |
 | 2,093–2,160 | “NeuroLens” assembles from shards on the final hit, then “See how your video lands.” |
 | 2,160–2,250 | Three credit lines and a fade to black over the last 16 frames. |
 

@@ -2,11 +2,11 @@ import React from 'react';
 import {AbsoluteFill, Img, Sequence, staticFile, useCurrentFrame} from 'remotion';
 import {BrainHero} from '../BrainHero';
 import {CUE} from '../../script';
-import {cuts, f} from '../../beats';
+import {cuts, f, moments} from '../../beats';
 import {clamp, ease, enter} from '../../edit/anim';
 import {C, Flash} from '../../edit/ui';
 
-export const brainAt = cuts.minutes + f(3);
+const brainAt = cuts.minutes + f(3);
 const cardW = 1100, cardH = 560;
 const ringR = 80, ringC = 2 * Math.PI * ringR;
 
@@ -22,6 +22,7 @@ export const MinutesScene: React.FC = () => {
   const drop = enter(g, cuts.minutes, 20);
   const ring = ease(g, cuts.minutes + f(.5), brainAt);
   const toBrain = ease(g, brainAt, brainAt + f(.45));
+  const fade = clamp((g - (moments.silence - f(.3))) / (f(.3) - 1));
   return <AbsoluteFill style={{background: '#0B0C0E'}}>
     <AbsoluteFill style={{background: 'radial-gradient(ellipse at 50% 40%, rgba(255,138,42,.12), transparent 52%), radial-gradient(ellipse at 76% 64%, rgba(111,126,153,.14), transparent 46%)'}} />
     <AbsoluteFill style={{opacity: toBrain, transform: `scale(${.97 + .03 * toBrain})`}}>
@@ -48,5 +49,6 @@ export const MinutesScene: React.FC = () => {
       <div style={{fontSize: wordSize, lineHeight: 1, fontWeight: 600, letterSpacing: '-.065em', color: C.hot, textShadow: '0 24px 90px rgba(0,0,0,.7), 0 0 70px rgba(255,138,42,.25)'}}>{CUE.minutes.text}</div>
     </div>
     <Flash at={cuts.minutes} offset={cuts.minutes} strength={.3} length={8} />
+    <AbsoluteFill style={{background: '#050607', opacity: fade, pointerEvents: 'none'}} />
   </AbsoluteFill>;
 };

@@ -4,15 +4,14 @@ import {BrainHero} from '../BrainHero';
 import {CUE} from '../../script';
 import {cuts} from '../../beats';
 import {Caption, Flash, Shade} from '../../edit/ui';
-import {beatPulse, ease} from '../../edit/anim';
+import {ease} from '../../edit/anim';
 
 export const DropScene: React.FC = () => {
   const f = useCurrentFrame();
   const g = f + cuts.drop;
   const push = ease(g, cuts.drop, cuts.hooked);
-  const beat = beatPulse(g);
   return <AbsoluteFill style={{background: '#050607'}}>
-    <AbsoluteFill style={{transform: `scale(${1.02 + push * .04 + beat * .003})`, transformOrigin: '50% 50%'}}>
+    <AbsoluteFill style={{transform: `scale(${1.02 + push * .04})`, transformOrigin: '50% 50%'}}>
       <BrainHero start={18} layout="solo" />
     </AbsoluteFill>
     <Shade top="rgba(7,8,10,.18)" bottom="rgba(7,8,10,.9)" />

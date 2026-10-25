@@ -15,8 +15,8 @@ const smooth = (a: number, b: number, x: number) => {
 function Camera({progress, fly}: {progress: number; fly: number}) {
   const {camera} = useThree();
   useLayoutEffect(() => {
-    // Slow start, then an ease-in acceleration through the open bore; fly stays 0 for the drained replay.
-    const dolly = Math.pow(progress, 1.8);
+    // Steady motion from the first frame; keeps the old dolly position at the fly-in start (progress .65) and at the end.
+    const dolly = progress * (0.168 + 0.832 * progress);
     const base = new THREE.Vector3(6.4 - dolly * 5.2, 3.9 - dolly * 1.35, 9.6 - dolly * 5.6);
     const look = new THREE.Vector3(-0.1 + dolly * 0.1, 2.1 + dolly * 0.28, 0.9 - dolly * 2.1);
     if (fly > 0) {
@@ -229,6 +229,27 @@ function ScannerHousing({progress}: {progress: number}) {
   </group>;
 }
 
+const BORE_RINGS = [0.58, 0.18, -0.26, -0.72, -1.2, -1.66];
+const BORE_STREAKS = Array.from({length: 16}, (_, i) => (i / 16) * Math.PI * 2);
+
+function BoreLights({fly}: {fly: number}) {
+  const show = smooth(0.42, 0.68, fly);
+  return <group position={[0, 2.38, 0]}>
+    {/* Fixed lights on the bore wall sweep past the camera as it accelerates through the tube. */}
+    {BORE_RINGS.map((z, i) => <mesh key={z} position={[0, 0, z]}>
+      <torusGeometry args={[0.986, i % 2 === 0 ? 0.011 : 0.006, 6, 64]}/>
+      <meshBasicMaterial color={i % 3 === 0 ? '#FFD3A6' : '#D7E8FF'} transparent opacity={show * (i % 2 === 0 ? 0.62 : 0.34)} blending={THREE.AdditiveBlending} depthWrite={false} toneMapped={false}/>
+    </mesh>)}
+    {BORE_STREAKS.map((a, i) => {
+      const length = 2.15 + (i % 4) * 0.12;
+      return <mesh key={`streak-${i}`} position={[Math.cos(a) * 0.965, Math.sin(a) * 0.965, -0.6]} rotation={[Math.PI / 2, 0, 0]}>
+        <cylinderGeometry args={[0.007, 0.007, length, 5]}/>
+        <meshBasicMaterial color="#B9D6F8" transparent opacity={show * 0.36} blending={THREE.AdditiveBlending} depthWrite={false} toneMapped={false}/>
+      </mesh>;
+    })}
+  </group>;
+}
+
 function FloorGlow({position, scale, color, opacity}: {position: [number, number, number]; scale: [number, number, number]; color: string; opacity: number}) {
   const uniforms = useMemo(() => ({color: {value: new THREE.Color(color)}, strength: {value: opacity}}), [color, opacity]);
   return <mesh position={position} rotation={[-Math.PI / 2, 0, 0]} scale={scale}>
@@ -284,6 +305,7 @@ export function ScannerWorld({progress, fly = 0}: {progress: number; fly?: numbe
     <RoundedBox position={[0, 0.28, -0.55]} scale={[3.7, 0.53, 3.3]} color="#26303C" radius={0.2}/>
     <RoundedBox position={[0, 0.64, -0.55]} scale={[2.45, 0.9, 2.8]} color="#445164" radius={0.23}/>
     <ScannerHousing progress={progress}/>
+    <BoreLights fly={fly}/>
     {/* Fixed table pedestal and precision slide rails. */}
     <RoundedBox position={[0, 0.17, 3.3]} scale={[1.18, 0.29, 2.9]} color="#202832" radius={0.08}/>
     <RoundedBox position={[0, 0.68, 3.1]} scale={[0.6, 1, 1.3]} color="#455368" radius={0.12}/>
