@@ -92,14 +92,25 @@ const OpenScene: React.FC = () => {
   const beat = beatPulse(g);
   const buildFlash = Math.max(...CUE.build.map((cue) => clamp(1 - (g - cue.start) / 7)));
   return <AbsoluteFill style={{background: C.bg}}>
-    <AbsoluteFill style={{transform: `scale(${1.025 + push * .17 + beat * .004}) translateY(${push * -12}px)`, transformOrigin: '52% 52%'}}>
-      <Scanner />
-    </AbsoluteFill>
+    <Sequence durationInFrames={span(cuts.open, CUE.openB.start)}>
+      <AbsoluteFill style={{transform: `scale(${1.04 + push * .1})`}}><FullBleed clip="bunny" start={20} /></AbsoluteFill>
+    </Sequence>
+    <Sequence from={CUE.openB.start - cuts.open} durationInFrames={span(CUE.openB.start, cuts.build)}>
+      <AbsoluteFill style={{transform: `scale(${1.04 + push * .1})`}}><FullBleed clip="sintel" start={14} /></AbsoluteFill>
+    </Sequence>
+    <Sequence from={cuts.build - cuts.open} durationInFrames={span(cuts.build, cuts.stop)}>
+      <AbsoluteFill style={{transform: `scale(${1.025 + push * .17 + beat * .004}) translateY(${push * -12}px)`, transformOrigin: '52% 52%'}}>
+        <Scanner />
+      </AbsoluteFill>
+    </Sequence>
+    <AbsoluteFill style={{background: '#000', opacity: ease(g, CUE.stopA.start, CUE.stopA.start + 8) * .62, pointerEvents: 'none'}} />
     <Shade top="rgba(7,8,10,.24)" bottom="rgba(7,8,10,.78)" />
     <AbsoluteFill style={{background: 'radial-gradient(ellipse at 50% 53%, transparent 28%, rgba(5,6,8,.42) 100%)'}} />
     <Caption cue={CUE.openA} offset={cuts.open} size={103} y={505} maxWidth={1450} />
     <Caption cue={CUE.openB} offset={cuts.open} size={103} y={505} maxWidth={1450} />
+    <Caption cue={CUE.answer} offset={cuts.open} size={96} y={505} maxWidth={1500} />
     {CUE.build.map((cue) => <Caption key={cue.id} cue={cue} offset={cuts.open} size={184} y={540} maxWidth={1760} outFrames={1} />)}
+    <Caption cue={CUE.stopA} offset={cuts.open} size={132} y={480} maxWidth={1520} outFrames={1} loosen={0} />
     <AbsoluteFill style={{background: '#FFFFFF', opacity: buildFlash * .12, mixBlendMode: 'screen', pointerEvents: 'none'}} />
     <Flash at={cuts.build} offset={cuts.open} strength={.18} length={10} />
   </AbsoluteFill>;
@@ -127,6 +138,7 @@ const DropScene: React.FC = () => {
     </AbsoluteFill>
     <Shade top="rgba(7,8,10,.18)" bottom="rgba(7,8,10,.9)" />
     <AbsoluteFill style={{background: 'radial-gradient(ellipse at 66% 44%, rgba(255,138,42,.09), transparent 50%)'}} />
+    <Caption cue={CUE.stopB} offset={cuts.drop} size={148} y={620} maxWidth={1520} outFrames={6} loosen={0} />
     <Caption cue={CUE.drop} offset={cuts.drop} size={128} y={856} maxWidth={1700} />
     <Flash at={cuts.drop} offset={cuts.drop} strength={.56} length={12} />
   </AbsoluteFill>;
@@ -324,10 +336,9 @@ const ModelScene: React.FC = () => {
   const beat = beatPulse(g);
   return <AbsoluteFill style={{background: C.bg}}>
     <AbsoluteFill style={{transform: `scale(${1.02 + push * .045 + beat * .003}) translateY(${push * -8}px)`, transformOrigin: '61% 48%'}}>
-      <BrainHero start={25} />
+      <BrainHero start={40} />
     </AbsoluteFill>
     <Shade top="rgba(6,7,9,.2)" bottom="rgba(6,7,9,.92)" />
-    <Caption cue={CUE.model} offset={cuts.model} size={98} y={830} maxWidth={1580} />
     <Flash at={cuts.model} offset={cuts.model} strength={.22} length={10} />
   </AbsoluteFill>;
 };
@@ -343,7 +354,7 @@ const EndingScene: React.FC = () => {
   const credits = ease(g, CUE.credits.start + 8, CUE.credits.start + 28);
   return <AbsoluteFill style={{background: '#050607'}}>
     <AbsoluteFill style={{transform: `scale(${1.02 + build * .055 + beat * .002})`, transformOrigin: '54% 48%'}}>
-      <BrainHero start={30} />
+      <BrainHero start={46} />
     </AbsoluteFill>
     <AbsoluteFill style={{background: 'radial-gradient(ellipse at 50% 48%, transparent 24%, rgba(5,6,8,.7) 100%)'}} />
     <AbsoluteFill style={{background: '#000', opacity: black}} />
@@ -357,6 +368,26 @@ const EndingScene: React.FC = () => {
     </div>
     <Flash at={hit} offset={cuts.ending} strength={.5} length={13} />
   </AbsoluteFill>;
+};
+
+/* Spans the model and ending scenes: the model line, then "Weeks" struck through and "minutes." on the next bar. */
+const LateCaptions: React.FC = () => {
+  const g = useCurrentFrame();
+  const strike = ease(g, CUE.minutes.start - 10, CUE.minutes.start);
+  const shown = g >= CUE.weeks.start && g < CUE.weeks.end;
+  const out = 1 - ease(g, CUE.weeks.end - 5, CUE.weeks.end);
+  return <>
+    <AbsoluteFill style={{background: '#000', opacity: (ease(g, CUE.weeks.start - 6, CUE.weeks.start + 4) - ease(g, moments.endingHit, moments.endingHit + 1)) * .72, pointerEvents: 'none'}} />
+    <Caption cue={CUE.model} offset={0} size={92} y={830} maxWidth={1580} />
+    {shown && <div style={{position: 'absolute', left: 0, right: 0, top: 540, transform: 'translateY(-50%)', display: 'flex', justifyContent: 'center', alignItems: 'baseline', gap: 56, opacity: out, pointerEvents: 'none'}}>
+      <div style={{position: 'relative', fontSize: 184, fontWeight: 600, letterSpacing: '-.055em', color: strike > 0 ? C.muted : C.text, opacity: 1 - strike * .45, textShadow: '0 8px 42px rgba(0,0,0,.62)', transform: `scale(${.92 + enter(g, CUE.weeks.start, 19) * .08})`}}>
+        {CUE.weeks.text}
+        <div style={{position: 'absolute', left: -12, right: -12, top: '54%', height: 12, borderRadius: 6, background: C.hot, transform: `scaleX(${strike})`, transformOrigin: 'left'}} />
+      </div>
+      {g >= CUE.minutes.start && <div style={{fontSize: 184, fontWeight: 600, letterSpacing: '-.055em', color: C.hot, textShadow: '0 0 70px rgba(255,138,42,.35)', transform: `scale(${1.25 - enter(g, CUE.minutes.start, 14) * .25})`, filter: `blur(${(1 - clamp(enter(g, CUE.minutes.start, 14))) * 10}px)`}}>{CUE.minutes.text}</div>}
+    </div>}
+    <Flash at={CUE.minutes.start} strength={.3} length={10} />
+  </>;
 };
 
 const BeatOverlay: React.FC = () => {
@@ -393,6 +424,7 @@ export const Trailer: React.FC = () => {
       <Sequence from={cuts.compare} durationInFrames={span(cuts.compare, cuts.model)}><CompareScene /></Sequence>
       <Sequence from={cuts.model} durationInFrames={span(cuts.model, cuts.ending)}><ModelScene /></Sequence>
       <Sequence from={cuts.ending} durationInFrames={span(cuts.ending, cuts.end)}><EndingScene /></Sequence>
+      <LateCaptions />
       <BeatOverlay />
     </AbsoluteFill>
     <AbsoluteFill style={{background: '#000', opacity: ease(f, DURATION - 16, DURATION - 1), pointerEvents: 'none'}} />

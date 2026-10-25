@@ -45,32 +45,35 @@ const cue = (id: string, text: string, start: number, end: number): Cue => ({
   end: Math.min(DURATION, Math.max(Math.round(start) + 1, Math.round(end))),
 });
 
-const openSplit = Math.min(
-  cuts.build - 1,
-  Math.max(cuts.open + 1, nearest(downbeatFrames.filter((f) => f > cuts.open && f < cuts.build), (cuts.open + cuts.build) / 2)),
-);
+const openSplit = nearest(downbeatFrames.filter((f) => f > cuts.open && f < cuts.build), (cuts.open + cuts.build) / 2);
 
-const buildDownbeats = downbeatFrames.filter((f) => f >= cuts.build && f < cuts.stop);
-const buildWordStarts = buildDownbeats.length >= 3
-  ? buildDownbeats.slice(0, 3)
-  : pick(cuts.build, cuts.stop, 3);
+// Build: the answer line on its first bar, three punch words one per beat, then the question
+// starts on the last downbeat so "was the video?" lands in the music's stop.
+const buildBars = downbeatFrames.filter((f) => f >= cuts.build && f < cuts.stop);
+const answerEnd = buildBars[1] ?? Math.round((cuts.build + cuts.stop) / 2);
+const questionStart = buildBars[buildBars.length - 1] ?? cuts.stop;
+const buildWordStarts = pick(answerEnd, questionStart, 3);
 
-const stopBeats = downbeatFrames.filter((f) => f > cuts.stop && f < cuts.drop);
-const stopSplit = stopBeats[0] ?? Math.round((cuts.stop + cuts.drop) / 2);
+// After the compare: the model line, then "Weeks" struck through and "minutes." on the next bar,
+// then the title on the ending hit.
+const lateBars = downbeatFrames.filter((f) => f > cuts.model && f < moments.endingHit);
+const minutesStart = lateBars[lateBars.length - 2] ?? moments.endingHit - 72;
+const weeksStart = lateBars[lateBars.length - 3] ?? minutesStart - 72;
 
 const signalStarts = pick(cuts.signals, cuts.muted, 7);
 const endingSubStart = nextBeat(moments.endingHit, 1);
 
 export const CUE = {
-  openA: cue('open-a', 'To see how a brain reacts to a video,', cuts.open, openSplit),
-  openB: cue('open-b', 'you needed this.', openSplit, cuts.build),
+  openA: cue('open-a', 'You made a video.', cuts.open, openSplit),
+  openB: cue('open-b', 'Will it grab them?', openSplit, cuts.build),
+  answer: cue('answer', 'The real answer is in the brain.', cuts.build, answerEnd),
   build: [
     cue('build-lab', 'A lab.', buildWordStarts[0], buildWordStarts[1]),
     cue('build-scanner', 'A scanner.', buildWordStarts[1], buildWordStarts[2]),
-    cue('build-weeks', 'Weeks.', buildWordStarts[2], cuts.stop),
+    cue('build-weeks', 'Weeks.', buildWordStarts[2], questionStart),
   ],
-  stopA: cue('stop-a', 'What if all you needed', cuts.stop, stopSplit),
-  stopB: cue('stop-b', 'was the video?', stopSplit, cuts.drop),
+  stopA: cue('stop-a', 'What if all you needed', questionStart, cuts.drop),
+  stopB: cue('stop-b', 'was the video?', cuts.stop, nextBeat(cuts.drop, 1)),
   drop: cue('drop', 'Meet NeuroLens.', nextBeat(cuts.drop, 1), cuts.hooked),
   hooked: cue('hooked', 'The second they\u2019re hooked.', cuts.hooked, cuts.drift),
   drift: cue('drift', 'The second they drift.', cuts.drift, cuts.signals),
@@ -80,7 +83,9 @@ export const CUE = {
   ),
   muted: cue('muted', 'Still works on mute?', cuts.muted, cuts.compare),
   compare: cue('compare', 'Which cut wins?', cuts.compare, cuts.model),
-  model: cue('model', 'Built on a model trained on real brain scans.', cuts.model, cuts.ending),
+  model: cue('model', 'Built on a model trained on real brain scans.', cuts.model, weeksStart),
+  weeks: cue('weeks', 'Weeks', weeksStart, moments.endingHit),
+  minutes: cue('minutes', 'minutes.', minutesStart, moments.endingHit),
   endingTitle: cue('ending-title', 'NeuroLens', moments.endingHit, cuts.end),
   endingSub: cue('ending-sub', 'See how your video lands.', endingSubStart, cuts.end),
   credits: cue('credits', CREDIT_LINES.join(' '), cuts.credits, cuts.end),
