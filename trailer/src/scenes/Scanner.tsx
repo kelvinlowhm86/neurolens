@@ -5,7 +5,7 @@ import {ScannerWorld} from './scanner/ScannerWorld';
 import {clamp} from '../edit/anim';
 
 /** A completely procedural, frame-addressable opening shot. No external assets. */
-export const Scanner: React.FC<{cameraProgress?: number; flyProgress?: number}> = ({cameraProgress, flyProgress = 0}) => {
+export const Scanner: React.FC<{progress?: number; shot?: number}> = ({progress, shot}) => {
   const frame = useCurrentFrame();
   const {width, height, durationInFrames} = useVideoConfig();
   const fallback = clamp(frame / Math.max(1, durationInFrames - 1));
@@ -14,7 +14,7 @@ export const Scanner: React.FC<{cameraProgress?: number; flyProgress?: number}> 
       camera={{position: [8.6, 5.3, 12.6], fov: 34, near: 0.1, far: 65}}
       gl={{antialias: true, alpha: false, powerPreference: 'high-performance'}}
       shadows>
-      <ScannerWorld progress={cameraProgress ?? fallback} fly={flyProgress}/>
+      <ScannerWorld progress={progress ?? fallback} shot={shot ?? fallback}/>
     </ThreeCanvas>
     <AbsoluteFill style={{pointerEvents: 'none', background:
       'radial-gradient(ellipse at 52% 41%, transparent 30%, rgba(7,9,13,0.14) 64%, rgba(7,9,13,0.7) 100%)'}}/>

@@ -53,7 +53,6 @@ type Props = {
   offset: number;
   size: number;
   y: number;
-  mode?: 'shatter' | 'assemble';
   color?: string;
   weight?: number;
   letterSpacing?: number;
@@ -62,24 +61,22 @@ type Props = {
 };
 
 export const Shatter: React.FC<Props> = ({
-  text, at, offset, size, y, mode = 'shatter', color = C.text, weight = 600,
+  text, at, offset, size, y, color = C.text, weight = 600,
   letterSpacing = -.055, lineHeight = 1.03,
   textShadow = '0 8px 42px rgba(0,0,0,.62)',
 }) => {
   const g = useCurrentFrame() + offset;
   const seed = useMemo(
-    () => text.split('').reduce((sum, ch) => sum + ch.charCodeAt(0), 0) + size * 31 + (mode === 'assemble' ? 7 : 0),
-    [text, size, mode],
+    () => text.split('').reduce((sum, ch) => sum + ch.charCodeAt(0), 0) + size * 31,
+    [text, size],
   );
   const shards = useMemo(() => build(seed), [seed]);
-  const travel = f(.6);
   const life = f(.72);
   const p = clamp((g - at) / life);
-  const q = clamp((g - (at - travel)) / travel);
-  const baseVisible = mode === 'assemble' ? g >= at : g < at;
-  const shardsVisible = mode === 'assemble' ? g < at : g >= at;
-  const beat = mode === 'shatter' ? p : 1 - q;
-  const opacity = mode === 'shatter' ? 1 - clamp((p - .35) / .65) : 1;
+  const baseVisible = g < at;
+  const shardsVisible = g >= at;
+  const beat = p;
+  const opacity = 1 - clamp((p - .35) / .65);
   const textStyle: React.CSSProperties = {
     position: 'absolute', inset: 0, textAlign: 'center', whiteSpace: 'nowrap',
     fontSize: size, lineHeight, fontWeight: weight, letterSpacing: `${letterSpacing}em`,

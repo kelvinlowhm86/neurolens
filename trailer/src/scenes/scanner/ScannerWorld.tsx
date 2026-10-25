@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import {RectAreaLightUniformsLib} from 'three/addons/lights/RectAreaLightUniformsLib.js';
 import {RoomEnvironment} from 'three/addons/environments/RoomEnvironment.js';
 import {mergeVertices} from 'three/addons/utils/BufferGeometryUtils.js';
+import {cuts, moments} from '../../beats';
 
 const COLD = '#6F7E99';
 const ICE = '#BCD0EB';
@@ -12,41 +13,53 @@ const smooth = (a: number, b: number, x: number) => {
   return v * v * (3 - 2 * v);
 };
 
-function Camera({progress, fly}: {progress: number; fly: number}) {
+type Vec3 = readonly [number, number, number];
+const CAMERA_PATH: ReadonlyArray<{p: Vec3; l: Vec3}> = [
+  {p: [6.4, 3.9, 9.6], l: [-0.1, 2.1, 0.9]},
+  {p: [4.00432, 3.278, 7.02], l: [-0.0539, 2.229, -0.067]},
+  {p: [0, 2.62, 1.35], l: [0, 2.56, -1.2]},
+  {p: [0, 2.62, -0.5], l: [0, 2.58, -6]},
+  {p: [0, 2.62, -3.4], l: [0, 2.62, -9]},
+];
+const cameraDistance = (a: Vec3, b: Vec3) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+const CAMERA_STOPS = CAMERA_PATH.reduce<number[]>((stops, key, i) => {
+  stops.push(i === 0 ? 0 : stops[i - 1] + cameraDistance(CAMERA_PATH[i - 1].p, key.p));
+  return stops;
+}, []);
+const CAMERA_LENGTH = CAMERA_STOPS[CAMERA_STOPS.length - 1];
+const DOLLY_END = CAMERA_STOPS[1] / CAMERA_LENGTH;
+const QUESTION_AT = (cuts.question - cuts.scanner) / (moments.stop - cuts.scanner);
+// The shot is one arc-length path: constant camera speed to 14 s, then a smooth rise into the rush.
+const DOLLY_RATE = DOLLY_END / QUESTION_AT;
+const RUSH_POWER = 4;
+const RUSH_RATE = DOLLY_RATE + (1 - DOLLY_END - (1 - QUESTION_AT) * DOLLY_RATE) * RUSH_POWER / (1 - QUESTION_AT);
+const shotProgress = (shot: number) => {
+  const t = Math.min(1, Math.max(0, shot));
+  if (t <= QUESTION_AT) return DOLLY_END * t / QUESTION_AT;
+  const x = (t - QUESTION_AT) / (1 - QUESTION_AT);
+  return DOLLY_END + (1 - QUESTION_AT) * (DOLLY_RATE * x + (RUSH_RATE - DOLLY_RATE) * Math.pow(x, RUSH_POWER) / RUSH_POWER);
+};
+
+function Camera({shot}: {shot: number}) {
   const {camera} = useThree();
   useLayoutEffect(() => {
-    // Steady motion from the first frame; keeps the old dolly position at the fly-in start (progress .65) and at the end.
-    const dolly = progress * (0.168 + 0.832 * progress);
-    const base = new THREE.Vector3(6.4 - dolly * 5.2, 3.9 - dolly * 1.35, 9.6 - dolly * 5.6);
-    const look = new THREE.Vector3(-0.1 + dolly * 0.1, 2.1 + dolly * 0.28, 0.9 - dolly * 2.1);
-    if (fly > 0) {
-      const s = Math.pow(Math.min(1, Math.max(0, fly)), 3);
-      const keys = [
-        {t: 0, p: [base.x, base.y, base.z], l: [look.x, look.y, look.z]},
-        {t: .5, p: [0, 2.62, 1.35], l: [0, 2.56, -1.2]},
-        {t: .8, p: [0, 2.62, -.5], l: [0, 2.58, -6]},
-        {t: 1, p: [0, 2.62, -3.4], l: [0, 2.62, -9]},
-      ] as const;
-      let i = 0;
-      while (i < keys.length - 2 && s > keys[i + 1].t) i++;
-      const a = keys[i], b = keys[i + 1];
-      const u = (s - a.t) / (b.t - a.t);
-      camera.position.set(
-        a.p[0] + (b.p[0] - a.p[0]) * u,
-        a.p[1] + (b.p[1] - a.p[1]) * u,
-        a.p[2] + (b.p[2] - a.p[2]) * u,
-      );
-      camera.lookAt(
-        a.l[0] + (b.l[0] - a.l[0]) * u,
-        a.l[1] + (b.l[1] - a.l[1]) * u,
-        a.l[2] + (b.l[2] - a.l[2]) * u,
-      );
-    } else {
-      camera.position.copy(base);
-      camera.lookAt(look);
-    }
+    const target = shotProgress(shot) * CAMERA_LENGTH;
+    let i = 1;
+    while (i < CAMERA_STOPS.length - 1 && CAMERA_STOPS[i] < target) i++;
+    const a = CAMERA_PATH[i - 1], b = CAMERA_PATH[i];
+    const u = (target - CAMERA_STOPS[i - 1]) / (CAMERA_STOPS[i] - CAMERA_STOPS[i - 1]);
+    camera.position.set(
+      a.p[0] + (b.p[0] - a.p[0]) * u,
+      a.p[1] + (b.p[1] - a.p[1]) * u,
+      a.p[2] + (b.p[2] - a.p[2]) * u,
+    );
+    camera.lookAt(
+      a.l[0] + (b.l[0] - a.l[0]) * u,
+      a.l[1] + (b.l[1] - a.l[1]) * u,
+      a.l[2] + (b.l[2] - a.l[2]) * u,
+    );
     camera.updateProjectionMatrix();
-  }, [camera, progress, fly]);
+  }, [camera, shot]);
   return null;
 }
 
@@ -232,8 +245,8 @@ function ScannerHousing({progress}: {progress: number}) {
 const BORE_RINGS = [0.58, 0.18, -0.26, -0.72, -1.2, -1.66];
 const BORE_STREAKS = Array.from({length: 16}, (_, i) => (i / 16) * Math.PI * 2);
 
-function BoreLights({fly}: {fly: number}) {
-  const show = smooth(0.42, 0.68, fly);
+function BoreLights({rush}: {rush: number}) {
+  const show = smooth(0.42, 0.68, rush);
   return <group position={[0, 2.38, 0]}>
     {/* Fixed lights on the bore wall sweep past the camera as it accelerates through the tube. */}
     {BORE_RINGS.map((z, i) => <mesh key={z} position={[0, 0, z]}>
@@ -283,12 +296,13 @@ function LightShaft() {
   </mesh>;
 }
 
-export function ScannerWorld({progress, fly = 0}: {progress: number; fly?: number}) {
+export function ScannerWorld({progress, shot = progress}: {progress: number; shot?: number}) {
   const slide = smooth(0.08, 0.86, progress) * 2.25;
+  const rush = Math.min(1, Math.max(0, (shot - QUESTION_AT) / (1 - QUESTION_AT)));
   return <>
     <color attach="background" args={['#0E0F11']}/>
     <fog attach="fog" args={['#0E0F11', 12, 32]}/>
-    <Camera progress={progress} fly={fly}/>
+    <Camera shot={shot}/>
     <StudioReflections/>
     <ambientLight intensity={0.29} color={COLD}/>
     <hemisphereLight args={['#8093AF', '#101319', 0.65]}/>
@@ -305,7 +319,7 @@ export function ScannerWorld({progress, fly = 0}: {progress: number; fly?: numbe
     <RoundedBox position={[0, 0.28, -0.55]} scale={[3.7, 0.53, 3.3]} color="#26303C" radius={0.2}/>
     <RoundedBox position={[0, 0.64, -0.55]} scale={[2.45, 0.9, 2.8]} color="#445164" radius={0.23}/>
     <ScannerHousing progress={progress}/>
-    <BoreLights fly={fly}/>
+    <BoreLights rush={rush}/>
     {/* Fixed table pedestal and precision slide rails. */}
     <RoundedBox position={[0, 0.17, 3.3]} scale={[1.18, 0.29, 2.9]} color="#202832" radius={0.08}/>
     <RoundedBox position={[0, 0.68, 3.1]} scale={[0.6, 1, 1.3]} color="#455368" radius={0.12}/>

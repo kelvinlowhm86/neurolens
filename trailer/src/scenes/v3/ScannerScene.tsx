@@ -12,9 +12,9 @@ const SLOW_PUSH = .65;
 export const ScannerScene: React.FC = () => {
   const frame = useCurrentFrame();
   const g = frame + cuts.scanner;
-  const cssPush = clamp((g - cuts.scanner) / span(cuts.scanner, cuts.question));
-  const slow = SLOW_PUSH * cssPush;
-  const fly = clamp((g - cuts.question) / span(cuts.question, moments.stop));
+  const shot = clamp((g - cuts.scanner) / span(cuts.scanner, moments.stop));
+  const cssPush = shot;
+  const world = SLOW_PUSH * clamp((g - cuts.scanner) / span(cuts.scanner, cuts.question));
   const k = g - moments.bigHit;
   const shake = k >= 0 && k < 10 ? 1 - k / 10 : 0;
   const sx = (k % 2 ? -1 : 1) * 14 * shake;
@@ -24,7 +24,7 @@ export const ScannerScene: React.FC = () => {
   const whoosh = ease(g, moments.stop - f(.3), moments.stop);
   return <AbsoluteFill style={{background: C.bg}}>
     <AbsoluteFill style={{transform: `scale(${1.025 + cssPush * .1}) translate(${sx}px, ${cssPush * -12 + sy}px)`, transformOrigin: '52% 52%'}}>
-      <Scanner cameraProgress={slow} flyProgress={fly} />
+      <Scanner progress={world} shot={shot} />
     </AbsoluteFill>
     <Shade top="rgba(7,8,10,.24)" bottom="rgba(7,8,10,.78)" />
     <AbsoluteFill style={{background: 'radial-gradient(ellipse at 50% 53%, transparent 28%, rgba(5,6,8,.42) 100%)'}} />

@@ -1,6 +1,5 @@
 import React from 'react';
 import {AbsoluteFill} from 'remotion';
-import {signed} from '../../edit/Graph';
 import {C} from '../../edit/ui';
 
 export const RING: ReadonlyArray<readonly [number, number]> = [
@@ -32,10 +31,9 @@ export const GroupTitle: React.FC<{title: string; x: number; color: string; opac
   </div>;
 
 export const SignalLabel: React.FC<{
-  name: string; value: number; x: number; y: number;
-  nameSize: number; valueSize: number; opacity?: number; scale?: number;
-}> = ({name, value, x, y, nameSize, valueSize, opacity = 1, scale = 1}) =>
+  name: string; x: number; y: number;
+  nameSize: number; opacity?: number; scale?: number;
+}> = ({name, x, y, nameSize, opacity = 1, scale = 1}) =>
   <div style={{position: 'absolute', left: x, top: y, width: 620, transform: `translate(-50%,-50%) scale(${scale})`, textAlign: 'center', opacity, pointerEvents: 'none'}}>
     <div style={{fontSize: nameSize, lineHeight: 1.02, fontWeight: 600, letterSpacing: '-.055em', textShadow: '0 8px 38px #000'}}>{name}</div>
-    <div style={{marginTop: nameSize * .08, fontSize: valueSize, lineHeight: 1, color: C.hot, fontVariantNumeric: 'tabular-nums', textShadow: '0 4px 18px #000'}}>{signed(value)}</div>
   </div>;

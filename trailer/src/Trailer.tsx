@@ -31,10 +31,11 @@ const musicLevel = (frame: number) => {
   return up;
 };
 
-const titleAssembleFrom = moments.finalHit - f(.65);
 const impactFrom = moments.drop - f(SFX.impact.HIT_OFFSET);
 const impactDuration = moments.drop + f(3) - impactFrom;
 const impactFade = f(1.5);
+const finalImpactFrom = moments.finalHit - f(SFX.impact.HIT_OFFSET);
+const finalImpactDuration = cuts.credits - finalImpactFrom;
 const muteFrom = cuts.mute - f(SFX.mute.HIT_OFFSET);
 const scribbleFrom = moments.weeksStop - f(SFX.scribble.HIT_OFFSET);
 
@@ -44,6 +45,9 @@ export const Trailer: React.FC = () => {
     <Audio src={staticFile('music3-muffled.wav')} trimBefore={f(MUSIC_START)} volume={(t) => .8 * (1 - musicLevel(t)) * MASTER} />
     <Sequence from={impactFrom} durationInFrames={impactDuration}>
       <Audio src={staticFile(SFX.impact.file)} volume={(t) => interpolate(t, [impactDuration - impactFade, impactDuration], [.45, 0], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'}) * MASTER} />
+    </Sequence>
+    <Sequence from={finalImpactFrom} durationInFrames={finalImpactDuration}>
+      <Audio src={staticFile(SFX.impact.file)} volume={(t) => interpolate(t, [finalImpactDuration - impactFade, finalImpactDuration], [.45, 0], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'}) * MASTER} />
     </Sequence>
     <Sequence from={muteFrom}>
       <Audio src={staticFile(SFX.mute.file)} volume={.5 * MASTER} />
@@ -68,11 +72,6 @@ export const Trailer: React.FC = () => {
       <Sequence from={cuts.model} durationInFrames={span(cuts.model, cuts.weeksAgain)}><ModelScene /></Sequence>
       <Sequence from={cuts.weeksAgain} durationInFrames={span(cuts.weeksAgain, cuts.minutes)}><WeeksAgainScene /></Sequence>
       <Sequence from={cuts.minutes} durationInFrames={span(cuts.minutes, moments.silence)}><MinutesScene /></Sequence>
-      <Sequence from={titleAssembleFrom} durationInFrames={moments.finalHit - titleAssembleFrom + 1}>
-        <Shatter text={CUE.endingTitle.text} at={moments.finalHit} offset={titleAssembleFrom} mode="assemble"
-          size={238} y={430} weight={600} letterSpacing={-.07} lineHeight={1}
-          textShadow="0 24px 90px rgba(0,0,0,.8), 0 0 90px rgba(255,138,42,.16)" />
-      </Sequence>
       <Sequence from={cuts.title} durationInFrames={span(cuts.title, cuts.credits)}><TitleScene /></Sequence>
       <Sequence from={cuts.credits} durationInFrames={span(cuts.credits, cuts.end)}><CreditsScene /></Sequence>
     </PulseStage>

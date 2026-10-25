@@ -1,14 +1,11 @@
 import React from 'react';
 import {AbsoluteFill, useCurrentFrame} from 'remotion';
-import bunny from '../../bunny.json';
-import {CUE, LABEL} from '../../script';
+import {CUE} from '../../script';
 import {cuts, f} from '../../beats';
-import {at} from '../../edit/Graph';
 import {beatPulse, clamp, ease, enter} from '../../edit/anim';
 import {C} from '../../edit/ui';
 import {COLUMN_POS, GROUPS, GroupTitle, RING, SignalField, SignalLabel} from './signals';
 
-const arrays = LABEL.signals.map((name) => bunny.signals[name.toLowerCase() as keyof typeof bunny.signals] as number[]);
 const flyStart = cuts.groups - f(.5);
 
 export const SignalsScene: React.FC = () => {
@@ -31,11 +28,9 @@ export const SignalsScene: React.FC = () => {
       return <SignalLabel
         key={cue.id}
         name={cue.text}
-        value={at(arrays[i], 25)}
         x={rx + (cx - rx) * fly}
         y={ry + (cy - ry) * fly}
         nameSize={72 + (42 - 72) * fly}
-        valueSize={44 + (40 - 44) * fly}
         opacity={clamp((g - cue.start) / 4)}
         scale={pop + (1 - pop) * fly}
       />;
