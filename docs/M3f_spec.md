@@ -171,8 +171,11 @@ place in line among other users, waking the database from the landing page.
   (`dataset_removed_at` and its reason, or `deleted_at`), so no curve can be added after that moment;
   then `delete_job_prefixes`; on success `jobs.dataset_purged_at = now()` (migration 006). A failed
   delete leaves `dataset_purged_at` empty and every reaper run retries the purge for consented jobs
-  that are marked (removed or deleted) and not purged. Account delete keeps its order (files, then
-  rows) since no row is left to retry from.
+  that are marked (removed or deleted) and not purged. For a deleted job the purge also deletes the job's own files (upload, result, brain,
+  thumbnail), so `dataset_purged_at` means all its files are gone; the reaper's retry covers every
+  marked job, consented or not. A route that has marked answers success even if the purge failed (it
+  logs an error; the reaper finishes), since the user can no longer see or retry it. Account delete
+  keeps its order (files, then rows) since no row is left to retry from.
 - **Lock order:** any transaction that locks both takes the user's balance row first, then the job row
   (`add_curve`, account delete, `reserve`), so two of them can never deadlock.
 - **Stop sharing:** `POST /api/jobs/<id>/stop-sharing` on a done, shared, not-removed job marks it
