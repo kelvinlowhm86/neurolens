@@ -1,28 +1,36 @@
-// Hand-written 120 BPM grid: beat n at n * 0.5 - 0.06 s; no pulses in stops/silences.
+// Hand-written 120 BPM grid: beat n at n * 0.5 - 0.06 s in music time; no pulses in stops/silences.
 export const FPS = 30;
-export const DURATION = 2370;
+export const DURATION = 2250;
 export const f = (seconds: number) => Math.round(seconds * FPS);
+
+// Both music beds play from this point into the uncut files.
+export const MUSIC_START = 4;
 
 const BEAT = 0.5;
 const OFFSET = 0.06;
 const LAST_BEAT = 152;
+
+// Music time to trailer time.
+const at = (musicSeconds: number) => musicSeconds - MUSIC_START;
+
+export const moments = {
+  bigHit: f(at(16)), stop: f(at(22.25)), drop: f(at(24)), breakSmall: f(at(43.25)),
+  muteStop: f(at(48.25)), muteBack: f(at(49)), weeksStop: f(at(64.25)), minutesBack: f(at(65)),
+  silence: f(at(72.25)), finalHit: f(at(73.75)), musicEnd: f(at(76.05)),
+} as const;
+
 const SILENCES: ReadonlyArray<readonly [number, number]> = [
-  [22.25, 24], [48.25, 49], [64.25, 65], [72.25, 73.75], [74.25, 79],
+  [at(22.25), at(24)], [at(48.25), at(49)], [at(64.25), at(65)],
+  [at(72.25), at(73.75)], [at(74.25), DURATION / FPS],
 ];
-const MUFFLED: readonly [number, number] = [44, 48.25];
+const MUFFLED: readonly [number, number] = [at(44), at(48.25)];
 
 const silent = (seconds: number) => SILENCES.some(([a, b]) => seconds > a && seconds < b);
 
 export const beats = Array.from({length: LAST_BEAT}, (_, i) => {
-  const seconds = (i + 1) * BEAT - OFFSET;
+  const seconds = at((i + 1) * BEAT - OFFSET);
   return {frame: f(seconds), seconds, strength: seconds > MUFFLED[0] && seconds < MUFFLED[1] ? 0.35 : 1};
-}).filter(({seconds}) => !silent(seconds));
-
-export const moments = {
-  bigHit: f(16), stop: f(22.25), drop: f(24), breakSmall: f(43.25), muteStop: f(48.25),
-  muteBack: f(49), weeksStop: f(64.25), minutesBack: f(65), silence: f(72.25),
-  finalHit: f(73.75), musicEnd: f(76.05),
-} as const;
+}).filter(({seconds}) => seconds >= 0 && !silent(seconds));
 
 export const CLIPS = {
   openBunny: 20, openSintel: 12,
@@ -31,10 +39,10 @@ export const CLIPS = {
 } as const;
 
 export const cuts = {
-  open: f(0), sintelOpen: f(4), scanner: f(8), lab: f(12), scannerWord: f(14), weeks: f(16),
-  question: f(20), drop: f(24), hooked: f(28), drift: f(32), signals: f(36), groups: f(40),
-  mute: f(44), compare: f(50), model: f(58), weeksAgain: f(62), minutes: f(65),
-  title: f(73.75), credits: f(76), end: f(79),
+  open: f(0), sintelOpen: f(3), scanner: f(6), lab: f(8), scannerWord: f(10), weeks: f(12),
+  question: f(14), drop: f(20), hooked: f(24), drift: f(28), signals: f(32), groups: f(36),
+  mute: f(40), compare: f(46), model: f(54), weeksAgain: f(58), minutes: f(61),
+  title: moments.finalHit, credits: f(72), end: DURATION,
 } as const;
 
 // HIT_OFFSET: seconds from the file's start to its main hit (measured from the files).

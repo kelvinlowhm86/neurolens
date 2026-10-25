@@ -1,8 +1,8 @@
 import React from 'react';
-import {AbsoluteFill, Freeze, useCurrentFrame} from 'remotion';
+import {AbsoluteFill, useCurrentFrame} from 'remotion';
 import sintel from '../../sintel.json';
 import {CUE, LABEL} from '../../script';
-import {CLIPS, FPS, cuts, f, moments} from '../../beats';
+import {CLIPS, FPS, cuts, f} from '../../beats';
 import {Graph, at, signed} from '../../edit/Graph';
 import {clamp, ease, enter} from '../../edit/anim';
 import {C, Caption, Flash, FullBleed, Shade} from '../../edit/ui';
@@ -25,10 +25,7 @@ const MuteIcon: React.FC<{size: number}> = ({size}) =>
 export const MuteScene: React.FC = () => {
   const frame = useCurrentFrame();
   const g = frame + cuts.mute;
-  const local = g - cuts.mute;
-  const holdFrom = moments.muteStop - cuts.mute, holdTo = moments.muteBack - cuts.mute;
-  const effective = local >= holdTo ? holdFrom + (local - holdTo) : Math.min(local, holdFrom);
-  const t = MUTE_FROM + effective / FPS;
+  const t = MUTE_FROM + (g - cuts.mute) / FPS;
   const progress = clamp((t - MUTE_FROM) / (MUTE_TO - MUTE_FROM));
   const shrink = ease(g, cuts.mute + f(.4), cuts.mute + f(1));
   const pop = enter(g, cuts.mute, 11.5);
@@ -37,7 +34,7 @@ export const MuteScene: React.FC = () => {
   const size = 160 + (64 - 160) * shrink;
   return <AbsoluteFill style={{background: C.bg}}>
     <AbsoluteFill>
-      <Freeze frame={effective}><FullBleed clip="sintel" start={MUTE_FROM} /></Freeze>
+      <FullBleed clip="sintel" start={MUTE_FROM} />
     </AbsoluteFill>
     <Shade top="rgba(6,7,9,.52)" bottom="rgba(6,7,9,.97)" />
     <Caption cue={CUE.mute} offset={cuts.mute} size={126} y={244} maxWidth={1740} />

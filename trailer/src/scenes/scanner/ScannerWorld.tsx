@@ -12,15 +12,41 @@ const smooth = (a: number, b: number, x: number) => {
   return v * v * (3 - 2 * v);
 };
 
-function Camera({progress}: {progress: number}) {
+function Camera({progress, fly}: {progress: number; fly: number}) {
   const {camera} = useThree();
   useLayoutEffect(() => {
-    // Slow start, then accelerating push toward the bore: tension builds into the music's stop.
+    // Slow start, then an ease-in acceleration through the open bore; fly stays 0 for the drained replay.
     const dolly = Math.pow(progress, 1.8);
-    camera.position.set(6.4 - dolly * 5.2, 3.9 - dolly * 1.35, 9.6 - dolly * 5.6);
-    camera.lookAt(-0.1 + dolly * 0.1, 2.1 + dolly * 0.28, 0.9 - dolly * 2.1);
+    const base = new THREE.Vector3(6.4 - dolly * 5.2, 3.9 - dolly * 1.35, 9.6 - dolly * 5.6);
+    const look = new THREE.Vector3(-0.1 + dolly * 0.1, 2.1 + dolly * 0.28, 0.9 - dolly * 2.1);
+    if (fly > 0) {
+      const s = Math.pow(Math.min(1, Math.max(0, fly)), 3);
+      const keys = [
+        {t: 0, p: [base.x, base.y, base.z], l: [look.x, look.y, look.z]},
+        {t: .5, p: [0, 2.62, 1.35], l: [0, 2.56, -1.2]},
+        {t: .8, p: [0, 2.62, -.5], l: [0, 2.58, -6]},
+        {t: 1, p: [0, 2.62, -3.4], l: [0, 2.62, -9]},
+      ] as const;
+      let i = 0;
+      while (i < keys.length - 2 && s > keys[i + 1].t) i++;
+      const a = keys[i], b = keys[i + 1];
+      const u = (s - a.t) / (b.t - a.t);
+      camera.position.set(
+        a.p[0] + (b.p[0] - a.p[0]) * u,
+        a.p[1] + (b.p[1] - a.p[1]) * u,
+        a.p[2] + (b.p[2] - a.p[2]) * u,
+      );
+      camera.lookAt(
+        a.l[0] + (b.l[0] - a.l[0]) * u,
+        a.l[1] + (b.l[1] - a.l[1]) * u,
+        a.l[2] + (b.l[2] - a.l[2]) * u,
+      );
+    } else {
+      camera.position.copy(base);
+      camera.lookAt(look);
+    }
     camera.updateProjectionMatrix();
-  }, [camera, progress]);
+  }, [camera, progress, fly]);
   return null;
 }
 
@@ -236,12 +262,12 @@ function LightShaft() {
   </mesh>;
 }
 
-export function ScannerWorld({progress}: {progress: number}) {
+export function ScannerWorld({progress, fly = 0}: {progress: number; fly?: number}) {
   const slide = smooth(0.08, 0.86, progress) * 2.25;
   return <>
     <color attach="background" args={['#0E0F11']}/>
     <fog attach="fog" args={['#0E0F11', 12, 32]}/>
-    <Camera progress={progress}/>
+    <Camera progress={progress} fly={fly}/>
     <StudioReflections/>
     <ambientLight intensity={0.29} color={COLD}/>
     <hemisphereLight args={['#8093AF', '#101319', 0.65]}/>

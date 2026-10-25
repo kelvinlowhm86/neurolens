@@ -24,7 +24,7 @@ export const WeeksAgainScene: React.FC = () => {
     <Caption cue={CUE.weeks} offset={cuts.weeksAgain} size={200} y={540} maxWidth={1760} outFrames={1} loosen={0} />
     <svg width={1920} height={1080} viewBox="0 0 1920 1080" style={{position: 'absolute', inset: 0, pointerEvents: 'none', filter: 'drop-shadow(0 0 12px rgba(255,138,42,.55))'}}>
       <path
-        d="M 574 548 C 690 606, 812 512, 950 590 C 1090 670, 1210 524, 1348 588 M 602 620 C 736 578, 858 658, 1004 606 C 1140 558, 1268 646, 1382 596"
+        d="M 574 508 C 690 566, 812 472, 950 550 C 1090 630, 1210 484, 1348 548 M 602 580 C 736 538, 858 618, 1004 566 C 1140 518, 1268 606, 1382 556"
         fill="none"
         stroke={C.hot}
         strokeWidth="14"

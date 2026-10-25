@@ -9,7 +9,7 @@ import {C} from '../../edit/ui';
 import {COLUMN_POS, GROUPS, GroupTitle, RING, SignalField, SignalLabel} from './signals';
 
 const arrays = LABEL.signals.map((name) => bunny.signals[name.toLowerCase() as keyof typeof bunny.signals] as number[]);
-const flyStart = f(39.5);
+const flyStart = cuts.groups - f(.5);
 
 export const SignalsScene: React.FC = () => {
   const frame = useCurrentFrame();
