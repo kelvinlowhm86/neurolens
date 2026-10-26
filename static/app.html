@@ -480,7 +480,7 @@
 const $ = id => document.getElementById(id);
 const video = $('videoPlayer');
 const BRAIN_UNAVAILABLE = 'The 3D view is not available for this video.';
-const VIDEO_DELETED = 'This video has been deleted. Uploads are kept for 30 days (12 months if you agreed to keep it for research).';
+const VIDEO_DELETED = 'This video is no longer available to play. Original uploads are kept for 30 days; research copies have their own retention, described in the privacy policy.';
 const VIDEO_UNPLAYABLE = "This video can't be played here.";
 const GROUPS = {
   see: { label: 'Seeing', signals: ['faces', 'bodies', 'scenes', 'visual'] },
@@ -1962,6 +1962,67 @@ function choiceGroup(host, name, options) {
 
 let curveTarget = null, curveFile = null;
 
+function curveList(items) {
+  if (items.length <= 1) return items[0] || '';
+  return `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
+}
+
+const CURVE_QUALITY_TEXT = {
+  too_few_points: 'it has fewer than 20 points',
+  flat_curve: 'the watch percentage barely changes across it',
+  rising_curve: 'it ends higher than it starts',
+  watch_ratio_too_high: 'it has an unusually high watch ratio',
+};
+
+function curveQualityMessage(flags) {
+  const reasons = [...new Set(flags.map(flag => CURVE_QUALITY_TEXT[flag] || 'it did not pass one of the quality checks'))];
+  return `Thanks for adding it. The report was saved, but no credit was refunded because ${curveList(reasons)}. The saved report can't be reuploaded; the guide can help with future uploads.`;
+}
+
+function curveReportError(status, data) {
+  const detail = typeof data.message === 'string' ? data.message.trim() : '';
+  const lower = detail.toLowerCase();
+  let explanation;
+  if (status === 413) {
+    const limit = detail.match(/(\d+)\s+bytes/i);
+    const size = limit ? ` (the limit is ${Math.round(Number(limit[1]) / 1024)} KB)` : '';
+    explanation = `This file is too large to add${size}. Choose the .json YouTube retention report rather than a larger export, then try again.`;
+  } else if (lower.includes('no rows')) {
+    explanation = 'This report has no data rows yet. YouTube may not have enough watch data for this video. If the video already has views, export the report again later.';
+  } else if (lower.includes('at least 2 rows')) {
+    explanation = 'This report has too few rows to make a curve. YouTube may not have enough watch data for this video yet. If the video already has views, export the report again later.';
+  } else if (lower.includes('rows must be a list')) {
+    explanation = "This report's rows are not in the expected format. Choose the .json audience-retention report you downloaded from YouTube and try again.";
+  } else if (lower.includes(' column')) {
+    explanation = 'This report is missing a column the curve needs. Choose the audience-retention report you downloaded from YouTube and try again.';
+  } else if (lower.includes('valid json')) {
+    explanation = "This file isn't valid JSON. Choose the .json audience-retention report you downloaded from YouTube and try again.";
+  } else if (lower.includes('more than 1000 rows')) {
+    explanation = 'This report has more rows than can be used. Choose the audience-retention report you downloaded from YouTube and try again.';
+  } else if (lower.startsWith('row ')) {
+    explanation = 'Part of this report does not match what the curve needs. Choose the audience-retention report you downloaded from YouTube and try again.';
+  } else if (lower.includes('json object')) {
+    explanation = 'This file is not a YouTube audience-retention report. Choose the .json report you downloaded from YouTube and try again.';
+  } else {
+    explanation = 'This file does not match the YouTube audience-retention report format. Choose the .json report you downloaded from YouTube and try again.';
+  }
+  return { message: detail ? `${explanation} (Details: ${detail})` : explanation, guide: true };
+}
+
+function curveResultMessage(data) {
+  const rewarded = data.rewarded_cents || 0;
+  if (rewarded > 0) {
+    return {
+      message: `Thanks! This analysis is now free: ${dollars(rewarded)} has been returned to your credit.`,
+      guide: false,
+    };
+  }
+  if (Array.isArray(data.quality) && data.quality.length) {
+    return { message: curveQualityMessage(data.quality), guide: true };
+  }
+  return { message: 'Thanks, saved.', guide: false };
+}
+
 function setCurveMsg(text, isError, withGuideLink) {
   const el = $('curveMsg');
   el.textContent = text;
@@ -2051,19 +2112,18 @@ $('curveSave').addEventListener('click', async () => {
     const data = await res.json().catch(() => ({}));
     if (res.status === 401) return window.location.reload();
     if (!res.ok) {
-      if (res.status === 400 && data.error === 'invalid_retention_report') {
+      if (data.error === 'invalid_retention_report') {
+        const problem = curveReportError(res.status, data);
         $('curveSave').disabled = false;
-        return setCurveMsg("This doesn't look like a YouTube retention report.", true, true);
+        return setCurveMsg(problem.message, true, problem.guide);
       }
       const message = data.message || `Couldn't save the curve (HTTP ${res.status}).`;
       $('curveSave').disabled = false;
       return setCurveMsg(message, true);
     }
     curveFailures.delete(target.jobId);
-    const rewarded = data.rewarded_cents || 0;
-    if (rewarded > 0) setCurveMsg(`Thanks! This analysis is now free: ${dollars(rewarded)} is back in your credit.`);
-    else if (Array.isArray(data.quality) && data.quality.length) setCurveMsg("Thanks, saved. It doesn't look like a full retention curve, so it isn't free.");
-    else setCurveMsg('Thanks, saved.');
+    const outcome = curveResultMessage(data);
+    setCurveMsg(outcome.message, false, outcome.guide);
     curveSaved();
     loadHistory();
     loadBalance();
