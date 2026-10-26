@@ -12,7 +12,7 @@
 - **Automatic last line of defence.** A GPU guard (§6c) stops the GPU if it stays on with nothing to do. It reads our own database, not the scaling metrics it is guarding. It emails when it acts.
 - **Hard time bounds.** A request waits at most 2 hours in SageMaker's queue and runs at most 60 minutes. So any job still open 4 hours after it was created is dead, and the reaper refunds it within the hour.
 - **The image is built in AWS CodeBuild.** It starts from AWS's PyTorch inference image. The weights stay in S3 and SageMaker copies them in when an instance starts.
-- **Research consent needs the retention curve** (agreed 22 Oct). A consented copy with no audience-retention curve 60 days after upload is deleted.
+- **Research consent needs the retention curve** (agreed 22 Oct). A consented copy with no audience-retention curve is deleted after `research.no_curve_days` (90) days.
 
 ## 1. Scope
 ### In scope
@@ -136,7 +136,7 @@ The same rules as the old `verify` (length limit first, then record the duration
   - `DEADLINE_S` becomes **4 hours** after `created_at` (was 24): the dispatcher never gives a request more than 3 hours from creation (§3 step 7), plus 60 minutes of invocation timeout. A lost notification is therefore refunded within about 7 hours.
   - `HEARTBEAT_STALE_S` stays 10 minutes.
   - User-facing text: the `job_active` release (M3c §4) says "within about 7 hours"; the page's `deadline_passed` message says "within 4 hours".
-  - **Delete retries:** every run also calls `storage.delete_keys` on `storage.job_keys` for every `failed` job whose `updated_at` is within the last 2 days. Deleting a missing key is a no-op, so this finishes any refund whose delete failed (container, error handler, dispatcher's DLQ handler, Cancel) and removes files a late write left behind. A delete that still fails makes the run raise, so the error alarm emails. `done` jobs are never touched by this.
+  - **Delete retries:** every run also calls `storage.delete_job_prefixes` and `storage.delete_keys` on `storage.job_keys` for every `failed` job whose `updated_at` is within the last 2 days. Deleting a missing key is a no-op, so this finishes any refund whose delete failed (container, error handler, dead-letter handler, Cancel) and removes files a late write left behind. A delete that still fails makes the run raise, so the error alarm emails. `done` jobs are never touched by this.
   - It also runs the dataset clean-up (§7).
 
 ## 6. Scaling, pause and the guard
@@ -237,7 +237,7 @@ behaviour remains below.
 - their roles, each scoped to `neurolens` resources:
   - `dispatcher`: consume the jobs queue (receive, delete, get attributes); `s3:GetObject` and `s3:DeleteObject` on `uploads/*`, `s3:ListBucket` on the bucket; `sagemaker:InvokeEndpointAsync` on the endpoint; the Data API and the database secret; its logs;
   - `gpu_failed`: the M3a Lambda role (the DLQ handler's rights, same work);
-  - the M3a Lambda role also reads `dataset/*` (`s3:GetObject`): the reaper's 60-day clean-up checks for `retention.csv`, and without read rights S3 answers 403, not 404;
+  - the M3a Lambda role deletes `uploads/*`, `results/*`, `dataset/*` and `academic/*` (`s3:DeleteObject`) and reads `results/*` and `uploads/*` (`s3:GetObject`); the reaper checks `retention_snapshots` in the database, not `retention.csv` in S3, so it needs no read on `dataset/*`;
   - `gpu_guard`: §6c's permissions, the Data API and the database secret, its logs;
 - the lifecycle rules: `sagemaker-output/` 1 day, `build/` 7 days;
 - the container's log group `/aws/sagemaker/Endpoints/neurolens` with 14-day retention (its lines carry user ids and object keys). The endpoint depends on the group, so Terraform creates it before SageMaker could;
@@ -314,21 +314,21 @@ behaviour remains below.
   - each condition alone blocks it;
   - it logs the marker;
   - a keep-warm (min ≥ 1) blocks it.
-- **Reaper:** the 4-hour deadline; a refunded job whose files are still there has them deleted on the next run, with no second refund; a `done` job's files are never deleted; the clean-up deletes only the right jobs' dataset files, skips (and marks) a job whose `retention.csv` exists, marks them only after the deletes succeed, and leaves the user's own result.
-- **Retention:** sets `retention_added_at`; refused after removal; `list_jobs` `needs_retention`.
+- **Reaper:** the 4-hour deadline; a refunded job whose files are still there has them deleted on the next run, with no second refund; the refund retry path leaves a `done` job's own files alone; the research clean-up selects done, consented jobs past `research.no_curve_days` with no `retention_snapshots` row and not already removed or deleted, marks the copy removed under the job's row lock with `require_no_snapshot=True`, then purges both `dataset/` and `academic/` prefixes; `add_curve` locks the same job row and refuses a removed copy, so a curve and a removal cannot both win; a failed purge leaves the row marked and is retried, and the user's own result is kept.
+- **Retention:** stores each snapshot and sets `retention_added_at`; refused after removal; `list_jobs` returns `sharing`, `curve_count` and `curve_reward_cents` (M3f §5d).
 - **Web:** paused when max 0 or no target; a read failure → 500.
 - **Cancel window:** an undispatched queued job is cancelled (refunded, files deleted); a dispatched one (`verified_duration_ms` set) → 409, nothing refunded or deleted; `list_jobs` `cancellable` is true only for the first; `verify_queued` on a cancelled job → `not_queued` (no invoke).
 - **Scripts:** `stop_work.sh` deletes the scheduled action before it sets 0/0 and fails if the read-back is not 0/0; `start_work.sh` refuses `--keep-db`.
 - **Break-it checks (3):**
   - the guard stops while a job is processing;
-  - the clean-up deletes a job with a retention curve;
+  - the clean-up deletes a job with a retention snapshot;
   - the container charges a job whose claim it lost.
 - **Existing tests this spec retires or changes** (Josh approves by approving this spec):
   - **deleted with their subject:** `test_breaker.py`, `test_breaker_alarm.py`, `test_m2b_protection.py`, `test_m2b_shutdown.py`, `test_m2b_heartbeat.py`, `test_m3a_heartbeat.py`, and the SQS-polling parts of `test_worker.py`, `test_m2b_worker.py`, `test_m3a_worker.py`;
   - **rewritten to the new entry point with the same assertions:** the job-logic parts of those worker tests, `test_m3d_worker.py`, `test_m3d_thumbnail.py`, `test_m3c_consent.py`, `test_unreadable_video.py`, `test_cancel_and_refund_cleanup.py`;
   - **renamed setting:** `worker_group` → `gpu_endpoint` in `conftest.py`, `test_env_settings.py`, `test_m3b_auth.py`, `test_m3b_web.py`, `test_m2b_web.py`, `test_m3a_web.py`;
   - **reworked:** `test_work_scripts.py`, `test_experiments_scripts.py`, `test_m2b_boot_record.py`, and the `verify` tests in `test_m3a_billing.py` → `verify_queued`;
-  - the reaper's deadline tests in `test_m3a_lambdas.py` (24 h → 4 h);
+  - the reaper's 4-hour deadline tests in `test_m3a_lambdas.py`;
   - any other existing test that fails is reported to Josh, not edited.
 
 ## 12. AWS day B (cost estimate first)
@@ -363,7 +363,6 @@ Measured figures replace these in the build log.
 - **The deploy user may create and delete any CloudWatch alarm.** `RegisterScalableTarget` refuses a caller without `cloudwatch:PutMetricAlarm` and `cloudwatch:DeleteAlarms` (day B: "User is missing the following permissions"), checked beyond our `neurolens-*` alarm names, so these two actions are on `*`. Misusing them needs a deliberate command by the key holder.
 - **Scaling permissions trust the `Project` tag.** `RegisterScalableTarget` with `Project=neurolens` in the request is allowed, so the deploy user could deliberately tag another project's scaling target and then change it. It needs a deliberate act by the account owner; scoping to the exact target would need its random-id ARN before it exists. `TagResource` is allowed only on targets already tagged `neurolens`.
 - **An invoke whose answer is lost, twice:** SageMaker accepted the request, the dispatcher saw an error both times, and the DLQ handler refunds the job. The request then finds a `failed` job and skips it. The user is refunded and uploads again; at most one start-up is wasted.
-- **Retention added in the same moment as the 60-day clean-up:** the clean-up checks `retention.csv` just before deleting, so the window is a fraction of a second, once per job.
 - **An expired request is reported late.** SageMaker reports a request whose 2-hour wait ran out only when an instance next takes it from the queue (day B: no notice in 18 minutes with no instance; the notice came the moment one started). While the GPU cannot start, the reaper refunds the job instead, 4 to 7 hours after upload. The user waits longer for the refund; no credit is lost. When capacity returns, the expired request still counts as backlog and starts the GPU once, about $0.70 (estimate: cold start plus 7 idle minutes).
 - **A step that hangs inside the model (audio extraction, transcription) has no deadline of its own.** The claim keep-alive's `worker.max_job_minutes` (55, from the longest measured job) is the only bound: the GPU runs up to 55 minutes for that job, then the process ends and the job is refunded. About $2 (estimate) per hang; none seen so far. A per-step deadline would need measured step times first.
 - **A new upload between the guard's check and its stop:** SageMaker starts the GPU again for it; one start-up is wasted.
@@ -385,5 +384,5 @@ Measured figures replace these in the build log.
    - The GPU returns to 0 by itself.
    - The guard's stop was seen once and emailed.
 5. Day B: a bad file was refused in seconds without starting a GPU.
-6. Day B: the dataset clean-up was run against a test row with `created_at` set back 61 days, and deleted exactly that copy.
+6. Current rehearsal criterion: run the dataset clean-up against a test row older than `research.no_curve_days` (for example, 91 days with the current 90-day setting), verify that only its research copy is deleted, and record the result. This criterion does not assert a new live run.
 7. The Opus review of the money, failure and deletion slices finds no HIGH.
