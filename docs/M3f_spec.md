@@ -103,7 +103,8 @@ place in line among other users, waking the database from the landing page.
 3. **Sound share at 0:** the line reads "Responds as strongly with the sound off". In the compare
    table the cell shows "—" with that text on hover. Values unchanged. While comparing, the line is
    hidden (the table row has it).
-4. **Results opened from History** get moment pictures while the stored video exists (30 days): the
+4. **Results opened from History** get moment pictures while the video route can serve the video
+   (the upload for 30 days, or the shared research copy while the result is still available): the
    player's video element uses `crossOrigin="anonymous"` (the bucket's CORS already allows GET) and
    the moments are rebuilt once the video link arrives. The title row shows the video name only
    ("analysed in" and "no local video" go).
@@ -174,8 +175,7 @@ place in line among other users, waking the database from the landing page.
 - The worker computes the video's SHA-256 while copying it and records it with
   `billing.record_video_hash(db, job_id, sha256)` (`jobs.video_sha256`, migration 006) before the
   copy.
-- S3 lifecycle: `dataset/` and `academic/` expire after 1095 days (3 years), replacing the 365-day
-  rule.
+- S3 lifecycle: `dataset/` and `academic/` expire after 1095 days (3 years).
 
 ### 5c. Clean-up and withdrawal
 - `storage.delete_job_prefixes(s3, bucket, job_id)` deletes every object under `dataset/<job_id>/`
@@ -206,7 +206,7 @@ place in line among other users, waking the database from the landing page.
   shared rows (`list_jobs` `sharing` requires status done), with a one-line confirm ("Stop sharing this video? Its research copy is deleted now.").
 - **No curve after 90 days:** the reaper's clean-up (M3e §7) uses `config.json`
   `research.no_curve_days` (90), deletes both prefixes and sets reason `'no_curve'`. It counts from
-  `created_at` and skips jobs with any snapshot. The old `retention.csv` check is removed (§5f).
+  `created_at` and skips jobs with any snapshot.
 - Job delete and account delete delete both prefixes (replacing the fixed dataset key list).
 - A refused curve upload on a removed copy says why: "You stopped sharing this video." or "This
   video's research copy was deleted after 90 days without a curve."
@@ -223,16 +223,20 @@ place in line among other users, waking the database from the landing page.
 - A curve chosen in the upload dialog is sent once its job is done, while the tab is open. If that
   fails, or the tab closed first, the row's link still offers it; a failed send shows "Couldn't add
   the curve for <name>." on the row.
-- `POST /api/jobs/<id>/retention` body: `report` (text, as now), `views` (`lt_1k`, `1k_10k`,
-  `10k_100k`, `gt_100k`), `published` (`week`, `month`, `older`), `promoted` (bool). Bad values → 400.
+- `POST /api/jobs/<id>/retention` body: `report` (text, as now; at most 64 KiB), `views` (`lt_1k`,
+  `1k_10k`, `10k_100k`, `gt_100k`), `published` (`week`, `month`, `older`), `promoted` (bool). Bad
+  values → 400. A report that is empty, has fewer than 2 rows, is malformed JSON, misses a required
+  column, has a bad row, or is over 64 KiB → 400 `invalid_retention_report` (413 for the size), with
+  nothing stored; the form explains the fix and links to the guide.
   The job must be done, shared and not removed (409s as now, with the messages of §5c).
 - Duplicates are checked before any S3 write. If `add_curve` refuses for any reason (including a
   unique-constraint race, which answers 409 `duplicate_curve`), the route deletes the two files it
   wrote.
-- Order: parse the report (`results.parse_retention_report`, unchanged) → compute the quality flags
-  (below) → write the raw `.json` and the `.csv` to S3 under a new `snapshot_id` → `billing.add_curve`.
-  An S3 failure → 500, nothing recorded, and a file already written is deleted. A database failure after the writes leaves two orphan files
-  under the job's prefix, removed with it.
+- Order: parse the report (`results.parse_retention_report`, unchanged) → validate the form choices →
+  write the raw `.json` and the `.csv` to S3 under a new `snapshot_id` → compute the quality flags and
+  call `billing.add_curve`. An S3 failure → 500, nothing recorded, and a file already written is
+  deleted. A database failure after the writes leaves two orphan files under the job's prefix,
+  removed with it.
 - **Quality (`results.curve_quality(pairs)`, pure):** valid when there are at least 20 points, the
   watch ratio spread is at least 0.02 (not flat), the last value is not above the first (not rising
   overall) and no value is above 10. It returns the list of failed checks (empty = valid). The
@@ -257,11 +261,14 @@ place in line among other users, waking the database from the landing page.
   for one job impossible even if the code is wrong.
 - Settings in `config.json` `research`: `curve_rewards_per_window` (5), `curve_reward_window_days`
   (30), `no_curve_days` (90). These are anti-abuse product limits, not budget limits.
-- Replies on the form: "Thanks! This analysis is now free: $0.72 is back in your credit." when
-  rewarded (the amount comes from the reply's `rewarded_cents`); "Thanks, saved. It doesn't look like a
-  full retention curve, so it isn't free." when the curve is invalid; otherwise "Thanks, saved."
-  A curve held in the upload dialog also says "Thanks, saved." The credit in the top bar refreshes
-  after a server save.
+- Replies on the form (`curveResultMessage`/`curveQualityMessage` in `static/app.html`): when
+  rewarded, "Thanks! This analysis is now free: $0.72 has been returned to your credit." (the amount
+  comes from the reply's `rewarded_cents`; it is credit, not cash); when the report is saved but fails
+  a quality check, "Thanks for adding it. The report was saved, but no credit was refunded because
+  <reasons>." with the reasons: too little viewing data (fewer than 20 points), the retention barely
+  changes across the video, the retention at the end is higher than at the start, or unusually high
+  repeat viewing (unknown flags get a generic reason); otherwise "Thanks, saved." A curve held in the
+  upload dialog also says "Thanks, saved." The credit in the top bar refreshes after a server save.
 - `list_jobs` returns, for shared jobs, `sharing` (done, shared and not removed), `curve_count` and
   `curve_reward_cents` (what a valid curve would give now, 0 if not possible). It applies every reward
   condition above except the curve's own validity; the per-user ones (funded, under the cap) come from
