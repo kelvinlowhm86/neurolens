@@ -25,10 +25,12 @@
 <main>
   <h1>How to get your audience-retention report</h1>
 
-  <p>YouTube keeps a real audience-retention curve for each of your own videos: how much of the
-  audience is still watching at each point. You can add that curve to the analysis of a finished
-  video in NeuroLens that you share for research. A valid curve can make that video's analysis
-  free; the form says when.</p>
+  <p>Thank you for sharing your audience-retention report. Your contribution helps us understand
+  how people watch videos and improve NeuroLens. Follow the steps below to get the report from
+  YouTube and add it to the analysis of a finished video you've shared for research.</p>
+
+  <p>If your analysis is eligible for a credit refund, the "Add audience retention" window will
+  show the amount you can receive.</p>
 
   <h2>Get the report</h2>
   <ol>
@@ -49,20 +51,16 @@
       </ul>
     </li>
     <li>Run it.</li>
-    <li>Copy the whole response and save it as a text file ending in <code>.json</code>.</li>
-    <li>In NeuroLens, click "Add audience retention" on the finished video's row or result.</li>
+    <li>Copy the whole JSON response, including the opening <code>{</code> and closing
+    <code>}</code>. Paste it into a plain-text editor and save it as <code>retention.json</code>.
+    Make sure the filename ends in <code>.json</code>, not <code>.txt</code>.</li>
+    <li>In NeuroLens, click "Add audience retention" on the finished video's row or result,
+    choose your <code>retention.json</code> file, fill in the remaining details and click "Save".</li>
   </ol>
 
-  <h2>Things to know</h2>
-  <ul>
-    <li>Only the channel owner can get this report.</li>
-    <li>One video per request.</li>
-    <li>Leave out any other dimensions. Adding one gives repeated time points, and the form
-    refuses them.</li>
-    <li>A response with no rows means YouTube has no data yet for the video. This happens with
-    new videos or ones with very few views.</li>
-    <li>The file must be under 64 KB. A normal report is about 5 KB.</li>
-  </ul>
+  <h2>If your report is empty</h2>
+  <p>A response with no rows means YouTube has no retention data available for the video yet.
+  This can happen with new videos or ones with very few views.</p>
 
   <p class="updated">Written from the YouTube Analytics API documentation as of 15 October 2026;
   Google may change its tools.</p>
