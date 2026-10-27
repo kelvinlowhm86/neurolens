@@ -1,0 +1,17 @@
+[Unit]
+Description=NeuroLens GPU worker (TRIBE v2)
+After=docker.service network-online.target
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/neurolens-boot.sh
+ExecStop=/usr/bin/docker stop -t 30 neurolens-worker
+# Retries until user data has written /etc/neurolens/*.env; also restarts the worker if it crashes.
+Restart=on-failure
+RestartSec=10
+TimeoutStartSec=0
+
+[Install]
+WantedBy=multi-user.target

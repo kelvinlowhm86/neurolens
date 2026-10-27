@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# tribev2 transcribes speech by shelling out to `uvx whisperx …`, which builds an unpinned WhisperX on
+# the fly under ~/.cache/uv. The worker puts this directory first on PATH so the pinned WhisperX in the
+# worker's own environment runs instead: reproducible, offline-capable, nothing written outside the venv.
+set -euo pipefail
+if [[ "${1:-}" != "whisperx" ]]; then
+  echo "neurolens uvx shim: only 'uvx whisperx' is supported (got: $*)" >&2
+  exit 2
+fi
+shift
+exec "${NEUROLENS_PYTHON:?set by neurolens_worker}" -m neurolens_worker.whisperx_cli "$@"

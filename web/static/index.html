@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NeuroLens — Video Engagement Analysis</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="/static/styles.css">
+<script src="/static/chart.min.js"></script>
+</head>
+<body>
+<header>
+  <div class="logo">
+    <div class="logo-icon"><svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div>
+    <div class="logo-text">Neuro<span>Lens</span></div>
+  </div>
+  <div class="header-right">
+    <div class="header-meta" id="headerMeta">Select a video to view analysis</div>
+    <!-- Signed out -->
+    <div class="account" id="signedOut" hidden>
+      <form class="dev-login" id="devLoginForm" hidden>
+        <input id="devEmail" type="email" placeholder="you@example.com" aria-label="Dev login email" required>
+        <button class="btn-ghost" type="submit">Dev sign in</button>
+      </form>
+      <a class="btn-primary" id="googleLogin" href="/auth/login" hidden style="text-decoration:none">Sign in with Google</a>
+    </div>
+    <!-- Signed in -->
+    <div class="account" id="signedIn" hidden>
+      <span class="credits-pill" id="creditsPill" title="Available credits (1 credit ≈ 1 second of video)">— credits</span>
+      <button class="btn-ghost" id="btnBuy" type="button">Buy credits</button>
+      <button class="btn-ghost" id="btnHistory" type="button">History</button>
+      <img class="avatar" id="avatar" alt="" hidden>
+      <button class="btn-ghost" id="btnLogout" type="button">Sign out</button>
+    </div>
+  </div>
+</header>
+
+<div class="layout">
+  <div class="panel-left">
+    <div class="signin-hint" id="signinHint" hidden>
+      Sign in to analyse your own ads. New accounts get free credits — enough for two 30-second videos.
+      Meanwhile, explore the sample analyses below.
+    </div>
+
+    <!-- Upload (signed in) -->
+    <div class="upload-zone hidden" id="uploadZone">
+      <div class="upload-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>
+      <div class="upload-title">Upload a video for analysis</div>
+      <div class="upload-subtitle" id="uploadSubtitle">MP4, MOV, or WebM — max 120 seconds</div>
+      <input type="file" accept="video/mp4,video/quicktime,video/webm" id="fileInput" aria-label="Choose a video">
+    </div>
+
+    <!-- Samples carousel -->
+    <div class="samples-section" id="samplesSection">
+      <div class="samples-label">Sample Videos</div>
+      <div class="samples-grid" id="samplesGrid"></div>
+    </div>
+
+    <!-- Processing: upload and GPU work happen in parallel -->
+    <div class="processing" id="processing">
+      <!-- Your video, scrubbed in step with the analysis: the shaded part is not analysed yet. -->
+      <div class="proc-video">
+        <video id="procVideo" muted playsinline preload="auto"></video>
+        <div class="proc-shade" id="procShade"></div>
+        <div class="proc-scan" id="procScan" hidden></div>
+        <span class="proc-pass" id="procPass">Waiting</span>
+        <span class="proc-time" id="procTime"></span>
+      </div>
+
+      <div class="proc-body">
+        <div class="processing-text" id="processingText">Preparing upload…</div>
+        <div class="proc-tip" id="procTip" aria-live="polite"></div>
+        <div class="progress-steps">
+          <div class="step"><span class="step-label">Upload</span><div class="bar"><span id="uploadBar"></span></div></div>
+          <div class="step"><span class="step-label">Analysis</span><div class="bar"><span id="analysisBar"></span></div></div>
+        </div>
+        <div class="proc-meta">
+          <span class="chip" id="gpuChip">GPU: checking</span>
+          <span class="processing-detail" id="processingDetail"></span>
+        </div>
+        <div class="upload-cost" id="processingCost"></div>
+        <button class="btn-new" id="btnCancel" type="button" hidden>Cancel</button>
+      </div>
+    </div>
+
+    <!-- Video player -->
+    <div class="video-container" id="videoContainer">
+      <div class="video-wrapper"><video id="videoPlayer" controls playsinline></video></div>
+      <div class="video-info">
+        <span class="video-filename" id="videoFilename"></span>
+        <div class="video-stats"><span id="videoDuration"></span><span id="videoProcessTime"></span></div>
+        <div class="btn-row">
+          <a class="btn-new" id="btnCsv" hidden style="text-decoration:none">Export CSV</a>
+          <button class="btn-new" id="btnNew" type="button">Back</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel-right">
+    <div class="charts-empty" id="chartsEmpty">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 3v18h18"/><path d="M7 16l4-8 4 4 5-9"/></svg>
+      <div>Select a video to view its engagement analysis</div>
+    </div>
+    <div class="charts-container" id="chartsContainer">
+      <div class="result-tabs" id="resultTabs" role="tablist" hidden>
+        <button class="tab active" id="tabCharts" role="tab" aria-selected="true" type="button">Charts</button>
+        <button class="tab" id="tabReport" role="tab" aria-selected="false" type="button">AI report <span class="tab-badge" id="reportBadge"></span></button>
+      </div>
+
+      <!-- AI report: written by an LLM from the TRIBE results + key frames, delivered as a PDF -->
+      <div class="report-pane" id="reportPane" hidden>
+        <div class="report-wait" id="reportWait">
+          <div class="spinner"></div>
+          <div class="processing-text">Writing your report…</div>
+          <div class="proc-tip" id="reportTip"></div>
+          <div class="processing-detail">Usually under a minute. Your charts are ready in the meantime.</div>
+        </div>
+        <div class="report-failed" id="reportFailed" hidden></div>
+        <div class="report-ready" id="reportReady" hidden>
+          <div class="report-toolbar">
+            <span class="report-model" id="reportModel"></span>
+            <div class="btn-row">
+              <a class="btn-new" id="reportOpen" target="_blank" rel="noopener" style="text-decoration:none">Open in new tab</a>
+              <a class="btn-primary" id="reportDownload" style="text-decoration:none">Download PDF</a>
+            </div>
+          </div>
+          <iframe class="report-frame" id="reportFrame" title="NeuroLens AI report"></iframe>
+        </div>
+      </div>
+
+      <div id="chartsPane">
+      <div class="result-stats" id="resultStats"></div>
+
+      <div class="chart-card">
+        <div class="chart-header"><div class="chart-title"><span class="chart-dot" style="background:var(--orange)"></span> Overall Engagement</div><div class="chart-peak" id="peakOverall"></div></div>
+        <div class="chart-wrapper tall"><canvas id="chartOverall"></canvas></div>
+        <div class="chart-desc">The combined neural engagement score across all five brain regions. Higher values mean the brain is processing more of the video content at that moment. Look for peaks (high-attention moments) and troughs (where viewers may disengage).</div>
+      </div>
+
+      <div class="chart-card">
+        <div class="chart-header"><div class="chart-title"><span class="chart-dot" style="background:var(--red)"></span> FFA — Faces</div><div class="chart-peak" id="peakFfa"></div></div>
+        <div class="chart-wrapper"><canvas id="chartFfa"></canvas></div>
+        <div class="chart-desc">Activation of the Fusiform Face Area — the brain region specialised for face recognition. Spikes when faces appear on screen. Strong face activation typically correlates with higher emotional engagement and memorability.</div>
+      </div>
+
+      <div class="chart-card">
+        <div class="chart-header"><div class="chart-title"><span class="chart-dot" style="background:var(--blue)"></span> EBA — Bodies</div><div class="chart-peak" id="peakEba"></div></div>
+        <div class="chart-wrapper"><canvas id="chartEba"></canvas></div>
+        <div class="chart-desc">Activation of the Extrastriate Body Area — responds to human bodies, hands, and gestures. Sustained elevation means people are consistently on screen. Drops may indicate product-only shots or environment-focused moments.</div>
+      </div>
+
+      <div class="chart-card">
+        <div class="chart-header"><div class="chart-title"><span class="chart-dot" style="background:var(--green)"></span> PPA — Scenes</div><div class="chart-peak" id="peakPpa"></div></div>
+        <div class="chart-wrapper"><canvas id="chartPpa"></canvas></div>
+        <div class="chart-desc">Activation of the Parahippocampal Place Area — responds to environments, landscapes, and spatial scenes. High when the video shows wide establishing shots, interiors, or location context. Low during close-ups on people or products.</div>
+      </div>
+
+      <div class="chart-card">
+        <div class="chart-header"><div class="chart-title"><span class="chart-dot" style="background:var(--gold)"></span> STS — Social Cues</div><div class="chart-peak" id="peakSts"></div></div>
+        <div class="chart-wrapper"><canvas id="chartSts"></canvas></div>
+        <div class="chart-desc">Activation of the Superior Temporal Sulcus — responds to social signals like eye gaze, facial expressions, and biological motion. High during interpersonal moments, dialogue, and emotionally charged interactions between people.</div>
+      </div>
+
+      <div class="chart-card">
+        <div class="chart-header"><div class="chart-title"><span class="chart-dot" style="background:var(--purple)"></span> Auditory Cortex — Audio Contribution</div><div class="chart-peak" id="peakAud"></div></div>
+        <div class="chart-wrapper tall"><canvas id="chartAuditory"></canvas></div>
+        <div class="chart-desc">The solid line shows auditory cortex activation with the full audio track; the dashed line shows activation with audio stripped. The shaded gap between them is the audio's independent contribution. Large gaps mean the soundtrack is doing real work — important for assessing impact on muted social media placements.</div>
+      </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<dialog id="buyDialog" aria-labelledby="buyTitle">
+  <div class="dlg-head"><span id="buyTitle">Buy credits</span><button class="btn-new" type="button" data-close>Close</button></div>
+  <div class="dlg-body" id="packList"></div>
+</dialog>
+
+<dialog id="historyDialog" aria-labelledby="historyTitle">
+  <div class="dlg-head"><span id="historyTitle">Your analyses</span><button class="btn-new" type="button" data-close>Close</button></div>
+  <div class="dlg-body" id="historyList"></div>
+</dialog>
+
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

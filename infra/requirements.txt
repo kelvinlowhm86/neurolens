@@ -1,0 +1,6 @@
+# .venv-tools: CDK app libraries, the CDK CLI (PyPI build), AWS CLI v1, boto3 (deploy scripts). Synth uses node.
+aws-cdk-lib==2.200.0
+constructs==10.4.2
+aws-cdk-cli==2.1140.0
+awscli==1.46.2
+boto3==1.43.119

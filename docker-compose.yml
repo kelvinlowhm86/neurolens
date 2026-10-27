@@ -1,0 +1,86 @@
+# NeuroLens dev stack in containers (APP_ENV=dev) — the same system `make dev` runs from venvs.
+#
+#   docker compose --profile mock up    # fake inference, any machine
+#   docker compose --profile gpu up     # real TRIBE v2; needs the NVIDIA Container Toolkit on the host
+#
+# On the team's 2×4090 box use `make dev` instead (GPU worker from a venv, no host toolkit needed).
+
+x-app-env: &app-env
+  APP_ENV: dev
+  PUBLIC_BASE_URL: http://localhost:8000
+  DATABASE_URL: postgresql://neurolens:neurolens@postgres:5432/neurolens
+  AWS_ENDPOINT_URL: http://moto:5055
+  AWS_ACCESS_KEY_ID: dev
+  AWS_SECRET_ACCESS_KEY: dev
+  AWS_REGION: ap-southeast-1
+  AWS_DEFAULT_REGION: ap-southeast-1
+  S3_BUCKET: neurolens-dev
+  S3_PUBLIC_ENDPOINT_URL: http://localhost:5055        # what the browser uses
+  SQS_QUEUE_URL: http://moto:5055/123456789012/neurolens-jobs
+  SQS_DLQ_URL: http://moto:5055/123456789012/neurolens-jobs-dlq
+  SAMPLES_JSON: /app/data/samples.json
+  DATA_DIR: /app/data
+
+services:
+  postgres:
+    image: postgres:15
+    environment: {POSTGRES_USER: neurolens, POSTGRES_PASSWORD: neurolens, POSTGRES_DB: neurolens}
+    ports: ["127.0.0.1:5433:5432"]
+    volumes: ["./.dev/pgdata-compose:/var/lib/postgresql/data"]
+    healthcheck: {test: ["CMD-SHELL", "pg_isready -U neurolens"], interval: 3s, retries: 30}
+
+  moto:
+    build:
+      context: .
+      dockerfile_inline: |
+        FROM python:3.11-slim
+        RUN pip install --no-cache-dir "moto[server]==5.2.4"
+        ENTRYPOINT ["moto_server", "-H", "0.0.0.0", "-p", "5055"]
+    ports: ["127.0.0.1:5055:5055"]
+
+  aws-init:                       # bucket, queues, DLQ redrive, S3 → SQS notification
+    build: {context: ., dockerfile: web/Dockerfile}
+    environment: *app-env
+    volumes: ["./scripts:/scripts:ro"]
+    command: ["python", "/scripts/dev_aws_init.py"]
+    depends_on: [moto]
+    restart: on-failure
+
+  web:
+    build: {context: ., dockerfile: web/Dockerfile}
+    env_file: [{path: .env, required: false}]   # Google / Stripe keys, FLASK_SECRET_KEY
+    environment:
+      <<: *app-env
+      DEV_LOGIN_ENABLED: "true"
+    volumes: ["./data/videos:/app/data/videos:ro", "./data/output:/app/data/output:ro"]
+    ports: ["127.0.0.1:8000:8000"]
+    depends_on:
+      postgres: {condition: service_healthy}
+      aws-init: {condition: service_completed_successfully}
+
+  reaper:                         # stands in for the dlq_refund + sla_reaper Lambdas
+    build: {context: ., dockerfile: web/Dockerfile}
+    environment: *app-env
+    command: ["python", "-m", "neurolens_common.reaper_loop"]
+    depends_on: [web]
+
+  worker-mock:
+    profiles: [mock]
+    build: {context: ., dockerfile: worker/Dockerfile, target: mock}
+    environment: *app-env
+    depends_on: [web]
+
+  worker:
+    profiles: [gpu]
+    build: {context: ., dockerfile: worker/Dockerfile, target: gpu}
+    environment:
+      <<: *app-env
+      SILENT_MODE: ${SILENT_MODE:-ffmpeg}
+    volumes:
+      - "${MODELS_DIR:-./models}:/models:ro"
+      - "./data/nilearn:/models/nilearn:ro"
+    deploy:
+      resources:
+        reservations:
+          devices: [{driver: nvidia, count: all, capabilities: [gpu]}]
+    depends_on: [web]

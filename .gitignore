@@ -3,6 +3,7 @@
 config.json
 .env
 .env.*
+!.env.example
 
 # ─── Model weights & HF caches ─────────────────────────────────────────────
 # Everything TRIBE v2 pulls lands under ./models (HF_HOME points here):
@@ -66,3 +67,12 @@ Thumbs.db
 
 # ─── Planning docs (local only) ────────────────────────────────────────────
 /docs/PLAN.md
+
+# ─── Cloud build: dev stack + venvs ─────────────────────────────────────────
+.dev/
+.venv*/
+**/node_modules/
+experiments/out/
+infra/build/
+infra/cdk.out/
+.env.deploy

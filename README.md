@@ -1,594 +1,328 @@
-# NeuroLens — Video Engagement Analysis via Predicted Brain Activity
+# NeuroLens
 
-## Overview
+**Predict how viewers' brains respond to your video content — second by second — before you post it.**
 
-NeuroLens uses Meta's **TRIBE v2** (TRImodal Brain Encoder) to predict how the human brain responds to video content, second by second. By analysing predicted fMRI activation across key cortical regions, it produces a temporal engagement profile for any uploaded video — surfacing which moments are most neurally stimulating, which sensory channels drive attention, and how different content types (faces, scenes, speech) compete for brain resources.
+NeuroLens is a cloud SaaS (NUS CS5224 project). You upload a video; a GPU worker runs Meta's
+[TRIBE v2](https://github.com/facebookresearch/tribev2) to predict the cortical response of an average viewer,
+turns it into five easy signals (faces, bodies, scenes, social cues, sound) plus a with/without-audio comparison,
+and an LLM writes a PDF report with screenshots, charts, what works and what to improve.
 
-This is not emotion classification. It is a **neural engagement analyser** — a computational proxy for what a neuromarketing lab produces with a real fMRI scanner at thousands of dollars per hour.
+![Architecture](docs/architecture.png)
 
----
-
-## Core Objectives
-
-### 1. Temporal Engagement Scoring
-
-**Question:** Which seconds of the video are most stimulating?
-
-**Method:** For each one-second timestep, sum the predicted activation magnitude across all sensory regions of interest (ROIs). Produce a per-second engagement score that can be plotted as a timeline, revealing peaks and troughs in neural stimulation throughout the video.
-
-### 2. Regional Content Comparison
-
-**Question:** Do faces and people drive more engagement than landscapes and environments?
-
-**Method:** Extract activation from functionally distinct cortical regions and compare them over time:
-
-- **FFA** (Fusiform Face Area) — responds to faces
-- **EBA** (Extrastriate Body Area) — responds to human bodies
-- **PPA** (Parahippocampal Place Area) — responds to scenes and environments
-- **STS** (Superior Temporal Sulcus) — responds to biological motion and social cues
-- **A1/A5** (Auditory Cortex) — responds to sound and speech
-
-By plotting these five region traces side by side against the video timeline, we can see exactly when and why engagement shifts — a face appearing, a scene change, dialogue starting.
-
-### 3. Audio Contribution Analysis
-
-**Question:** Does the audio track actually add engagement, or is the video carrying the load?
-
-**Method:** Run the same video through the model twice — once as full video (visual + audio), once as video-only (audio stripped). Compare auditory cortex activation between the two runs. The delta reveals the audio track's independent contribution to neural engagement at each second.
+**Contents**
+1. [How it works](#how-it-works)
+2. [Repository layout](#repository-layout)
+3. [Run it locally](#run-it-locally-app_envdev)
+4. [Deploy to AWS](#deploy-to-aws-app_envaws)
+5. [Secrets and git](#secrets-and-git)
+6. [Troubleshooting](#troubleshooting)
+7. [Licence](#licence)
 
 ---
 
-## Architecture
+## How it works
 
-The project has two main parts: a **Python backend** that runs inference and serves results via API, and a **web frontend** that handles upload, playback, and visualisation.
+1. **Sign in** (Google; a dev sign-in exists locally). New users get free credits.
+2. **Upload**: the browser reads the video's length, the server reserves credits and returns a presigned S3
+   upload URL. The video goes straight to S3 — never through the web server.
+3. **Pre-warm**: at the same moment the server wakes a GPU, so the model loads while you upload.
+4. **Queue**: S3 tells SQS a file arrived; a GPU worker claims the job (exactly one worker can).
+5. **TRIBE v2, twice**: once with sound, once with the sound removed. Each second is mapped to five brain regions.
+6. **Results**: charts appear (synced to the video), credits are charged for the real length, CSV export.
+7. **AI report**: an LLM reads the numbers, transcript and key frames and writes a PDF, viewable in the page or
+   downloadable.
 
-```
-┌─────────────────────────────────────────────────────────┐
-│                      FRONTEND                           │
-│                                                         │
-│   ┌──────────┐  ┌──────────┐  ┌──────────────────────┐ │
-│   │  Upload   │  │  Video   │  │   Charts Dashboard   │ │
-│   │  Dropzone │  │  Player  │  │                      │ │
-│   │          │  │          │  │  - Overall engagement │ │
-│   │          │  │          │  │  - FFA (faces)        │ │
-│   │          │  │          │  │  - EBA (bodies)       │ │
-│   │          │  │          │  │  - PPA (scenes)       │ │
-│   │          │  │          │  │  - STS (social)       │ │
-│   │          │  │          │  │  - A1/A5 (audio)      │ │
-│   └──────────┘  └──────────┘  └──────────────────────┘ │
-│                        │                                │
-│                        │ POST /api/analyse              │
-│                        ▼                                │
-├─────────────────────────────────────────────────────────┤
-│                      BACKEND                            │
-│                                                         │
-│   ┌─────────────────────────────────────────────────┐   │
-│   │  Flask API  (/api/analyse)                      │   │
-│   │                                                 │   │
-│   │  1. Receive video blob                          │   │
-│   │  2. Save to temp file                           │   │
-│   │  3. Run TRIBE v2 inference (full video)         │   │
-│   │  4. Run TRIBE v2 inference (video-only, no audio│)  │
-│   │  5. Extract ROI activations per timestep        │   │
-│   │  6. Compute engagement scores                   │   │
-│   │  7. Return JSON response                        │   │
-│   └─────────────────────────────────────────────────┘   │
-│                        │                                │
-│                        ▼                                │
-│   ┌─────────────────────────────────────────────────┐   │
-│   │  TRIBE v2 Model (GPU)                           │   │
-│   │                                                 │   │
-│   │  Input:  video.mp4                              │   │
-│   │  Output: (T, 20484) predicted fMRI activations  │   │
-│   │                                                 │   │
-│   │  Encoders:                                      │   │
-│   │    - V-JEPA2-Giant  (video)   ~14 GB VRAM       │   │
-│   │    - LLaMA 3.2-3B   (text)   ~7 GB VRAM        │   │
-│   │    - Wav2Vec-BERT    (audio)  ~1 GB VRAM        │   │
-│   │    - TRIBE transformer        ~6-10 GB VRAM     │   │
-│   │                                                 │   │
-│   │  Hardware: 2× RTX 4090 (48 GB total)            │   │
-│   └─────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────┘
-```
+Failures refund automatically: a job that fails twice lands in a dead-letter queue and is refunded; a reaper closes
+anything stuck. Spot interruptions hand the job to another GPU without using up a retry.
+
+## Repository layout
+
+| Path | What it is |
+|---|---|
+| `packages/common/` | Shared Python: config, database, billing ledger, job rules, S3 keys, reaper SQL |
+| `migrations/` | Postgres schema. All credit changes are SQL functions (one transaction each) |
+| `web/` | Flask web tier + the dashboard (`web/static/`) |
+| `worker/` | GPU worker: queue loop, TRIBE v2, ROI extraction, AI report (`worker/neurolens_worker/report/`) |
+| `lambdas/` | AWS Lambdas: DLQ refund, SLA reaper |
+| `infra/` | AWS CDK app (Python): network, data, compute, ops stacks |
+| `ami/` | Packer template + boot scripts for the GPU worker AMI |
+| `scripts/` | Dev stack launcher, end-to-end test, secrets upload, sample seeding, quota check, secret scanner |
+| `docs/` | Architecture diagram, build checklist, prototype notes |
+| `app.py`, `*.ipynb`, `static/` | The original single-machine prototype (kept for reference) |
 
 ---
 
-## Part 1 — Backend
+## Run it locally (`APP_ENV=dev`)
 
-### Phase 1A: Exploration Notebook (`explore.ipynb`)
+Dev mode runs **the whole system on one machine**. Every AWS piece has a local stand-in:
 
-A Jupyter notebook that validates the full pipeline on a sample video before building the API. It will:
+| On AWS | Locally |
+|---|---|
+| Aurora PostgreSQL | Postgres container (`postgres:15`), data in `.dev/pgdata` |
+| S3 + SQS + DLQ | [moto](https://github.com/getmoto/moto) server from a venv |
+| CloudFront + ALB + Fargate | gunicorn on `localhost` |
+| Spot GPU Auto Scaling Group | one always-on worker (real model on your GPU, or a mock) |
+| Billing Lambdas + EventBridge | one reaper loop |
+| Claude on Bedrock (AI report) | OpenAI API with your key (or a mock report) |
 
-1. **Load TRIBE v2** from HuggingFace with dual-GPU device mapping across 2× RTX 4090
-2. **Run inference** on a short sample video (10–30 seconds)
-3. **Inspect the raw output** — print `preds.shape`, examine the `(T, 20484)` matrix, understand the `segments` list
-4. **Map vertices to ROIs** — use the fsaverage5 atlas to identify which of the 20,484 vertices belong to FFA, EBA, PPA, STS, and auditory cortex
-5. **Extract per-region timeseries** — for each timestep, compute mean activation within each ROI
-6. **Compute overall engagement** — sum or average activation across all sensory ROIs per second
-7. **Run the audio comparison** — strip audio from the sample video using ffmpeg, re-run inference, compute the delta in auditory cortex activation
-8. **Plot everything** — produce matplotlib charts showing all traces aligned to the video timeline
-9. **Define the JSON output schema** that the API will return
+Nothing is installed system-wide: all Python goes into project venvs (`.venv-*`), and temp/caches go to `.dev/`.
 
-Expected output schema:
+### What your machine needs
 
-```json
-{
-  "duration_seconds": 30,
-  "timesteps": [
-    {
-      "t": 0,
-      "engagement_overall": 0.73,
-      "regions": {
-        "ffa_faces": 0.82,
-        "eba_bodies": 0.45,
-        "ppa_scenes": 0.61,
-        "sts_social": 0.38,
-        "auditory": 0.67
-      },
-      "audio_contribution": 0.21
-    },
-    {
-      "t": 1,
-      "engagement_overall": 0.81,
-      "regions": {
-        "ffa_faces": 0.91,
-        "eba_bodies": 0.52,
-        "ppa_scenes": 0.44,
-        "sts_social": 0.55,
-        "auditory": 0.72
-      },
-      "audio_contribution": 0.28
-    }
-  ]
-}
-```
+| Need | Version / notes | Required for |
+|---|---|---|
+| Linux, `git`, `make` | — | everything |
+| Python | 3.11 (`python3.11`) | everything |
+| Docker | any recent; only runs the Postgres container | everything |
+| `ffmpeg` + `ffprobe` on `PATH` | 6+ | everything (video checks, frames) |
+| NVIDIA GPU + driver | ≥ 24 GB VRAM (peak use ≈ 11 GB), driver ≥ 525. CUDA itself comes inside the pip wheels | real model only |
+| Disk | ~1 GB for mock mode; ~30 GB for the real model (9 GB venv + ~17 GB weights) | — |
+| Node.js | 18+ | only `make cdk-synth` / AWS deploys |
 
-### Phase 1B: Flask API (`app.py`)
+### What you need to supply
 
-A Flask application exposing a single endpoint:
+All local settings live in **`.env`** (copy of `.env.example`; git-ignored, never committed).
 
-```
-POST /api/analyse
-Content-Type: multipart/form-data
-Body: { video: <file blob> }
+| Setting in `.env` | Required? | What to put |
+|---|---|---|
+| `FLASK_SECRET_KEY` | yes | any long random string: `python3 -c "import secrets;print(secrets.token_hex(32))"` |
+| `INFERENCE_BACKEND` | — | `tribe` (real model) or `mock`. `make dev-mock` forces mock anyway |
+| `MODELS_DIR`, `HF_HOME`, `TORCH_HOME` | real model | folder holding the TRIBE v2 weights (see [Model weights](#model-weights)) |
+| `HF_TOKEN` | only to download weights | Hugging Face read token with access to `meta-llama/Llama-3.2-3B` |
+| `REPORT_LLM` | — | `mock` (sample report, no key), `openai`, or `off` |
+| `OPENAI_API_KEY`, `OPENAI_MODEL` | if `REPORT_LLM=openai` | your OpenAI key and a model that accepts images + JSON-schema output |
+| `DEV_PUBLIC_HOST`, `DEV_WEB_PORT` | — | `localhost` / `8000` by default. Set an IP (e.g. `192.168.0.17`) to open it to your LAN; pick a port your firewall allows |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | optional | Google sign-in locally (dev sign-in works without it) |
+| `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | optional | test-mode billing locally (see `make dev-stripe`) |
 
-Response: 200 OK
-Content-Type: application/json
-Body: { <engagement JSON as defined above> }
-```
+Everything else in `.env.example` (database URL, moto endpoints, queue URLs) already matches the dev stack.
 
-The API will:
-
-1. Accept a video file upload (mp4, mov, webm — max 120 seconds for initial version)
-2. Save to a temporary path
-3. Run TRIBE v2 inference on the full video (video + audio)
-4. Strip the audio track using ffmpeg and run inference again (video-only)
-5. Extract ROI activations and compute engagement scores using the same logic validated in the notebook
-6. Compute the audio contribution delta per timestep
-7. Clean up temp files
-8. Return the structured JSON response
-
-Considerations:
-
-- The model should be loaded once at app startup, not per request
-- Inference on a 60-second video will take meaningful time — the endpoint should return a job ID and support polling, or use a synchronous response with a loading state on the frontend
-- CORS must be enabled for the frontend to call the API
-- Video duration should be validated and capped
-
----
-
-## Part 2 — Frontend
-
-A single-page web application (React or plain HTML) with three sections:
-
-### Upload Area
-
-- Drag-and-drop zone or file picker for video upload
-- Shows upload progress
-- Validates file type and duration before sending
-- Triggers `POST /api/analyse` with the video blob
-- Displays a loading/processing state while the backend runs inference
-
-### Video Player
-
-- Plays the uploaded video using a standard HTML5 video element
-- Includes a visible timeline/scrubber
-- A vertical playhead cursor on the charts below stays synchronised with the video's current playback position — as the video plays, the cursor moves across the charts in real time
-
-### Charts Dashboard
-
-Six time-series charts, all sharing the same X axis (seconds), stacked vertically and synchronised to the video player:
-
-1. **Overall Engagement** — the summed engagement score per second (area chart, prominent)
-2. **FFA — Faces** — fusiform face area activation (line chart)
-3. **EBA — Bodies** — extrastriate body area activation (line chart)
-4. **PPA — Scenes** — parahippocampal place area activation (line chart)
-5. **STS — Social Cues** — superior temporal sulcus activation (line chart)
-6. **Auditory Cortex** — shown as two overlapping traces: with-audio and without-audio, so the audio contribution is visible as the gap between the two lines
-
-All charts share a synchronised hover/crosshair. Clicking any point on a chart seeks the video to that second.
-
----
-
-## Hardware Requirements
-
-- **GPU:** 2× NVIDIA RTX 4090 (24 GB VRAM each, 48 GB total)
-- **VRAM usage:** ~28–32 GB across both cards
-- **System RAM:** 32 GB minimum, 64 GB recommended
-- **Storage:** ~25 GB for model weights and dependencies
-- **CUDA:** 12.x with PyTorch 2.x
-- **Python:** 3.10+
-
-## Dependencies
-
-- `tribev2` — TRIBE v2 model and inference code
-- `torch` — PyTorch with CUDA support
-- `flask` + `flask-cors` — API server
-- `ffmpeg` — audio stripping for the comparison run
-- `nilearn` — fsaverage5 atlas and ROI mapping
-- `numpy`, `scipy` — numerical operations
-- `matplotlib` — notebook visualisation
-
-## Gated Model Access
-
-The TRIBE v2 text encoder depends on **LLaMA 3.2-3B**, which is a gated model on HuggingFace. Before first run:
-
-1. Go to [meta-llama/Llama-3.2-3B](https://huggingface.co/meta-llama/Llama-3.2-3B) and accept the license
-2. Create a HuggingFace read access token at [huggingface.co/settings/tokens](https://huggingface.co/settings/tokens)
-3. Run `huggingface-cli login` and paste the token
-
-TRIBE v2 itself (`facebook/tribev2`) is freely downloadable under CC BY-NC 4.0.
-
----
-
-## Test Drive: Running the Exploration Notebook
-
-The `explore.ipynb` notebook validates the full NeuroLens pipeline end-to-end on a sample video. Follow these steps to run it on a Linux machine with GPU access.
-
-### Prerequisites
-
-- Linux (Ubuntu 22.04+ recommended)
-- Python 3.10+
-- NVIDIA GPU with 40 GB+ VRAM (A100 40 GB, or 2× RTX 4090)
-- CUDA 12.x + matching PyTorch
-- ffmpeg installed (`sudo apt install ffmpeg`)
-- HuggingFace account with LLaMA 3.2-3B license accepted
-
-### Setup
+### Quick start — no GPU needed (mock model)
 
 ```bash
-# 1. Clone or create your project directory
-mkdir neurolens && cd neurolens
-
-# 2. Create a virtual environment
-python3 -m venv .venv
-source .venv/bin/activate
-
-# 3. Pin NumPy FIRST (critical — must happen before tribev2 install)
-pip install "numpy>=1.26.4,<2.1.0"
-
-# 4. Install remaining requirements
-pip install -r requirements.txt
-
-# 5. Install TRIBE v2 from GitHub (separate step — uses git+https)
-pip install "tribev2[plotting] @ git+https://github.com/facebookresearch/tribev2.git"
-
-# 6. Authenticate with HuggingFace (one-time)
-#    Make sure you've accepted the LLaMA 3.2-3B license at:
-#    https://huggingface.co/meta-llama/Llama-3.2-3B
-huggingface-cli login
-
-# 7. Launch Jupyter
-jupyter notebook explore.ipynb
+git clone <repo-url> && cd <repo>
+cp .env.example .env                 # then set FLASK_SECRET_KEY
+make venv-dev                        # web, moto, mock worker, tests (~450 MB, in .venv-dev)
+make dev-mock                        # Postgres + moto + web + reaper + mock worker
 ```
 
-### What the notebook does
+Open **http://localhost:8000** → **Dev sign in** (any email) → upload a video. Results arrive in seconds (fake
+numbers); the AI report tab shows a sample PDF.
 
-The notebook runs 18 code cells in sequence:
-
-| Cell | What it does | Time |
-|------|-------------|------|
-| 1–2 | GPU check, NumPy version check | instant |
-| 3–4 | HuggingFace auth, pre-download LLaMA 3.2-3B | ~5 min (first run, 6 GB download) |
-| 5 | Load TRIBE v2 checkpoint | ~10 sec |
-| 6 | Download Sintel trailer (480p, 52s) | ~5 sec |
-| 7 | Run full inference (video + audio) | ~2–5 min (first run loads V-JEPA2 ~14 GB) |
-| 8–9 | Inspect raw `(T, 20484)` output | instant |
-| 10–11 | Load Destrieux atlas, build ROI vertex masks | ~5 sec |
-| 12 | Extract per-region engagement timeseries | instant |
-| 13–14 | Strip audio, re-run inference (video-only) | ~2–5 min |
-| 15 | Compute audio contribution delta | instant |
-| 16 | Normalise all scores to 0–1 | instant |
-| 17 | Plot 6-panel engagement chart, save PNG | instant |
-| 18 | Export structured JSON output | instant |
-
-**Total first-run time:** approximately 15–20 minutes (dominated by model downloads).  
-**Subsequent runs:** approximately 5–10 minutes (inference only, models cached).
-
-### Expected outputs
-
-After running all cells, you'll have two files in the working directory:
-
-- `neurolens_output.png` — a 6-panel dark-theme chart showing overall engagement, per-ROI activation, and audio contribution over the video timeline
-- `neurolens_output.json` — the structured JSON matching the API output schema, with per-second engagement scores for all five regions
-
-### Dual RTX 4090 notes
-
-If running on 2× RTX 4090 (48 GB total, 24 GB each) rather than a single A100:
-
-- The default `TribeModel.from_pretrained()` may try to load everything onto GPU 0 and OOM
-- If this happens, set `CUDA_VISIBLE_DEVICES=0,1` and try passing `device_map="auto"` if supported
-- Alternatively, patch `tribev2/demo_utils.py` to distribute encoders across devices (V-JEPA2 + LLaMA on GPU 0, Wav2Vec-BERT + TRIBE transformer on GPU 1)
-- The notebook includes VRAM monitoring at each stage to help debug memory issues
-
-### Troubleshooting
-
-| Symptom | Cause | Fix |
-|---------|-------|-----|
-| `ImportError: cannot import name '_center'` | NumPy ≥ 2.1 | `pip install "numpy>=1.26.4,<2.1.0"` then restart kernel |
-| `ReadTimeout` during `model.predict()` | LLaMA download times out | Run the pre-download cell (Cell 4) first |
-| `CUDA out of memory` on `predict()` | Insufficient VRAM | Need 40 GB+ single GPU, or multi-GPU setup |
-| `ValueError` on `get_events_dataframe()` | Temp file not flushed | The notebook handles this — don't modify file I/O |
-| `401 Unauthorized` | LLaMA license not accepted | Visit [meta-llama/Llama-3.2-3B](https://huggingface.co/meta-llama/Llama-3.2-3B) and accept |
-
----
-
-## Reference: Meta's Official TRIBE v2 Demo
-
-**URL:** [aidemos.atmeta.com/tribev2](https://aidemos.atmeta.com/tribev2/)
-
-The official demo is a JavaScript single-page application that visualises predicted neural activity while stimuli are played. The following analysis is based on direct screenshots of the live interface.
-
-### Layout
-
-Screenshots of the live demo (April 2026):
-
-![Meta Demo — Browse Examples](meta-demo-browse.png)
-*Screenshot 1: Browse Examples view — video grid on right, idle brain on left*
-
-![Meta Demo — Playback](meta-demo-playback.png)
-*Screenshot 2: Playback view — video playing on right, activated brain on left*
-
-The demo uses a **fixed two-panel split** on a dark (`#000`) background:
-
-```
-┌──────────────────────────┬───────────────────────────────────┐
-│                          │                                   │
-│     3D BRAIN MODEL       │     CONTENT PANEL                 │
-│                          │                                   │
-│   - WebGL rendered       │   Tab bar:                        │
-│   - Rotatable/zoomable   │   [Browse Examples]               │
-│   - Side profile view    │   [Compare Performance]           │
-│   - Hot colormap overlay │   [Explore In-Silico]             │
-│     (black→red→yellow    │   [Learn about Mu...]             │
-│      →white)             │                                   │
-│                          │   Description text                │
-│                          │                                   │
-│                          │   Video grid / Video player       │
-│                          │                                   │
-├──────────────────────────┤                                   │
-│ [True] [Predicted]       │                                   │
-│ [Normal] [Inflated]      │                                   │
-│ [Open] [Close]           │                                   │
-└──────────────────────────┴───────────────────────────────────┘
+```bash
+make test-e2e                        # browser-style end-to-end check (expect 6 × PASS)
+make test                            # unit + integration tests (needs the dev Postgres running)
+make dev-down                        # stop everything (database kept in .dev/pgdata)
 ```
 
-### Left panel — 3D Brain Visualisation
+### Real model on your GPU
 
-- **3D mesh** of the brain rendered in WebGL (grey/white low-poly surface), shown in a lateral (side) profile view against a dark circular vignette background with a faint head silhouette outline for anatomical orientation
-- **Activity heatmap** overlaid on the mesh using a `hot` colormap: inactive regions stay grey, active regions glow black → red → orange → yellow → white
-- **Activity legend** at the top: a horizontal gradient bar labelled "Low" to "High" with the label "Activity"
-- **"Show Guide" button** in the top-left corner (opens explanatory overlay)
-
-**Toggle controls** at the bottom of the brain panel (pill-shaped buttons, white text on dark, selected state has a white background):
-
-| Toggle group | Options | Purpose |
-|---|---|---|
-| Data source | `True` / `Predicted` | Switch between real fMRI scan data and TRIBE v2's prediction for the same stimulus |
-| Mesh style | `Normal` / `Inflated` | Normal shows anatomically folded cortex; Inflated "unfolds" the sulci to reveal hidden activation in the folds |
-| View mode | `Open` / `Close` | Open splits the brain into two halves exposing the medial surface; Close shows the intact exterior |
-
-The **True vs Predicted** toggle is notable — it lets users visually validate the model's accuracy by switching between the actual fMRI recording and the predicted activation for the same video clip. In the screenshots, the `Predicted` and `Normal` and `Close` options are selected.
-
-### Right panel — Browse Examples view (Screenshot 1)
-
-- **Tab bar** at the top with four options: `Browse Examples` (selected, filled pill), `Compare Performance`, `Explore In-Silico`, `Learn about Mu...` (truncated)
-- **Description text** explaining that this compares TRIBE v2 predictions with real brain scans, noting that real scans include noise and wandering thoughts while the model predicts isolated stimulus responses
-- **Video thumbnail grid** — 3 columns, at least 3 rows visible, each thumbnail showing a frame from a pre-loaded clip with a centered play button overlay. Content includes nature scenes, elderly people, suburban houses, a running figure, a close-up face — diverse naturalistic stimuli from the training datasets
-
-### Right panel — Playback view (Screenshot 2)
-
-When a clip is selected, the grid is replaced with:
-
-- **Video player** — large, embedded, showing the active clip (a nature/landscape scene with trees and sky in the screenshot)
-- **Transport controls** below the video:
-  - Pause/play button (‖)
-  - Mute toggle (speaker with ×)
-  - Speed button (`2×`)
-  - **Timeline scrubber** — horizontal bar with a blue dot indicator showing playback position
-- **"← Back" button** to return to the grid
-
-The brain heatmap on the left **updates in real time** as the video plays — in Screenshot 2, significantly more activation is visible (large red/yellow/white hotspots across temporal and visual cortex) compared to the idle state in Screenshot 1.
-
-### What it does NOT do
-
-- Does not accept user-uploaded videos — only pre-loaded stimuli from the training datasets
-- Does not expose ROI-level data, engagement scores, or per-region numerical breakdowns
-- Does not offer an audio-vs-no-audio comparison mode
-- Does not provide downloadable data or API access — visualisation only
-- Does not show any timeseries charts, graphs, or quantitative metrics
-- No timeline annotations or per-second numerical engagement scores
-
-### What we take from it for NeuroLens
-
-**Borrow:**
-
-- The **synchronised playback** pattern — brain state updates as video plays. This is the core UX and it works well.
-- The **dark theme** — brain activity heatmaps are most readable on black. Our charts should also be on a dark background.
-- The **transport controls** — play/pause, scrubber, mute. Standard and effective.
-- The **True vs Predicted toggle concept** — we should let users toggle between "with audio" and "without audio" views in our charts, similar to how Meta lets users toggle between real fMRI and predicted.
-
-**Improve on:**
-
-- Replace the 3D brain (requires neuroscience literacy) with **line charts that anyone can read**. The brain is beautiful but most users can't map "the yellow blob in the temporal region" to "faces are driving engagement here." Our per-region labelled charts solve this.
-- Add **quantitative metrics** — the demo shows only a visual heatmap with no numbers. We produce engagement scores per second.
-- Add **user video upload** — the demo only works with pre-loaded clips. NeuroLens accepts any video.
-- Add **audio contribution analysis** — the demo has no way to isolate audio's effect. Our dual-inference approach (with audio vs without) directly addresses this.
-- Add **timeline annotations** — mark peaks and label what's driving them ("face appears", "dialogue starts", "scene change").
-
----
-
-## Reference: Code from GitHub & Colab Demo
-
-**Repo:** [github.com/facebookresearch/tribev2](https://github.com/facebookresearch/tribev2)
-**Demo notebook:** [tribe_demo.ipynb](https://github.com/facebookresearch/tribev2/blob/main/tribe_demo.ipynb) (also opens in [Google Colab](https://colab.research.google.com/github/facebookresearch/tribev2/blob/main/tribe_demo.ipynb))
-
-### Repository structure
-
-```
-tribev2/
-├── main.py              # Experiment pipeline: Data, TribeExperiment
-├── model.py             # FmriEncoder: Transformer-based multimodal→fMRI model
-├── pl_module.py         # PyTorch Lightning training module
-├── demo_utils.py        # TribeModel and helpers for inference — THIS IS OUR MAIN ENTRY POINT
-├── eventstransforms.py  # Custom event transforms (word extraction, chunking, …)
-├── utils.py             # Multi-study loading, splitting, subject weighting
-├── utils_fmri.py        # Surface projection (MNI / fsaverage) and ROI analysis
-├── grids/
-│   ├── defaults.py      # Full default experiment configuration
-│   └── test_run.py      # Quick local test entry point
-├── plotting/            # Brain visualization (PyVista & Nilearn backends)
-└── studies/             # Dataset definitions (Algonauts2025, Lahner2024, …)
+```bash
+make venv-worker                     # ~9 GB into .venv-worker; ends with: cuda True <n> GPU(s)
+# set MODELS_DIR / HF_HOME / TORCH_HOME in .env (next section), INFERENCE_BACKEND=tribe
+make dev                             # first start: ~20 s to load TRIBE v2
+make dev-logs NAME=worker            # wait for: Worker … ready (tribe backend …)
+make test-e2e VIDEO="data/videos/<some ad>.mp4"
 ```
 
-### Key code patterns we will use
+Expect roughly 5 GPU-seconds per second of video per pass (two passes per job): ~1.5 min for a 10 s clip,
+~5 min for a 30 s 1080p clip on an RTX 4090.
 
-**1. Loading the model**
+#### Model weights
 
-```python
-from tribev2.demo_utils import TribeModel
-from pathlib import Path
+The worker runs offline (`HF_HUB_OFFLINE=1`) against a folder of weights (~17 GB: TRIBE v2, V-JEPA 2,
+Wav2Vec-BERT, LLaMA 3.2-3B, faster-whisper large-v3, WhisperX alignment model).
 
-CACHE_FOLDER = Path("./cache")
-model = TribeModel.from_pretrained("facebook/tribev2", cache_folder=CACHE_FOLDER)
+- **Already have them** (e.g. from the prototype notebooks): point `MODELS_DIR`, `HF_HOME` and `TORCH_HOME`
+  (`<MODELS_DIR>/torch`) at that folder.
+- **Download them**: accept the licence at https://huggingface.co/meta-llama/Llama-3.2-3B, put a read token in
+  `HF_TOKEN`, then `make download-weights SAMPLE="path/to/a-video-with-speech.mp4"` (speech triggers the
+  transcription and text models so they get downloaded too).
+
+#### AI report locally
+
+Set `REPORT_LLM=openai`, `OPENAI_API_KEY`, `OPENAI_MODEL` in `.env`, then `make dev-down && make dev`.
+Settings load at start-up, so restart after any `.env` change.
+
+### Open it to your LAN
+
+```bash
+# .env
+DEV_PUBLIC_HOST=192.168.0.17      # this machine's IP
+DEV_WEB_PORT=8080                 # a port your firewall allows
 ```
 
-The checkpoint download is ~1 GB. The three frozen encoders (V-JEPA2, LLaMA, Wav2Vec-BERT) are downloaded lazily on first use of each modality via HuggingFace Hub.
+The app URL, the browser's S3 upload URL and the listening address all follow from these two lines. Google
+sign-in only works on `localhost` (Google rejects plain-http redirects elsewhere); use dev sign-in on the LAN.
 
-**2. Running inference on video**
+### Everyday commands
 
-```python
-df = model.get_events_dataframe(video_path="path/to/video.mp4")
-preds, segments = model.predict(events=df)
-print(preds.shape)  # (n_timesteps, 20484)
-```
-
-`get_events_dataframe()` is the preprocessing step. For video input it automatically:
-1. Extracts audio from the video track
-2. Transcribes speech into word-level events with timestamps using **WhisperX**
-3. Builds a unified events DataFrame with video, audio, and text columns aligned to a 2 Hz grid
-
-`model.predict()` runs the transformer and subject block, returning:
-- `preds`: numpy array of shape `(T, 20484)` — one cortical prediction per second
-- `segments`: list of time segments with their associated events
-
-Predictions are **offset by 5 seconds** to compensate for hemodynamic lag.
-
-**3. Hemisphere splitting for visualisation**
-
-The 20,484 vertices are split evenly: indices 0–10,241 are the **left hemisphere**, indices 10,242–20,483 are the **right hemisphere** (fsaverage5 convention):
-
-```python
-N_PER_HEMI = 10242
-
-def split_hemis(v):
-    return v[:N_PER_HEMI], v[N_PER_HEMI:]
-```
-
-**4. Brain surface visualisation (from Colab demo)**
-
-```python
-from nilearn import datasets as nl_datasets
-from nilearn.plotting import view_surf
-
-fsavg = nl_datasets.fetch_surf_fsaverage(mesh='fsaverage5')
-
-lh_data, rh_data = split_hemis(preds[t])
-view = view_surf(
-    surf_mesh=fsavg['infl_left'],
-    surf_map=lh_data,
-    bg_map=fsavg['sulc_left'],
-    cmap='hot',
-    threshold='20%',
-    black_bg=True,
-    colorbar=True,
-)
-```
-
-**5. Running text-only or audio-only inference**
-
-The modality dropout design (`p=0.3` during training) means any subset of modalities works at inference:
-
-```python
-# Text only
-df = model.get_events_dataframe(text_path="path/to/script.txt")
-
-# Audio only
-df = model.get_events_dataframe(audio_path="path/to/audio.wav")
-```
-
-This is what enables our **audio contribution analysis** — we run video-only (by stripping audio with ffmpeg first) and compare against full video.
-
-### Known gotchas from the community
-
-These issues were identified by the DataCamp tutorial and community usage:
-
-| Issue | Fix |
+| Command | Does |
 |---|---|
-| **NumPy 2.x conflict** — `neuralset` (internal dependency) fails with `ImportError: cannot import name '_center' from 'numpy._core.umath'` | Pin `numpy>=1.26.4,<2.1.0` before installing tribev2 |
-| **HuggingFace download timeout** — LLaMA 3.2-3B (~6 GB) download times out mid-inference with default 10s timeout | Set `HF_HUB_DOWNLOAD_TIMEOUT=300` and pre-download with `snapshot_download()` |
-| **Temp file race condition** — if you pass a temp file path to `get_events_dataframe()` before the file is flushed to disk, it reads an empty file | Always call `flush()` → `os.fsync()` → `close()` before passing the path |
-| **LLaMA is gated** — inference silently fails or throws auth errors if you haven't accepted the Meta license | Accept at [huggingface.co/meta-llama/Llama-3.2-3B](https://huggingface.co/meta-llama/Llama-3.2-3B), then `huggingface-cli login` |
-| **T4 GPU OOM** — 16 GB VRAM is insufficient; model loads but crashes on `predict()` | Minimum 40 GB (A100) or split across 2× RTX 4090 |
-| **VRAM spike on first predict** — model checkpoint is ~1 GB but encoders are loaded lazily on first modality use, spiking to 28–32 GB | Pre-warm by running a short dummy prediction after loading |
-
-### Architecture detail (from the paper)
-
-The internal processing pipeline for video input runs as follows:
-
-```
-Video frames ──→ V-JEPA2-Giant (frozen) ──→ D=1280 embeddings at 2 Hz
-Audio track  ──→ Wav2Vec-BERT (frozen)  ──→ D=1024 embeddings at 2 Hz
-Transcribed  ──→ LLaMA 3.2-3B (frozen)  ──→ D=2048 embeddings at 2 Hz
-       │                │                        │
-       └────────────────┴────────────────────────┘
-                        │
-                  Project to D_model = 1152
-                  Concatenate (3 × 384)
-                        │
-              ┌─────────▼─────────┐
-              │  8-layer, 8-head  │
-              │  Transformer      │
-              │  (100s context)   │
-              └─────────┬─────────┘
-                        │
-                  Decimate to 1 Hz
-                        │
-              ┌─────────▼─────────┐
-              │  Subject Block    │
-              │  (linear project  │
-              │   to 20,484       │
-              │   vertices)       │
-              └─────────┬─────────┘
-                        │
-                  Output: (T, 20484)
-```
-
-The `modality dropout (p=0.3)` during training means any modality can be zeroed out and the model still produces meaningful predictions. This is critical for our audio comparison — when we strip audio before inference, the model gracefully handles the missing modality rather than crashing.
+| `make dev` / `make dev-mock` | start everything (real / mock model) |
+| `make dev-down` | stop everything |
+| `make dev-status` | what is running |
+| `make dev-logs NAME=web\|worker\|moto\|reaper` | follow a log |
+| `make test` / `make test-e2e` | tests / end-to-end check |
+| `make silent-check VIDEO=…` | compare the two silent-pass methods on one video |
+| `make bench-local VIDEOS="a.mp4 b.mp4"` | GPU timings → `experiments/out/bench-local.csv` |
+| `make help` | every target |
 
 ---
 
-## License
+## Deploy to AWS (`APP_ENV=aws`)
 
-This project is for **non-commercial research use only**, in compliance with TRIBE v2's CC BY-NC 4.0 license.
+### What gets deployed
+
+Four CDK stacks in `ap-southeast-1` (Singapore):
+
+| Stack | Contains |
+|---|---|
+| `NeuroLens-Network` | VPC across 2 AZs, **no NAT gateway**, security groups, free S3 gateway endpoint |
+| `NeuroLens-Data` | S3 bucket (uploads 48 h, results 30 d), SQS jobs queue + DLQ, Aurora Serverless v2 (0–2 ACU, pauses when idle), ECR repos, SSM parameters. **Kept on teardown** |
+| `NeuroLens-Compute` | CloudFront (HTTPS) → ALB → ECS Fargate web tier; Spot `g6e.2xlarge` GPU Auto Scaling Group (min 0) from the worker AMI |
+| `NeuroLens-Ops` | DLQ-refund + SLA-reaper Lambdas, CloudWatch dashboard and alarms, SNS email alerts, AWS FIS Spot-interruption experiment, AWS Budget |
+
+Idle cost is roughly the ALB + one small Fargate task + public IPs + Aurora storage (≈ $35–50/month). GPUs cost
+nothing while no one is uploading.
+
+### Tools you need
+
+Install nothing system-wide: the CLIs below go into `.venv-tools` (`make venv-tools`) or run as containers.
+
+| Tool | What it is for | Set it up |
+|---|---|---|
+| **AWS account + IAM** | Owns every resource; your CLI credentials | Console → IAM → Users → create `neurolens-admin` with `AdministratorAccess` (course project) → *Security credentials* → **Create access key** (CLI) |
+| **AWS CLI** (`.venv-tools/bin/aws`) | Quotas, ECR login, SSM, CloudFormation outputs | `make venv-tools`, then `.venv-tools/bin/aws configure --profile neurolens` (region `ap-southeast-1`), then `export AWS_PROFILE=neurolens` |
+| **Service Quotas** | GPU instances are **0 vCPU by default** on new accounts | `make quota-check`, then request **G and VT Spot vCPUs (L-3819A6DF) ≥ 16** and **G and VT On-Demand vCPUs (L-DB2E81BA) ≥ 8**. Approval can take days — do this first |
+| **AWS CDK** (`.venv-tools/bin/cdk`, PyPI build) | Creates and updates all four stacks | Comes with `make venv-tools` (needs Node.js). Once per account: `make cdk-bootstrap` |
+| **Docker** | Builds the web and GPU worker images | Needs ~15 GB free where Docker stores images (the GPU image is ~10 GB). If `/var/lib/docker` is on a small partition, move Docker's `data-root` first |
+| **Amazon ECR** | Stores the two images | Repos are created by the `NeuroLens-Data` stack; `make push-web` / `make push-worker` log in and push |
+| **Packer** (runs as the `hashicorp/packer` container) | Bakes the GPU worker AMI: weights + image layers pre-loaded, so a new GPU starts fast | Nothing to install; `make ami` runs it. Needs On-Demand G quota (bakes on a `g6e.2xlarge`, ~20 min, ≈ $1) |
+| **Hugging Face** | Source of the model weights for the AMI | Accept https://huggingface.co/meta-llama/Llama-3.2-3B, create a read token, put it in `.env` as `HF_TOKEN` (used only during the bake) |
+| **Amazon Bedrock** | Writes the AI report on AWS (Claude Opus 5.5, via the workers' IAM role — no API key) | Console → Bedrock → *Model access* → enable Anthropic Claude Opus 5.5 in your Bedrock region (`bedrock_region` in `infra/cdk.json`, default = stack region) |
+| **Google Cloud Console** | Google sign-in for the deployed site | APIs & Services → OAuth consent screen (External, scopes `openid email profile`, add testers) → Credentials → OAuth client ID (Web). Redirect URI is added after the first deploy |
+| **Stripe Dashboard** (test mode) | Credit purchases | Copy the test **secret key**; the webhook endpoint is added after the first deploy |
+| **AWS Secrets Manager** | Holds the web tier's secrets on AWS | `make secrets` uploads `.env.deploy` (see below) and generates the Flask key + CloudFront origin secret |
+| **CloudWatch, SNS, Budgets, FIS** | Dashboard, email alerts, cost alert, Spot-interruption test | Created by the stacks; set `alert_email` in `infra/cdk.json` and confirm the SNS email |
+
+### Step by step
+
+Run everything from the repo root with `AWS_PROFILE=neurolens` exported.
+
+**1. Tools and access**
+```bash
+make venv-tools
+.venv-tools/bin/aws configure --profile neurolens && export AWS_PROFILE=neurolens
+make quota-check                       # g6e offered? quotas? → file quota requests if needed
+make cdk-bootstrap
+```
+Enable Claude Opus 5.5 in Bedrock *Model access*. Set `alert_email` (and optionally `budget_usd`) in `infra/cdk.json`.
+
+**2. Secrets** — create `.env.deploy` (git-ignored) with the deployed site's secrets:
+```bash
+GOOGLE_CLIENT_ID=...
+GOOGLE_CLIENT_SECRET=...
+STRIPE_SECRET_KEY=sk_test_...
+STRIPE_WEBHOOK_SECRET=            # filled in at step 7
+LOADTEST_TOKEN=                   # optional: enables load-test sign-in for Experiment 2
+```
+```bash
+make secrets                          # → Secrets Manager "neurolens/app"
+```
+
+**3. Storage and registries first**
+```bash
+make deploy STACKS="NeuroLens-Network NeuroLens-Data"
+```
+
+**4. Images**
+```bash
+make push-web push-worker             # tag = current git commit
+```
+
+**5. GPU worker AMI** (needs `HF_TOKEN` in `.env` and On-Demand G quota)
+```bash
+make ami SAMPLE="data/videos/<a video with speech>.mp4"   # prints the AMI id (ami-…)
+```
+
+**6. Everything else**
+```bash
+make deploy CDK_ARGS="-c worker_ami_id=ami-xxxxxxxx -c web_image_tag=$(git rev-parse --short HEAD)"
+make seed-samples                     # sample gallery → S3
+```
+The `NeuroLens-Compute` outputs print **PublicUrl** (`https://xxxx.cloudfront.net`), **OAuthRedirectUri** and
+**StripeWebhookUrl**.
+
+**7. Connect Google and Stripe to the new URL**
+- Google Console → your OAuth client → add **OAuthRedirectUri** as an authorised redirect URI.
+- Stripe Dashboard → Developers → Webhooks → add endpoint **StripeWebhookUrl** with events
+  `checkout.session.completed` and `invoice.paid` → copy its signing secret into `.env.deploy` as
+  `STRIPE_WEBHOOK_SECRET` → `make secrets` → `make restart-web` (the web tier reads secrets at start-up).
+
+**8. Smoke test** — open **PublicUrl**, sign in with Google, upload a short video. The first job starts a GPU
+(watch *CloudWatch → Dashboards → NeuroLens*); the AI report tab fills in after the charts.
+
+### Updating a deployment
+
+| Change | Command |
+|---|---|
+| Web tier code / frontend | `make release-web` |
+| Secrets changed (`make secrets`) | `make restart-web` |
+| Worker code | `make release-worker` (new GPUs pick it up; running ones finish their job first) |
+| Worker Python dependencies or model weights | `make ami SAMPLE=…`, then `make deploy CDK_ARGS="-c worker_ami_id=<new>"` |
+| Infrastructure | edit `infra/`, `make cdk-synth` to check, `make deploy CDK_ARGS=…` |
+
+### Pausing and clean-up
+
+```bash
+make pause        # GPUs to 0 and web tasks to 0 — keeps everything else
+make teardown     # destroys Compute + Ops; keeps the bucket, database and images
+```
+To remove everything: `make destroy-all` (asks to confirm), then empty and delete the S3 bucket and ECR repos in the
+console (they are retained on purpose).
+
+### To verify on first deployment
+
+- `g6e.2xlarge` is offered in your region (`make quota-check`); otherwise change `region` in `infra/cdk.json`.
+- Claude Opus 5.5 is available on Bedrock in `bedrock_region`, and the workers' IAM policy
+  (`bedrock:InvokeModel*`) covers the Bedrock Messages endpoint used by the report step.
+- Peak VRAM is ~11 GB, so a 24 GB GPU (e.g. `g6.xlarge`, NVIDIA L4) may be enough and cheaper — set
+  `worker_instance_types` in `infra/cdk.json` to try it.
+
+---
+
+## Secrets and git
+
+| File | Holds | In git? |
+|---|---|---|
+| `.env` | your local settings and keys (OpenAI, Google, Stripe, HF) | **never** — git-ignored |
+| `.env.deploy` | the deployed site's secrets, uploaded by `make secrets` | **never** — git-ignored |
+| `config.json` | the prototype's Hugging Face token | **never** — git-ignored |
+| `.env.example` | the template with empty values | yes |
+
+On AWS, secrets live only in Secrets Manager (`neurolens/app`, `neurolens/db`) and are read by IAM role at run
+time; images, AMIs and CloudFormation templates contain none.
+
+Two safety nets:
+```bash
+make install-hooks     # once per clone: a pre-commit hook refuses commits with secrets or .env files
+make check-secrets     # scan everything git would see — run before every push
+```
+
+## Troubleshooting
+
+| Symptom | Fix |
+|---|---|
+| Page unreachable from another machine | Set `DEV_PUBLIC_HOST` to this machine's IP and `DEV_WEB_PORT` to a port the firewall allows, then `make dev-down && make dev` |
+| Upload never starts | The browser posts straight to the S3 stand-in on port `5055`; that port must be reachable too |
+| Job fails twice, credits refunded | `make dev-logs NAME=worker` shows the error; on AWS see the `/neurolens/worker` log group |
+| AI report: "OPENAI_API_KEY is not set" | Put the key in `.env`, then restart (`make dev-down && make dev`) |
+| `make test` cannot connect to Postgres | Start the stack first (`make dev-mock`) |
+| Worker: CUDA out of memory | Another process holds the GPU; pick one with `CUDA_VISIBLE_DEVICES=1 make dev` |
+| Docker fills the root disk | Move Docker's `data-root` to a larger partition before `make push-worker` / `make ami` |
+
+## Licence
+
+Course project, non-commercial. TRIBE v2 is released under CC BY-NC 4.0; LLaMA 3.2 under Meta's licence.
+Commercial use would need a commercial model licence. Prototype notes: [`docs/PROTOTYPE.md`](docs/PROTOTYPE.md).

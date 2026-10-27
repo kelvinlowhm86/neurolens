@@ -1,0 +1,20 @@
+# Build context is the repo root; keep it small and free of secrets.
+.git
+.env
+.env.*
+!.env.example
+config.json
+.dev/
+.venv-*/
+models/
+data/videos/
+data/output/
+data/nilearn/
+output/
+notebooks/
+*.ipynb
+**/.ipynb_checkpoints
+**/__pycache__
+infra/cdk.out
+docs/
+experiments/out/

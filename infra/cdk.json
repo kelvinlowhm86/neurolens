@@ -1,0 +1,23 @@
+{
+  "app": "python3 app.py",
+  "context": {
+    "region": "ap-southeast-1",
+    "worker_ami_id": "ami-REPLACE_AFTER_PACKER_BAKE",
+    "worker_spot": true,
+    "worker_instance_types": ["g6e.2xlarge"],
+    "max_workers": 2,
+    "web_desired": 1,
+    "web_image_tag": "latest",
+    "prewarm_enabled": true,
+    "silent_mode": "ffmpeg",
+    "idle_shutdown_seconds": 300,
+    "aurora_min_acu": 0,
+    "aurora_max_acu": 2,
+    "budget_usd": 100,
+    "alert_email": "",
+    "cloudfront_prefix_list_id": "",
+    "report_llm": "bedrock",
+    "bedrock_model": "anthropic.claude-opus-5-5",
+    "bedrock_region": ""
+  }
+}
