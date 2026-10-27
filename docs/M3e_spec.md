@@ -27,7 +27,7 @@ The dispatcher Lambda; the container (`neurolens/worker.py` rewritten), its imag
 1. `POST /api/uploads/presign` reserves credit and creates the `queued` job, as now. It refuses with 503 `processing_paused` when the endpoint's scaling maximum is 0 (§8).
 2. The browser uploads to S3. S3 notifies the jobs queue (SQS, unchanged), and the queue triggers the dispatcher (§3).
 3. The dispatcher checks the file, prices the job and calls `InvokeEndpointAsync`. The job stays `queued`.
-4. If no GPU is running, SageMaker's `HasBacklogWithoutCapacity` alarm starts one (§6a).
+4. If no GPU is running, the dispatcher starts one (M3f §6a); SageMaker's `HasBacklogWithoutCapacity` alarm (§6a) is the fallback.
 5. SageMaker downloads the upload and POSTs it to the container. The container claims the job, runs the analysis, writes the results and charges the job (§4).
 6. If the container fails, it refunds the job itself. If it never answers (crash, timeout, lost machine) or the request expires in the queue, SageMaker's error notification reaches the error handler, which refunds (§5).
 7. After 7 minutes with an empty queue the GPU stops (§6a). If that ever fails, the GPU guard stops it (§6c).

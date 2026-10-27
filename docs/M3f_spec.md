@@ -9,7 +9,7 @@ disagree, this one wins, and the older section is updated to match.
   15-s cancel window and refund.
 - Research sharing asks for consent to train NeuroLens's own models, keeps shared videos 3 years, and
   rewards a valid audience-retention curve with that video's analysis for free.
-- Starting the GPU from the dispatcher is measured first, not built (§6).
+- The dispatcher starts the GPU; AWS's alarms still stop it (§6a, to build before M4; decided 28 Oct).
 - Sign-in lasts 30 days from the last use, recorded on the server so that signing out ends it (§6b).
 - `python app.py` on a laptop runs only against the local fake stack.
 
@@ -293,14 +293,33 @@ deploy, Josh stops sharing each one in the page (which also removes any old `ret
 `result.json` under `dataset/`). Nothing in the code reads the old layout afterwards.
 
 ## 6. GPU start and sign-in
-### 6a. GPU start from the dispatcher: not built
-Starting the GPU from the dispatcher (`UpdateEndpointWeightsAndCapacities`) would save about 4 minutes
-of a cold start, but the scale-in alarm is in ALARM whenever the GPU is off, and AWS keeps applying a
-step policy while its alarm stays in ALARM. The two could fight over the capacity. Nothing is built and
-the idle wait stays 7 minutes (the backlog metric arrives about 3 minutes late, so a shorter wait would
-shut the GPU as a job arrives). Decided 25 Oct: revisit before M4 as one design, our own GPU on/off
-control (the dispatcher starts the GPU; an off-switch reads the database only while the GPU is on; the
-AWS alarm stays as a backstop of about 30 minutes), with full money-path tests.
+### 6a. GPU start from the dispatcher (to build before M4)
+AWS's scale-out alarm starts the GPU 4.0–4.9 minutes after a job is sent (measured on six cold starts,
+23–25 Oct): the backlog metric reaches CloudWatch about 3 minutes late, and the alarm already fires on
+the first one-minute period. So the dispatcher starts the GPU itself; stopping is unchanged (AWS's
+alarms and the GPU guard). We own no off-switch. Expected cold start: about 13 → 9 minutes.
+- **Start:** after a successful `InvokeEndpointAsync`, `DescribeEndpoint`; if the variant's desired
+  instance count is 0, `UpdateEndpointWeightsAndCapacities(DesiredInstanceCount=1)`. An endpoint
+  already updating (`ValidationException`) means a start is under way: skip. Any other failure is
+  logged as an error and the job stays dispatched: the scale-out alarm still starts the GPU as before.
+  Never called for a job the dispatcher rejects or refunds.
+- **Permissions:** the dispatcher gains `sagemaker:DescribeEndpoint` and
+  `sagemaker:UpdateEndpointWeightsAndCapacities` on our endpoint only.
+- **Why no fight with scale-in:** AWS does not apply scaling while the endpoint is updating (about
+  6.5 minutes of machine start), and by then the late backlog data shows the waiting job, so the
+  scale-in alarm is OK. Unproven: the real run below confirms it. If wrong, the cost is today's
+  behaviour plus one wasted partial start (about $0.25, estimate); no credit is affected.
+- **GPU name:** the container logs `torch.cuda.get_device_name()` at start and the boot record gains
+  `gpu_name` (M3e §10), to tell whether slow sessions (the same 27 s clip took about 2 or about 6
+  minutes depending on the session) are the `ml.g6.2xlarge` fallback. Josh then decides whether to
+  keep that fallback.
+- **Tests (full treatment, small: it starts a paid GPU):** written first by a separate agent. Count 0
+  → one start; count 1 → none; updating → none; a failed start call → job still dispatched, error
+  logged; a rejected or refunded job → no start. One break-it check; Opus review of this slice.
+- **Real run (estimate about $0.70: one cold start plus the 7-minute idle wait):** with the GPU off,
+  upload one clip. Pass: scaling activity within 1 minute of the dispatch, the GPU stays on through
+  start-up (no scale-in to 0 before the job finishes), the job is done and charged once, and the GPU
+  stops after the idle wait. Record the cold start (upload to `transcribing`) and `gpu_name`.
 
 ### 6b. Sign-in sessions (`neurolens/web/auth.py`)
 - **Migration 006** adds `sessions`: `session_hash TEXT PRIMARY KEY` (SHA-256 of the token),
