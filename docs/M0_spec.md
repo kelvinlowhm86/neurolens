@@ -42,7 +42,7 @@ Created later, in the milestone that needs them: `worker.py`, `neurolens/worker.
 
 The web app still calls `inference` for `/api/analyse` in local use, as today. This is temporary and marked with a code comment; M1 removes it (the web tier must never import `inference`).
 
-**Normalisation rule (do not change):** `extract_engagement` cuts the with-audio and no-audio auditory passes to their shared length *first*, then rescales each to 0–1. The main five ROI columns are rescaled over the full timeline. So `auditory` and `auditory_with_audio` may differ in the same row. `AGENTS.md` records this so nobody "fixes" it. The notebooks' inline copies rescale first and cut afterwards, so 7 of the 14 stored samples in `data/samples.json` (those with a one-second length mismatch) differ in those two columns from what the server would produce. The size of that difference is unmeasured until real model output exists (M2's GPU run).
+**Values rule (do not change):** the signals are signed means over the brain-area points, with no absolute value and no rescaling (0 = typical film/TV viewing, the model's built-in scale), so videos can be compared. The with-audio and no-audio series are cut to the shared length of the two passes. `AGENTS.md` records this so nobody "fixes" it.
 
 ### Interfaces fixed by this spec (the tests are written against exactly these)
 - `neurolens.engagement`:

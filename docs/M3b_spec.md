@@ -1,8 +1,8 @@
 # NeuroLens — M3b Implementation Spec
-**Milestone:** sign-in, the public HTTPS website on AWS, credit top-ups, job history, and the switch to a product that runs by itself (20 – 30 Oct)
+**Milestone:** sign-in, the public HTTPS website on AWS, credit grants, job history, and the switch to a product that runs by itself (20 – 30 Oct)
 
-**Operating model: product mode.** Nothing waits for a person. The website, sign-in, history and results are always available. GPU workers still scale from zero on the job queue (M2b), and the reaper settles stuck jobs every 3 hours (§6). The only by-hand parts are operator tools: the NAT Gateway switch for days with GPU work (§5), the warm hold for demos and study sessions, and `stop_work.sh` to pause GPU work.
-**Builds on:** M3a (Aurora via the Data API, three-stage billing, refunds, dead-letter and reaper Lambdas, Aurora-backed status and result endpoints, a development user on `127.0.0.1`). M3b replaces the development user with real accounts, runs the web app on Lambda behind CloudFront's free HTTPS address, replaces the NAT instance with an on-demand NAT Gateway, and adds history, CSV export, credit grants and Stripe test-mode top-ups. It ends with the product ready for the GPU batch and M4's usability study.
+**Operating model: product mode.** Nothing waits for a person. The website, sign-in, history and results are always available. GPU work runs on a SageMaker asynchronous endpoint that starts a GPU when a job is waiting and stops it after 7 idle minutes (M3e), and the reaper settles stuck jobs every 3 hours (§6). The only by-hand parts are operator tools: `start_work.sh --keep-warm` for demos and study sessions, and `stop_work.sh` to pause GPU work (§5).
+**Builds on:** M3a (Aurora via the Data API, three-stage billing, refunds, dead-letter and reaper Lambdas, Aurora-backed status and result endpoints, a development user on `127.0.0.1`). M3b replaces the development user with real accounts, runs the web app on Lambda behind CloudFront's free HTTPS address, and adds history, CSV export and credit grants. It ends with the product ready for the GPU batch and M4's usability study.
 
 **Ground rules for all of M3b:** region `us-east-1`. Python 3.12. All infrastructure is Terraform in `infra/terraform/`, tagged `Project=neurolens`, `Milestone=M3b`. Run AWS commands with the `neurolens` CLI profile only. **Tests first, as in M0 §5:** the §11 tests are written by a separate agent against §2–§8 before the implementation, and are not edited by the implementer. Money and sign-in code (§2, §7) get the full treatment: tests first, 2–3 break-it checks on committed code, and an independent Opus review. `/security-review` runs on the full M3 diff before M3 is merged, and its high-severity findings are fixed first.
 
@@ -10,25 +10,25 @@
 | | Decision | Deciding reason |
 |---|---|---|
 | A | **Amazon Cognito** for sign-in: Google and email-and-password at launch, more providers later without code changes. Our own user IDs, with a table mapping each sign-in to a user; one person signing in two ways with the **same verified email is one user**. | A provider's ID as our user ID makes every later change a migration of all users. Linking on a verified email is what most products do (Slack, Notion, Atlassian). Cognito is free up to 10,000 monthly users. |
-| B | **Flask on AWS Lambda** behind CloudFront (function URL with origin access control). The page and samples come from S3 through the same CloudFront address. | There is no machine to keep alive (no patching, restarts or replacement), and the website works even when the NAT Gateway is off. About $0 at our traffic. |
-| C | **No load balancer.** | Nothing takes traffic on servers: Lambda runs more copies by itself, and GPU workers pull jobs from the queue. Growth is limited by Lambda's account concurrency, Aurora's maximum capacity, the GPU quota and the worker group's maximum size (the queue wait), not by a missing load balancer. |
-| D | **Product mode** (above), used for the GPU batch, the study and the demo. GPU workers stay in **private subnets**; a **NAT Gateway** (managed by AWS) replaces the NAT instance and exists only on days with GPU work and in the final deployed window. The reaper runs **every 3 hours, always**, with Aurora's auto-pause at 5 minutes and its maximum at 1 ACU. | A NAT instance is a machine we patch and a single point of failure, the wrong fit for a product nobody watches. A NAT Gateway is the standard managed choice, and deleting it between GPU days keeps the cost to about $1.20 a day of use. Every reaper query wakes Aurora (measured: about 11 minutes at its maximum capacity per run), so a reaper that checks often would keep it awake forever; hourly measured about $15 a month, every 3 hours at 1 ACU is about $3 a month (estimate, to be measured: each run measured 0.18 ACU-hours at a 2 ACU maximum; at 1 ACU it should be about half), and it can never silently miss a refund. |
+| B | **Flask on AWS Lambda** behind CloudFront (function URL with origin access control). The page and samples come from S3 through the same CloudFront address. | There is no machine to keep alive (no patching, restarts or replacement), and the website works even when GPU work is paused. About $0 at our traffic. |
+| C | **No load balancer.** | Nothing takes traffic on servers: Lambda runs more copies by itself, and SageMaker starts a GPU when a job is waiting. Growth is limited by Lambda's account concurrency, Aurora's maximum capacity and the GPU quota, not by a missing load balancer. |
+| D | **Product mode** (above), used for the GPU batch, the study and the demo. The GPU runs on a SageMaker asynchronous endpoint in AWS's own network; the VPC holds only the database, and there is no NAT Gateway. The reaper runs **every 3 hours, always**, with Aurora's auto-pause at 5 minutes and its maximum at 1 ACU. | Nothing is a machine we patch and nobody has to switch the GPU on: an upload starts it, and it stops after 7 idle minutes. Every reaper query wakes Aurora (measured: about 11 minutes at its maximum capacity per run), so a reaper that checks often would keep it awake forever; hourly measured about $15 a month, every 3 hours at 1 ACU is about $3 a month (estimate, to be measured: each run measured 0.18 ACU-hours at a 2 ACU maximum; at 1 ACU it should be about half), and it can never silently miss a refund. |
 
-**Open sign-up is safe:** new accounts start with **0 credit**. Credit comes from `grant_credit.py` (§7a) or, for the team only, Stripe test top-ups (§7b). A stranger can sign up and browse the samples, but cannot run a GPU job. The Google OAuth app is **published** (not "Testing"), so anyone with Google can sign up without being added to a list; the consent screen links a one-page privacy policy (`static/privacy.html`).
+**Open sign-up is safe:** new accounts start with **0 credit**. Credit comes from `grant_credit.py` (§7a). A stranger can sign up and browse the samples, but cannot run a GPU job. The Google OAuth app is **published** (not "Testing"), so anyone with Google can sign up without being added to a list; the consent screen links a one-page privacy policy (`static/privacy.html`).
 
 **Day one: check the unknowns before building anything else.** If any check fails, stop and ask Josh.
 1. A Cognito user pool with its hosted sign-in page, Google as an identity provider and the app client's callback `https://<distribution>.cloudfront.net/auth/callback` signs a Google user and an email user in end to end (create the CloudFront distribution first; its Lambda origin can be added later). Google's authorized redirect URI is Cognito's `https://<prefix>.auth.us-east-1.amazoncognito.com/oauth2/idpresponse`.
 2. The ID token of a Google-federated user carries `email_verified = true` (through the attribute mapping, §2a).
-3. The account's Lambda concurrency limit (new accounts can be well below 1,000). If it is low, request 1,000 through Service Quotas (free); the web, reaper, dead-letter, breaker and webhook functions share it.
+3. The account's Lambda concurrency limit (new accounts can be well below 1,000). If it is low, request 1,000 through Service Quotas (free); the web, reaper, dead-letter and GPU job functions share it.
 
 ## 1. Scope
 ### In scope
 - Cognito sign-in (Google and email-and-password), our own user IDs, account linking by verified email (§2)
 - The web app on Lambda behind CloudFront; the page and samples from S3 (§3)
-- The page: sign-in, balance, history, CSV, top-up, specific failure messages (§4)
-- The NAT Gateway switch replacing the NAT instance (§5)
+- The page: sign-in, balance, history, CSV, specific failure messages (§4)
+- The database-only network and the GPU work switch (§5)
 - The reaper every 3 hours, 5-minute auto-pause and 1 ACU maximum (§6)
-- 0 starter credit, `grant_credit.py`, Stripe test-mode top-ups for an allowlist (§7)
+- 0 starter credit and `grant_credit.py` (§7)
 - Experiment 3, an independent track (§9)
 - Deleting the scaffolding before `aws-josh` is merged into `main` (§10)
 
@@ -47,8 +47,8 @@ The usability study itself, the participant withdrawal script (built nearer the 
 ### 2b. Modes and secrets
 - `auth.mode`: `"dev"` (laptop and tests, M3a §2, including its `127.0.0.1` guard) or `"cognito"` (AWS). The Lambdas set `NEUROLENS_DEPLOYED=1`, which `settings.apply_env` maps to `deployed: true`; `create_app` raises `UnsafeConfigError` for dev mode whenever `deployed` is true (the web code reads it through settings, never from `os.environ`).
 - **Dev mode keeps M3a's fixed development user** (`dev-user`, created with `billing.ensure_user`, no `identities` row). It is a local stand-in, not an account, so it needs no UUID; every request in dev mode is signed in as it.
-- Deployment values arrive as environment variables through `settings.apply_env` (never `config.json`): `NEUROLENS_AUTH_MODE`, `NEUROLENS_COGNITO_ISSUER` (`https://cognito-idp.us-east-1.amazonaws.com/<pool id>`), `NEUROLENS_COGNITO_CLIENT_ID`, `NEUROLENS_COGNITO_DOMAIN`, `NEUROLENS_PUBLIC_BASE_URL` (`https://<distribution>.cloudfront.net`; on AWS the launcher reads this and the client ID from Parameter Store instead, §3a), `NEUROLENS_WORKER_GROUP` (`neurolens-workers`, §4a), plus M3a's `NEUROLENS_S3_BUCKET`, `NEUROLENS_AWS_REGION` and `NEUROLENS_DB_*`. They map to `auth.mode`, `auth.cognito_issuer`, `auth.cognito_client_id`, `auth.cognito_domain`, `public_base_url`, `aws.worker_group`. In Cognito mode every one is required, and startup fails if one is missing.
-- **Secrets in Parameter Store** (`SecureString`), read once at startup and never written to disk: `/neurolens/web/cognito_client_secret`, `/neurolens/web/flask_secret_key` (at least 32 random bytes, created once by hand and never regenerated, so sessions survive redeploys), and for §7b `/neurolens/web/stripe_secret_key`, `/neurolens/web/stripe_webhook_secret`, `/neurolens/web/topup_allowlist` (comma-separated emails; personal data stays out of git). The three Stripe parameters are read, and required, only in Cognito mode with `stripe.enabled` true.
+- Deployment values arrive as environment variables through `settings.apply_env` (never `config.json`): `NEUROLENS_AUTH_MODE`, `NEUROLENS_COGNITO_ISSUER` (`https://cognito-idp.us-east-1.amazonaws.com/<pool id>`), `NEUROLENS_COGNITO_CLIENT_ID`, `NEUROLENS_COGNITO_DOMAIN`, `NEUROLENS_PUBLIC_BASE_URL` (`https://<distribution>.cloudfront.net`; on AWS the launcher reads this and the client ID from Parameter Store instead, §3a), `NEUROLENS_GPU_ENDPOINT` (`neurolens`, §4a), plus M3a's `NEUROLENS_S3_BUCKET`, `NEUROLENS_AWS_REGION` and `NEUROLENS_DB_*`. They map to `auth.mode`, `auth.cognito_issuer`, `auth.cognito_client_id`, `auth.cognito_domain`, `public_base_url`, `aws.gpu_endpoint`. In Cognito mode every one is required, and startup fails if one is missing.
+- **Secrets in Parameter Store** (`SecureString`), read once at startup and never written to disk: `/neurolens/web/cognito_client_secret` and `/neurolens/web/flask_secret_key` (at least 32 random bytes, created once by hand and never regenerated, so sessions survive redeploys).
 
 ### 2c. Routes and accounts
 - Authlib's Flask client with Cognito's OpenID configuration (`<issuer>/.well-known/openid-configuration`), scope `openid email`.
@@ -68,12 +68,12 @@ The usability study itself, the participant withdrawal script (built nearer the 
 
 ## 3. Web tier on AWS
 ### 3a. Lambda
-- Function `neurolens-web`: Python 3.12, arm64, 1769 MB (one full vCPU: a cold start's setup of AWS clients is CPU-bound and took 4.6-5.5 s at 512 MB; the cost stays inside the free tier), timeout 60 s, **outside the VPC** (it reaches Cognito, Parameter Store, S3 and the Data API over AWS's public endpoints, so it never depends on the NAT Gateway).
+- Function `neurolens-web`: Python 3.12, arm64, 1769 MB (one full vCPU: a cold start's setup of AWS clients is CPU-bound and took 4.6-5.5 s at 512 MB; the cost stays inside the free tier), timeout 60 s, **outside the VPC** (it reaches Cognito, Parameter Store, S3 and the Data API over AWS's public endpoints).
 - `neurolens/web/lambda_handler.py` is the AWS launcher (the laptop's is `app.py`): it loads settings with `settings.load_settings()`, builds the app once per container with `create_app(cfg=...)`, and adapts function-URL events (payload 2.0, including several `Set-Cookie` values) to WSGI with **apig-wsgi** (confirm at build that it handles function-URL events and multiple cookies; the fallback is AWS's Lambda Web Adapter).
 - **Function URL** with `AuthType = AWS_IAM`. Its resource policy lets only this CloudFront distribution invoke it, in **two statements** (function URLs created since October 2025 need both): `lambda:InvokeFunctionUrl` and `lambda:InvokeFunction`, each for principal `cloudfront.amazonaws.com` with `SourceArn` = this distribution. Sources: [Lambda function URL access](https://docs.aws.amazon.com/lambda/latest/dg/urls-auth.html), [CloudFront OAC for Lambda](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/private-content-restricting-access-to-lambda.html).
-- Known limitation (stopping rule: needs heavy traffic): all functions share the account's concurrency, so a flood of web requests could delay the breaker, reaper or dead-letter handler. The production fix is reserved concurrency on `neurolens-web` (one line, once the account limit is 1,000).
+- Known limitation (stopping rule: needs heavy traffic): all functions share the account's concurrency, so a flood of web requests could delay the reaper, dead-letter handler or GPU job functions. The production fix is reserved concurrency on `neurolens-web` (one line, once the account limit is 1,000).
 - **Packaging:** `infra/build_web_lambda.sh` builds `build/web_lambda.zip` from `neurolens/`, the handler and `requirements/web.txt`, installed for Linux arm64 (`pip install --platform manylinux2014_aarch64 --only-binary=:all: --target ...`). Terraform deploys the zip. The web code never imports `neurolens.inference`, `torch` or `numpy` (import-hygiene test).
-- Web IAM role: `ssm:GetParameter` on `/neurolens/web/*` with `kms:Decrypt` for the default key; M3a's `rds-data` and database-secret permissions; `s3:PutObject` on `uploads/*` (presigned POSTs are signed with the role's own credentials); `s3:GetObject` on `results/*` with `s3:ListBucket` on the bucket (without it S3 answers 403, not 404, for a result not written yet); `autoscaling:DescribeAutoScalingGroups` (it needs `*`; read-only, for §4a's paused check); its own log group. The public address and the Cognito client ID are read from `/neurolens/web/public_base_url` and `/neurolens/web/cognito_client_id` (plain parameters Terraform writes), not environment variables: CloudFront's address depends on this function's URL, and the client's callback address contains CloudFront's, so environment variables would be a Terraform cycle.
+- Web IAM role: `ssm:GetParameter` on `/neurolens/web/*` with `kms:Decrypt` for the default key; M3a's `rds-data` and database-secret permissions; `s3:PutObject` on `uploads/*` (presigned POSTs are signed with the role's own credentials); `s3:GetObject` on `results/*` with `s3:ListBucket` on the bucket (without it S3 answers 403, not 404, for a result not written yet); `application-autoscaling:DescribeScalableTargets` (it cannot be scoped to one resource; read-only, for §4a's paused check); its own log group. The public address and the Cognito client ID are read from `/neurolens/web/public_base_url` and `/neurolens/web/cognito_client_id` (plain parameters Terraform writes), not environment variables: CloudFront's address depends on this function's URL, and the client's callback address contains CloudFront's, so environment variables would be a Terraform cycle.
 - `GET /healthz`: unauthenticated, 200 `{"ok": true}`, **never touches the database**.
 
 ### 3b. CloudFront
@@ -83,17 +83,17 @@ The usability study itself, the participant withdrawal script (built nearer the 
 - **POST bodies must carry their hash.** With origin access control, Lambda accepts a POST only with `x-amz-content-sha256` set to the hex SHA-256 of the body. The page sends every POST through one helper, `postJSON(url, body)`, which computes it with `crypto.subtle.digest`. On the laptop Flask ignores the header. Plain HTML form POSTs are therefore not used anywhere.
 
 ### 3c. Deploying
-`infra/deploy_web.sh` (refuses uncommitted changes, like `deploy_code.sh`):
-1. builds the Lambda zip and ships it to both functions (`neurolens-web`, `neurolens-stripe-webhook`) with `aws lambda update-function-code`, waiting until each update is live. Terraform uploads the zip only when it creates the functions and ignores their code afterwards, so an apply for anything else (the NAT Gateway switch) never needs a build or changes the running code; build the zip once before the first apply, and
-2. syncs the site files: `static/index.html` → `site/index.html` (uploaded with `Cache-Control: no-cache`, so a browser checks for a new page on every load instead of running an old one after a deploy), `static/` → `site/static/`, and `site/data/samples.json` holding **only the samples whose clip is listed in `data/videos/SOURCES.md`** (open-licensed; third-party ads are never published), with only those samples' videos, thumbnails and results; then invalidates the CloudFront cache (`/*`). None of today's 13 samples is listed, so the public samples list is empty until open-licensed clips with their own precomputed results are added (a GPU-batch task). The laptop keeps all 13.
+`infra/deploy_web.sh` (refuses uncommitted changes):
+1. builds the Lambda zip and ships it to `neurolens-web` with `aws lambda update-function-code`, waiting until the update is live. Terraform uploads the zip only when it creates the function and ignores its code afterwards, so an apply for anything else never needs a build or changes the running code; build the zip once before the first apply, and
+2. syncs the site files: `static/index.html` → `site/index.html` and `static/app.html` → `site/app` (both uploaded with `Cache-Control: no-cache`, so a browser checks for a new page on every load instead of running an old one after a deploy), `static/` → `site/static/`, and `site/data/samples.json` holding **only the samples whose clip is listed in `data/videos/SOURCES.md`** (open-licensed; third-party ads are never published), with only those samples' videos, thumbnails and results; then invalidates the CloudFront cache (`/*`). Both current samples are listed, so the public list is not empty. The laptop keeps the same samples.
 
 ## 4. The page, history and messages
 ### 4a. Endpoints
-- `GET /api/me`: `{"user_id", "email", "balance": {...}, "can_top_up": bool}`.
+- `GET /api/me`: `{"user_id", "email", "balance": {...}}`.
 - `GET /api/jobs?limit=50`: the user's jobs, newest first, at most `limit` (default 50; anything but an integer from 1 to 100 returns 400 `{"error": "bad_limit"}`): `[{"job_id", "filename", "status", "created_at", "verified_duration_ms", "captured_cents", "error_code", "result_available"}]`. `result_available` is true for a `done` job created less than 30 days ago (results expire after 30 days).
 - `GET /api/jobs/<job_id>/result.csv`: the same ownership check as `/result` (404 for others, no S3 call first). Columns in order: `t, engagement_overall, ffa_faces, eba_bodies, ppa_scenes, sts_social, auditory, auditory_with_audio, auditory_without_audio`, one row per timestep, `None` as an empty cell, numbers exactly as stored in the result JSON. `Content-Disposition: attachment; filename="neurolens-<job_id>.csv"`. **Superseded by M3d:** results now use format 2 (signed signals, no 0-1 rescaling) from `extract_response`, see `docs/M3d_spec.md` §2-§3 and §7.
 - `/result` and `/result.csv` serve the result for a `done` job only (M3e §8). Not-available cases: another user's or unknown job → 404 `not_found`; a `failed` job → 404 `not_found` (even if a late worker wrote a result); `queued`/`processing` → 404 `result_not_ready`; a `done` job whose result object is gone (the 30-day expiry) → 404 `result_expired`.
-- `POST /api/uploads/presign` gains one check, **before reserving any credit**: when the worker group's maximum is 0 (GPU work stopped by `stop_work.sh` or the breaker), it returns **503** `{"error": "processing_paused"}` and reserves nothing. It reads the group itself (`aws.worker_group`), not a separate flag, so the two can never disagree. If the read fails, it refuses with `presign_failed` (fails closed). In dev mode (no worker group) there is no check. Known limitation: jobs already waiting when GPU work stops wait until it restarts or the 24-hour deadline refunds them (M3a §7); the user can cancel a waiting job (M3d §7).
+- `POST /api/uploads/presign` gains one check, **before reserving any credit**: when the SageMaker endpoint's scaling maximum is 0 (GPU work stopped by `stop_work.sh`), it returns **503** `{"error": "processing_paused"}` and reserves nothing. It reads the endpoint's scalable target itself (`aws.gpu_endpoint`), not a separate flag, so the two can never disagree. If the read fails, it refuses with `presign_failed` (fails closed). In dev mode (no endpoint) there is no check. Known limitation: jobs already waiting when GPU work stops wait until it restarts or the 4-hour deadline refunds them (M3e §5); the user can cancel a waiting job (M3d §7).
 - `GET /api/samples` is **removed** (the page reads `/data/samples.json`). `GET /api/limits` stays and is the one `/api/*` route open signed out (it holds no user data; M3d §6 needs `colour_range` to colour samples' brains); every other `/api/*` route needs sign-in.
 - The README's results section notes that `auditory` and the two `auditory_with/without_audio` columns are normalised over different windows (M0 §2), not the CSV.
 
@@ -103,7 +103,6 @@ The usability study itself, the participant withdrawal script (built nearer the 
 - **Sign-in screen:** a "Sign in" button to `/login` (Cognito's page offers Google or email), the sample browser below it. Uploads, balance and history appear only when signed in. "Sign out" in the header (§2c).
 - **Balance** in `.header-meta`, from cents, refreshed after each job ends. With 0 credit, the upload area says "You have no credit yet. Ask the NeuroLens team for test credit."
 - **History** panel from `/api/jobs`: each row re-opens its stored result in the existing chart code, links to the CSV, and says when results expire. Filenames and `error_message` come from users: inserted with `textContent`, never `innerHTML`.
-- **Top-up** (§7b): a control "Add test credit — no real charge", shown only when `can_top_up` is true.
 - **Failure messages** by `error_code`, each ending "You have not been charged." where money was refunded:
   - `insufficient_credit` (402 at presign): "Not enough credit for this video."
   - `insufficient_credit_for_actual_duration`: "Your video is longer than the length we estimated, and your credit doesn't cover the difference."
@@ -118,83 +117,59 @@ The usability study itself, the participant withdrawal script (built nearer the 
   - `processing_paused` (503 at presign): "Processing is paused right now, so no video can be analysed. You have not been charged."
   - Any other code: "Processing failed." (never the raw code alone).
 
-## 5. Network: the NAT Gateway switch
-- The NAT instance, its role, security group and start/stop steps are **removed**.
-- Terraform variable `nat_gateway` (bool, default `false`). When `true`: an Elastic IP and a NAT Gateway in the public subnet, and the private route table's `0.0.0.0/0` route to it. When `false`: neither exists, and private subnets reach only S3 (the existing free gateway endpoint). Creating takes about 2 minutes. Cost: about $0.045 an hour for the gateway plus $0.005 for its address, only while it exists.
-- Set to `true` for days with GPU work and for the final deployed window (GPU batch, study, demo); `false` otherwise. The website never needs it (§3a).
-- `start_work.sh` refuses to let workers start (any form that raises the group's max) unless the NAT Gateway exists, is `available`, and the private route table's `0.0.0.0/0` route points at it: a worker without it cannot reach SQS or the Data API and would only wait for the idle alarm.
-- The opposite order is guarded too: **Terraform refuses to apply `nat_gateway = false` while the worker group's max is above 0 or a worker instance is still running** (a precondition reading the group and the live `Role=worker` instances through data sources), with the message "run infra/stop_work.sh first, check that no worker is listed". Otherwise workers could start with no network and do nothing but bill until the idle alarm.
-- `stop_work.sh` reports a NAT Gateway or an unattached `neurolens` Elastic IP that still exists as a problem (NOT CONFIRMED), with the fix: set `nat_gateway = false` and apply.
+## 5. Network and the work switch
+- The VPC holds only Aurora: one private subnet per zone, and no internet gateway, NAT Gateway, route table or S3 gateway endpoint. Every Lambda runs outside the VPC, and the web app reaches Aurora through the Data API and S3 over its public HTTPS endpoint. The GPU container runs in SageMaker's network, also outside our VPC.
+- `start_work.sh` sets the SageMaker endpoint's scaling maximum to 1 (its normal state), so an upload starts a GPU by itself and it stops after 7 idle minutes. `--keep-warm [--hours N]` first writes a one-off scheduled action that sets the minimum back to 0 at the end of the window, then raises the minimum to 1 for N hours (1 to 4, default 3); in that order, a failure never leaves a GPU on without an end.
+- `stop_work.sh` is the emergency pause: it deletes any keep-warm action first, sets the scalable target's minimum and maximum to 0 and reads them back, sets the endpoint's desired instance count to 0, then waits until the endpoint shows no instance. It prints ALL STOPPED only when every step succeeded, otherwise NOT CONFIRMED with each problem. The website stays up.
+- Neither script touches Aurora's capacity; Terraform owns it.
 ### Operator commands in product mode
 Options are named by what they change; the help text says when to use each.
 | Command | Does |
 |---|---|
-| `start_work.sh` | checks the NAT Gateway (above), then sets the worker group's max to 1: automatic scaling on, so an upload starts a worker. (`--max 2` exists only for Experiment 2 and is deleted with the experiment tools, §10.) |
-| `start_work.sh --keep-worker [--hours N]` | the above plus a warm hold (M2b §2d): one worker on now and kept for N hours (1 to 4, default 3). When working alone, for example debugging. |
-| `start_work.sh --keep-worker-and-db [--hours N]` | `--keep-worker`, plus Aurora's minimum capacity 0.5 ACU so nobody waits about 15 s for the database to wake (about $0.06 an hour). When other people are watching: demos and study sessions. |
-| `stop_work.sh` | workers to 0/0/0 and the warm hold released; Aurora's minimum back to 0; then the checks (no GPU instance; the NAT Gateway and Elastic IP, above). The website stays up. |
-| `deploy_code.sh` | uploads the last commit as the worker code bundle (refuses uncommitted changes), then restarts every running worker that has no job, so it runs the new code. A worker with a job is named and left alone (it gets the new code at its next start); `--now` restarts it anyway (its job is handed back and retried). Replaces `restart_workers.sh`. |
-| `debug_worker.sh` | opens a shell on a worker through Session Manager. Refuses unless a warm hold is on (group minimum 1 or more), with "run infra/start_work.sh --keep-worker first", so AWS cannot remove the worker mid-session. Replaces `connect_worker.sh`. |
+| `start_work.sh` | sets the endpoint's scaling maximum to 1, so an upload starts a GPU by itself; it stops after 7 idle minutes. |
+| `start_work.sh --keep-warm [--hours N]` | the above plus a warm GPU now, kept for N hours (1 to 4, default 3); AWS ends it at the end of the window. For demos and study sessions. |
+| `stop_work.sh` | sets the scalable target to 0/0 and reads it back, deletes any keep-warm action, sets the endpoint's desired count to 0 and waits until no instance remains. The website stays up. |
+| `build_image.sh` | zips the last commit (refuses uncommitted changes), builds the worker image in CodeBuild, and prints its digest; put it in `terraform.tfvars` as `worker_image` and apply. |
 
-Terraform ignores changes to Aurora's `min_capacity`, so the scripts and Terraform don't fight. Known limitation: the warm hold's scheduled end resets only the worker group, not Aurora's minimum, so a forgotten `--keep-worker-and-db` keeps Aurora awake (about $1.40 a day) until `stop_work.sh` or the 6-hour database email.
-
-- Deploy-user permissions (paste into `neurolens-deploy-compute`): create, delete and describe NAT Gateways, allocate, release and associate Elastic IPs, all limited to `Project=neurolens` tags as for other EC2 resources.
+- Deploy-user permissions (`neurolens-deploy-compute`): VPC, private subnets, the database security group and tagged EC2 changes; SageMaker, Application Auto Scaling and CodeBuild role actions as in M3e §9. It has no NAT Gateway, Elastic IP or route-table creation rights.
 
 ## 6. Reaper: every 3 hours, always on
 - The reaper rule `neurolens-reaper-schedule` runs `rate(3 hours)` and is always enabled (Terraform). It **replaces** M3a's `neurolens-reaper-every-5-min` (created disabled, with `ignore_changes = [state]` so the scripts could switch it): that rule and its `ignore_changes` are removed, so Terraform alone owns the new rule's state. `start_work.sh` and `stop_work.sh` no longer touch it.
-- Aurora's `seconds_until_auto_pause` becomes **300** (the minimum) and its `max_capacity` becomes **1 ACU** (M3a had 2; our load is a few small queries). Terraform owns the maximum: `start_work.sh` and `stop_work.sh` change only the minimum. Each run wakes Aurora for about 11 minutes (measured: it resumes straight to its maximum, and the 300 s count starts only when the last connection closes; about 15 s to resume, M3a's resume wait covers it). Cost: about $3 a month (estimate, to be measured: each run measured 0.18 ACU-hours at a 2 ACU maximum; at 1 ACU it should be about half). Hourly at 2 ACU measured about $15 a month, which is why the interval is 3 hours.
-- What it guards against (M3a §7, one 24-hour deadline): an upload that never arrived (credit reserved, nothing will run), a job no GPU ever took, a job whose worker died and whose queue message is gone (`processing` forever), and a published result whose charge was not recorded. Worst case, such a job waits about 27 hours (the deadline plus the 3-hour interval) before it is settled or refunded; the dead-letter handler still refunds the common failures within seconds, and a user can cancel a waiting job.
-- **The forgotten-database alarm changes what it measures.** M3a's `neurolens-db-awake-6h` fires when Aurora was awake *at some point* in each of 6 hours in a row; the reaper wakes it every 3 hours, so that rule would fire every day with nothing wrong. It now fires when Aurora was awake for **a large share of each hour**: the hourly **70th percentile** of `ServerlessDatabaseCapacity` above **0** in each of 6 hours in a row: the metric reads 0 while paused, so this means awake in more than 30% of the hour's minutes, whatever capacity it ran at. A reaper wake (about 11 minutes, measured) stays below it, while a caller every 12 minutes (about 45%, M3a's example) and a forgotten `--keep-worker-and-db` (100%) are above it.
+- Aurora's `seconds_until_auto_pause` becomes **300** (the minimum) and its `max_capacity` becomes **1 ACU** (M3a had 2; our load is a few small queries). Terraform owns both capacities: neither `start_work.sh` nor `stop_work.sh` changes Aurora. Each run wakes Aurora for about 11 minutes (measured: it resumes straight to its maximum, and the 300 s count starts only when the last connection closes; about 15 s to resume, M3a's resume wait covers it). Cost: about $3 a month (estimate, to be measured: each run measured 0.18 ACU-hours at a 2 ACU maximum; at 1 ACU it should be about half). Hourly at 2 ACU measured about $15 a month, which is why the interval is 3 hours.
+- What it guards against (M3e §5, one 4-hour deadline): an upload that never arrived (credit reserved, nothing will run), a job no GPU ever took, a job whose container died and whose queue message is gone (`processing` forever), and a published result whose charge was not recorded. Worst case, such a job waits about 7 hours (the deadline plus the 3-hour interval) before it is settled or refunded; the dead-letter handler still refunds the common failures within seconds, and a user can cancel a waiting job.
+- **The forgotten-database alarm changes what it measures.** M3a's `neurolens-db-awake-6h` fires when Aurora was awake *at some point* in each of 6 hours in a row; the reaper wakes it every 3 hours, so that rule would fire every day with nothing wrong. It now fires when Aurora was awake for **a large share of each hour**: the hourly **70th percentile** of `ServerlessDatabaseCapacity` above **0** in each of 6 hours in a row: the metric reads 0 while paused, so this means awake in more than 30% of the hour's minutes, whatever capacity it ran at. A reaper wake (about 11 minutes, measured) stays below it, while a caller every 12 minutes (about 45%, M3a's example) and a client polling every few minutes (100%) are above it.
 
-## 6b. Alarms simplified
-- **The idle alarm only detects and emails.** Its "set to 0" action and its direct call to the breaker are removed, with the breaker's alarm-invoke permission. Reasons:
-  - The "set to 0" action, an M2a leftover, never helps now. A worker idle with an empty queue was already removed by scale-in. A worker stuck with a job is protected, so only the breaker (which removes protection first) can end it. A worker that cannot fetch jobs while jobs wait is ended, then replaced a minute later by scale-out, which is the loop the breaker exists to stop.
-  - The direct call existed only to beat that action's race (M2b §2c, rehearsal R8).
-  - The breaker now acts only on its 5-minute schedule, which still covers a warm hold ending while the alarm stays in `ALARM`. The cost: a broken worker may run up to 5 more minutes (about $0.15).
-  - The `workers_to_zero` policy stays: scale-in uses it.
-- **One error alarm for every Lambda.** A single `for_each` block covers the breaker, dead-letter handler, reaper, web and webhook functions (replacing the breaker's separate alarm and M3a's block): one email on any failed run. These catch a function that runs and fails, not one that never runs (a disabled schedule is caught by `start_work.sh`'s check).
+## 6b. Alarms
+- The EC2 worker group, its idle alarm and the breaker are gone (M3e §6c). The GPU guard's alarms replace them: `neurolens-gpu-guard-stopped` emails when the guard had to stop a GPU, and `neurolens-gpu-guard-not-running` fires when the guard has not run for 30 minutes.
+- **One error alarm for every Lambda.** A single `for_each` block covers every function: one email on any failed run. These catch a function that runs and fails, not one that never runs.
 
 ## 7. Credit
 ### 7a. Grants
 - `billing.starter_cents` is **0** in the committed `config.json`; laptop tests may set their own.
 - `infra/grant_credit.py <dollars>`: the amount is in dollars with at most two decimals (`5`, `2.50`), turned into whole cents. It prompts for the email (so participants' emails never land in shell history), finds the user by email (unique since §8's migration), shows their available balance, asks to confirm, and adds the credit (never sets the balance) in one transaction with a `grant` ledger row. The amount must be positive; an unknown email stops with an error before the confirm. Runs from a laptop with the `neurolens` profile, never from the web app.
 
-### 7b. Stripe test-mode top-ups (full treatment: money)
-Demonstrates a payment flow **without real money**; it must never be switched to live mode (the model's licence, CC BY-NC, forbids commercial use).
-- `/neurolens/web/stripe_secret_key` must start with `sk_test_` (startup fails otherwise). Config `stripe.enabled` (committed `true`; it applies only in Cognito mode, so the laptop never needs Stripe), `stripe.packs` (`{"5": 500, "10": 1000}`, pack name → cents).
-- `can_top_up` is true only in Cognito mode with `stripe.enabled`, for a signed-in user whose email is in `/neurolens/web/topup_allowlist` (emails compared after trimming spaces and lowercasing, here and in the webhook). The allowlist matters because Stripe's public test card would otherwise give anyone free GPU credit.
-- `POST /api/top-up/checkout` (signed in, allowlisted, JSON `{"pack": "5" | "10"}`): creates a hosted Stripe Checkout Session with the server-defined amount in USD and `managed_payments[enabled] = false` (Stripe's merchant-of-record mode, on by default for some accounts, requires tax codes; we are the seller of test credit). It names no payment methods: Stripe's current API refuses `payment_method_types`, so which methods show (card, Link) is a Stripe dashboard setting; in test mode any of them is harmless, metadata `user_id` and `pack`, `success_url`/`cancel_url` from `public_base_url`, and returns only its URL. The browser never sends an amount, user ID or session ID. Refusals: top-ups off (dev mode or `stripe.enabled` false) → 404 `not_found`; a user not on the allowlist → 403 `top_up_not_allowed`; an unknown pack → 400 `unknown_pack`.
-- **Webhook: its own function** `neurolens-stripe-webhook` (same code bundle, handler `neurolens/web/stripe_webhook.py`), with a function URL of `AuthType = NONE`, called by Stripe directly (not through CloudFront, because Stripe cannot send the body-hash header). Its resource policy has the two statements function URLs need (§3a): `lambda:InvokeFunctionUrl` for principal `*` with `FunctionUrlAuthType = NONE`, and `lambda:InvokeFunction` for principal `*` with `InvokedViaFunctionUrl = true`. Its security is Stripe's signature, verified over the **raw request body** (base64-decoded first when the event says `isBase64Encoded`) before parsing.
-- **Webhook answers**, chosen so Stripe retries only what a retry can fix (Stripe retries any non-2xx answer for up to 3 days):
-  - bad or missing signature → **400**, nothing done;
-  - `stripe.enabled` false → **200**, nothing done;
-  - a valid event that is refused (`livemode = true`, another event type than `checkout.session.completed`, a session whose `payment_status` is not `"paid"`, an unknown pack, an unknown user, a user whose `users.email` is not on the allowlist; the user is found from the metadata `user_id`) → **200**, nothing credited, logged with the reason;
-  - Aurora still waking after the resume wait → **503**, so Stripe retries later;
-  - accepted (`checkout.session.completed`, paid, test mode; the cents come from the pack in the metadata our server set, never from Stripe's `amount_total`) → in one transaction, insert into `stripe_test_events` (event ID primary key, session ID unique) with `ON CONFLICT DO NOTHING`; only if a row was inserted, add the pack's cents and a `test_topup` ledger row; then **200**. A repeated event or session never credits twice; the success redirect never credits anything.
-- The webhook role has only `ssm:GetParameter` on the Stripe and allowlist parameters, `rds-data` and the database secret, and its log group.
-
-### 7c. Checking the database code on Aurora
-- `infra/db_smoke.py` is **renamed `infra/check_aurora.py`** and stays as an operator tool: CI tests only the PostgreSQL backend, so this is the one check of the Data API backend's value formats on the real database (M3a §3d). Run it after changing `neurolens/db.py`'s Data API code or adding a migration, and once on a new account.
+### 7b. Checking the database code on Aurora
+- `infra/check_aurora.py` is an operator tool: CI tests only the PostgreSQL backend, so this is the one check of the Data API backend's value formats on the real database (M3a §3d). Run it after changing `neurolens/db.py`'s Data API code or adding a migration, and once on a new account.
 - It gains one `sign_in` round trip for a throwaway identity: a first sign-in creates the user, a second with the same identity returns the same `user_id`, and a third with another subject and the same email in different letter case links to it. Its existing checks are unchanged, and its clean-up of the throwaway rows, pass or fail, now covers their `identities` rows too.
 
 ## 8. Interfaces fixed by this spec (the §11 tests are written against exactly these)
-- Migration `002_accounts.sql`: table `identities (issuer TEXT, subject TEXT, user_id TEXT NOT NULL REFERENCES users, created_at, PRIMARY KEY (issuer, subject))`; a unique index on `lower(users.email)`; the ledger `kind` check gains `grant`; table `stripe_test_events (event_id TEXT PRIMARY KEY, session_id TEXT UNIQUE NOT NULL, user_id TEXT NOT NULL REFERENCES users, cents BIGINT NOT NULL, created_at)`. The comment on `users.user_id` becomes "our own UUID (text)". Kinds and other values are passed as parameters (project SQL has no string literals).
-- `neurolens.billing`: `sign_in(db, issuer, subject, email, starter_cents) -> str`; `list_jobs(db, user_id, limit) -> list[dict]`; `user_by_email(db, email) -> str | None`; `grant_credit(db, email, cents) -> str` (returns the user ID; `ValueError` for `cents <= 0`, `LookupError` for an unknown email); `credit_test_topup(db, event_id, session_id, user_id, cents) -> bool` (True only when it credited). `ensure_user` **stays** (dev mode and existing tests) with one change: no `starter` ledger row when `starter_cents` is 0. `sign_in` creates new users through the same internal step inside its own transaction.
+- Migration `002_accounts.sql`: table `identities (issuer TEXT, subject TEXT, user_id TEXT NOT NULL REFERENCES users, created_at, PRIMARY KEY (issuer, subject))`; a unique index on `lower(users.email)`; the ledger `kind` check gains `grant`. The comment on `users.user_id` becomes "our own UUID (text)". Kinds and other values are passed as parameters (project SQL has no string literals).
+- `neurolens.billing`: `sign_in(db, issuer, subject, email, starter_cents) -> str`; `list_jobs(db, user_id, limit) -> list[dict]`; `user_by_email(db, email) -> str | None`; `grant_credit(db, email, cents) -> str` (returns the user ID; `ValueError` for `cents <= 0`, `LookupError` for an unknown email). `ensure_user` **stays** (dev mode and existing tests) with one change: no `starter` ledger row when `starter_cents` is 0. `sign_in` creates new users through the same internal step inside its own transaction.
 - **Existing tests this spec retires or changes** (AGENTS.md: tests change only where a spec says so):
   - `tests/test_web.py::test_samples_equals_samples_json` and `tests/test_presign.py::test_create_app_with_cfg_needs_no_config_json`'s `/api/samples` request: `/api/samples` is removed. The second test keeps its purpose (no `config.json` needed) and requests another route instead.
-  - `/api/me`'s new shape (§4a): `tests/test_m3a_web.py::test_me_returns_email_and_balance`, `test_me_shows_a_reservation` and `test_me_uses_create_apps_built_in_dev_user_without_a_cfg` expect `{user_id, email, balance: {available_cents, reserved_cents}, can_top_up}`.
+  - `/api/me`'s new shape (§4a): `tests/test_m3a_web.py::test_me_returns_email_and_balance`, `test_me_shows_a_reservation` and `test_me_uses_create_apps_built_in_dev_user_without_a_cfg` expect `{user_id, email, balance: {available_cents, reserved_cents}}`.
   - `result_not_ready` (§4a): `tests/test_m3a_web.py::test_result_of_an_unfinished_job_without_a_result_is_404` (both cases) and `tests/test_m2b_web.py`'s job-in-progress result test (renamed for it).
   - Starter credit 0 (§7a): `tests/test_env_settings.py`'s committed-config test (renamed for it).
   - Tests that build Cognito-mode apps get the new required settings; dev-mode tests (`dev-user`, `ensure_user`, `/api/limits`) are unchanged, because dev mode is always signed in.
   - `tests/test_m3a_db.py`'s module docstring names `infra/check_aurora.py` instead of `infra/db_smoke.py` (text only).
   - Any other existing test that fails against this spec is reported to Josh, not edited.
 - `neurolens.web.auth`: `current_user() -> tuple[str, str] | None`; `init_auth(app, cfg, ssm_client, *, server_metadata=None)`. The sign-in rule for `/api/*` is one `before_request` check in `create_app`, not a per-route decorator, so a new route cannot be left open. With `server_metadata` (a dict with `issuer`, `authorization_endpoint`, `token_endpoint` and `jwks_uri`), Authlib uses it instead of downloading the OpenID configuration.
-- **Sign-in test seam:** tests pass `server_metadata` with fake URLs and fake only HTTP with `responses`: the token endpoint returns an ID token the test signs with its own RSA key; the JWKS URL returns that key. Authlib's real state, nonce and signature checks run. Nothing in the tests contacts Cognito, Google or Stripe. `dev.txt` gains `responses`.
+- **Sign-in test seam:** tests pass `server_metadata` with fake URLs and fake only HTTP with `responses`: the token endpoint returns an ID token the test signs with its own RSA key; the JWKS URL returns that key. Authlib's real state, nonce and signature checks run. Nothing in the tests contacts Cognito or Google. `dev.txt` gains `responses`.
 - `neurolens.settings.get_parameter(ssm_client, name) -> str` (one `SecureString`, decrypted).
 - `neurolens.web.app.create_app(..., ssm_client=None)`: in Cognito mode reads the parameters at startup and fails fast if one is missing.
-- `neurolens.web.lambda_handler.handler(event, context)`; `neurolens.web.stripe_webhook.handler(event, context)`.
+- `neurolens.web.lambda_handler.handler(event, context)`.
 - `neurolens.results.to_csv(result: dict) -> str`.
-- `requirements/web.txt` gains `authlib`, `requests`, `apig-wsgi`, `stripe`; loses `flask-cors`.
+- `requirements/web.txt` gains `authlib`, `requests`, `apig-wsgi`; loses `flask-cors`.
 
 ## 9. Experiment 3 (cloud vs on-premise cost)
 An independent track.
@@ -204,18 +179,13 @@ An independent track.
 - Output under `experiments/experiment-3/<run_id>/` with a `manifest.json` (M2b §10's contract). Costs use the **measured on-demand price** ($1.861 an hour for `g6e.xlarge`) and measured runtimes; the consolidation recomputes cost per video and the break-even volume from them and shows the original planned figures beside them, labelled as planned. Never presented as observed fully-loaded costs.
 
 ## 10. Scaffolding deleted before the merge into `main`
-Deleted once the system runs end to end on the GPU and is reviewed, before the experiments and user testing (one clean merge):
-- the NAT instance and its start/stop steps (§5, done in M3b);
-- the reaper's on/off steps in `start_work.sh`/`stop_work.sh` (§6, done in M3b);
-- The worker's shutdown script and systemd unit, and that script from `pull_code.sh`'s `install` line (done: the files are deleted and every mention is gone from `pull_code.sh`, `build_ami.sh`, `deploy_code.sh` and UserData).
+Scaffolding is gone: the worker's shutdown script and systemd unit, the EC2 worker group and its network, and the old restart/connect scripts.
 
-Removed in M3b itself (not waiting for the merge): `infra/restart_workers.sh` (folded into `deploy_code.sh`, §5); `build_ami.sh --dlami` (a fallback never needed: both images built on plain Ubuntu).
-
-What stays: **product** (scale-out and scale-in alarms, idle alarm and breaker, dead-letter handler, reaper, heartbeat and scale-in protection, one error alarm per Lambda, `pull_code.sh`, the web and webhook functions), **operator tools** (`deploy_code.sh`, `deploy_web.sh`, `debug_worker.sh`, `check_aurora.py`, `build_ami.sh` with `--cpu-rehearsal` and `--refresh-weights`, `apply_schema.py`, `grant_credit.py`, `aws_env.sh`, `start_work.sh` / `stop_work.sh`, the email-only alerts) and **experiment tools**, deleted after the report (boot records, `cold_start.py`, `latency_*`, `export_cloudwatch.py`, `finish_run.py`, `FAKE_INFERENCE_SECONDS`, `start_work.sh --max 2` for Experiment 2).
+What stays: **product** (dispatcher, SageMaker error handler, GPU guard, dead-letter handler, reaper, one error alarm per Lambda, the web function), **operator tools** (`deploy_web.sh`, `build_image.sh`, `make_model_data.sh`, `build_ffprobe_layer.sh`, `apply_schema.py`, `check_aurora.py`, `grant_credit.py`, `aws_env.sh`, `start_work.sh` / `stop_work.sh`, the email-only alerts) and **experiment tools**, deleted after the report (boot records, `cold_start.py`, `latency_*`, `export_cloudwatch.py`, `finish_run.py`, `FAKE_INFERENCE_SECONDS`).
 
 ## 11. Tests (tests-first; `FAKE_INFERENCE=1 pytest`)
 - **Sign-in**, through the §8 seam: the callback clears any session, stores only `user_id`, `email` and `signed_in_at`; `email_verified` `True` and `"true"` are accepted, while `False`, `"false"`, `"True"` and a missing claim give 403 `email_not_verified`; a wrong `state`, a token signed by the wrong key, or `?error=access_denied` gives 400 `sign_in_failed` and no session; `/login` redirects with exactly `<public_base_url>/auth/callback`; logout clears the session and returns the Cognito logout URL built from config; with a fake clock, a session used every hour still works at 11 hours after sign-in and gets 401 at 13 hours.
-- **Accounts** (`sign_in`, Postgres backend; CI cannot reach Aurora, so the Data API backend is checked by `check_aurora.py`, §7c): a new sign-in creates one user with a UUID `user_id`, the starter balance and no ledger row when it is 0; the same `(issuer, subject)` returns the same user; a second sign-in with a different subject and the same email (any letter case) links to the same user; a different email creates a different user; two simultaneous first sign-ins with one email produce one user; a known identity signing in with a new verified email updates `users.email` (so a new subject with the **old** email creates a different user, and `get_email` returns the new one), a change of letter case only leaves it unchanged, and a new email already held by another user leaves both users' emails unchanged, still returns the identity's own user, and logs a warning.
+- **Accounts** (`sign_in`, Postgres backend; CI cannot reach Aurora, so the Data API backend is checked by `check_aurora.py`, §7b): a new sign-in creates one user with a UUID `user_id`, the starter balance and no ledger row when it is 0; the same `(issuer, subject)` returns the same user; a second sign-in with a different subject and the same email (any letter case) links to the same user; a different email creates a different user; two simultaneous first sign-ins with one email produce one user; a known identity signing in with a new verified email updates `users.email` (so a new subject with the **old** email creates a different user, and `get_email` returns the new one), a change of letter case only leaves it unchanged, and a new email already held by another user leaves both users' emails unchanged, still returns the identity's own user, and logs a warning.
 - **Every `/api/*` route** returns 401 JSON when signed out (enumerating the URL map, so no new route is forgotten); each listed public route stays public.
 - **Cookie flags** in Cognito mode: `Secure`, `HttpOnly`, `SameSite=Lax`.
 - **POST without JSON content type** returns 415; responses carry **no** CORS headers.
@@ -225,12 +195,9 @@ What stays: **product** (scale-out and scale-in alarms, idle alarm and breaker, 
 - `/healthz` returns 200 without calling the database.
 - **History:** only the user's own jobs, newest first; `limit` 1 and 100 accepted, 0, 101 and `abc` give 400; `result_available` false after 30 days.
 - **CSV and result:** columns in order, one row per timestep, empty cells for `None`, values identical to the JSON; a `processing` job whose result object exists serves it (both routes); each not-available case returns its exact error with no S3 call before the ownership check.
-- **Paused processing:** with the stubbed worker group at max 0, presign returns 503 `processing_paused` and reserves nothing (balance and ledger unchanged); at max 1 it proceeds; when reading the group raises, it returns `presign_failed` and reserves nothing; in dev mode it never reads a group.
-- **Webhook answers:** bad signature 400; a valid but refused event (each case in §7b) 200 with no credit; `DatabaseResumingException` past the wait 503; a base64-encoded body verifies.
-- **Checkout refusals:** 404 when top-ups are off, 403 `top_up_not_allowed` for a non-allowlisted user, 400 `unknown_pack`.
+- **Paused processing:** with the stubbed endpoint's scalable target at max 0, presign returns 503 `processing_paused` and reserves nothing (balance and ledger unchanged); at max 1 it proceeds; when reading the target raises, it returns `presign_failed` and reserves nothing; in dev mode it never reads a target.
 - **Grants:** exactly the amount with a `grant` ledger row, M3a invariants kept; zero or negative cents and an unknown email raise.
-- **Stripe (full treatment):** a live key is rejected at startup; `can_top_up` false for a non-allowlisted user and when disabled; checkout refuses non-allowlisted users and unknown packs and never takes an amount from the request; the webhook rejects a bad signature, `livemode = true`, an unknown pack and a non-allowlisted user; the same event or the same session twice credits once; disabled mode returns 200 without credit.
-- **Import hygiene:** the web and webhook code never import `neurolens.inference`, `torch` or `numpy`.
+- **Import hygiene:** the web code never imports `neurolens.inference`, `torch` or `numpy`.
 
 ## 12. Acceptance criteria
 1. The day-one checks pass (Google and email sign-in through Cognito with the CloudFront callback; `email_verified` for Google users; the Lambda concurrency limit known, and raised if low).
@@ -238,50 +205,44 @@ What stays: **product** (scale-out and scale-in alarms, idle alarm and breaker, 
 3. Signing in with Google and with email and password using the same verified email reaches the same account and balance.
 4. `GET /api/jobs` and the CSV return only the signed-in user's own jobs; the CSV matches the JSON result exactly.
 5. The function URL refuses a direct request (403 without CloudFront's signature); the site works through CloudFront.
-6. The website, sign-in and history work while `nat_gateway = false` and no GPU worker exists.
-7. With `nat_gateway = true` and `start_work.sh`, one fake job runs end to end through the deployed website (upload, worker, result, history, CSV). With `nat_gateway = false`, `start_work.sh` refuses to start workers, and `terraform apply` refuses `nat_gateway = false` while the group's max is above 0. After `stop_work.sh`, an upload through the deployed site is refused with "Processing is paused" and the balance is unchanged.
-8. `stop_work.sh` reports NOT CONFIRMED while a NAT Gateway or an unattached Elastic IP exists, and ALL STOPPED after `nat_gateway = false` is applied.
+6. The website, sign-in and history work while GPU work is paused and no GPU exists.
+7. With `start_work.sh`, one fake job runs end to end through the deployed website (upload, GPU, result, history, CSV). After `stop_work.sh`, an upload through the deployed site is refused with "Processing is paused" and the balance is unchanged.
+8. `stop_work.sh` prints ALL STOPPED with the endpoint at 0 and no keep-warm action, and NOT CONFIRMED when any step cannot be proven.
 9. The reaper runs every 3 hours with nothing else active, Aurora pauses again within about 15 minutes of each run (visible in CloudWatch), and the forgotten-database alarm stays OK through 6 idle hours.
-10. A team member on the allowlist completes a Stripe test Checkout and receives exactly one matching credit; replays never credit twice; a non-allowlisted user sees no top-up control and the checkout endpoint refuses them.
-11. `grant_credit.py` gives a participant credit by email.
-12. The S3 bucket and the web app no longer allow arbitrary origins.
-13. The full M3 diff passed `/security-review` with no unresolved high-severity findings.
-14. Experiment 3 artifacts exist under `experiments/experiment-3/` with a manifest.
-15. `FAKE_INFERENCE=1 pytest` passes locally and in CI, and the tests were committed before the implementation.
+10. `grant_credit.py` gives a participant credit by email.
+11. The S3 bucket and the web app no longer allow arbitrary origins.
+12. The full M3 diff passed `/security-review` with no unresolved high-severity findings.
+13. Experiment 3 artifacts exist under `experiments/experiment-3/` with a manifest.
+14. `FAKE_INFERENCE=1 pytest` passes locally and in CI, and the tests were committed before the implementation.
 
 ## 13. File layout additions
 ```
 neurolens/web/auth.py              MODIFIED: Cognito mode, login_required, init_auth
-neurolens/web/app.py               MODIFIED: /api/me, history, CSV, healthz, top-up, CORS removed, JSON-only POSTs, 503 while the database wakes, presign refused while processing is paused, /api/samples removed
+neurolens/web/app.py               MODIFIED: /api/me, history, CSV, healthz, CORS removed, JSON-only POSTs, 503 while the database wakes, presign refused while processing is paused, /api/samples removed
 neurolens/web/lambda_handler.py    NEW: the AWS launcher (apig-wsgi)
-neurolens/web/stripe_webhook.py    NEW
 neurolens/results.py               NEW: to_csv
-neurolens/billing.py               MODIFIED: sign_in, list_jobs, grant_credit, credit_test_topup; ensure_user writes no ledger row for 0
-neurolens/settings.py              MODIFIED: get_parameter, the new environment variables (incl. NEUROLENS_DEPLOYED, NEUROLENS_WORKER_GROUP)
-config.json                        MODIFIED: billing.starter_cents 0, stripe block
-requirements/web.txt, dev.txt      MODIFIED: authlib, requests, apig-wsgi, stripe (flask-cors removed); responses
+neurolens/billing.py               MODIFIED: sign_in, list_jobs, grant_credit; ensure_user writes no ledger row for 0
+neurolens/settings.py              MODIFIED: get_parameter, the new environment variables (incl. NEUROLENS_DEPLOYED, NEUROLENS_GPU_ENDPOINT)
+config.json                        MODIFIED: billing.starter_cents 0
+requirements/web.txt, dev.txt      MODIFIED: authlib, requests, apig-wsgi (flask-cors removed); responses
 infra/migrations/002_accounts.sql  NEW
 infra/build_web_lambda.sh          NEW
 infra/deploy_web.sh                NEW
 infra/grant_credit.py              NEW
-infra/start_work.sh, stop_work.sh  MODIFIED: NAT Gateway checks, reaper steps and NAT instance removed, --keep-worker / --keep-worker-and-db
-infra/deploy_code.sh               MODIFIED: restarts idle running workers (--now: busy ones too)
-infra/restart_workers.sh           DELETED (folded into deploy_code.sh)
-infra/connect_worker.sh            RENAMED infra/debug_worker.sh, refuses without a warm hold
-infra/build_ami.sh                 MODIFIED: --dlami removed
-infra/db_smoke.py                  RENAMED infra/check_aurora.py, gains a sign_in round trip
-infra/terraform/                   MODIFIED: Cognito, CloudFront, web and webhook Lambdas, NAT Gateway switch (NAT instance removed) with its max-0 precondition, reaper every 3 hours, auto-pause 300 s, Aurora maximum 1 ACU, database alarm on hourly average, idle alarm detect-and-email only, one error alarm per Lambda
-infra/iam/neurolens-deploy-*.json  MODIFIED: Cognito, CloudFront, NAT Gateway, Elastic IP, new Lambdas
-static/                            MODIFIED: sign-in, balance, history, CSV, top-up, messages, postJSON, empty samples state; privacy.html NEW
-docs/session_checklist.md          NEW: nat_gateway on, start_work.sh --keep-worker-and-db, sign-in check, grant credit, stop_work.sh, nat_gateway off (in that order)
+infra/start_work.sh, stop_work.sh  MODIFIED: SageMaker endpoint keep-warm and emergency pause, no Aurora changes
+infra/check_aurora.py              NEW: the Data API check, with a sign_in round trip
+infra/terraform/                   MODIFIED: Cognito, CloudFront, web Lambda, database-only VPC, SageMaker endpoint and scaling, reaper every 3 hours, auto-pause 300 s, Aurora maximum 1 ACU, database alarm on hourly average, GPU guard alarms, one error alarm per Lambda
+infra/iam/neurolens-deploy-*.json  MODIFIED: Cognito, CloudFront, SageMaker, ECR, CodeBuild, Application Auto Scaling, new Lambdas
+static/                            MODIFIED: sign-in, balance, history, CSV, messages, postJSON, empty samples state; privacy.html NEW
+docs/session_checklist.md          NEW: start_work.sh --keep-warm, sign-in check, grant credit, stop_work.sh (in that order)
 experiments/tco_benchmark.py       NEW
 experiments/slurm/tco_benchmark.sbatch  NEW
 tests/                             MODIFIED: §11
 ```
 
 ## 14. Cost
-- Lambda, CloudFront, Cognito, Parameter Store standard parameters, Stripe test mode: free at our use.
-- NAT Gateway: about $1.20 a day while it exists (GPU days and the deployed window only).
+- Lambda, CloudFront, Cognito and Parameter Store standard parameters: free at our use.
+- Network: no NAT Gateway or Elastic IP bills; the VPC and subnets are free.
 - Reaper: about $3.50 a month in Aurora wake-ups (measured over 67 runs: 0.12 ACU-hours a run, 8 runs a day, $0.12 per ACU-hour). Measure it again from the ACU graph in the first day after any change to the schedule or capacity.
 - S3 site files: cents a month.
 - Experiment 3: no new GPU time (the cloud leg reuses Experiment 1).
