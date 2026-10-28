@@ -413,6 +413,12 @@ resource "aws_lambda_permission" "events_invoke_gpu_guard" {
 # Reserved concurrency caps parallel Bedrock spend; async retries are off because a failure is
 # final and recorded on the job.
 
+locals {
+  # config.json names a US inference profile ("us.<model>"); IAM also needs the bare model.
+  report_profile_arn = "arn:aws:bedrock:${var.region}:${local.account_id}:inference-profile/${local.config.report.model}"
+  report_model       = trimprefix(local.config.report.model, "us.")
+}
+
 resource "aws_iam_role" "report" {
   name                 = "neurolens-report${local.iam_suffix}"
   permissions_boundary = local.boundary_arn
@@ -456,12 +462,18 @@ resource "aws_iam_role_policy" "report" {
         Condition = { StringLike = { "s3:prefix" = ["results/*"] } }
       },
       {
-        # Bedrock Mantle has no published model ARN format, so the action is scoped to any
-        # model; only this Lambda's code uses it and the code fixes the model (M3g §8).
-        Sid      = "CreateBedrockInference"
+        # The US inference profile in config.json, and the model it routes to in any US region.
+        Sid      = "InvokeTheReportModelProfile"
         Effect   = "Allow"
-        Action   = "bedrock-mantle:CreateInference"
-        Resource = "*"
+        Action   = "bedrock:InvokeModel"
+        Resource = local.report_profile_arn
+      },
+      {
+        Sid       = "InvokeTheReportModelThroughTheProfile"
+        Effect    = "Allow"
+        Action    = "bedrock:InvokeModel"
+        Resource  = "arn:aws:bedrock:*::foundation-model/${local.report_model}"
+        Condition = { StringEquals = { "bedrock:InferenceProfileArn" = local.report_profile_arn } }
       },
       {
         Sid      = "OwnLogs"

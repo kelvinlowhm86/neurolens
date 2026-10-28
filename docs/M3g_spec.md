@@ -5,7 +5,7 @@ sharing). Where this spec and an older one disagree, this one wins, and the olde
 updated to match.
 
 ## Decisions (28 Oct, Josh)
-- A written report per video, by Claude Sonnet 5.5 on Amazon Bedrock (us-east-1), from the
+- A written report per video, by Claude Sonnet 4.6 on Amazon Bedrock (US regions), from the
   brain numbers and the video's frames. Free, at most one finished report per video, stored and
   deleted with the job.
 - Frames are cut on the GPU machine right after the analysis, 1 per second (the brain data is
@@ -112,21 +112,23 @@ normally (no Lambda retry). The Lambda's async retries are set to 0 and its time
   `overall`, the three groups, the seven signals and `muted.overall` (2 dp), and the four-part
   `results.summarise` output; the words (if any); then for each second `t` a text block
   `"t = <t> s"` followed by its image block (base64 JPEG). At most `duration_seconds` images
-  (120 at the 120 s limit; Claude accepts far more).
+  (120 at the 120 s limit; Sonnet 4.6 has a 1M-token window on Bedrock, which allows 600 images,
+  and Bedrock's 20 MB request limit fits 120 frames of 640 px).
 
 ### 5c. Call
-Anthropic Python SDK, `AnthropicBedrockMantle(aws_region=cfg aws.region)`, model from
-`config.json` `report.model` (`anthropic.claude-sonnet-5-5`), `max_tokens` `report.max_tokens`
-(16000), `output_config` with `effort: "medium"` and a JSON-schema `format` (§5d), adaptive
-thinking left at its default, SDK timeout 240 s, `max_retries` 2. The SDK
-(`anthropic[bedrock]`) ships as a Lambda layer built by `infra/build_report_layer.sh` (manylinux
-wheels, like the ffprobe layer), so the other Lambdas' zip stays dependency-free. Checked 28 Oct
-on Anthropic's Bedrock page: `anthropic.claude-sonnet-5-5` is served through this endpoint
-(`bedrock-mantle.us-east-1.api.aws`, SigV4 from the Lambda role); the IAM action is
-`bedrock-mantle:CreateInference`; us-east-1 offers in-region routing (10% above global routing,
-keeps the data in us-east-1 as the privacy page says). Sonnet 5.5 access is granted per account
-in the Bedrock console (§8). The server-side `fallbacks` option does not exist on Bedrock; a
-refusal is simply `refused` (§5d).
+Anthropic Python SDK, `AnthropicBedrock(aws_region=cfg aws.region)` (Bedrock InvokeModel), model
+from `config.json` `report.model` (`us.anthropic.claude-sonnet-4-6`, the US inference profile:
+requests stay in AWS's US regions, 10% above global routing), `max_tokens` `report.max_tokens`
+(16000), `output_config` with a JSON-schema `format` (§5d), effort and thinking left at their
+defaults, `anthropic_version` `bedrock-2023-05-31` in the body (the SDK's default API version is
+refused by models served through InvokeModel), SDK timeout 240 s, `max_retries` 2. The SDK
+(`anthropic[bedrock]`, pinned) ships as a Lambda layer built by `infra/build_report_layer.sh`
+(manylinux wheels, like the ffprobe layer), so the other Lambdas' zip stays dependency-free.
+Why Sonnet 4.6 (28 Oct): this account is refused every model on Bedrock's Messages-API endpoint
+(Sonnet 5.5, Sonnet 5, GPT-6.x: "not available for this account"), while Sonnet 4.6 and Opus 4.6
+answer through InvokeModel; Sonnet 4.6 is the cheaper of the two ($3/$15 per million tokens before
+the 10% US premium). The server-side `fallbacks` option does not exist on Bedrock; a refusal is
+simply `refused` (§5d).
 
 ### 5d. Answer
 Schema (also checked in code after parsing, since a wrong report must not be stored):
@@ -157,7 +159,7 @@ All model text is inserted as text (`textContent`), never as HTML.
 
 ## 7. Privacy page (`static/privacy.html`)
 A short section: when you ask for a report, the video's frames (1 per second), its words and its
-brain numbers are sent to Claude on Amazon Bedrock in AWS us-east-1; AWS states Bedrock does not
+brain numbers are sent to Claude on Amazon Bedrock, processed in AWS's US regions; AWS states Bedrock does not
 store them or use them for training; the frames and report are deleted with the job, and expire
 with the result after 30 days.
 
@@ -166,17 +168,15 @@ with the result after 30 days.
   `results.py` (standard library only), the report layer, 512 MB, timeout 300 s, async `maximum_retry_attempts = 0`, reserved concurrency 5
   (caps parallel Bedrock spend), env as the other job Lambdas.
 - Its role: Data API on the cluster, `s3:GetObject` on `results/*`, `s3:PutObject` and
-  `s3:DeleteObject` on `results/*.report.json`, `bedrock-mantle:CreateInference`, logs. The
-  resource is the Sonnet 5.5 model's ARN if the AWS service authorization reference gives a
-  format for it; if not, `*` for that one action (shortcut: the role could call any Bedrock model,
-  but only this Lambda's code uses it and the code fixes the model; narrow it once the ARN format
-  is known).
+  `s3:DeleteObject` on `results/*.report.json`, `bedrock:InvokeModel` on the US inference
+  profile and on the model in any US region when reached through that profile, logs. The
+  permissions boundary allows only that profile and model.
 - Web role: `lambda:InvokeFunction` on `neurolens-report` only. `aws.report_function` added to
   the web Lambda's settings.
 - `storage.job_keys` adds `results/<id>.frames` and `results/<id>.report.json`, so job delete,
   account delete and the reaper remove them. The `results/` 30-day expiry covers both.
-- Josh's one-time console step: Bedrock → Model access → enable Claude Sonnet 5.5 in us-east-1
-  (Anthropic asks a short use-case form the first time).
+- One-time console step: Anthropic's use-case form in Bedrock (done 28 Oct); Sonnet 4.6
+  answers in the playground.
 
 ## 9. Laptop (`infra/local_stack.py`)
 The local stack passes a `report_starter` that runs `write_report` in a thread with a fake

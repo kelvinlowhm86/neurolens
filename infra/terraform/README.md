@@ -61,8 +61,8 @@ down.
    `/neurolens/terraform/google_client_secret` and
    `/neurolens/web/flask_secret_key` (at least 32 random bytes).
 7. Confirm the $40/month AWS Budget alerts still exist (Billing, Budgets).
-8. In the console, with the region set to us-east-1, enable Claude Sonnet 5.5 under Bedrock →
-   Model access (Anthropic asks a short use-case form the first time).
+8. In the console, with the region set to us-east-1, open Bedrock and submit Anthropic's
+   use-case form if asked; Claude Sonnet 4.6 must answer in the playground.
 
 Every command runs with this profile:
 

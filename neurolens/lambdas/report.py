@@ -16,6 +16,7 @@ from neurolens.report_prompt import MAX_HEADLINE, MAX_LISTS, MAX_MOMENTS, MAX_SU
 logger = logging.getLogger(__name__)
 
 KINDS = ("strong", "weak")
+BEDROCK_API_VERSION = "bedrock-2023-05-31"
 # Sent as the structured-output format. Bedrock's schema subset has no length or count limits, so
 # those live in the prompt and in _valid_report (M3g §5d).
 _TEXT_LIST = {"type": "array", "items": {"type": "string"}}
@@ -110,9 +111,9 @@ def _usage(response):
 
 def _bedrock_client(region):
     """The Anthropic SDK's Bedrock client; imported here so importers need no SDK (M3g §5c)."""
-    from anthropic import AnthropicBedrockMantle
+    from anthropic import AnthropicBedrock
 
-    return AnthropicBedrockMantle(aws_region=region, timeout=240, max_retries=2)
+    return AnthropicBedrock(aws_region=region, timeout=240, max_retries=2)
 
 
 def write_report(job_id, db, s3, bucket, client, cfg):
@@ -148,10 +149,9 @@ def write_report(job_id, db, s3, bucket, client, cfg):
                 max_tokens=report_cfg["max_tokens"],
                 system=system,
                 messages=[{"role": "user", "content": content}],
-                output_config={
-                    "effort": "medium",
-                    "format": {"type": "json_schema", "schema": REPORT_SCHEMA},
-                },
+                output_config={"format": {"type": "json_schema", "schema": REPORT_SCHEMA}},
+                # The SDK's default API version is refused by InvokeModel models (M3g §5c).
+                extra_body={"anthropic_version": BEDROCK_API_VERSION},
             )
         except Exception:
             logger.exception(f"{job_id}: Bedrock failed")
