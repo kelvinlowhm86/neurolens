@@ -118,13 +118,17 @@ normally (no Lambda retry). The Lambda's async retries are set to 0 and its time
 Anthropic Python SDK, `AnthropicBedrockMantle(aws_region=cfg aws.region)`, model from
 `config.json` `report.model` (`anthropic.claude-sonnet-5-5`), `max_tokens` `report.max_tokens`
 (16000), `output_config` with `effort: "medium"` and a JSON-schema `format` (§5d), adaptive
-thinking left at its default, SDK timeout 240 s, `max_retries` 2. The SDK ships as a Lambda layer
-built by `infra/build_report_layer.sh` (manylinux wheels, like the ffprobe layer), so the other
-Lambdas' zip stays dependency-free. Before the build: verify on AWS that the model ID is served
-in us-east-1 through the Mantle endpoint and which IAM action it needs; if Mantle does not serve
-it, use the SDK's `AnthropicBedrock` client (InvokeModel) instead and note it here.
+thinking left at its default, SDK timeout 240 s, `max_retries` 2. The SDK
+(`anthropic[bedrock]`) ships as a Lambda layer built by `infra/build_report_layer.sh` (manylinux
+wheels, like the ffprobe layer), so the other Lambdas' zip stays dependency-free. Checked 28 Oct
+on Anthropic's Bedrock page: `anthropic.claude-sonnet-5-5` is served through this endpoint
+(`bedrock-mantle.us-east-1.api.aws`, SigV4 from the Lambda role); the IAM action is
+`bedrock-mantle:CreateInference`; us-east-1 offers in-region routing (10% above global routing,
+keeps the data in us-east-1 as the privacy page says). Sonnet 5.5 access is granted per account
+in the Bedrock console (§8). The server-side `fallbacks` option does not exist on Bedrock; a
+refusal is simply `refused` (§5d).
 
-### 5d. Answer
+## 5d. Answer
 Schema (also checked in code after parsing, since a wrong report must not be stored):
 ```
 { "headline": str (<= 120 chars),
@@ -162,8 +166,11 @@ with the result after 30 days.
   `results.py` (standard library only), the report layer, 512 MB, timeout 300 s, async `maximum_retry_attempts = 0`, reserved concurrency 5
   (caps parallel Bedrock spend), env as the other job Lambdas.
 - Its role: Data API on the cluster, `s3:GetObject` on `results/*`, `s3:PutObject` and
-  `s3:DeleteObject` on `results/*.report.json`, the Bedrock invoke action on that one model,
-  logs.
+  `s3:DeleteObject` on `results/*.report.json`, `bedrock-mantle:CreateInference`, logs. The
+  resource is the Sonnet 5.5 model's ARN if the AWS service authorization reference gives a
+  format for it; if not, `*` for that one action (shortcut: the role could call any Bedrock model,
+  but only this Lambda's code uses it and the code fixes the model; narrow it once the ARN format
+  is known).
 - Web role: `lambda:InvokeFunction` on `neurolens-report` only. `aws.report_function` added to
   the web Lambda's settings.
 - `storage.job_keys` adds `results/<id>.frames` and `results/<id>.report.json`, so job delete,
