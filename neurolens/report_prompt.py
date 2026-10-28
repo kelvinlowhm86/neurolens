@@ -19,20 +19,46 @@ each second of the video.
 The seven signals are: faces, bodies and scenes (the visual areas that respond to those things),
 visual (the wider visual response), sound (the hearing response), speech and social (the language
 and social response), and overall. They belong to three groups: see (faces, bodies, scenes,
-visual), hear (sound) and understand (speech, social).
+visual), hear (sound) and understand (speech, social). Read the groups, not only overall: say
+which of them carry the video and which stay low.
 
 Every value is a signed mean, not an absolute measurement, and 0 is typical film or television
-viewing on the model's own scale. Use the values to compare this video's moments and to compare
-it with other videos, never as a measure of how engaged or how good it is. These are model
-predictions of an average viewer's brain, not measurements of real people.
+viewing on the model's own scale. Judge every level against 0. A stretch that is the lowest of
+this video but still above 0 is above typical viewing: call it the weakest part and an
+opportunity, never a failure. These are model predictions of an average viewer's brain, not
+measurements of real people.
 
-Write for a video maker, in plain words. Cite times in whole seconds. Use only the spoken words
-you are given, and never guess what was said beyond them. Name what happens on screen from the
-pictures. Say clearly when the brain data and what happens on screen do not agree.
+How to read the curves:
+- The response trails what is seen and heard by about 1 to 3 seconds and is smoothed, so match
+  each rise or fall to what happened on screen up to 3 seconds before it.
+- The opening: judge it by its level against 0 and how fast it rises. The visual response needs a
+  few seconds to build even after a strong first shot, so a gentle rise over the first 3 to 5
+  seconds is not a flaw. An opening that stays below 0, for example a dark, empty or silent
+  start, is.
+- The ending: a drop over a final logo or product card is expected and is not a weakness. Never
+  make it a weak moment or an improvement unless the fall starts seconds before the card
+  appears.
+- muted_overall is the same video predicted with no sound. Where overall is clearly above it,
+  the sound and speech carry that stretch; where they are close, the pictures carry it.
+- The spoken words are an automatic transcript and can misspell names, brand names most of all.
+  Take names from on-screen text when they appear there, and never quote an obvious transcription
+  error. Never guess what was said beyond the words you are given.
+
+Writing:
+- Verdict first: the headline and the summary open with the overall verdict (the level against 0
+  and which groups lead), then the strengths, then what could be better. Be fair: name the real
+  strengths before the weaknesses, and still name the weakest stretch as an opportunity.
+- You may say a moment suggests stronger or weaker attention or interest. Never present
+  attention, a score, views, watch time or drop-off as measured or predicted facts, and never use
+  the words engagement, engage or engaging: say response instead.
+- Write for a video maker, in plain words. Cite times in whole seconds. Name what happens on
+  screen from the pictures. Say clearly when the brain data and what happens on screen do not
+  agree.
 
 Limits: the headline at most {headline} characters, the summary at most {summary} characters,
 {min_moments} to {max_moments} moments, at most {lists} strengths and {lists} improvements.
-Each moment's start and end are whole seconds from 0 to the video's last second, start <= end.
+Each moment's start and end are whole seconds from 0 to last_second (given with the numbers),
+both included, start <= end.
 """.format(
     headline=MAX_HEADLINE,
     summary=MAX_SUMMARY,
@@ -48,6 +74,7 @@ def build_request(result, frames, words, summary):
     signals = result["signals"]
     data = {
         "duration_seconds": result["duration_seconds"],
+        "last_second": result["duration_seconds"] - 1,
         "signals": {
             name: [round(float(value), 2) for value in signals[name]] for name in results.SERIES
         },

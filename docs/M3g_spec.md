@@ -107,8 +107,17 @@ normally (no Lambda retry). The Lambda's async retries are set to 0 and its time
   scale, so they compare videos and moments, not absolute engagement; these are model
   predictions of an average viewer's brain, not measurements of real people; write for a video
   maker in plain words; cite times in whole seconds; never guess what was said beyond the
-  words given.
-- User content, in order: a JSON block with `duration_seconds`, the per-second values of
+  words given. How to read the curves (checked against the CeraVe 30 s and 76 s cuts, 29 Oct):
+  judge every level against 0, so the lowest stretch of a video above 0 is an opportunity, not a
+  failure; read the three groups, not only overall; the response trails the screen by about
+  1-3 s and is smoothed; judge the opening by its level and rise (vision needs a few seconds to
+  build), and treat a drop over a final logo card as expected; overall above `muted.overall`
+  means sound carries that stretch; the transcript can misspell names (take them from on-screen
+  text). Writing: verdict first, strengths before weaknesses; "suggests attention" is allowed,
+  but never attention, a score, views, watch time or drop-off as fact, and never the word
+  engagement. A final logo card's drop is never a weak moment unless the fall starts before it.
+- User content, in order: a JSON block with `duration_seconds`, `last_second` (the last whole
+  second a moment may name, stated so the model need not work it out), the per-second values of
   `overall`, the three groups, the seven signals and `muted.overall` (2 dp), and the four-part
   `results.summarise` output; the words (if any); then for each second `t` a text block
   `"t = <t> s"` followed by its image block (base64 JPEG). At most `duration_seconds` images
@@ -155,8 +164,8 @@ A Report tab beside the charts of a finished job. States, few words:
   the POST answers.
 - writing: "Writing your report…"; the page checks `GET …/report` every 5 s, stops after 10 min.
 - ready: headline, summary, then the moments (each time a button that moves the time cursor,
-  like the existing moment links), strengths, improvements; a one-line note that it is an AI
-  reading of predicted brain activity.
+  like the existing moment links), strengths, improvements; the note "Written by AI from
+  predicted brain responses, not viewer data."
 - failed with tries left: "Couldn't write the report." and "Try again"; none left: the first
   line only.
 All model text is inserted as text (`textContent`), never as HTML.

@@ -397,6 +397,7 @@ def test_build_request_carries_the_results_numbers_and_summary():
 
     data = next(_json_blocks(content))
     assert data["duration_seconds"] == 3
+    assert data["last_second"] == 2  # a moment's end is checked against it (M3g §5d)
     numeric = _numeric_lists(data)
     for name in results.SERIES:
         assert result["signals"][name] in numeric
