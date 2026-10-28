@@ -37,7 +37,7 @@ ENTRY_KEYS = {
     "result",
     "summary",
 }
-SUMMARY_KEYS = {"opening", "strong_moments", "weak_moments", "audio_dependence"}
+SUMMARY_KEYS = {"audio_dependence"}
 
 
 @pytest.mark.parametrize("sample", SAMPLES, ids=[s.get("id", "?") for s in SAMPLES])

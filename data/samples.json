@@ -1233,35 +1233,6 @@
         }
       },
       "summary": {
-        "opening": {
-          "value": -0.06933333333333333,
-          "rest": 0.10030612244897959,
-          "word": "weaker than the rest"
-        },
-        "strong_moments": [
-          {
-            "start": 10,
-            "end": 15,
-            "value": 0.2818
-          },
-          {
-            "start": 17,
-            "end": 27,
-            "value": 0.3371
-          }
-        ],
-        "weak_moments": [
-          {
-            "start": 1,
-            "end": 4,
-            "value": -0.06933333333333333
-          },
-          {
-            "start": 46,
-            "end": 53,
-            "value": -0.27914285714285714
-          }
-        ],
         "audio_dependence": 0.33
       }
     },
@@ -2542,35 +2513,6 @@
         }
       },
       "summary": {
-        "opening": {
-          "value": -0.051666666666666666,
-          "rest": 0.06668627450980391,
-          "word": "weaker than the rest"
-        },
-        "strong_moments": [
-          {
-            "start": 19,
-            "end": 25,
-            "value": 0.18566666666666665
-          },
-          {
-            "start": 48,
-            "end": 55,
-            "value": 0.19557142857142856
-          }
-        ],
-        "weak_moments": [
-          {
-            "start": 1,
-            "end": 5,
-            "value": -0.04975
-          },
-          {
-            "start": 29,
-            "end": 39,
-            "value": -0.0736
-          }
-        ],
         "audio_dependence": 0.0
       }
     }

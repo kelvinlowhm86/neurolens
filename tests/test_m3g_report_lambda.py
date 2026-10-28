@@ -353,14 +353,6 @@ def _numeric_lists(value):
     ]
 
 
-def _keys(value):
-    found = set()
-    for item in _walk(value):
-        if isinstance(item, dict):
-            found.update(item)
-    return found
-
-
 def test_build_request_puts_each_image_after_its_second_label():
     from neurolens.report_prompt import build_request
 
@@ -368,7 +360,7 @@ def test_build_request_puts_each_image_after_its_second_label():
     frames = [b"\xff\xd8zero", b"\xff\xd8one", b"\xff\xd8two"]
     words = [{"start": 1.25, "text": "hello"}]
 
-    system, content = build_request(result, frames, words, results.summarise(result))
+    system, content = build_request(result, frames, words)
 
     assert isinstance(system, str) and system
     image_indices = [
@@ -387,13 +379,12 @@ def test_build_request_puts_each_image_after_its_second_label():
         assert base64.b64decode(source["data"]) == frames[second]
 
 
-def test_build_request_carries_the_results_numbers_and_summary():
+def test_build_request_carries_the_results_numbers():
     from neurolens.report_prompt import build_request
 
     result = make_result(duration=3)
-    summary = results.summarise(result)
 
-    _, content = build_request(result, [b"\xff\xd8zero"], [], summary)
+    _, content = build_request(result, [b"\xff\xd8zero"], [])
 
     data = next(_json_blocks(content))
     assert data["duration_seconds"] == 3
@@ -405,7 +396,7 @@ def test_build_request_carries_the_results_numbers_and_summary():
         assert result["signals"][name] in numeric
     assert result["signals"]["overall"] in numeric
     assert result["muted"]["overall"] in numeric
-    assert set(summary) <= _keys(data)
+    assert "summary" not in data
 
 
 def test_build_request_includes_the_spoken_words_when_there_are_some():
@@ -414,7 +405,7 @@ def test_build_request_includes_the_spoken_words_when_there_are_some():
     result = make_result(duration=3)
     words = [{"start": 1.25, "text": "hello"}]
 
-    _, content = build_request(result, [b"\xff\xd8zero"], words, results.summarise(result))
+    _, content = build_request(result, [b"\xff\xd8zero"], words)
 
     text = " ".join(
         block["text"]

@@ -10,7 +10,7 @@ import logging
 import os
 from datetime import UTC, datetime
 
-from neurolens import billing, lambdas, report_prompt, results, settings, storage
+from neurolens import billing, lambdas, report_prompt, settings, storage
 
 logger = logging.getLogger(__name__)
 
@@ -134,9 +134,7 @@ def write_report(job_id, db, s3, bucket, client, cfg):
             logger.warning(f"{job_id}: report failed: missing input")
             return
 
-        system, content = report_prompt.build_request(
-            result, frames, words, results.summarise(result)
-        )
+        system, content = report_prompt.build_request(result, frames, words)
         report_cfg = cfg["report"]
         try:
             response = client.messages.create(

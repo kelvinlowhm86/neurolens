@@ -375,12 +375,7 @@ def test_result_of_a_done_job(aws, client, db):
     resp = client.get(f"/api/jobs/{job_id}/result")
     assert resp.status_code == 200
     data = resp.get_json()
-    assert set(data.pop("summary")) == {
-        "opening",
-        "strong_moments",
-        "weak_moments",
-        "audio_dependence",
-    }
+    assert set(data.pop("summary")) == {"audio_dependence"}
     assert data == stored
 
 

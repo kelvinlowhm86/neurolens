@@ -141,54 +141,31 @@ class FakeReportClient:
         )()
 
 
-def _canned_report(result, summary):
-    """A valid report built from the result's own summary, for the local stack (M3g §9)."""
+def _canned_report(result):
+    """A valid report for the local stack, built from the result alone (M3g §9)."""
     duration = result["duration_seconds"]
-    moments = []
-    picks = (
-        ("strong", summary.get("strong_moments")),
-        ("weak", summary.get("weak_moments")),
-    )
-    for kind, list_ in picks:
-        for pick in list_ or []:
-            start, end = int(pick["start"]), int(pick["end"])
-            if 0 <= start <= end < duration:
-                strong = kind == "strong"
-                moments.append(
-                    {
-                        "start": start,
-                        "end": end,
-                        "kind": kind,
-                        "what_happens": "The picture changes here.",
-                        "brain_response": "The predicted response rises above the video's average."
-                        if strong
-                        else "The predicted response falls below the video's average.",
-                        "suggestion": "Keep this pacing." if strong else "Try a change here.",
-                    }
-                )
-    if not moments:
-        moments = [
-            {
-                "start": 0,
-                "end": max(0, duration - 1),
-                "kind": "strong",
-                "what_happens": "The video opens.",
-                "brain_response": "The predicted response starts above typical viewing.",
-                "suggestion": None,
-            }
-        ]
+    moments = [
+        {
+            "start": 0,
+            "end": min(2, duration - 1),
+            "kind": "strong",
+            "what_happens": "The video opens.",
+            "brain_response": "The predicted response starts above typical viewing.",
+            "suggestion": None,
+        }
+    ]
     return {
         "headline": "A sample reading of this video",
-        "summary": "A local sample report, built from the video's strongest and weakest moments.",
-        "moments": moments[:8],
+        "summary": "A local sample report.",
+        "moments": moments,
         "strengths": ["A clear opening."],
-        "improvements": ["Tighten the weakest moment."],
+        "improvements": ["Try a change in the middle."],
     }
 
 
 def _report_starter(s3, db, cfg):
     """Rows the web app's report request through the real Lambda code with a fake client."""
-    from neurolens import results, storage
+    from neurolens import storage
     from neurolens.lambdas import report
 
     bucket = cfg["aws"]["s3_bucket"]
@@ -197,7 +174,7 @@ def _report_starter(s3, db, cfg):
         def run():
             try:
                 result = storage.get_result(s3, bucket, job_id)
-                answer = _canned_report(result, results.summarise(result))
+                answer = _canned_report(result)
                 report.write_report(job_id, db, s3, bucket, FakeReportClient(answer), cfg)
                 print(f"Report {job_id}: written")
             except Exception as err:

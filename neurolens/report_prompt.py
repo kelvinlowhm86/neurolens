@@ -75,9 +75,9 @@ both included, start <= end.
 )
 
 
-def build_request(result, frames, words, summary):
-    """(system, content) for the report Lambda: the numbers and summary, the words, then each
-    second's label and picture (M3g §5b)."""
+def build_request(result, frames, words):
+    """(system, content) for the report Lambda: the numbers, the words, then each second's label
+    and picture (M3g §5b)."""
     signals = result["signals"]
     data = {
         "duration_seconds": result["duration_seconds"],
@@ -86,7 +86,6 @@ def build_request(result, frames, words, summary):
             name: [round(float(value), 2) for value in signals[name]] for name in results.SERIES
         },
         "muted_overall": [round(float(value), 2) for value in result["muted"]["overall"]],
-        "summary": summary,
     }
     content = [{"type": "text", "text": json.dumps(data)}]
     if words:
