@@ -242,7 +242,7 @@ def test_valid_video_is_done_and_writes_result_json(
 
     assert outcome is Outcome.DONE
     result = read_result(aws, job_id)
-    assert set(result) == SECTION_1_KEYS  # exactly these: no filename, no gpu
+    assert set(result) == SECTION_1_KEYS | {"frames"}  # exactly these: no filename, no gpu
     assert result["job_id"] == job_id
     assert result["fake_inference"] is True
     assert isinstance(result["processing_time_seconds"], int | float)
@@ -358,7 +358,7 @@ def test_result_has_gpu_only_when_gpu_info_returns_a_value(
     run_job(aws, db, job_id, clip_path, make_cfg, roi_masks_small)
 
     result = read_result(aws, job_id)
-    assert set(result) == SECTION_1_KEYS | {"gpu"}
+    assert set(result) == SECTION_1_KEYS | {"frames", "gpu"}
     assert result["gpu"] == gpu
 
 
