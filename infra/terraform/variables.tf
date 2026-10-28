@@ -82,3 +82,9 @@ variable "google_client_id" {
   description = "The Google OAuth client's ID (not secret). Set in terraform.tfvars."
   type        = string
 }
+
+variable "log_retention_days" {
+  description = "Days CloudWatch keeps the Lambda, web and GPU logs: 90 while developing and running experiments (they hold the run timings), 14 once live."
+  type        = number
+  default     = 14
+}

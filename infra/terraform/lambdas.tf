@@ -127,7 +127,7 @@ resource "aws_cloudwatch_log_group" "m3a_lambda" {
   for_each = local.m3a_lambdas
 
   name              = "/aws/lambda/${each.value.name}"
-  retention_in_days = 14
+  retention_in_days = var.log_retention_days
   tags              = { Milestone = "M3a" }
 }
 
@@ -277,7 +277,7 @@ resource "aws_lambda_layer_version" "ffprobe" {
 
 resource "aws_cloudwatch_log_group" "dispatcher" {
   name              = "/aws/lambda/neurolens-dispatcher"
-  retention_in_days = 14
+  retention_in_days = var.log_retention_days
   tags              = { Milestone = "M3e" }
 }
 
@@ -358,7 +358,7 @@ resource "aws_iam_role_policy" "gpu_guard" {
 
 resource "aws_cloudwatch_log_group" "gpu_guard" {
   name              = "/aws/lambda/neurolens-gpu-guard"
-  retention_in_days = 14
+  retention_in_days = var.log_retention_days
   tags              = { Milestone = "M3e" }
 }
 

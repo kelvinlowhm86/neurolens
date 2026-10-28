@@ -17,6 +17,7 @@ alert_email = "you@example.com"
 # its digest), then put the digest here and apply again. Empty: no endpoint is created.
 # worker_image   = "sha256:REPLACE-WITH-THE-BUILT-IMAGE-DIGEST"
 # max_instances  = 1          # stays 1; the account's GPU quota is 2
+# log_retention_days = 90     # while developing; 14 once live
 
 # M3b sign-in (§2a). The Cognito page prefix (unique in the region, lowercase, no "aws",
 # "amazon" or "cognito"), e.g. "neurolens-<something of yours>":

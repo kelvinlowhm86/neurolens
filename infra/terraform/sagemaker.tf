@@ -214,7 +214,7 @@ resource "awscc_sagemaker_endpoint_config" "main" {
 
 resource "aws_cloudwatch_log_group" "sagemaker_endpoint" {
   name              = "/aws/sagemaker/Endpoints/neurolens"
-  retention_in_days = 14
+  retention_in_days = var.log_retention_days
   tags              = { Milestone = "M3e" }
 }
 
