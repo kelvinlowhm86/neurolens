@@ -15,8 +15,12 @@ updated to match.
   than the web Lambda's 60 s). The page asks for it and checks back.
 - Videos analysed before this ships have no frames, so no report. Accepted.
 - Shipped in the same worker image rebuild as M3f §6a.
-- Proposed 28 Oct, Josh to confirm: the frames file also carries the spoken words with their
-  times (§2b). Without them the report cannot say what was said when the speech signal moves.
+- The frames file also carries the spoken words with their times (§2b), so the report can say
+  what was said when the speech signal moves.
+- Written only when the user clicks "Write report", never automatically: no Bedrock cost for
+  reports nobody reads. A second click cannot start a second report (the server claims the job
+  once, §3; the page disables the button while waiting).
+- The video price does not change: the report's cost fits inside it (§10).
 
 ## 1. Scope
 ### In scope
@@ -38,7 +42,7 @@ on a non-zero exit, a 120 s timeout, or zero frames, like `make_thumbnail`. No h
 
 ### 2b. Stored file
 One object, `results/<job_id>.frames`: an uncompressed zip (JPEGs do not compress) holding
-`0000.jpg`, `0001.jpg`, … and `words.json` (proposed, §Decisions): a list of
+`0000.jpg`, `0001.jpg`, … and `words.json`: a list of
 `{"start": seconds (2 dp), "text": word}` from the `Word` events `build_events` already made,
 in time order; an empty list when there is no speech, and always an empty list in fake mode.
 `storage.put_frames(s3, bucket, job_id, data)` and `storage.get_frames(...)` (returns the
@@ -137,7 +141,8 @@ Schema (also checked in code after parsing, since a wrong report must not be sto
 ## 6. Page (`static/app.html`)
 A Report tab beside the charts of a finished job. States, few words:
 - no `frames` in the result: "No report for this video."
-- not yet asked: a "Write report" button, with "Free" beside it.
+- not yet asked: a "Write report" button, with "Free" beside it; disabled from the click until
+  the POST answers.
 - writing: "Writing your report…"; the page checks `GET …/report` every 5 s, stops after 10 min.
 - ready: headline, summary, then the moments (each time a button that moves the time cursor,
   like the existing moment links), strengths, improvements; a one-line note that it is an AI
