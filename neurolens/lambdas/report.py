@@ -11,14 +11,12 @@ import os
 from datetime import UTC, datetime
 
 from neurolens import billing, lambdas, report_prompt, results, settings, storage
-from neurolens.report_prompt import MAX_HEADLINE, MAX_LISTS, MAX_MOMENTS, MAX_SUMMARY, MIN_MOMENTS
 
 logger = logging.getLogger(__name__)
 
 KINDS = ("strong", "weak")
 BEDROCK_API_VERSION = "bedrock-2023-05-31"
-# Sent as the structured-output format. Bedrock's schema subset has no length or count limits, so
-# those live in the prompt and in _report_problem (M3g §5d).
+# Sent as the structured-output format; the lengths the prompt asks for are guidance only (M3g §5d).
 _TEXT_LIST = {"type": "array", "items": {"type": "string"}}
 REPORT_SCHEMA = {
     "type": "object",
@@ -60,29 +58,25 @@ def _is_int(value):
     return isinstance(value, int) and not isinstance(value, bool)
 
 
-def _is_text(value, limit=None):
-    return isinstance(value, str) and (limit is None or len(value) <= limit)
+def _is_text(value):
+    return isinstance(value, str)
 
 
 def _report_problem(answer, duration):
-    """Why the answer is not a complete report inside the schema's limits, or None (M3g §5d)."""
+    """Why the answer cannot be shown as a report, or None (M3g §5d). Only what the page relies
+    on is checked, never lengths or counts: a long report is still a report."""
     if not isinstance(answer, dict):
         return "not a JSON object"
-    headline, summary = answer.get("headline"), answer.get("summary")
-    if not _is_text(headline, MAX_HEADLINE):
-        return f"headline is not text of at most {MAX_HEADLINE} characters ({_size(headline)})"
-    if not _is_text(summary, MAX_SUMMARY):
-        return f"summary is not text of at most {MAX_SUMMARY} characters ({_size(summary)})"
+    for name in ("headline", "summary"):
+        if not _is_text(answer.get(name)):
+            return f"{name} is not text"
+    for name in ("strengths", "improvements", "moments"):
+        if not isinstance(answer.get(name), list):
+            return f"{name} is not a list"
     for name in ("strengths", "improvements"):
-        items = answer.get(name)
-        if not isinstance(items, list) or len(items) > MAX_LISTS:
-            return f"{name} is not a list of at most {MAX_LISTS} ({_size(items)})"
-        if not all(isinstance(item, str) for item in items):
+        if not all(_is_text(item) for item in answer[name]):
             return f"{name} holds something other than text"
-    moments = answer.get("moments")
-    if not isinstance(moments, list) or not MIN_MOMENTS <= len(moments) <= MAX_MOMENTS:
-        return f"moments is not a list of {MIN_MOMENTS} to {MAX_MOMENTS} ({_size(moments)})"
-    for number, moment in enumerate(moments, 1):
+    for number, moment in enumerate(answer["moments"], 1):
         if not isinstance(moment, dict):
             return f"moment {number} is not an object"
         start, end = moment.get("start"), moment.get("end")
@@ -95,11 +89,6 @@ def _report_problem(answer, duration):
         if moment.get("suggestion") is not None and not _is_text(moment.get("suggestion")):
             return f"moment {number} has a suggestion that is not text"
     return None
-
-
-def _size(value):
-    """The length of a text or list, for a problem message; the type name otherwise."""
-    return len(value) if isinstance(value, (str, list)) else type(value).__name__
 
 
 def _text_of(response):

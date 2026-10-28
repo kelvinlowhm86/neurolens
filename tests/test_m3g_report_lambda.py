@@ -252,9 +252,23 @@ def bad_answer(kind):
     if kind == "out_of_range":
         report["moments"][0]["start"] = 0
         report["moments"][0]["end"] = 3
-    elif kind == "too_many":
-        report["moments"] = [valid_report()["moments"][0] for _ in range(9)]
     return answer(report)
+
+
+def test_a_long_answer_is_still_stored(aws, db, pg, make_cfg):
+    """Lengths and counts are the prompt's guidance only: a long report is still a report."""
+    job_id = writing_job(aws, db, pg)
+    report = valid_report()
+    report["headline"] = "h" * 500
+    report["summary"] = "s" * 5000
+    report["moments"] = [valid_report()["moments"][0] for _ in range(12)]
+    report["strengths"] = ["a strength"] * 9
+    client = FakeClient(answer(report))
+
+    write_report(aws, db, job_id, client, make_cfg(report=report_cfg()))
+
+    assert report_job(pg, job_id)["report_state"] == "ready"
+    assert object_exists(aws, REPORT_KEY.format(job_id=job_id))
 
 
 @pytest.mark.parametrize(
@@ -264,7 +278,6 @@ def bad_answer(kind):
         ("truncated", "truncated"),
         ("bad_json", "bad_answer"),
         ("out_of_range", "bad_answer"),
-        ("too_many", "bad_answer"),
     ],
 )
 def test_a_bad_answer_fails_with_its_code_and_stores_nothing(aws, db, pg, make_cfg, kind, expected):

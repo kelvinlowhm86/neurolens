@@ -131,18 +131,20 @@ the 10% US premium). The server-side `fallbacks` option does not exist on Bedroc
 simply `refused` (§5d).
 
 ### 5d. Answer
-Schema (also checked in code after parsing, since a wrong report must not be stored):
+Schema:
 ```
-{ "headline": str (<= 120 chars),
-  "summary": str (<= 900 chars),
+{ "headline": str, "summary": str,
   "moments": [ { "start": int, "end": int, "kind": "strong" | "weak",
-                 "what_happens": str, "brain_response": str, "suggestion": str | null } ]  (1-8),
-  "strengths": [str] (0-4), "improvements": [str] (0-4) }
+                 "what_happens": str, "brain_response": str, "suggestion": str | null } ],
+  "strengths": [str], "improvements": [str] }
 ```
-`0 <= start <= end < duration_seconds`. The prompt asks for at most 100 and 700 characters
-(the model counts characters only roughly), so a slight overshoot still passes; the counts it
-states are the checked ones. A `bad_answer` log line names the failed check. Failure codes: `refused` (`stop_reason == "refusal"`),
-`truncated` (`max_tokens`), `bad_answer` (not JSON or fails the checks), `bedrock_error`
+The prompt asks for a headline of at most 120 characters, a summary of at most 900, 1-8 moments
+and at most 4 strengths and 4 improvements. That is guidance only. After parsing, the code checks
+only what the page relies on: every field present with its type, `kind` one of the two values, and
+`0 <= start <= end < duration_seconds` (each moment's time moves the video). It never rejects an
+answer for its length or counts: a long report is still a report, and `max_tokens` already stops a
+runaway answer (`truncated`). A `bad_answer` log line names the failed check.
+Failure codes: `refused` (`stop_reason == "refusal"`), `truncated` (`max_tokens`), `bad_answer` (not JSON or fails the checks), `bedrock_error`
 (SDK error after its retries). The stored file adds `model`, `created_at` (UTC text) and the
 `usage` token counts, for cost tracking.
 
