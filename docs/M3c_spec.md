@@ -54,6 +54,7 @@ Migration 003; consent at upload; the research copy in the worker (the video und
   - The job must be owned by the user and not deleted (otherwise 404, like `owned_job`).
   - The job must be `done` (otherwise 409 `job_not_done`).
   - The job must have consent (otherwise 409 `no_consent`).
+  - The research copy must not have been removed (otherwise 409 `dataset_removed`, M3f §5c).
 - Report rules: the text is a JSON object whose `columnHeaders` list includes columns named `elapsedVideoTimeRatio` and `audienceWatchRatio` (other columns, such as `relativeRetentionPerformance`, are allowed and ignored; columns are found by name, not position). `rows` holds 2 to 1000 rows (a missing `rows` means YouTube had no data for the video). `elapsedVideoTimeRatio` is in 0–1 and strictly increasing. `audienceWatchRatio` is ≥ 0 and finite (it can exceed 1 when viewers rewatch). Any rule broken → 400 `invalid_retention_report` with the row number (1-based) where a row is at fault.
 - Stored as a new snapshot under `dataset/<job_id>/retention/<snapshot_id>.json` (the file as uploaded) and `dataset/<job_id>/retention/<snapshot_id>.csv` (two columns, header `elapsed_ratio,watch_ratio`). A new upload adds a snapshot rather than replacing the old one; an identical curve (same hash) is refused as a duplicate (M3f §5d).
 - The page shows a quiet "Add audience retention" link on a done, shared job's History row and results page until its first snapshot, and always in the "⋯" menu, with a link to the guide (M3f §5d). To know this, `list_jobs` returns `sharing` and `curve_count`, and the job status response includes `research_consent` once the job is `done` (it stays hidden before).
@@ -119,12 +120,12 @@ Marking first means no curve can be added while the purge runs. A failed purge l
 
 ## 7. Permissions and storage (Terraform)
 - **Lifecycle rules:** `dataset/` and `academic/`, 1095 days each. Each file expires 3 years after it was stored; the reaper's 90-day no-curve purge is separate (M3f §5c).
-- **Worker role:** `s3:PutObject` on `dataset/*` and `academic/*`. The copy is done as a put, which needs no new read permission.
+- **Worker role:** `s3:PutObject` on `dataset/*` and `academic/*`. The copy is a `copy_object`, which reads the upload with the `s3:GetObject` the worker already has (last bullet).
 - **Web role:**
   - `s3:DeleteObject` on `uploads/*`, `results/*`, `dataset/*` and `academic/*`;
   - `s3:PutObject` on `dataset/*/retention/*` (the raw report and parsed CSV of each snapshot);
   - `cognito-idp:ListUsers` and `cognito-idp:AdminDeleteUser` on our pool only.
-- **Role boundary:** `infra/iam/neurolens-role-boundary.json` gains a statement allowing those two actions on `userpool/*` in us-east-1. The boundary caps every role, so without this the web role's grant would be denied. Josh applies the boundary change (a paste, like earlier IAM policy edits).
+- **Role boundary:** `infra/iam/neurolens-role-boundary.json` gains a statement allowing those two actions on our user pool in us-east-1. The boundary caps every role, so without this the web role's grant would be denied. Josh applies the boundary change (a paste, like earlier IAM policy edits).
 - **Alarm:** a CloudWatch log metric filter on `COGNITO_DELETE_FAILED` in the web function's log group, plus the alarm `neurolens-cognito-delete-failed` (count at least 1 in 5 minutes, emails the existing alarm topic).
 - **Worker:** the worker role already has `s3:GetObject` on `uploads/*`, which `copy_object` needs as its source.
 

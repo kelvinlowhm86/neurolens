@@ -118,7 +118,7 @@ place in line among other users, waking the database from the landing page.
    signed-out left grid are removed. Signed out, the left column is the sign-in box.
 7. **CSV name:** `/api/jobs/<id>/result.csv` sends `Content-Disposition: attachment;
    filename="<video name without extension> – NeuroLens.csv"` (with an RFC 5987 `filename*` for
-   non-ASCII names; a missing name falls back to "NeuroLens result").
+   non-ASCII names; a missing name falls back to "NeuroLens result.csv").
 8. **A failed or unknown job from a link** (`?job=`) opens History, not the player; the row shows the
    reason.
 9. **Phone results:** the moments sit as two rows of two pictures under their label; the scrubber
@@ -131,8 +131,8 @@ place in line among other users, waking the database from the landing page.
     works" and the closing band; the sample credit only in the footer.
 13. Start-up text: "Starting up; this can take up to a minute."
 14. The 3D brain stops drawing while the player is hidden.
-15. `docs/M3d_spec.md` §8: the `deadline_passed` error message reads "within 4 hours"; its History
-    label is the short "Didn't finish in time" (item 5).
+15. `docs/M3d_spec.md` §8: the `deadline_passed` History label is the short "Didn't finish in time"
+    (item 5).
 16. **Opening a result from History** switches to the player at once with a loading line. A result
     that keeps failing to load (5xx) shows "Couldn't open this result. Try again later." instead of
     retrying silently.
@@ -172,7 +172,7 @@ place in line among other users, waking the database from the landing page.
   curve). The only place model training reads.
 - `academic/<job_id>/`: NeuroLens's result (`result.json`) and brain map (`brain`), for the course
   study. The worker writes them here instead of `dataset/`.
-- The worker computes the video's SHA-256 while copying it and records it with
+- The worker computes the video's SHA-256 from the downloaded file and records it with
   `billing.record_video_hash(db, job_id, sha256)` (`jobs.video_sha256`, migration 006) before the
   copy.
 - S3 lifecycle: `dataset/` and `academic/` expire after 1095 days (3 years).

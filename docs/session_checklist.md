@@ -7,7 +7,7 @@ Do these in this order. Each step says what it costs and how to know it worked.
    uploads start the GPU by themselves. A GPU costs $1.86 an hour (about $2.24 on the fallback
    type); it stops itself 7 idle minutes after the last job.
 2. **Sign-in check.** Open the site's address (`terraform output public_base_url`) and sign in once.
-3. **Credit.** Give the test account credit if it has none: `python infra/grant_credit.py ...`.
+3. **Credit.** Give the test account credit if it has none: `python infra/grant_credit.py 5 --backend data_api`.
 4. **Work.** An upload starts the endpoint; a new GPU can take about 10 minutes to be ready. Run one
    short warm-up job first.
 5. **Stop.** `infra/stop_work.sh`. It ends any keep-warm, sets the endpoint's scaling maximum and

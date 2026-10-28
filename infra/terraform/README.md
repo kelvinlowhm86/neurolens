@@ -11,7 +11,8 @@ and `destroy` removes everything it created. The region is one setting (`region`
 
 - One S3 bucket: public access blocked, encrypted, HTTPS-only, ACLs disabled, browser upload
   (CORS) from `allowed_origins`, and prefix-scoped expiry (`uploads/` and `results/` after 30 days,
-  `dataset/` after 365, `sagemaker-output/` after 1, `build/` after 7, `experiments/` never).
+  `dataset/` and `academic/` after 1095, `sagemaker-output/` after 1, `build/` after 7,
+  `experiments/` never).
 - One SQS queue (visibility 1080 s, a 15 s delivery delay) and the wiring that sends a message
   whenever a file lands under `uploads/`. A second queue (`neurolens-jobs-dlq`) receives a job that
   failed twice.
@@ -190,8 +191,7 @@ infra/stop_work.sh                      # emergency pause; prints ALL STOPPED on
 ```
 
 `stop_work.sh` deletes any keep-warm action, sets the endpoint's scaling maximum and minimum to 0
-and checks both, sets the desired count to 0, waits until the endpoint shows 0 and puts Aurora's
-minimum back to 0.
+and checks both, sets the desired count to 0 and waits until the endpoint shows 0.
 A running job dies and is refunded. `start_work.sh` puts the maximum back to 1.
 
 ## 5b. Demo routine

@@ -324,7 +324,7 @@ jupyter notebook notebooks/explore.ipynb
 ### Run the app and the tests
 
 ```bash
-python app.py                                   # web app on http://127.0.0.1:5003 (reads config.json and .env, incl. AWS_PROFILE; it never runs the model)
+python infra/local_stack.py                     # whole product on a laptop: local PostgreSQL, fake S3/SQS, web on http://127.0.0.1:5003 (--grant <email> <dollars> adds credit)
 FAKE_INFERENCE=1 python worker.py serve         # the SageMaker container on a laptop (fake model; real model needs a GPU)
 pip install -e . -r requirements/dev.txt        # laptop: tests and lint only, no GPU or model needed
 pytest && ruff check . && ruff format --check .

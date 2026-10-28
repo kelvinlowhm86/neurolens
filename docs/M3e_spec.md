@@ -10,7 +10,7 @@
 - **Checks before the GPU.** A small Lambda (the dispatcher) checks the size, measures the duration with ffprobe and prices the job before anything is sent to SageMaker. Bad files and short credit never wake a GPU.
 - **No automatic retry.** SageMaker does not retry a failed request (AWS docs, Async troubleshooting). A job that fails on the GPU is refunded at once and the user uploads again.
 - **Automatic last line of defence.** A GPU guard (§6c) stops the GPU if it stays on with nothing to do. It reads our own database, not the scaling metrics it is guarding. It emails when it acts.
-- **Hard time bounds.** A request waits at most 2 hours in SageMaker's queue and runs at most 60 minutes. So any job still open 4 hours after it was created is dead, and the reaper refunds it within the hour.
+- **Hard time bounds.** A request waits at most 2 hours in SageMaker's queue and runs at most 60 minutes. So any job still open 4 hours after it was created is dead, and the reaper refunds it within about 7 hours.
 - **The image is built in AWS CodeBuild.** It starts from AWS's PyTorch inference image. The weights stay in S3 and SageMaker copies them in when an instance starts.
 - **Research consent needs the retention curve** (agreed 22 Oct). A consented copy with no audience-retention curve is deleted after `research.no_curve_days` (90) days.
 
@@ -40,7 +40,7 @@ The dispatcher Lambda; the container (`neurolens/worker.py` rewritten), its imag
   2. Terminal: if `failed`, delete the upload (a refund deleted it already and this one landed afterwards, M3a §7b); skip.
   3. `processing` → skip (already running).
   4. `head_object`: missing → refund `upload_missing` (no delete). Larger than the limit → refund `file_too_large`, delete the upload.
-  5. Measure the duration with `media.probe_duration(url)` on a 10-minute presigned GET URL (SigV4, as the web's `_presigned_get`). `UnreadableVideo` → refund `unreadable_video`, delete the upload. `ProbeFailed` (ffprobe could not fetch or finish the file) propagates like any other error (below): a passing network fault never refunds and deletes a good video.
+  5. Measure the duration with `media.probe_duration(url)` on a 10-minute presigned GET URL (SigV4, as the web's `storage.presigned_get`). `UnreadableVideo` → refund `unreadable_video`, delete the upload. `ProbeFailed` (ffprobe could not fetch or finish the file) propagates like any other error (below): a passing network fault never refunds and deletes a good video.
   6. `billing.verify_queued(db, job_id, round(duration * 1000), max_duration_s)`:
      - `ok` → invoke;
      - `not_queued` (cancelled or claimed meanwhile) → skip;
@@ -90,7 +90,7 @@ The same rules as the old `verify` (length limit first, then record the duration
 - **Claim keep-alive:** `ClaimKeepAlive(on_beat, interval_seconds, max_seconds)`. It is the old `Heartbeat` minus SQS: it calls `billing.touch` every `worker.heartbeat_seconds` (50) and stops after `worker.max_job_minutes` (now **55**), logging an error and then calling `on_overrun` (`ClaimKeepAlive(on_beat, interval_seconds, max_seconds, on_overrun)`). In the container `on_overrun` ends the process (`os._exit(1)`): a Python thread stuck in the model cannot be stopped, and while it runs it holds the busy lock, so every later job sent to that instance would be refused with 503 and refunded untried. Ending the process fails the request, SageMaker replaces the unhealthy container, the claim goes stale within 90 s and the error handler refunds the job. A beat whose `touch` returns False (the claim is lost) logs a warning and stops renewing the claim, but the `max_job_minutes` deadline and `on_overrun` still apply (a model that hangs after a lost claim must still end the process); the next stage check ends the job as `LOST_CLAIM`.
 
 ### 4c. Failure inside the container
-- Any exception after the claim and before the result is published: `issue_refund(db, job_id, "processing_failed", _error_text(err), attempt=attempt)`. **Only if it returned True**, delete every file of the job (`storage.job_keys`). Answer 500.
+- Any exception after the claim and before the result is published: `issue_refund(db, job_id, "processing_failed", _error_text(err), attempt=attempt)`. **Only if it returned True**, delete every file of the job (`storage.job_keys` and the two research prefixes, `storage.delete_job_prefixes`). Answer 500.
   - A refund that returns False (the claim was lost, or the job is already `done` because `settle_success` committed but its response was lost) deletes nothing: the files may belong to a charged result. The handler answers 500 too.
   - A failed file delete is logged with `REFUND_DELETE_FAILED <job_id>` and never undoes the refund. It still answers 500.
 - A SIGTERM (SageMaker removing the instance) is not handled. The process ends, the claim goes stale within 90 s, and §5 refunds.
@@ -135,7 +135,7 @@ The same rules as the old `verify` (length limit first, then record the duration
   - It stays **every 3 hours**: each run wakes Aurora for about 11 minutes, and hourly measured about $15 a month against $3 (`infra/terraform/lambdas.tf`). It is the backstop for a lost notification, so speed matters less than cost.
   - `DEADLINE_S` becomes **4 hours** after `created_at` (was 24): the dispatcher never gives a request more than 3 hours from creation (§3 step 7), plus 60 minutes of invocation timeout. A lost notification is therefore refunded within about 7 hours.
   - `HEARTBEAT_STALE_S` stays 10 minutes.
-  - User-facing text: the `job_active` release (M3c §4) says "within about 7 hours"; the page's `deadline_passed` message says "within 4 hours".
+  - User-facing text: the `job_active` release (M3c §4) says "This video is still waiting or being processed. Try again when it finishes."; the page's `deadline_passed` History label is "Didn't finish in time" (M3f §4.5).
   - **Delete retries:** every run also calls `storage.delete_job_prefixes` and `storage.delete_keys` on `storage.job_keys` for every `failed` job whose `updated_at` is within the last 2 days. Deleting a missing key is a no-op, so this finishes any refund whose delete failed (container, error handler, dead-letter handler, Cancel) and removes files a late write left behind. A delete that still fails makes the run raise, so the error alarm emails. `done` jobs are never touched by this.
   - It also runs the dataset clean-up (§7).
 
@@ -205,12 +205,12 @@ behaviour remains below.
   - Cancel while the file is uploading aborts the upload, then cancels the reserved job as a failed upload does, so it is never dispatched or charged;
   - reading the chosen file's length gives up after 10 s with "Couldn't read this video.";
   - "Show if muted" is enabled again after a failed comparison.
-  - `video_changed` reads "The video was replaced after it was checked. Please upload it again." (with "You have not been charged.").
+  - `video_changed` reads "Video replaced after checking" in History (with "· not charged").
 - **Cancel only before dispatch** (15-s window, §3). Once dispatched, SageMaker starts a GPU for the job whatever happens, so a cancel then would cost a start-up (about $0.70, an estimate) at no cost to the user.
   - `billing.issue_refund`'s queued condition is `queued=True` (any queued job; the old `queued_before_s` age was always 0). It gains `undispatched_only=False`; with True its guarded update also requires `verified_duration_ms IS NULL`. The cancel route passes True, so the check and the refund are one statement and a cancel racing the dispatcher (which holds the row lock in `verify_queued`) has exactly one winner. A dispatched job → 409 `not_cancellable` ("This analysis has already started.").
   - `list_jobs` returns `cancellable` (queued and not dispatched). History's menu shows Cancel only when it is true; the slow-queue text no longer says "you can cancel". `JOB_ACTIVE_MESSAGE` drops "Cancel it first if it hasn't started".
-  - Confirm step: the price line ends with "· cancel within 15 s". The page adds "charged only if it succeeds" there only if it does not already say so near the price.
-  - After the upload completes, the panel's button reads "Cancel (15)" and counts down each second, then disappears. No extra sentence. A 409 on click removes the button and the progress view carries on, with no error shown.
+  - Confirm step: the price line ends with "· charged only for videos that finish · cancel within 15 s".
+  - After the upload completes, its History row's button reads "Cancel 15" and counts down each second in place of the "⋯" menu, then the menu returns. A 409 on click removes the button with no error shown.
 - **Web role:** `application-autoscaling:DescribeScalableTargets` (it cannot be scoped to one resource; read-only).
 
 ## 9. Terraform and IAM
@@ -219,14 +219,14 @@ behaviour remains below.
 - the CodeBuild project `neurolens-worker-image` (Linux x86-64, privileged for Docker, 60-minute timeout) and its role, which may only read `build/source.zip`, pull the base image from AWS's `pytorch-inference` repository (account 763104351884: `BatchGetImage`, `GetDownloadUrlForLayer`, `BatchCheckLayerAvailability`; the buildspec logs in to that registry as well as ours), push to our repository and write its log group;
 - the SageMaker execution role:
   - read on `model-data/*`, `uploads/*` and `results/*` (the container checks for an existing result before it claims), and `s3:ListBucket` on the bucket (SageMaker lists `model-data/`, and without it a missing result answers 403 instead of 404, which `object_exists` raises on);
-  - put on `results/*`, `dataset/*`, `experiments/boots/*` and `sagemaker-output/*`;
+  - put on `results/*`, `dataset/*`, `academic/*`, `experiments/boots/*` and `sagemaker-output/*`;
   - delete on the job prefixes (refund clean-up);
   - the Data API and the database secret;
   - ECR pull on our repository;
   - its logs;
   - `sns:Publish` on the error topic;
 - `aws_sagemaker_model` `neurolens-<image digest prefix>`, with environment: bucket, region, database trio, and `NEUROLENS_DEPLOYED=1`;
-- `aws_sagemaker_endpoint_configuration`:
+- `awscc_sagemaker_endpoint_config`:
   - the instance pools of §6a;
   - `ContainerStartupHealthCheckTimeoutInSeconds` 1800 and `ModelDataDownloadTimeoutInSeconds` 1800;
   - the async config: `S3OutputPath s3://<bucket>/sagemaker-output/ok/`, `S3FailurePath …/failed/`, `ErrorTopic`, `MaxConcurrentInvocationsPerInstance` 1;
