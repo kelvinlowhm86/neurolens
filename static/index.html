@@ -162,8 +162,21 @@
     closing.href = '/app?upload=1';
   }
 </script>
+<script src="/static/post_json.js"></script>
 <script type="module">
 import { createBrainView, decodeBrain, UNAVAILABLE } from '/static/brain_view.js';
+
+const WAKE_EVENTS = ['pointermove', 'pointerdown', 'touchstart', 'keydown', 'scroll'];
+let woke = false;
+function wake() {
+  if (woke) return;
+  woke = true;
+  for (const type of WAKE_EVENTS) window.removeEventListener(type, wake);
+  postJSON('/api/wake', {}).catch(() => {});
+}
+for (const type of WAKE_EVENTS) {
+  window.addEventListener(type, wake, { once: true, passive: true });
+}
 
 const $ = id => document.getElementById(id);
 const player = $('heroPlayer');

@@ -255,7 +255,7 @@ def test_a_session_survives_a_new_app_with_the_same_secret_key(cognito_app, idp)
 
 # ---------------------------------------------------------------- every /api/* route needs sign-in
 
-PUBLIC_API = {("/api/limits", "GET")}
+PUBLIC_API = {("/api/limits", "GET"), ("/api/wake", "POST")}
 
 
 def test_every_api_route_is_401_json_when_signed_out(cognito_app):

@@ -518,6 +518,7 @@
   <input type="file" accept=".json,application/json" id="curveInput" hidden>
 </dialog>
 
+<script src="/static/post_json.js"></script>
 <script>
 const $ = id => document.getElementById(id);
 const video = $('videoPlayer');
@@ -751,17 +752,6 @@ $('deleteJobCancel').addEventListener('click', () => {
 });
 $('deleteJobBtn').addEventListener('click', () => { if (deleteTarget) deleteJob(deleteTarget); });
 closeOnBackdrop(deleteJobDialog);
-
-async function postJSON(url, body) {
-  const text = JSON.stringify(body);
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
-  const hash = Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join('');
-  return fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-amz-content-sha256': hash },
-    body: text,
-  });
-}
 
 function setViewName(name) {
   const player = name === 'player';

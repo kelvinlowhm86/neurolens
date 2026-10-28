@@ -66,6 +66,12 @@ class PostgresDatabase:
     def __init__(self, dsn):
         self._dsn = dsn
 
+    def wake(self):
+        """Run one statement in a transaction, so both backends read alike (a laptop database
+        never pauses)."""
+        with self.transaction() as tx:
+            tx.execute("SELECT 1")
+
     @contextmanager
     def transaction(self):
         import psycopg
@@ -144,6 +150,16 @@ class DataApiDatabase:
         self._arns = {"resourceArn": cluster_arn, "secretArn": secret_arn}
         self._database = database
         self._resume_wait_s = resume_wait_s
+
+    def wake(self):
+        """Start Aurora's resume from auto-pause with one statement and no wait. A resuming or
+        throttled answer means the wake has started; any other error is raised."""
+        try:
+            self._client.execute_statement(**self._arns, database=self._database, sql="SELECT 1")
+        except ClientError as exc:
+            if exc.response.get("Error", {}).get("Code") not in _WAKING_CODES:
+                raise
+            logger.info("database is resuming from pause")
 
     @contextmanager
     def transaction(self):

@@ -232,15 +232,16 @@ def create_app(
 
     @app.before_request
     def api_rules():
-        """Every /api/* route except GET /api/limits: a signed-in user, and JSON for POSTs
-        (cross-site forms cannot send it without a CORS check this app never grants). The limits
-        are public so signed-out visitors' sample brains can be coloured (M3d §6)."""
+        """Every /api/* route except GET /api/limits: JSON for POSTs (cross-site forms cannot send
+        it without a CORS check this app never grants), and a signed-in user except for POST
+        /api/wake. The limits are public so signed-out visitors' sample brains can be coloured
+        (M3d §6); the wake so the landing page can start Aurora's resume before sign-in."""
         if not request.path.startswith("/api/"):
             return None
         if request.path == "/api/limits" and request.method == "GET":
             return None
-        user = auth.current_user()
-        if user is None:
+        public = request.path == "/api/wake" and request.method == "POST"
+        if not public and auth.current_user() is None:
             return _not_signed_in()
         if request.method == "POST" and request.content_length and not request.is_json:
             return _error("json_required", "The request body must be JSON.", status=415)
@@ -333,6 +334,17 @@ def create_app(
         if max_batch_files is not None:
             limits["max_batch_files"] = max_batch_files
         return jsonify(limits)
+
+    @app.route("/api/wake", methods=["POST"])
+    def wake():
+        """Start Aurora's resume from the landing page's first interaction. The page ignores the
+        answer; a failed wake is logged and still answers 204."""
+        if db is not None:
+            try:
+                db.wake()
+            except Exception:
+                logger.exception("Wake failed")
+        return "", 204
 
     @app.route("/api/me")
     def me():
