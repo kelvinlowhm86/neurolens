@@ -36,8 +36,8 @@ other languages.
 `inference.make_frames(path, seconds)` returns JPEG bytes, one per whole second `t = 0 ..
 seconds - 1`, where `seconds` is `result["duration_seconds"]` (the length of the per-second
 series, so frame `t` lines up with value `t`). One ffmpeg run:
-`-vf fps=1,scale=<long edge 640, other edge even, never upscaled>`, `-q:v 5`, written to a
-temporary folder that is always removed. Frames past `seconds` are dropped. Raises `FramesFailed`
+`-vf fps=1,scale=<long edge 640, other edge even, never upscaled>`, `-q:v 5`, JPEGs written to a
+pipe and split at each end-of-image marker (no files on disk). Frames past `seconds` are dropped. Raises `FramesFailed`
 on a non-zero exit, a 120 s timeout, or zero frames, like `make_thumbnail`. No heavy imports.
 
 ### 2b. Stored file
