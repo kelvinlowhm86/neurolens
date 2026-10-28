@@ -128,7 +128,7 @@ keeps the data in us-east-1 as the privacy page says). Sonnet 5.5 access is gran
 in the Bedrock console (§8). The server-side `fallbacks` option does not exist on Bedrock; a
 refusal is simply `refused` (§5d).
 
-## 5d. Answer
+### 5d. Answer
 Schema (also checked in code after parsing, since a wrong report must not be stored):
 ```
 { "headline": str (<= 120 chars),
