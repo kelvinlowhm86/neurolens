@@ -101,3 +101,18 @@ One run per clip per type, in us-east-1. "Warm" leaves out the one-time WhisperX
 **What limits the job:** video encoding on the A10G (same 32-bit compute as the L4, twice its memory bandwidth) was 2.4 times slower than on the L40S, close to the compute ratio (2.9) and far from the bandwidth ratio (1.4), so encoding is mainly limited by compute. The L4 alone could not show this: it trails the L40S by about 3 times on both.
 
 **As fallbacks when `g6e` is sold out:** both fit and give the same results, but they are not used (Josh, 2026-10-04): slower and dearer per video; a region move is the fallback instead (M4 spec §1). The L4's first 119 s job also took longer than the queue's 1,800 s visibility timeout. The fallback stays `g6e.2xlarge`: the same GPU, the same speed, about 20% more per job.
+
+## GPU availability on 28 Oct (SageMaker endpoint, us-east-1)
+Saved on 2026-10-28, because Application Auto Scaling keeps activity history for only 6 weeks.
+
+`sagemaker_scaling_activities_2026-10-23_to_28.tsv`: every scale-out and scale-in of the `neurolens` endpoint (times in SGT). From 23 to 25 Oct every scale-out reached a running GPU in 4 to 8 minutes. On 28 Oct four scale-outs (11:21 to 12:05) each gave up after about 11 minutes ("Overridden" by the next try) and the fifth got a GPU at 12:19, an NVIDIA L4 (`g6.2xlarge`, a fallback type) because no L40S was free. Earlier that morning three endpoint updates (09:55 to 10:35) were rolled back with `InsufficientInstanceCapacity` for `g6e.xlarge` and `g6.2xlarge`; those are endpoint updates, not scaling activities, so they are not in this file.
+
+```
+aws application-autoscaling describe-scaling-activities --service-namespace sagemaker \
+  --resource-id endpoint/neurolens/variant/main \
+  --query 'ScalingActivities[].[StartTime,EndTime,StatusCode,Description,StatusMessage]' --output text | sort
+```
+
+`spot_placement_scores_2026-10-28.tsv`: EC2 Spot placement scores (1 = least likely to get capacity, 10 = most) every 30 minutes from 11:41 to 19:34 SGT, for each of our four GPU types alone and for any of them (`ALL`), in five regions. A hint about EC2 capacity, not proof of SageMaker capacity (SageMaker draws on its own pool). Averages for `ALL`: us-east-1 6.5, us-west-2 5.9, eu-central-1 5.5, ap-northeast-1 3.0, us-east-2 2.0; `g6e.xlarge` alone scored 1 in every region all day.
+
+What it means: L40S GPUs were scarce everywhere that day, us-east-1 was no worse than the alternatives, and the fallback types are what kept the service working. Availability changes from day to day, so a cold start can take minutes or close to an hour.
