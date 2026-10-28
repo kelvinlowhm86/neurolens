@@ -2,6 +2,7 @@
 -r web.txt
 -r worker.txt
 -r experiments.txt
+-r lambdas.txt
 pytest>=8.0
 ruff>=0.6
 moto[s3,sqs,autoscaling,ssm]>=5.0

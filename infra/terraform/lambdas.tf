@@ -15,6 +15,8 @@ locals {
     "neurolens/billing.py",
     "neurolens/media.py",
     "neurolens/pricing.py",
+    "neurolens/report_prompt.py",
+    "neurolens/results.py",
     "neurolens/settings.py",
     "neurolens/storage.py",
     "neurolens/lambdas/__init__.py",
@@ -23,6 +25,7 @@ locals {
     "neurolens/lambdas/dispatcher.py",
     "neurolens/lambdas/gpu_failed.py",
     "neurolens/lambdas/gpu_guard.py",
+    "neurolens/lambdas/report.py",
   ]
   # gpu_failed does the dead-letter handler's work on a SageMaker notification (§5), so it shares
   # that role's rights.
@@ -401,4 +404,115 @@ resource "aws_lambda_permission" "events_invoke_gpu_guard" {
   function_name = aws_lambda_function.gpu_guard.function_name
   principal     = "events.amazonaws.com"
   source_arn    = aws_cloudwatch_event_rule.gpu_guard.arn
+}
+
+# ─── The AI report (M3g §5, §8) ───────────────────────────────────────────
+#
+# Its own Lambda because Bedrock takes ~30-90 s, longer than the web function's 60 s. The
+# Anthropic SDK ships as a layer (infra/build_report_layer.sh), so this zip stays dependency-free.
+# Reserved concurrency caps parallel Bedrock spend; async retries are off because a failure is
+# final and recorded on the job.
+
+resource "aws_iam_role" "report" {
+  name                 = "neurolens-report${local.iam_suffix}"
+  permissions_boundary = local.boundary_arn
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Action    = "sts:AssumeRole"
+      Principal = { Service = "lambda.amazonaws.com" }
+    }]
+  })
+  tags = { Milestone = "M3g" }
+}
+
+resource "aws_iam_role_policy" "report" {
+  name = "neurolens-report"
+  role = aws_iam_role.report.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = concat(local.db_access_statements, [
+      {
+        # The result and frames to read; the report to write and remove.
+        Sid      = "ReadInputs"
+        Effect   = "Allow"
+        Action   = "s3:GetObject"
+        Resource = "${aws_s3_bucket.main.arn}/results/*"
+      },
+      {
+        Sid      = "WriteAndRemoveTheReport"
+        Effect   = "Allow"
+        Action   = ["s3:PutObject", "s3:DeleteObject"]
+        Resource = "${aws_s3_bucket.main.arn}/results/*.report.json"
+      },
+      {
+        # Without it S3 answers 403, not 404, for a missing input. Listing only results/.
+        Sid       = "ListResultsSoMissingObjectsGive404"
+        Effect    = "Allow"
+        Action    = "s3:ListBucket"
+        Resource  = aws_s3_bucket.main.arn
+        Condition = { StringLike = { "s3:prefix" = ["results/*"] } }
+      },
+      {
+        # Bedrock Mantle has no published model ARN format, so the action is scoped to any
+        # model; only this Lambda's code uses it and the code fixes the model (M3g §8).
+        Sid      = "CreateBedrockInference"
+        Effect   = "Allow"
+        Action   = "bedrock-mantle:CreateInference"
+        Resource = "*"
+      },
+      {
+        Sid      = "OwnLogs"
+        Effect   = "Allow"
+        Action   = ["logs:CreateLogStream", "logs:PutLogEvents"]
+        Resource = "${aws_cloudwatch_log_group.report.arn}:*"
+      },
+    ])
+  })
+}
+
+resource "aws_lambda_layer_version" "report" {
+  layer_name          = "neurolens-report"
+  description         = "Anthropic SDK for Bedrock (infra/build_report_layer.sh)."
+  filename            = "${path.module}/.build/report_layer.zip"
+  source_code_hash    = try(filebase64sha256("${path.module}/.build/report_layer.zip"), null)
+  compatible_runtimes = ["python3.12"]
+}
+
+resource "aws_cloudwatch_log_group" "report" {
+  name              = "/aws/lambda/neurolens-report"
+  retention_in_days = var.log_retention_days
+  tags              = { Milestone = "M3g" }
+}
+
+resource "aws_lambda_function" "report" {
+  function_name                  = "neurolens-report"
+  role                           = aws_iam_role.report.arn
+  runtime                        = "python3.12"
+  handler                        = "neurolens.lambdas.report.handler"
+  filename                       = data.archive_file.m3a_lambdas.output_path
+  source_code_hash               = data.archive_file.m3a_lambdas.output_base64sha256
+  layers                         = [aws_lambda_layer_version.report.arn]
+  timeout                        = 300
+  memory_size                    = 512
+  reserved_concurrent_executions = 5
+
+  environment {
+    variables = merge(local.lambda_env, {
+      NEUROLENS_AWS_REGION = var.region
+    })
+  }
+
+  depends_on = [aws_cloudwatch_log_group.report, aws_iam_role_policy.report]
+  tags       = { Milestone = "M3g" }
+}
+
+# A queued request older than 4 min is dropped: started by then, it ends within the 5-min timeout,
+# before the 10-min stale point lets the user claim again, so two runs never overlap.
+resource "aws_lambda_function_event_invoke_config" "report" {
+  function_name                = aws_lambda_function.report.function_name
+  maximum_retry_attempts       = 0
+  maximum_event_age_in_seconds = 240
 }

@@ -8,6 +8,7 @@ history and CSV export, uploads refused while GPU work is paused.
 """
 
 import hashlib
+import json
 import logging
 import math
 import re
@@ -137,7 +138,9 @@ def _s3_client(cfg):
     return session.client("s3")
 
 
-def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=None):
+def create_app(
+    *, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=None, report_starter=None
+):
     """Build the Flask app.
 
     Never reads config.json itself (the launchers app.py and lambda_handler.py load it and pass
@@ -160,6 +163,18 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
         import boto3
 
         ssm_client = boto3.client("ssm", region_name=region)
+    report_function = (cfg.get("aws") or {}).get("report_function")
+    if report_starter is None and cognito and report_function:
+        import boto3
+
+        lambda_client = boto3.client("lambda", region_name=region)
+
+        def report_starter(job_id):
+            lambda_client.invoke(
+                FunctionName=report_function,
+                InvocationType="Event",
+                Payload=json.dumps({"job_id": job_id}).encode(),
+            )
 
     root = settings.get_root()
     if data_dir is None:
@@ -487,7 +502,8 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
             rows = tx.execute(
                 "SELECT job_id, object_key, filename, status, stage, stages, attempt, updated_at, "
                 "claimed_at, error_code, error_message, research_consent, retention_added_at, "
-                "dataset_removed_at, dataset_removed_reason, verified_duration_ms FROM jobs "
+                "dataset_removed_at, dataset_removed_reason, verified_duration_ms, report_state, "
+                "report_tries, report_started_at, report_error FROM jobs "
                 "WHERE job_id = CAST(:job_id AS uuid) AND user_id = :user_id "
                 "AND deleted_at IS NULL",
                 {"job_id": job_id, "user_id": user_id},
@@ -539,6 +555,10 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
             "dataset_removed_at",
             "dataset_removed_reason",
             "verified_duration_ms",
+            "report_state",
+            "report_tries",
+            "report_started_at",
+            "report_error",
         }
         public = {
             key: value
@@ -771,6 +791,70 @@ def create_app(*, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=N
             _delete_curve_files(s3, bucket, [raw_key, csv_key], job["job_id"])
             return _error(err.code, err.message, status=err.status)
         return jsonify({"stored": True, **stored})
+
+    @app.route("/api/jobs/<job_id>/report", methods=["POST"])
+    def start_report(job_id):
+        """Claim one free report attempt and start the report Lambda (M3g §4)."""
+        job, error = owned_job(job_id)
+        if error:
+            return error
+        if job["status"] != billing.DONE:
+            return _not_found()
+        if s3 is None or not bucket:
+            return _not_configured()
+        result = storage.get_result(s3, bucket, job["job_id"])
+        if not result or not result.get("frames"):
+            return _error("no_frames", "This video has no report.", status=409)
+        state = job["report_state"]
+        if state == "ready":
+            return _error("report_ready", "The report is ready.", status=409)
+        report_cfg = cfg.get("report") or {}
+        stale_minutes = report_cfg["stale_minutes"]
+        started = job["report_started_at"]
+        stale = started is None or started < datetime.now(UTC) - timedelta(minutes=stale_minutes)
+        if state == "writing" and not stale:
+            return _error("report_writing", "The report is being written.", status=409)
+        if job["report_tries"] >= report_cfg["max_tries"]:
+            return _error("no_tries_left", "No tries left for this report.", status=429)
+        if report_starter is None:
+            return _not_configured()
+        user_id, _ = signed_in_user()
+        if not billing.claim_report(
+            db, user_id, job["job_id"], report_cfg["max_tries"], stale_minutes
+        ):
+            return _error("report_writing", "The report is being written.", status=409)
+        try:
+            report_starter(job["job_id"])
+        except Exception:
+            logger.exception(f"Could not start the report for {job['job_id']}")
+            billing.release_report_try(db, job["job_id"])
+            return _error(
+                "report_failed", "Could not start the report. Please try again.", status=503
+            )
+        return jsonify({"report_state": "writing"}), 202
+
+    @app.route("/api/jobs/<job_id>/report")
+    def get_report(job_id):
+        """The report's state, tries left and stored answer (M3g §4)."""
+        job, error = owned_job(job_id)
+        if error:
+            return error
+        report_cfg = cfg.get("report") or {}
+        state = job["report_state"]
+        started = job["report_started_at"]
+        stale_before = datetime.now(UTC) - timedelta(minutes=report_cfg["stale_minutes"])
+        if state == "writing" and (started is None or started < stale_before):
+            state = "failed"
+        report = None
+        if state == "ready" and s3 is not None and bucket:
+            report = storage.get_report(s3, bucket, job["job_id"])
+        return jsonify(
+            {
+                "report_state": state,
+                "tries_left": max(0, report_cfg["max_tries"] - job["report_tries"]),
+                "report": report,
+            }
+        )
 
     @app.route("/api/jobs/<job_id>", methods=["DELETE"])
     def delete_job(job_id):

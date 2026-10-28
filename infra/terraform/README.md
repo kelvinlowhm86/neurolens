@@ -28,8 +28,8 @@ and `destroy` removes everything it created. The region is one setting (`region`
 - Application Auto Scaling: min 0, max `max_instances`; a waiting request starts a GPU, seven
   idle minutes stop it.
 - Lambda functions: the dispatcher (jobs queue, with the ffprobe layer), the SageMaker error
-  handler (error topic), the GPU guard (every 10 minutes), the dead-letter handler and the reaper
-  (every 3 hours).
+  handler (error topic), the GPU guard (every 10 minutes), the dead-letter handler, the reaper
+  (every 3 hours) and the report function (with the Anthropic SDK layer).
 - Alarms on one SNS email topic: the GPU guard stopped a GPU, the GPU guard has not run, Aurora has
   been awake for much of 6 hours, and one error alarm per Lambda.
 
@@ -61,6 +61,8 @@ down.
    `/neurolens/terraform/google_client_secret` and
    `/neurolens/web/flask_secret_key` (at least 32 random bytes).
 7. Confirm the $40/month AWS Budget alerts still exist (Billing, Budgets).
+8. In the console, with the region set to us-east-1, enable Claude Sonnet 5.5 under Bedrock →
+   Model access (Anthropic asks a short use-case form the first time).
 
 Every command runs with this profile:
 
@@ -90,6 +92,7 @@ cd infra/terraform
 cp terraform.tfvars.example terraform.tfvars    # bucket_name, region, zones, alert_email, auth, google
 ../build_web_lambda.sh                          # the web function's zip: the first apply needs it
 ../build_ffprobe_layer.sh                       # the dispatcher's ffprobe layer: so does it
+../build_report_layer.sh                        # the report function's Anthropic SDK layer: so does it
 terraform init -backend-config=backend.hcl
 terraform plan                                  # read it: only creates on an empty account
 terraform apply

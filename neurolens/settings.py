@@ -71,7 +71,8 @@ def apply_env(cfg):
     HF_TOKEN -> hf_token; NEUROLENS_AWS_REGION / NEUROLENS_S3_BUCKET /
     NEUROLENS_GPU_ENDPOINT -> aws.region / aws.s3_bucket / aws.gpu_endpoint;
     NEUROLENS_DB_CLUSTER_ARN / _SECRET_ARN / _NAME ->
-    aws.db_cluster_arn / aws.db_secret_arn / aws.db_name; NEUROLENS_DB_DSN -> db.dsn (a local
+    aws.db_cluster_arn / aws.db_secret_arn / aws.db_name; NEUROLENS_REPORT_FUNCTION ->
+    aws.report_function; NEUROLENS_DB_DSN -> db.dsn (a local
     PostgreSQL DSN holds a password, so it never goes in config.json). M3b's web functions:
     NEUROLENS_AUTH_MODE / _COGNITO_ISSUER / _COGNITO_CLIENT_ID / _COGNITO_DOMAIN -> auth.mode /
     auth.cognito_issuer / auth.cognito_client_id / auth.cognito_domain, NEUROLENS_PUBLIC_BASE_URL
@@ -89,6 +90,7 @@ def apply_env(cfg):
         ("NEUROLENS_DB_CLUSTER_ARN", "aws", "db_cluster_arn"),
         ("NEUROLENS_DB_SECRET_ARN", "aws", "db_secret_arn"),
         ("NEUROLENS_DB_NAME", "aws", "db_name"),
+        ("NEUROLENS_REPORT_FUNCTION", "aws", "report_function"),
         ("NEUROLENS_DB_DSN", "db", "dsn"),
         ("NEUROLENS_AUTH_MODE", "auth", "mode"),
         ("NEUROLENS_COGNITO_ISSUER", "auth", "cognito_issuer"),

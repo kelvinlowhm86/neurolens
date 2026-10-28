@@ -90,6 +90,13 @@ locals {
         Action   = ["cognito-idp:ListUsers", "cognito-idp:AdminDeleteUser"]
         Resource = aws_cognito_user_pool.users.arn
       },
+      {
+        # Start the one report function asynchronously (M3g §4, §8).
+        Sid      = "StartTheReport"
+        Effect   = "Allow"
+        Action   = "lambda:InvokeFunction"
+        Resource = aws_lambda_function.report.arn
+      },
     ]
   }
 }

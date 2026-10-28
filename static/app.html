@@ -182,6 +182,26 @@
   .report-body.active { display: flex; }
   .result-message { background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 18px 20px; font-size: 13px; line-height: 1.55; color: var(--ink-2); }
   .result-message:empty { display: none; }
+  .result-tabs { display: flex; gap: 4px; flex: none; border-bottom: 1px solid var(--rule); }
+  .result-tab { background: none; border: 0; border-bottom: 2px solid transparent; color: var(--ink-3); padding: 6px 10px; font: 500 13px var(--display); }
+  .result-tab.active { color: var(--ink); border-bottom-color: var(--heat); }
+  .result-panel { display: none; flex: 1; min-height: 0; flex-direction: column; gap: 18px; overflow-y: auto; scrollbar-width: thin; }
+  .result-panel.active { display: flex; }
+  .report-state { font-size: 13px; color: var(--ink-2); }
+  .report-state:empty { display: none; }
+  .report-answer { display: flex; flex-direction: column; gap: 14px; }
+  .report-answer h2 { font: 600 20px/1.3 var(--display); }
+  .report-answer p { font-size: 14px; color: var(--ink-2); line-height: 1.6; }
+  .report-moments { display: flex; flex-direction: column; gap: 8px; }
+  .report-moment { background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; padding: 10px 12px; text-align: left; color: inherit; display: flex; flex-direction: column; gap: 3px; }
+  .report-moment:hover { border-color: var(--ink-3); }
+  .report-moment .when { font: 500 13px var(--display); color: var(--heat); font-variant-numeric: tabular-nums; }
+  .report-moment p { font-size: 13px; color: var(--ink-2); }
+  .report-moment .suggestion { color: var(--ink); }
+  .report-list h3 { font: 600 13px var(--display); color: var(--ink-2); margin-bottom: 4px; }
+  .report-list ul { padding-left: 18px; font-size: 13px; color: var(--ink-2); }
+  .report-actions { display: flex; gap: 8px; align-items: center; }
+  .report-free { font-size: 12px; color: var(--ink-3); }
 
   .top { display: block; flex: none; }
   .moments { display: flex; flex-direction: column; gap: 8px; }
@@ -258,6 +278,7 @@
     .main-chart { flex: none; }
     .main-chart .chart { height: 200px; flex: none; }
     .D .report { padding: 20px 16px 60px; overflow: visible; }
+    .result-panel { overflow: visible; }
     .strips-wrap { flex: none; }
     .strips { grid-template-columns: 1fr; }
     .strip .chart { height: 120px; flex: none; }
@@ -376,26 +397,47 @@
     </div>
     <div class="report-body" id="reportBody">
       <div class="result-message" id="resultMessage" hidden></div>
-      <div class="top" id="topArea"></div>
-      <section class="main-chart" id="chartCard">
-        <div class="chart-head">
-          <h2>Brain response over time</h2>
-          <span class="keys" id="chartKeys"></span>
-          <span class="chart-controls">
-            <span class="sound-line" id="soundLine"></span>
-            <label class="compare-pick" id="compareRow" hidden><span>Compare with…</span><select id="compareSelect"></select></label>
-            <label class="toggle" id="mutedLabel"><input type="checkbox" id="mutedToggle"> Show if muted</label>
-          </span>
+      <div class="result-tabs" id="resultTabs" hidden>
+        <button class="result-tab active" id="chartsTabBtn" type="button">Analysis</button>
+        <button class="result-tab" id="reportTabBtn" type="button">Report</button>
+      </div>
+      <div class="result-panel active" id="chartsTab">
+        <div class="top" id="topArea"></div>
+        <section class="main-chart" id="chartCard">
+          <div class="chart-head">
+            <h2>Brain response over time</h2>
+            <span class="keys" id="chartKeys"></span>
+            <span class="chart-controls">
+              <span class="sound-line" id="soundLine"></span>
+              <label class="compare-pick" id="compareRow" hidden><span>Compare with…</span><select id="compareSelect"></select></label>
+              <label class="toggle" id="mutedLabel"><input type="checkbox" id="mutedToggle"> Show if muted</label>
+            </span>
+          </div>
+          <p class="note">Predicted for an average viewer.</p>
+          <p class="compare-msg" id="compareMsg"></p>
+          <div class="chart" id="mainChartBox"></div>
+        </section>
+        <section class="strips-wrap" id="stripsCard">
+          <div class="chart-head"><h2>What the brain is doing</h2></div>
+          <p class="note">Same scale on all three.</p>
+          <div class="strips" id="stripsHost"></div>
+        </section>
+      </div>
+      <div class="result-panel" id="reportTab" hidden>
+        <p class="report-state" id="reportStateText"></p>
+        <div class="report-answer" id="reportAnswer" hidden>
+          <h2 id="reportHeadline"></h2>
+          <p id="reportSummary"></p>
+          <div class="report-moments" id="reportMoments"></div>
+          <div class="report-list" id="reportStrengthsWrap"><h3>Strengths</h3><ul id="reportStrengths"></ul></div>
+          <div class="report-list" id="reportImprovementsWrap"><h3>Improvements</h3><ul id="reportImprovements"></ul></div>
+          <p class="note">An AI reading of predicted brain activity.</p>
         </div>
-        <p class="note">Predicted for an average viewer.</p>
-        <p class="compare-msg" id="compareMsg"></p>
-        <div class="chart" id="mainChartBox"></div>
-      </section>
-      <section class="strips-wrap" id="stripsCard">
-        <div class="chart-head"><h2>What the brain is doing</h2></div>
-        <p class="note">Same scale on all three.</p>
-        <div class="strips" id="stripsHost"></div>
-      </section>
+        <div class="report-actions" id="reportActions" hidden>
+          <button class="btn-white" id="reportWrite" type="button">Write report</button>
+          <span class="report-free" id="reportFree">Free</span>
+        </div>
+      </div>
     </div>
   </div>
   <div class="privacy-note page-end"><a href="/static/privacy.html">Privacy policy</a></div>
@@ -493,6 +535,7 @@ const NS = 'http://www.w3.org/2000/svg';
 let samplesData = null, jobsCache = [];
 let currentResult = null, currentSummary = null, currentContext = null;
 let comparison = null, mutedOn = false, resultSeq = 0, compareRequest = 0;
+let reportSeq = 0, reportPollTimer = null, reportJob = null, reportWritingSince = 0;
 let signedIn = false, me = null, limits = null;
 let virtualTime = 0, virtualPlaying = false, virtualAnchor = 0, virtualRaf = 0, videoRaf = 0;
 let videoJob = null, videoRetried = false, videoRequest = 0, videoPlaying = false;
@@ -1823,6 +1866,7 @@ async function loadJobVideo(jobId, seq, resume) {
 function showResultUnavailable(message) {
   resultSeq += 1;
   stopVirtual();
+  resetReportPanel();
   currentResult = null; currentSummary = null; currentContext = null; comparison = null;
   mutedOn = false; virtualTime = 0;
   clearAllCharts();
@@ -1848,6 +1892,198 @@ function showResultUnavailable(message) {
   $('clipTitle').textContent = '';
   $('clipTitle').title = '';
 }
+
+function setResultTab(name) {
+  const showReport = name === 'report';
+  $('chartsTab').hidden = showReport;
+  $('reportTab').hidden = !showReport;
+  $('chartsTab').classList.toggle('active', !showReport);
+  $('reportTab').classList.toggle('active', showReport);
+  $('chartsTabBtn').classList.toggle('active', !showReport);
+  $('reportTabBtn').classList.toggle('active', showReport);
+}
+
+function stopReportPolling() {
+  clearTimeout(reportPollTimer);
+  reportPollTimer = null;
+  reportJob = null;
+}
+
+function hideReportAnswer() {
+  $('reportAnswer').hidden = true;
+  $('reportHeadline').textContent = '';
+  $('reportSummary').textContent = '';
+  $('reportMoments').replaceChildren();
+  $('reportStrengths').replaceChildren();
+  $('reportImprovements').replaceChildren();
+}
+
+function resetReportPanel() {
+  reportSeq += 1;
+  stopReportPolling();
+  reportWritingSince = 0;
+  $('reportStateText').textContent = '';
+  hideReportAnswer();
+  $('reportActions').hidden = true;
+  $('reportWrite').disabled = false;
+  $('reportWrite').textContent = 'Write report';
+  $('resultTabs').hidden = true;
+  setResultTab('charts');
+}
+
+function renderReportAnswer(report) {
+  hideReportAnswer();
+  $('reportHeadline').textContent = report.headline || '';
+  $('reportSummary').textContent = report.summary || '';
+  for (const moment of report.moments || []) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'report-moment';
+    button.dataset.seek = String(moment.start);
+    const when = document.createElement('span');
+    when.className = 'when';
+    when.textContent = `${moment.kind === 'weak' ? 'Weak' : 'Strong'} · ${fmtRange(moment)}`;
+    const what = document.createElement('p');
+    what.textContent = moment.what_happens || '';
+    const brain = document.createElement('p');
+    brain.textContent = moment.brain_response || '';
+    button.append(when, what, brain);
+    if (moment.suggestion) {
+      const suggestion = document.createElement('p');
+      suggestion.className = 'suggestion';
+      suggestion.textContent = moment.suggestion;
+      button.append(suggestion);
+    }
+    $('reportMoments').append(button);
+  }
+  for (const [host, items] of [['reportStrengths', report.strengths], ['reportImprovements', report.improvements]]) {
+    for (const item of items || []) {
+      const li = document.createElement('li');
+      li.textContent = item;
+      $(host).append(li);
+    }
+  }
+  $('reportStrengthsWrap').hidden = !(report.strengths || []).length;
+  $('reportImprovementsWrap').hidden = !(report.improvements || []).length;
+  $('reportAnswer').hidden = false;
+}
+
+function applyReportState(jobId, seq, data) {
+  const state = data.report_state;
+  if (state === 'ready' && data.report) {
+    $('reportStateText').textContent = '';
+    $('reportActions').hidden = true;
+    renderReportAnswer(data.report);
+    return;
+  }
+  if (state === 'writing') {
+    $('reportStateText').textContent = 'Writing your report…';
+    $('reportActions').hidden = true;
+    hideReportAnswer();
+    if (!reportWritingSince) reportWritingSince = Date.now();
+    if (Date.now() - reportWritingSince <= 10 * 60 * 1000) {
+      clearTimeout(reportPollTimer);
+      reportPollTimer = setTimeout(() => refreshReport(jobId, seq), 5000);
+    } else {
+      $('reportStateText').textContent = 'The report is taking too long. Try again later.';
+    }
+    return;
+  }
+  if (state === 'failed') {
+    $('reportStateText').textContent = "Couldn't write the report.";
+    $('reportActions').hidden = !(data.tries_left > 0);
+    $('reportWrite').textContent = 'Try again';
+    return;
+  }
+  $('reportStateText').textContent = '';
+  $('reportActions').hidden = false;
+  $('reportWrite').textContent = 'Write report';
+}
+
+async function refreshReport(jobId, seq) {
+  if (seq !== reportSeq || reportJob !== jobId) return;
+  let res, data = {};
+  try {
+    res = await fetch(`/api/jobs/${jobId}/report`);
+    data = await res.json().catch(() => ({}));
+  } catch (e) {
+    if (seq === reportSeq) $('reportStateText').textContent = "Couldn't reach the server.";
+    return;
+  }
+  if (seq !== reportSeq || reportJob !== jobId) return;
+  if (res.status === 401) return window.location.reload();
+  if (!res.ok) {
+    $('reportStateText').textContent = data.message || "Couldn't load the report.";
+    return;
+  }
+  applyReportState(jobId, seq, data);
+}
+
+function setupReport(jobId, result) {
+  resetReportPanel();
+  $('resultTabs').hidden = false;
+  setResultTab('charts');
+  if (!result || !result.frames) {
+    $('reportStateText').textContent = 'No report for this video.';
+    return;
+  }
+  const seq = reportSeq;
+  reportJob = jobId;
+  refreshReport(jobId, seq);
+}
+
+async function requestReport() {
+  const jobId = reportJob;
+  const seq = reportSeq;
+  if (!jobId) return;
+  const button = $('reportWrite');
+  button.disabled = true;
+  button.textContent = 'Starting…';
+  $('reportActions').hidden = false;
+  try {
+    const res = await fetch(`/api/jobs/${jobId}/report`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
+    });
+    const data = await res.json().catch(() => ({}));
+    if (seq !== reportSeq || reportJob !== jobId) return;
+    if (res.status === 401) return window.location.reload();
+    if (res.status === 202) {
+      reportWritingSince = Date.now();
+      $('reportStateText').textContent = 'Writing your report…';
+      $('reportActions').hidden = true;
+      clearTimeout(reportPollTimer);
+      reportPollTimer = setTimeout(() => refreshReport(jobId, seq), 5000);
+      return;
+    }
+    if (data.error === 'report_ready' || data.error === 'report_writing') {
+      await refreshReport(jobId, seq);
+      return;
+    }
+    if (data.error === 'no_frames') {
+      $('reportStateText').textContent = 'No report for this video.';
+      $('reportActions').hidden = true;
+      return;
+    }
+    if (data.error === 'no_tries_left') {
+      $('reportStateText').textContent = "Couldn't write the report.";
+      $('reportActions').hidden = true;
+      return;
+    }
+    $('reportStateText').textContent = data.message || "Couldn't start the report.";
+    button.textContent = 'Try again';
+  } catch (e) {
+    $('reportStateText').textContent = "Couldn't reach the server. Please try again.";
+    button.textContent = 'Try again';
+  } finally {
+    button.disabled = false;
+  }
+}
+
+$('chartsTabBtn').addEventListener('click', () => setResultTab('charts'));
+$('reportTabBtn').addEventListener('click', () => setResultTab('report'));
+$('reportWrite').addEventListener('click', requestReport);
 
 async function showResult(jobId) {
   const seq = resultSeq;
@@ -2422,6 +2658,7 @@ function renderResult(result, summary, ctx) {
   $('compareMsg').classList.remove('error');
   $('sampleMeta').textContent = ctx.attribution || '';
   setViewName('player');
+  setupReport(ctx.jobId, result);
   const name = videoBaseName(ctx.title || '');
   $('clipTitle').textContent = shortName(name);
   $('clipTitle').title = name;
@@ -3002,6 +3239,7 @@ async function loadBrain() {
 function resetUI() {
   resultSeq += 1;
   stopVirtual();
+  resetReportPanel();
   currentResult = null; currentSummary = null; currentContext = null; comparison = null;
   mutedOn = false; virtualTime = 0;
   clearAllCharts();

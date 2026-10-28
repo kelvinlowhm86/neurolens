@@ -9,6 +9,7 @@ each queued upload through the real dispatcher into fake-mode analysis.
 """
 
 import argparse
+import json
 import os
 import shutil
 import sys
@@ -114,6 +115,97 @@ def _make_queue(sqs, s3):
         },
     )
     return queue_url
+
+
+class FakeReportUsage:
+    def model_dump(self):
+        return {"input_tokens": 100, "output_tokens": 50}
+
+
+class FakeReportClient:
+    """The report Lambda's Anthropic client on a laptop: one canned, valid answer."""
+
+    def __init__(self, answer):
+        self.messages = type("Messages", (), {"create": self.create})()
+        self.answer = answer
+
+    def create(self, **kwargs):
+        return type(
+            "Response",
+            (),
+            {
+                "stop_reason": "end_turn",
+                "content": [type("Block", (), {"type": "text", "text": json.dumps(self.answer)})()],
+                "usage": FakeReportUsage(),
+            },
+        )()
+
+
+def _canned_report(result, summary):
+    """A valid report built from the result's own summary, for the local stack (M3g §9)."""
+    duration = result["duration_seconds"]
+    moments = []
+    picks = (
+        ("strong", summary.get("strong_moments")),
+        ("weak", summary.get("weak_moments")),
+    )
+    for kind, list_ in picks:
+        for pick in list_ or []:
+            start, end = int(pick["start"]), int(pick["end"])
+            if 0 <= start <= end < duration:
+                strong = kind == "strong"
+                moments.append(
+                    {
+                        "start": start,
+                        "end": end,
+                        "kind": kind,
+                        "what_happens": "The picture changes here.",
+                        "brain_response": "The predicted response rises above the video's average."
+                        if strong
+                        else "The predicted response falls below the video's average.",
+                        "suggestion": "Keep this pacing." if strong else "Try a change here.",
+                    }
+                )
+    if not moments:
+        moments = [
+            {
+                "start": 0,
+                "end": max(0, duration - 1),
+                "kind": "strong",
+                "what_happens": "The video opens.",
+                "brain_response": "The predicted response starts above typical viewing.",
+                "suggestion": None,
+            }
+        ]
+    return {
+        "headline": "A sample reading of this video",
+        "summary": "A local sample report, built from the video's strongest and weakest moments.",
+        "moments": moments[:8],
+        "strengths": ["A clear opening."],
+        "improvements": ["Tighten the weakest moment."],
+    }
+
+
+def _report_starter(s3, db, cfg):
+    """Rows the web app's report request through the real Lambda code with a fake client."""
+    from neurolens import results, storage
+    from neurolens.lambdas import report
+
+    bucket = cfg["aws"]["s3_bucket"]
+
+    def start(job_id):
+        def run():
+            try:
+                result = storage.get_result(s3, bucket, job_id)
+                answer = _canned_report(result, results.summarise(result))
+                report.write_report(job_id, db, s3, bucket, FakeReportClient(answer), cfg)
+                print(f"Report {job_id}: written")
+            except Exception as err:
+                print(f"Report {job_id} failed: {type(err).__name__}: {err}", file=sys.stderr)
+
+        threading.Thread(target=run, name="local-report", daemon=True).start()
+
+    return start
 
 
 class LocalSageMaker:
@@ -257,7 +349,7 @@ def main(argv=None):
         sqs = boto3.client("sqs")
         _make_s3(s3)
         queue_url = _make_queue(sqs, s3)
-        app = create_app(cfg=cfg, db=db, s3_client=s3)
+        app = create_app(cfg=cfg, db=db, s3_client=s3, report_starter=_report_starter(s3, db, cfg))
         web_server, web_thread = _serve_web(app)
         print(
             f"NeuroLens is at http://127.0.0.1:{WEB_PORT} "

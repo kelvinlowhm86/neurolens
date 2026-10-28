@@ -83,6 +83,12 @@
   licence to use it for the purposes above. As a thank-you, adding a valid audience-retention
   curve makes that video's analysis free.</p>
 
+  <h2>AI reports</h2>
+  <p>When you ask for a report, the video's frames (one per second), its spoken words and its
+  brain numbers are sent to Claude on Amazon Bedrock in AWS us-east-1. AWS states that Bedrock
+  does not store them or use them for training. The frames and the report are deleted with the
+  job, and expire with the result after 30 days.</p>
+
   <h2>Who can see it</h2>
   <p>Only you, and the NeuroLens team, can see your videos and results. We do not sell or share
   them, and we do not use them for advertising. Sign-in is handled by Amazon Cognito.</p>

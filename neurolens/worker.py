@@ -8,6 +8,7 @@ the analysis, writes the result and charges or refunds it. `/ping` answers while
 import contextlib
 import enum
 import hashlib
+import io
 import json
 import logging
 import os
@@ -17,6 +18,7 @@ import tempfile
 import threading
 import time
 import uuid
+import zipfile
 from datetime import UTC, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -165,6 +167,16 @@ def job_temp_dir(feature_cache=None):
         except OSError:
             logger.exception(f"Could not remove the job's temporary folder {folder}")
         _log_temp_state(base, feature_cache)
+
+
+def _frames_zip(frames, words):
+    """The report's frames file: 0000.jpg, 0001.jpg, ... and words.json, uncompressed (M3g §2b)."""
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_STORED) as archive:
+        for number, data in enumerate(frames):
+            archive.writestr(f"{number:04d}.jpg", data)
+        archive.writestr("words.json", json.dumps(words).encode())
+    return buffer.getvalue()
 
 
 def _sha256_file(path):
@@ -367,6 +379,17 @@ def _analyse(
     # Cast and check before any write: an overflowing or non-finite value must fail the job
     # before the dataset copy or the result exists (M3d §5).
     brain = storage.brain_bytes(preds_full)
+
+    # Frames are for the optional report: cutting or storing them never fails the paid job.
+    try:
+        frames = inference.make_frames(video_path, result["duration_seconds"])
+        storage.put_frames(s3, bucket, job_id, _frames_zip(frames, inference.spoken_words(events)))
+    except inference.FramesFailed:
+        logger.error(f"FRAMES_FAILED {job_id}")
+    except Exception:
+        logger.exception(f"FRAMES_FAILED {job_id}")
+    else:
+        result["frames"] = len(frames)
 
     result["job_id"] = job_id
     result["processing_time_seconds"] = round(time.time() - t0, 1)

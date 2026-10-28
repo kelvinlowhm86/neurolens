@@ -25,6 +25,12 @@
     "heartbeat_seconds": 50,
     "max_job_minutes": 55
   },
+  "report": {
+    "model": "anthropic.claude-sonnet-5-5",
+    "max_tokens": 16000,
+    "max_tries": 3,
+    "stale_minutes": 10
+  },
   "db": {
     "backend": "data_api"
   },

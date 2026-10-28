@@ -790,6 +790,66 @@ def issue_refund(
     return True
 
 
+# ---------------------------------------------------------------- the AI report
+
+
+def claim_report(db, user_id, job_id, max_tries, stale_minutes):
+    """Claim one report attempt for the user's done job (M3g §3). True if this call got it.
+
+    It may claim a report never started, one that failed, or a `writing` one older than
+    `stale_minutes` (a Lambda that died); never a fresh `writing` one or one at its try cap.
+    """
+    with db.transaction() as tx:
+        rows = tx.execute(
+            "UPDATE jobs SET report_state = :writing, report_tries = report_tries + 1, "
+            "report_started_at = now(), report_error = NULL "
+            "WHERE job_id = CAST(:job_id AS uuid) AND user_id = :user_id "
+            "AND status = :done AND deleted_at IS NULL AND report_tries < :max_tries "
+            "AND EXISTS (SELECT 1 FROM users u WHERE u.user_id = :user_id "
+            "AND u.deleted_at IS NULL) "
+            "AND (report_state IS NULL OR report_state = :failed OR "
+            "(report_state = :writing AND report_started_at < now() - "
+            "make_interval(mins => :stale))) RETURNING job_id",
+            {
+                "job_id": job_id,
+                "user_id": user_id,
+                "done": DONE,
+                "writing": "writing",
+                "failed": "failed",
+                "max_tries": max_tries,
+                "stale": stale_minutes,
+            },
+        )
+    return bool(rows)
+
+
+def finish_report(db, job_id, state, error=None):
+    """Finish a `writing` report as `ready` or `failed` (M3g §3). False if no row changed."""
+    with db.transaction() as tx:
+        rows = tx.execute(
+            "UPDATE jobs SET report_state = :state, report_error = :error "
+            "WHERE job_id = CAST(:job_id AS uuid) AND report_state = :writing "
+            "AND deleted_at IS NULL RETURNING job_id",
+            {
+                "job_id": job_id,
+                "state": state,
+                "error": error,
+                "writing": "writing",
+            },
+        )
+    return bool(rows)
+
+
+def release_report_try(db, job_id):
+    """Mark a report failed and give its try back, for a Lambda that could not start (M3g §4)."""
+    with db.transaction() as tx:
+        tx.execute(
+            "UPDATE jobs SET report_state = :failed, report_tries = report_tries - 1 "
+            "WHERE job_id = CAST(:job_id AS uuid) AND report_state = :writing",
+            {"job_id": job_id, "failed": "failed", "writing": "writing"},
+        )
+
+
 # ---------------------------------------------------------------- retention curves
 
 

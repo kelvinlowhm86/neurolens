@@ -1,8 +1,10 @@
 """S3 helpers shared by the web app and the worker. No torch, no neurolens.inference."""
 
+import io
 import json
 import logging
 import uuid
+import zipfile
 from datetime import UTC, datetime
 from pathlib import PurePosixPath
 from urllib.parse import unquote_plus
@@ -151,6 +153,29 @@ def put_thumbnail(s3, bucket, job_id, data):
     )
 
 
+def put_frames(s3, bucket, job_id, data):
+    """Write results/<job_id>.frames, replacing an earlier copy (M3g §2b)."""
+    s3.put_object(
+        Bucket=bucket,
+        Key=f"results/{job_id}.frames",
+        Body=data,
+        ContentType="application/zip",
+    )
+
+
+def get_frames(s3, bucket, job_id):
+    """The frames in time order and the spoken words from results/<job_id>.frames (M3g §2b).
+
+    A missing object or a malformed zip raises.
+    """
+    body = s3.get_object(Bucket=bucket, Key=f"results/{job_id}.frames")["Body"].read()
+    with zipfile.ZipFile(io.BytesIO(body)) as archive:
+        names = sorted(name for name in archive.namelist() if name.endswith(".jpg"))
+        frames = [archive.read(name) for name in names]
+        words = json.loads(archive.read("words.json")) if "words.json" in archive.namelist() else []
+    return frames, words
+
+
 def put_dataset(s3, bucket, job_id, upload_key, result, brain):
     """Keep a consented job's video under dataset/<job_id>/ and our output under academic/.
 
@@ -233,6 +258,8 @@ def job_keys(job_id, object_key):
         f"results/{job_id}.json",
         f"results/{job_id}.brain",
         f"results/{job_id}.jpg",
+        f"results/{job_id}.frames",
+        f"results/{job_id}.report.json",
     ]
 
 
@@ -278,3 +305,7 @@ def result_exists(s3, bucket, job_id):
 
 def get_result(s3, bucket, job_id):
     return _get_json(s3, bucket, f"results/{job_id}.json")
+
+
+def get_report(s3, bucket, job_id):
+    return _get_json(s3, bucket, f"results/{job_id}.report.json")

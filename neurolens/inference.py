@@ -119,6 +119,21 @@ class ThumbnailFailed(RuntimeError):
     nothing."""
 
 
+def spoken_words(events):
+    """The spoken words of `build_events`, in time order, as {"start", "text"} dicts (M3g §2b).
+
+    Empty in fake mode (its stand-in has no words) and when the video has no speech.
+    """
+    if isinstance(events, _FakeEvents):
+        return []
+    words = events.loc[events.type == "Word"]
+    ordered = words.sort_values("start", kind="stable")
+    return [
+        {"start": round(float(row["start"]), 2), "text": str(row["text"])}
+        for _, row in ordered.iterrows()
+    ]
+
+
 def make_thumbnail(path, seconds):
     """A still from `seconds` into the video, 320 px wide, as JPEG bytes (M3d §5b).
 
@@ -153,6 +168,55 @@ def make_thumbnail(path, seconds):
     if result.returncode != 0 or not result.stdout:
         raise ThumbnailFailed(f"ffmpeg could not make a thumbnail from {path}")
     return result.stdout
+
+
+JPEG_END = b"\xff\xd9"
+
+
+class FramesFailed(RuntimeError):
+    """ffmpeg could not cut the report's frames: the file is not a video, it timed out, or it
+    wrote nothing."""
+
+
+def make_frames(path, seconds):
+    """One JPEG per whole second of the video, for the report (M3g §2a).
+
+    `seconds` is the result's duration (its per-second series length), so frame t lines up with
+    value t. The long edge is 640 px at most and never upscaled, and the other edge is even.
+    Raises FramesFailed on a non-zero exit, a 120 s timeout, or no frames.
+    """
+    if seconds < 1:
+        raise FramesFailed(f"no frames to cut from {path}")
+    try:
+        result = subprocess.run(
+            [
+                "ffmpeg",
+                "-v",
+                "error",
+                "-i",
+                str(path),
+                "-vf",
+                "fps=1,scale='if(gte(iw,ih),min(iw,640),-2)':'if(gte(iw,ih),-2,min(ih,640))'",
+                "-frames:v",
+                str(seconds),
+                "-q:v",
+                "5",
+                "-f",
+                "image2pipe",
+                "-c:v",
+                "mjpeg",
+                "-",
+            ],
+            capture_output=True,
+            timeout=120,
+        )
+    except subprocess.TimeoutExpired as err:
+        raise FramesFailed(f"ffmpeg timed out cutting frames from {path}") from err
+    # Each JPEG ends with the FFD9 marker, which cannot occur inside JPEG data (FF is stuffed).
+    frames = [part + JPEG_END for part in result.stdout.split(JPEG_END) if part]
+    if result.returncode != 0 or not frames:
+        raise FramesFailed(f"ffmpeg could not cut frames from {path}")
+    return frames[:seconds]
 
 
 class TimelineError(RuntimeError):

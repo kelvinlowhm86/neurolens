@@ -220,10 +220,11 @@ locals {
       name    = "neurolens-web"
       handler = "neurolens.web.lambda_handler.handler"
       environment = {
-        NEUROLENS_AUTH_MODE      = "cognito"
-        NEUROLENS_COGNITO_ISSUER = local.cognito_issuer
-        NEUROLENS_COGNITO_DOMAIN = local.cognito_domain
-        NEUROLENS_GPU_ENDPOINT   = local.endpoint_name
+        NEUROLENS_AUTH_MODE       = "cognito"
+        NEUROLENS_COGNITO_ISSUER  = local.cognito_issuer
+        NEUROLENS_COGNITO_DOMAIN  = local.cognito_domain
+        NEUROLENS_GPU_ENDPOINT    = local.endpoint_name
+        NEUROLENS_REPORT_FUNCTION = aws_lambda_function.report.function_name
       }
     }
   }
