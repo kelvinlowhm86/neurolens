@@ -332,23 +332,27 @@ pytest && ruff check . && ruff format --check .
 
 ### What the notebook does
 
-The notebook runs 18 code cells in sequence:
+The notebook runs 21 code cells in sequence (the last one is empty):
 
 | Cell | What it does | Time |
 |------|-------------|------|
-| 1–2 | GPU check, NumPy version check | instant |
-| 3–4 | HuggingFace auth, pre-download LLaMA 3.2-3B | ~5 min (first run, 6 GB download) |
-| 5 | Load TRIBE v2 checkpoint | ~10 sec |
-| 6 | Download Sintel trailer (480p, 52s) | ~5 sec |
-| 7 | Run full inference (video + audio) | ~2–5 min (first run loads V-JEPA2 ~14 GB) |
-| 8–9 | Inspect raw `(T, 20484)` output | instant |
-| 10–11 | Load Destrieux atlas, build ROI vertex masks | ~5 sec |
-| 12 | Extract per-region engagement timeseries | instant |
-| 13–14 | Strip audio, re-run inference (video-only) | ~2–5 min |
-| 15 | Compute audio contribution delta | instant |
-| 16 | Normalise all scores to 0–1 | instant |
-| 17 | Plot 6-panel engagement chart, save PNG | instant |
-| 18 | Export structured JSON output | instant |
+| 1 | GPU check | instant |
+| 2 | Locate the project root, load `config.json` | instant |
+| 3 | NumPy version check | instant |
+| 4–5 | HuggingFace auth, pre-download LLaMA 3.2-3B | ~5 min (first run, 6 GB download) |
+| 6 | Load TRIBE v2 checkpoint | ~10 sec |
+| 7 | Download Sintel trailer (480p, 52s) | ~5 sec |
+| 8 | Build events, run full inference (video + audio) | ~2–5 min (first run loads V-JEPA2 ~14 GB) |
+| 9–10 | Inspect raw `(T, 20484)` output and the segment list | instant |
+| 11–12 | Load Destrieux atlas, map Destrieux labels to the ROIs | ~5 sec |
+| 13 | Extract per-region engagement timeseries | instant |
+| 14–15 | Strip audio, re-run inference (video-only) | ~2–5 min |
+| 16 | Compute audio contribution delta | instant |
+| 17 | Normalise all scores to 0–1 | instant |
+| 18 | Plot 6-panel engagement chart, save PNG | instant |
+| 19 | Export structured JSON output | instant |
+| 20 | Print per-GPU VRAM use | instant |
+| 21 | (empty) | — |
 
 **Total first-run time:** approximately 15–20 minutes (dominated by model downloads).  
 **Subsequent runs:** approximately 5–10 minutes (inference only, models cached).
@@ -374,7 +378,7 @@ If running on 2× RTX 4090 (48 GB total, 24 GB each) rather than a single A100:
 | Symptom | Cause | Fix |
 |---------|-------|-----|
 | `ImportError: cannot import name '_center'` | NumPy ≥ 2.1 | NumPy is pinned in `requirements/base.txt` (2.2.6); reinstall from `requirements/` then restart kernel |
-| `ReadTimeout` during `model.predict()` | LLaMA download times out | Run the pre-download cell (Cell 4) first |
+| `ReadTimeout` during `model.predict()` | LLaMA download times out | Run the pre-download cell (Cell 5) first |
 | `CUDA out of memory` on `predict()` | Insufficient VRAM | Need 40 GB+ single GPU, or multi-GPU setup |
 | `ValueError` on `get_events_dataframe()` | Temp file not flushed | The notebook handles this — don't modify file I/O |
 | `401 Unauthorized` | LLaMA license not accepted | Visit [meta-llama/Llama-3.2-3B](https://huggingface.co/meta-llama/Llama-3.2-3B) and accept |

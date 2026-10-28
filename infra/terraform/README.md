@@ -55,9 +55,10 @@ down.
    - SageMaker endpoint quota for `ml.g6e.xlarge` (one instance is enough; the account's GPU quota
      is 2).
    - Lambda concurrency: if the account's limit is well below 1,000, request 1,000 (free).
-   - A HuggingFace read token for the model weights and a Google OAuth client for sign-in.
+   - A HuggingFace read token for the model weights (it goes in the repo's git-ignored `.env`
+     as `HF_TOKEN`, see `.env.example`) and a Google OAuth client for sign-in.
 6. Secrets in Parameter Store (`SecureString`, never in git or Terraform files):
-   `/neurolens/hf_token`, `/neurolens/terraform/google_client_secret` and
+   `/neurolens/terraform/google_client_secret` and
    `/neurolens/web/flask_secret_key` (at least 32 random bytes).
 7. Confirm the $40/month AWS Budget alerts still exist (Billing, Budgets).
 

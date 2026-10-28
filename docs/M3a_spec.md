@@ -34,7 +34,7 @@ Google sign-in, the public HTTPS website (CloudFront), the web server on AWS, th
 ### 3b. Money and durations
 Money is stored as **integer cents** (`BIGINT`) and durations as **integer milliseconds**. This avoids decimal-type differences between the Data API and PostgreSQL, and rounding errors.
 - Prices come from M1's `neurolens.pricing.estimate_cost_cents` ($0.90 per started 30-second block, with a half-second allowance so a "30-second" ad that ffprobe measures at 30.02 s is one block, not two).
-- Starter credit: config `billing.starter_cents`, default **500** ($5.00, about five 30-second analyses).
+- Starter credit: config `billing.starter_cents` wins; if a config omits it, the code's fallback (`DEFAULT_STARTER_CENTS` in `neurolens/web/app.py`) is 500. The committed `config.json` sets it to **0**, so a deployment gives no starter credit.
 
 ### 3c. Schema (`infra/migrations/001_init.sql`)
 ```sql
