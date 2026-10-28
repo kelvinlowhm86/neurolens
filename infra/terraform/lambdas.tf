@@ -249,6 +249,13 @@ resource "aws_iam_role_policy" "dispatcher" {
         Resource = local.endpoint_arn
       },
       {
+        # Start the GPU after a dispatch so the cold start does not wait for the alarm (M3f §6a).
+        Sid      = "StartTheGpu"
+        Effect   = "Allow"
+        Action   = ["sagemaker:DescribeEndpoint", "sagemaker:UpdateEndpointWeightsAndCapacities"]
+        Resource = local.endpoint_arn
+      },
+      {
         Sid      = "OwnLogs"
         Effect   = "Allow"
         Action   = ["logs:CreateLogStream", "logs:PutLogEvents"]

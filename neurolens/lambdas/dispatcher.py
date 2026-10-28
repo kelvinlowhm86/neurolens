@@ -10,6 +10,8 @@ import logging
 import os
 from datetime import UTC, datetime
 
+from botocore.exceptions import ClientError
+
 from neurolens import billing, lambdas, storage
 from neurolens.media import UnreadableVideo, probe_duration
 
@@ -122,6 +124,42 @@ def dispatch(
     return "invoked"
 
 
+def start_gpu_if_off(control, endpoint):
+    """Start the endpoint after a dispatch (M3f §6a). Returns the outcome; never raises."""
+    try:
+        variants = control.describe_endpoint(EndpointName=endpoint).get("ProductionVariants", [])
+    except Exception:
+        logger.exception(f"Could not describe {endpoint}; the GPU was not started")
+        return "error"
+    if len(variants) != 1:
+        logger.error(f"{endpoint} has {len(variants)} production variants; expected one")
+        return "error"
+
+    variant = variants[0]
+    if variant.get("DesiredInstanceCount", 0) > 0:
+        logger.info(f"GPU already running for {endpoint}")
+        return "running"
+
+    try:
+        control.update_endpoint_weights_and_capacities(
+            EndpointName=endpoint,
+            DesiredWeightsAndCapacities=[
+                {"VariantName": variant["VariantName"], "DesiredInstanceCount": 1}
+            ],
+        )
+    except ClientError as err:
+        if err.response.get("Error", {}).get("Code") == "ValidationException":
+            logger.info(f"GPU start already under way for {endpoint}")
+            return "starting"
+        logger.exception(f"Could not start the GPU for {endpoint}")
+        return "error"
+    except Exception:
+        logger.exception(f"Could not start the GPU for {endpoint}")
+        return "error"
+    logger.info(f"Started the GPU for {endpoint}")
+    return "started"
+
+
 def handler(event, context):
     lambdas.setup_logging()
     s3, db = lambdas.s3_client(), lambdas.database()
@@ -144,4 +182,6 @@ def handler(event, context):
                     max_duration_s=max_duration_s,
                 )
             )
+    if "invoked" in results:
+        start_gpu_if_off(lambdas.sagemaker_client(), endpoint)
     return results

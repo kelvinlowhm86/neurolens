@@ -402,8 +402,8 @@ def _analyse(
     return Outcome.DONE
 
 
-def boot_record(container_start_utc, model_loaded_utc, warmup_done_utc, ready_utc):
-    """The container's own start-up times, as UTC text (None for a missing step). Pure."""
+def boot_record(container_start_utc, model_loaded_utc, warmup_done_utc, ready_utc, gpu_name):
+    """Start-up times as UTC text (None for a missing step) and the GPU name. Pure."""
     return {
         "container_start_utc": storage.utc_text(container_start_utc)
         if container_start_utc
@@ -411,6 +411,7 @@ def boot_record(container_start_utc, model_loaded_utc, warmup_done_utc, ready_ut
         "model_loaded_utc": storage.utc_text(model_loaded_utc) if model_loaded_utc else None,
         "warmup_done_utc": storage.utc_text(warmup_done_utc) if warmup_done_utc else None,
         "ready_utc": storage.utc_text(ready_utc) if ready_utc else None,
+        "gpu_name": gpu_name,
     }
 
 
@@ -429,8 +430,8 @@ def _put_boot_json(s3, bucket, name, obj):
 
 
 def _record_boot(s3, bucket, times):
-    container_start, model_loaded, warmup_done, ready = times
-    record = boot_record(container_start, model_loaded, warmup_done, ready)
+    container_start, model_loaded, warmup_done, ready, gpu_name = times
+    record = boot_record(container_start, model_loaded, warmup_done, ready, gpu_name)
     stamp = storage.utc_text(container_start).replace(":", "")
     _put_boot_json(s3, bucket, f"{socket.gethostname()}-{stamp}", record)
 
@@ -572,6 +573,9 @@ def serve():
     feature_cache = tempfile.mkdtemp(prefix="neurolens-features-")
     inference.load_model(cfg, feature_cache=feature_cache)
     model_loaded = datetime.now(UTC)
+    gpu = inference.gpu_info()
+    gpu_name = gpu["device"] if gpu is not None else None
+    logger.info(f"GPU: {gpu_name}")
     roi_masks = inference.roi_masks()
 
     warmup = settings.resolve_paths(cfg, settings.get_root())["data"] / "warmup.mp4"
@@ -592,6 +596,8 @@ def serve():
         feature_cache=feature_cache,
     )
     ready = datetime.now(UTC)
-    _record_boot(s3, aws["s3_bucket"], (container_start, model_loaded, warmup_done, ready))
+    _record_boot(
+        s3, aws["s3_bucket"], (container_start, model_loaded, warmup_done, ready, gpu_name)
+    )
     logger.info(f"Worker ready on port {PORT}")
     server.serve_forever()

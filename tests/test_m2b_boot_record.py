@@ -14,20 +14,25 @@ CONTAINER_START = datetime(2026, 10, 14, 3, 0, 41, tzinfo=UTC)
 MODEL_LOADED = datetime(2026, 10, 14, 3, 2, 9, tzinfo=UTC)
 WARMUP_DONE = datetime(2026, 10, 14, 3, 3, 55, tzinfo=UTC)
 READY = datetime(2026, 10, 14, 3, 5, 58, tzinfo=UTC)
+GPU_NAME = "NVIDIA L4"
 FIELDS = {
     "container_start_utc",
     "model_loaded_utc",
     "warmup_done_utc",
     "ready_utc",
+    "gpu_name",
 }
 
 
 def test_boot_record_returns_exactly_the_container_fields():
-    assert set(worker.boot_record(CONTAINER_START, MODEL_LOADED, WARMUP_DONE, READY)) == FIELDS
+    assert (
+        set(worker.boot_record(CONTAINER_START, MODEL_LOADED, WARMUP_DONE, READY, GPU_NAME))
+        == FIELDS
+    )
 
 
 def test_boot_record_formats_each_step_as_utc_text():
-    record = worker.boot_record(CONTAINER_START, MODEL_LOADED, WARMUP_DONE, READY)
+    record = worker.boot_record(CONTAINER_START, MODEL_LOADED, WARMUP_DONE, READY, GPU_NAME)
 
     assert record["container_start_utc"] == "2026-10-14T03:00:41Z"
     assert record["model_loaded_utc"] == "2026-10-14T03:02:09Z"
@@ -36,7 +41,7 @@ def test_boot_record_formats_each_step_as_utc_text():
 
 
 def test_boot_record_keeps_a_missing_step_as_none():
-    record = worker.boot_record(CONTAINER_START, None, None, READY)
+    record = worker.boot_record(CONTAINER_START, None, None, READY, GPU_NAME)
 
     assert set(record) == FIELDS
     assert record["container_start_utc"] == "2026-10-14T03:00:41Z"
@@ -46,7 +51,7 @@ def test_boot_record_keeps_a_missing_step_as_none():
 
 
 def test_boot_record_is_pure_and_repeatable():
-    first = worker.boot_record(CONTAINER_START, MODEL_LOADED, WARMUP_DONE, READY)
-    second = worker.boot_record(CONTAINER_START, MODEL_LOADED, WARMUP_DONE, READY)
+    first = worker.boot_record(CONTAINER_START, MODEL_LOADED, WARMUP_DONE, READY, GPU_NAME)
+    second = worker.boot_record(CONTAINER_START, MODEL_LOADED, WARMUP_DONE, READY, GPU_NAME)
     assert first == second
     assert CONTAINER_START.tzinfo is UTC  # the inputs were not mutated
