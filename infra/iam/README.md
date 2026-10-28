@@ -17,7 +17,8 @@ a ceiling AWS checks on top of a role's own policy: the compute policy only lets
 create or edit roles that carry this boundary, and the deploy user cannot edit the boundary itself.
 So a role can never do more than read and write NeuroLens storage and queues, use the NeuroLens
 database through the Data API, read `/neurolens/` parameters, pull and push the worker image,
-resize only the NeuroLens endpoint, publish to NeuroLens SNS topics, write its own Lambda,
+resize only the NeuroLens endpoint, start only the report function, call Bedrock (no model
+ARN format exists to narrow it), publish to NeuroLens SNS topics, write its own Lambda,
 SageMaker and CodeBuild logs, and delete logins from our Cognito pool. No role may end a
 machine or change an Auto Scaling group.
 
