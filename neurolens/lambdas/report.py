@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 KINDS = ("strong", "weak")
 BEDROCK_API_VERSION = "bedrock-2023-05-31"
 # Sent as the structured-output format. Bedrock's schema subset has no length or count limits, so
-# those live in the prompt and in _valid_report (M3g §5d).
+# those live in the prompt and in _report_problem (M3g §5d).
 _TEXT_LIST = {"type": "array", "items": {"type": "string"}}
 REPORT_SCHEMA = {
     "type": "object",
@@ -64,36 +64,42 @@ def _is_text(value, limit=None):
     return isinstance(value, str) and (limit is None or len(value) <= limit)
 
 
-def _valid_report(answer, duration):
-    """True only for a complete answer inside the schema's limits (M3g §5d)."""
+def _report_problem(answer, duration):
+    """Why the answer is not a complete report inside the schema's limits, or None (M3g §5d)."""
     if not isinstance(answer, dict):
-        return False
-    if not _is_text(answer.get("headline"), MAX_HEADLINE):
-        return False
-    if not _is_text(answer.get("summary"), MAX_SUMMARY):
-        return False
+        return "not a JSON object"
+    headline, summary = answer.get("headline"), answer.get("summary")
+    if not _is_text(headline, MAX_HEADLINE):
+        return f"headline is not text of at most {MAX_HEADLINE} characters ({_size(headline)})"
+    if not _is_text(summary, MAX_SUMMARY):
+        return f"summary is not text of at most {MAX_SUMMARY} characters ({_size(summary)})"
     for name in ("strengths", "improvements"):
         items = answer.get(name)
         if not isinstance(items, list) or len(items) > MAX_LISTS:
-            return False
+            return f"{name} is not a list of at most {MAX_LISTS} ({_size(items)})"
         if not all(isinstance(item, str) for item in items):
-            return False
+            return f"{name} holds something other than text"
     moments = answer.get("moments")
     if not isinstance(moments, list) or not MIN_MOMENTS <= len(moments) <= MAX_MOMENTS:
-        return False
-    for moment in moments:
+        return f"moments is not a list of {MIN_MOMENTS} to {MAX_MOMENTS} ({_size(moments)})"
+    for number, moment in enumerate(moments, 1):
         if not isinstance(moment, dict):
-            return False
+            return f"moment {number} is not an object"
         start, end = moment.get("start"), moment.get("end")
         if not (_is_int(start) and _is_int(end) and 0 <= start <= end < duration):
-            return False
+            return f"moment {number} runs {start!r}-{end!r}, outside 0-{duration - 1} or reversed"
         if moment.get("kind") not in KINDS:
-            return False
+            return f"moment {number} has kind {moment.get('kind')!r}"
         if not _is_text(moment.get("what_happens")) or not _is_text(moment.get("brain_response")):
-            return False
+            return f"moment {number} lacks its text"
         if moment.get("suggestion") is not None and not _is_text(moment.get("suggestion")):
-            return False
-    return True
+            return f"moment {number} has a suggestion that is not text"
+    return None
+
+
+def _size(value):
+    """The length of a text or list, for a problem message; the type name otherwise."""
+    return len(value) if isinstance(value, (str, list)) else type(value).__name__
 
 
 def _text_of(response):
@@ -171,9 +177,12 @@ def write_report(job_id, db, s3, bucket, client, cfg):
             answer = json.loads(text) if text is not None else None
         except (TypeError, ValueError):
             answer = None
-        if not _valid_report(answer, result["duration_seconds"]):
+        problem = (
+            "not JSON" if answer is None else _report_problem(answer, result["duration_seconds"])
+        )
+        if problem:
             billing.finish_report(db, job_id, "failed", "bad_answer")
-            logger.warning(f"{job_id}: report was not a usable answer")
+            logger.warning(f"{job_id}: report was not a usable answer: {problem}")
             return
 
         stored = {

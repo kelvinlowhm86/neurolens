@@ -5,11 +5,15 @@ import json
 
 from neurolens import results
 
-# The answer's limits (M3g §5d): stated in the prompt, checked by the report Lambda.
+# The answer's limits (M3g §5d): checked by the report Lambda; the counts are also the prompt's.
 MAX_HEADLINE = 120
 MAX_SUMMARY = 900
 MIN_MOMENTS, MAX_MOMENTS = 1, 8
 MAX_LISTS = 4
+# The model counts characters only roughly (it counts items exactly), so the prompt asks for
+# shorter text than the check accepts: a slight overshoot must not throw away a paid report.
+ASK_HEADLINE = 100
+ASK_SUMMARY = 700
 
 SYSTEM_PROMPT = """You write a short report about a video for the person who made it. You are
 given the predicted brain response for an average viewer, second by second, and one picture from
@@ -33,8 +37,8 @@ Limits: the headline at most {headline} characters, the summary at most {summary
 {min_moments} to {max_moments} moments, at most {lists} strengths and {lists} improvements.
 Each moment's start and end are whole seconds from 0 to the video's last second, start <= end.
 """.format(
-    headline=MAX_HEADLINE,
-    summary=MAX_SUMMARY,
+    headline=ASK_HEADLINE,
+    summary=ASK_SUMMARY,
     min_moments=MIN_MOMENTS,
     max_moments=MAX_MOMENTS,
     lists=MAX_LISTS,

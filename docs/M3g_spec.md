@@ -139,7 +139,9 @@ Schema (also checked in code after parsing, since a wrong report must not be sto
                  "what_happens": str, "brain_response": str, "suggestion": str | null } ]  (1-8),
   "strengths": [str] (0-4), "improvements": [str] (0-4) }
 ```
-`0 <= start <= end < duration_seconds`. Failure codes: `refused` (`stop_reason == "refusal"`),
+`0 <= start <= end < duration_seconds`. The prompt asks for at most 100 and 700 characters
+(the model counts characters only roughly), so a slight overshoot still passes; the counts it
+states are the checked ones. A `bad_answer` log line names the failed check. Failure codes: `refused` (`stop_reason == "refusal"`),
 `truncated` (`max_tokens`), `bad_answer` (not JSON or fails the checks), `bedrock_error`
 (SDK error after its retries). The stored file adds `model`, `created_at` (UTC text) and the
 `usage` token counts, for cost tracking.
