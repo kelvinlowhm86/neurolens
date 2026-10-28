@@ -581,3 +581,14 @@ def test_a_session_for_a_deleted_user_401s_and_deletes_the_hint(cognito_client, 
     assert cookie is not None
     _, flags = cookie_flags(cookie)
     assert flags["max-age"].lower() == "max-age=0"
+
+
+def test_every_page_post_goes_through_post_json():
+    """M3b: behind CloudFront's origin access control, a POST without `x-amz-content-sha256`
+    is refused before it reaches the app, so every page POST must use the hashing helper."""
+    for page in STATIC.glob("*.html"):
+        text = page.read_text()
+        posts = [m.start() for m in re.finditer(r"""method:\s*['"]POST['"]""", text)]
+        helper = text.find("async function postJSON(")
+        allowed = [p for p in posts if helper != -1 and helper < p < text.find("\n}\n", helper)]
+        assert posts == allowed, f"{page.name}: a POST bypasses postJSON"

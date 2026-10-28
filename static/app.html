@@ -2041,11 +2041,7 @@ async function requestReport() {
   button.textContent = 'Starting…';
   $('reportActions').hidden = false;
   try {
-    const res = await fetch(`/api/jobs/${jobId}/report`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: '{}',
-    });
+    const res = await postJSON(`/api/jobs/${jobId}/report`, {});
     const data = await res.json().catch(() => ({}));
     if (seq !== reportSeq || reportJob !== jobId) return;
     if (res.status === 401) return window.location.reload();
