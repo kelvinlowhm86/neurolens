@@ -179,6 +179,8 @@ aws application-autoscaling describe-scalable-targets --service-namespace sagema
   --resource-ids endpoint/neurolens/variant/main
 ```
 
+The dashboard is CloudWatch > Dashboards > neurolens (free for the first 3 dashboards in an account).
+
 ## 4. Add a browser address later
 
 Add it to `allowed_origins` in `terraform.tfvars` and `terraform apply`.
