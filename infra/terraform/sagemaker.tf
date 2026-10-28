@@ -16,11 +16,15 @@ locals {
   image_digest_prefix = var.worker_image == "" ? "none" : substr(replace(local.image_digest, "sha256:", ""), 0, 12)
   worker_image_uri    = "${aws_ecr_repository.worker.repository_url}@${local.image_digest}"
 
-  # g6e first, then g6. SageMaker tries the next pool when the first has no capacity, waiting up
-  # to 600 s per variant. There is no CPU rehearsal: SageMaker refuses a CUDA image on a CPU type.
+  # Fastest per dollar first; each fits the model's ~20 GB GPU peak with at least 32 GB of RAM.
+  # SageMaker tries the next pool when one has no capacity (28 Oct: g6e and g6 were both out),
+  # waiting up to 600 s per variant. Each type needs its own SageMaker "for endpoint usage" quota.
+  # There is no CPU rehearsal: SageMaker refuses a CUDA image on a CPU type.
   instance_pools = [
     { instance_type = "ml.g6e.xlarge", priority = 1 },
     { instance_type = "ml.g6.2xlarge", priority = 2 },
+    { instance_type = "ml.g5.2xlarge", priority = 3 },
+    { instance_type = "ml.g6e.2xlarge", priority = 4 },
   ]
 
   # Endpoint configurations cannot be changed in place, so the name changes with all of their

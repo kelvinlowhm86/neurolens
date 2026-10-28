@@ -23,8 +23,8 @@ and `destroy` removes everything it created. The region is one setting (`region`
   limited to what it needs and capped by a permission boundary.
 - The ECR repository `neurolens-worker` (last 3 images) and the CodeBuild project
   `neurolens-worker-image` (privileged Docker, 60-minute timeout).
-- The SageMaker model, endpoint configuration (instance pools `ml.g6e.xlarge` then
-  `ml.g6.2xlarge`) and the endpoint `neurolens`; its async error topic `neurolens-gpu-errors`.
+- The SageMaker model, endpoint configuration (instance pools `ml.g6e.xlarge`,
+  `ml.g6.2xlarge`, `ml.g5.2xlarge`, `ml.g6e.2xlarge`, in that order) and the endpoint `neurolens`; its async error topic `neurolens-gpu-errors`.
 - Application Auto Scaling: min 0, max `max_instances`; a waiting request starts a GPU, seven
   idle minutes stop it.
 - Lambda functions: the dispatcher (jobs queue, with the ffprobe layer), the SageMaker error

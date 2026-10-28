@@ -147,7 +147,7 @@ The same rules as the old `verify` (length limit first, then record the duration
   - The backlog counts requests in progress too (AWS metric definition), but each minute's value reaches CloudWatch about 3 minutes late, so the alarm judges the queue as it was then. A job in its first ~3 minutes does not hold the GPU (§12a).
   - **Missing data counts as breaching:** AWS may stop publishing the backlog when idle, and an alarm without data must not keep a GPU on.
 - No target-tracking policy: with one instance it adds nothing, and AWS warns that several policies conflict.
-- **Instance types:** an instance pool list, `ml.g6e.xlarge` first, then `ml.g6.2xlarge` (SageMaker tries the next pool when the first has no capacity; `VariantInstanceProvisionTimeoutInSeconds` 600).
+- **Instance types:** an instance pool list, `ml.g6e.xlarge` first, then `ml.g6.2xlarge`, `ml.g5.2xlarge`, `ml.g6e.2xlarge` (SageMaker tries the next pool when one has no capacity; `VariantInstanceProvisionTimeoutInSeconds` 600 per pool). Each type fits the ~20 GB GPU peak with at least 32 GB of RAM and needs its own SageMaker "for endpoint usage" quota. Four, not two, since 28 Oct: g6e and g6 were both out three times in a row and the image switch rolled back.
   - The `hashicorp/aws` provider cannot express instance pools (checked up to 6.70, Oct 2026), so the endpoint configuration alone uses `awscc_sagemaker_endpoint_config` from the `hashicorp/awscc` provider (AWS Cloud Control), which can. Everything else stays on `hashicorp/aws`. No hand-made endpoint config.
 - **Creating or updating the endpoint** always starts one instance (`InitialInstanceCount` ≥ 1, AWS API). The scale-in alarm stays in ALARM while the GPU is off, so it sets the count back to 0 as soon as the endpoint is in service (25 Oct: about a minute into the container's start-up). A deploy therefore costs part of a cold start (an estimate: about $0.25 on `g6e`) and leaves the GPU off; the first upload after it makes a normal cold start.
 
@@ -347,7 +347,7 @@ Order, with no long gap between the steps:
    - the first job's `transcribing` against a later job's (the warm-up must make them alike);
    - cost per video;
    - that `ApproximateBacklogSize` has a point every minute while a job runs;
-   - that the endpoint accepted both instance pools (`DescribeEndpointConfig`).
+   - that the endpoint accepted all instance pools (`DescribeEndpointConfig`).
 7. Fallback: not forced. Record which type ran.
 8. Finish: confirm `ALL STOPPED`. Nothing stays running: there is no NAT to switch off.
 
