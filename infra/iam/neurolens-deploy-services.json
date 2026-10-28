@@ -42,6 +42,16 @@
       "Resource": "arn:aws:cloudwatch:us-east-1:*:alarm:neurolens-*"
     },
     {
+      "Sid": "DashboardOnlyNeurolens",
+      "Effect": "Allow",
+      "Action": [
+        "cloudwatch:PutDashboard",
+        "cloudwatch:GetDashboard",
+        "cloudwatch:DeleteDashboards"
+      ],
+      "Resource": "arn:aws:cloudwatch::*:dashboard/neurolens*"
+    },
+    {
       "Sid": "EmailTopicsOnlyNeurolens",
       "Effect": "Allow",
       "Action": "sns:*",
