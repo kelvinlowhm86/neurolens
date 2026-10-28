@@ -42,7 +42,6 @@ resource "aws_cloudwatch_dashboard" "neurolens" {
         height = 4
         properties = {
           title  = "Alarms"
-          region = var.region
           alarms = local.dashboard_alarms
         }
       },
@@ -127,12 +126,11 @@ resource "aws_cloudwatch_dashboard" "neurolens" {
           view   = "timeSeries"
           period = 60
           # One line per pool from the endpoint configuration, so a slow backup-GPU run stands out.
-          metrics = flatten([
-            for i, pool in local.instance_pools : [
-              ["AWS/SageMaker", "TotalProcessingTime", "EndpointName", local.endpoint_name, "VariantName", local.variant_name, "InstanceType", pool.instance_type, { stat = "Average", id = "proc_${i}", visible = false, period = 60 }],
-              [{ expression = "proc_${i}/1000", label = pool.instance_type }],
-            ]
-          ])
+          # concat, not flatten: flatten would merge every row into one list.
+          metrics = concat(
+            [for i, pool in local.instance_pools : ["AWS/SageMaker", "TotalProcessingTime", "EndpointName", local.endpoint_name, "VariantName", local.variant_name, "InstanceType", pool.instance_type, { stat = "Average", id = "proc_${i}", visible = false, period = 60 }]],
+            [for i, pool in local.instance_pools : [{ expression = "proc_${i}/1000", label = pool.instance_type }]],
+          )
         }
       },
       {
@@ -163,12 +161,10 @@ resource "aws_cloudwatch_dashboard" "neurolens" {
           region = var.region
           view   = "timeSeries"
           period = 60
-          metrics = flatten([
-            for i, name in local.dashboard_lambdas : [
-              ["AWS/Lambda", "Duration", "FunctionName", name, { stat = "Maximum", id = "dur_${i}", visible = false, period = 60 }],
-              [{ expression = "dur_${i}/1000", label = name }],
-            ]
-          ])
+          metrics = concat(
+            [for i, name in local.dashboard_lambdas : ["AWS/Lambda", "Duration", "FunctionName", name, { stat = "Maximum", id = "dur_${i}", visible = false, period = 60 }]],
+            [for i, name in local.dashboard_lambdas : [{ expression = "dur_${i}/1000", label = name }]],
+          )
         }
       },
       {
