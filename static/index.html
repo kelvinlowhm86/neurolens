@@ -172,7 +172,8 @@ function wake() {
   if (woke) return;
   woke = true;
   for (const type of WAKE_EVENTS) window.removeEventListener(type, wake);
-  postJSON('/api/wake', {}).catch(() => {});
+  // keepalive: a click on Sign in navigates at once and would otherwise cancel the wake.
+  postJSON('/api/wake', {}, { keepalive: true }).catch(() => {});
 }
 for (const type of WAKE_EVENTS) {
   window.addEventListener(type, wake, { once: true, passive: true });
