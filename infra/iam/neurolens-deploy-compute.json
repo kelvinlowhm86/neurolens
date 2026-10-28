@@ -10,6 +10,16 @@
       "Resource": "*"
     },
     {
+      "Sid": "GpuCapacityAndQuotaRead",
+      "Effect": "Allow",
+      "Action": [
+        "ec2:GetSpotPlacementScores",
+        "servicequotas:GetServiceQuota",
+        "servicequotas:ListServiceQuotas"
+      ],
+      "Resource": "*"
+    },
+    {
       "Sid": "Ec2CreateOnlyIfTaggedNeurolens",
       "Effect": "Allow",
       "Action": [
