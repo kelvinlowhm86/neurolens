@@ -1,0 +1,78 @@
+{
+  "cloud": {
+    "gpu_usd_per_hour": {
+      "value": 2.61,
+      "unit": "USD per GPU-hour",
+      "source": "AWS SageMaker pricing page, ml.g6e.xlarge on-demand, us-east-1",
+      "estimate": false
+    },
+    "idle_wait_minutes": {
+      "value": 7,
+      "unit": "minutes",
+      "source": "Our endpoint configuration: stops after 7 idle minutes",
+      "estimate": false
+    },
+    "cold_start_minutes": {
+      "value": 7.2,
+      "unit": "minutes",
+      "source": "Measured on the endpoint: ~6.5 min machine start + ~40 s model ready",
+      "estimate": false
+    },
+    "videos_per_cold_session": {
+      "value": 3,
+      "unit": "videos per session",
+      "source": "Assumption: three videos batched into one warm session",
+      "estimate": true
+    },
+    "fixed_usd_per_month": {
+      "value": 5,
+      "unit": "USD per month",
+      "source": "Estimate: Aurora wake-ups, S3 and Lambda at low traffic; to be refined from billing",
+      "estimate": true
+    }
+  },
+  "on_prem": {
+    "gpu_price_usd": {
+      "value": 5000,
+      "unit": "USD",
+      "source": "NVIDIA A100 40 GB PCIe new; sources range $5,000-8,000 (used $2,000-4,000)",
+      "estimate": true
+    },
+    "host_price_usd": {
+      "value": 2500,
+      "unit": "USD",
+      "source": "Estimate: workstation to hold the GPU",
+      "estimate": true
+    },
+    "amortisation_months": {
+      "value": 36,
+      "unit": "months",
+      "source": "Assumption: three-year straight-line amortisation",
+      "estimate": true
+    },
+    "gpu_tdp_watts": {
+      "value": 250,
+      "unit": "watts",
+      "source": "NVIDIA A100 40 GB PCIe TDP",
+      "estimate": false
+    },
+    "host_idle_watts": {
+      "value": 100,
+      "unit": "watts",
+      "source": "Estimate: workstation idle draw excluding the GPU",
+      "estimate": true
+    },
+    "electricity_usd_per_kwh": {
+      "value": 0.23,
+      "unit": "USD per kWh",
+      "source": "Estimate: Singapore tariff converted to USD",
+      "estimate": true
+    },
+    "hours_on_per_month": {
+      "value": 730,
+      "unit": "hours per month",
+      "source": "24/7 operation: 24 hours x 365 days / 12 months",
+      "estimate": false
+    }
+  }
+}
