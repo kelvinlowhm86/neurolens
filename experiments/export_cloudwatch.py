@@ -36,24 +36,31 @@ def main():
     cloudwatch = boto3.client("cloudwatch", region_name=aws["region"])
     s3 = boto3.client("s3", region_name=aws["region"])
 
-    def query(id_, metric, stat):
+    def query(id_, namespace, metric, dimensions, stat):
         return {
             "Id": id_,
             "MetricStat": {
-                "Metric": {
-                    "Namespace": "AWS/SageMaker",
-                    "MetricName": metric,
-                    "Dimensions": [{"Name": "EndpointName", "Value": endpoint}],
-                },
+                "Metric": {"Namespace": namespace, "MetricName": metric, "Dimensions": dimensions},
                 "Period": 60,
                 "Stat": stat,
             },
         }
 
+    endpoint_only = [{"Name": "EndpointName", "Value": endpoint}]
     queries = [
-        query("backlog", "ApproximateBacklogSize", "Maximum"),
-        # AWS documents the CPU sample count as the way to count running instances.
-        query("instances", "CPUUtilization", "SampleCount"),
+        # The async backlog metrics carry only EndpointName.
+        query("backlog", "AWS/SageMaker", "ApproximateBacklogSize", endpoint_only, "Maximum"),
+        # Each running instance reports its CPU once a minute, so the sample count is the number
+        # of instances (AWS's documented method). The instance metrics live in their own namespace
+        # with the variant as a second dimension, and exist only because the endpoint's role may
+        # publish them (infra/terraform/iam.tf).
+        query(
+            "instances",
+            "/aws/sagemaker/Endpoints",
+            "CPUUtilization",
+            endpoint_only + [{"Name": "VariantName", "Value": VARIANT}],
+            "SampleCount",
+        ),
     ]
     names = {"backlog": "backlog", "instances": "instances"}
     series = {col: {} for col in COLUMNS[1:]}

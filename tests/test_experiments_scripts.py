@@ -81,6 +81,9 @@ def test_export_cloudwatch_uses_the_backlog_and_instance_count_series():
     source = text("export_cloudwatch.py")
     assert "ApproximateBacklogSize" in source
     assert "CPUUtilization" in source
+    # Instance metrics are not in AWS/SageMaker and carry the variant too (seen 28 Oct: none there).
+    assert '"/aws/sagemaker/Endpoints"' in source
+    assert '"VariantName"' in source
     assert "GroupInServiceInstances" not in source
     assert "ApproximateNumberOfMessagesVisible" not in source
 

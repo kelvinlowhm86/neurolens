@@ -141,6 +141,17 @@
       "Resource": "arn:aws:sns:us-east-1:*:neurolens-*"
     },
     {
+      "Sid": "PublishEndpointInstanceMetricsOnly",
+      "Effect": "Allow",
+      "Action": "cloudwatch:PutMetricData",
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "cloudwatch:namespace": "/aws/sagemaker/Endpoints"
+        }
+      }
+    },
+    {
       "Sid": "ContainerAndBuildLogsOnlyNeurolens",
       "Effect": "Allow",
       "Action": [

@@ -102,6 +102,16 @@ resource "aws_iam_role_policy" "sagemaker" {
         ]
       },
       {
+        # SageMaker publishes the instance metrics (CPU, memory, GPU, disk) with this role; without
+        # it there are none, and Experiment 2 cannot count running instances (M3e §10).
+        # PutMetricData has no resource, so the namespace condition is the scope.
+        Sid       = "PublishEndpointInstanceMetrics"
+        Effect    = "Allow"
+        Action    = "cloudwatch:PutMetricData"
+        Resource  = "*"
+        Condition = { StringEquals = { "cloudwatch:namespace" = "/aws/sagemaker/Endpoints" } }
+      },
+      {
         # The endpoint's ErrorTopic (M3e §5).
         Sid      = "PublishGpuErrors"
         Effect   = "Allow"

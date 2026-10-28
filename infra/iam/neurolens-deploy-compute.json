@@ -219,6 +219,12 @@
         "application-autoscaling:DescribeScalingActivities"
       ],
       "Resource": "*"
+    },
+    {
+      "Sid": "ReadGpuStartAndStopRequestsHasNoResource",
+      "Effect": "Allow",
+      "Action": "cloudtrail:LookupEvents",
+      "Resource": "*"
     }
   ]
 }
