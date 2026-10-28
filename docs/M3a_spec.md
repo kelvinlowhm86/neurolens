@@ -4,6 +4,8 @@
 
 **Ground rules for all of M3a:** region `us-east-1`. Python 3.12. All infrastructure is Terraform in `infra/terraform/`, tagged `Project=neurolens`, `Milestone=M3a`. Run AWS commands with the `neurolens` CLI profile only. **Tests first, as in M0 §5:** the §10 tests are written by a separate agent against §3–§4 before the implementation, and are not edited by the implementer. Billing is the riskiest code in the project: no billing function is merged without its tests passing, and the break-it check (§10) is mandatory.
 
+> **Out of date:** §4a's `verify` and `release_for_retry`, §5's SQS worker and §6's `/api/me` shape and status/result routes. The current design is M3e §3a (`verify_queued`), §4 (container) and §8 (web), with `/api/me` in M3b §4a. Everything else is current.
+
 ## 1. Scope
 ### In scope
 - Aurora Serverless v2 (PostgreSQL) reached through the **RDS Data API**, which scales to zero when idle
@@ -19,7 +21,7 @@ Google sign-in, the public HTTPS website (CloudFront), the web server on AWS, th
 
 ## 2. Development identity (until M3b)
 - Config `auth.mode`: `"dev"` in M3a. `auth.dev_user_id` and `auth.dev_email` give one fixed user.
-- `neurolens.web.auth.current_user() -> tuple[str, str] | None` returns `(user_id, email)`. In dev mode it always returns the dev user. M3b adds `"google"` mode behind the same function; nothing else in the web app reads identity directly.
+- `neurolens.web.auth.current_user() -> tuple[str, str] | None` returns `(user_id, email)`. In dev mode it always returns the dev user. M3b adds `"cognito"` mode behind the same function; nothing else in the web app reads identity directly.
 - `create_app` **refuses to start** in dev mode unless the configured `server.host` (§9) is `127.0.0.1`, raising `neurolens.settings.UnsafeConfigError`, so a development identity can never be exposed publicly.
 
 ## 3. Database
@@ -39,7 +41,7 @@ Money is stored as **integer cents** (`BIGINT`) and durations as **integer milli
 ### 3c. Schema (`infra/migrations/001_init.sql`)
 ```sql
 CREATE TABLE users (
-  user_id     TEXT PRIMARY KEY,               -- Google 'sub' from M3b; the dev user in M3a
+  user_id     TEXT PRIMARY KEY,               -- our own UUID from M3b; the dev user in M3a
   email       TEXT NOT NULL,
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -220,7 +222,7 @@ Both use Python 3.12, `DataApiDatabase`, and only pure-Python modules (`neurolen
 
 ## 9. Configuration additions (`config.json`, and `.env` / `env.conf` for deployment-specific identifiers such as the database ARNs, M1 §2)
 `aws.db_cluster_arn`, `aws.db_secret_arn`, `aws.db_name` (set only through the `NEUROLENS_DB_*` environment variables in §3a, never written in `config.json`; add the three pairs to `load_settings`'s overlay and to `.env.example`); `db.backend`; `db.dsn` (postgres only; a local DSN contains a password, so it is set only through `NEUROLENS_DB_DSN` in `.env`, never in `config.json`, and is added to the overlay and `.env.example` like the others); `auth.mode`, `auth.dev_user_id`, `auth.dev_email`; `billing.starter_cents`; `server.host` (default `127.0.0.1`) and `server.port` (default 5003), which the root `app.py` launcher binds to and the dev-mode guard (§2) checks. Apart from the local DSN, none of these are secrets: the Aurora password lives only in Secrets Manager.
-- The worker's templated UserData (M2a §4c) now also writes `db.backend = "data_api"` to `config.json` and the three `NEUROLENS_DB_*` variables to `env.conf`.
+- The SageMaker model's environment (M3e §9) carries the three `NEUROLENS_DB_*` variables, and `config.json` sets `db.backend = "data_api"`.
 
 ## 10. Tests (tests-first; `FAKE_INFERENCE=1 pytest`)
 Database tests run against a real **PostgreSQL 16**: a service container in CI, `docker run postgres:16` locally. They connect through `NEUROLENS_TEST_DSN`, which CI sets; when it is unset they are skipped with a message saying how to start the container locally, except in CI (`CI=true`), where an unset DSN fails the run so the billing tests can never be silently skipped. Each test gets a fresh schema from `infra/migrations/`. `dev.txt` gains `psycopg[binary]`. Required:
@@ -293,7 +295,7 @@ tests/                           MODIFIED: §10
 ## 12. Acceptance criteria
 1. `apply_schema.py` creates the schema on Aurora and on local PostgreSQL, and a second run changes nothing.
 2. A job whose verified duration matches the estimate is reserved, then captured for the same amount; `available_cents` falls by exactly that price, confirmed against `ledger` rows, not just the balance.
-3. A job whose client-reported duration was too short, for a user who cannot cover the difference, fails with `insufficient_credit_for_actual_duration`, is fully refunded, and runs **no** inference (worker logs show no `run_inference` call).
+3. A job whose client-reported duration was too short, for a user who cannot cover the difference, fails with `insufficient_credit_for_actual_duration`, is fully refunded, and runs **no** inference (worker logs show no inference stage).
 4. A video whose verified duration exceeds 120 s fails with `duration_exceeds_max_verified` before inference, whatever the balance, with exactly one refund even if the dead-letter path also fires.
 5. A job that fails twice reaches the dead-letter queue and is refunded by the Lambda without manual steps.
 6. A job not finished 4 hours after it was created, and not being run, is refunded by the reaper within one run as `deadline_passed`, and its upload is deleted.

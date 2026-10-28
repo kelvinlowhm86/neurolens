@@ -172,7 +172,7 @@ There is no reference set of videos to say how big a "normal" rise or dip is, so
   - The entry is `{id, title, description, attribution, video_file, thumbnail, brain_file, result, summary}`, with the summary computed by `results.summarise(result)`. Re-run it after a summary rule change.
   - `.gitignore` adds `/data/output/**/brain`.
 - **`deploy_web.sh`:** publishes only samples whose clip is listed in SOURCES.md (unchanged) and also copies each one's brain file. It uploads `static/app.html` as `site/app` (§8b).
-- **AWS day** (cost estimate first: about $3-5, GPU about 1.5 h at $1.861/h plus Aurora; Josh confirms remaining credits):
+- **AWS day** (cost estimate first: about $3-5, GPU about 1.5 h at $2.61/h for `ml.g6e.xlarge` plus Aurora; Josh confirms remaining credits):
   - One batch of Josh's manual steps: Terraform apply (M3c plus CORS), the schema (`python infra/apply_schema.py --backend data_api`), the worker image (`infra/build_image.sh`, then apply its digest), `infra/deploy_web.sh`.
   - Real GPU jobs on each sample clip, one of them with consent.
   - **Stop check:** the sample values must be finite and centred near 0 (median overall within ±0.3). If not, the built-in-scale assumption is wrong: stop and rethink the wording before going further.

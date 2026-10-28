@@ -176,7 +176,7 @@ An independent track.
 - `experiments/tco_benchmark.py` times the full two-pass pipeline for 15 s, 30 s and 60 s clips and writes a CSV of wall-clock times.
 - **On-premise leg:** the school's GPU cluster via Slurm (`experiments/slurm/tco_benchmark.sbatch`, a GPU with 40 GB or more), falling back to a teammate's 2× RTX 4090 machine; 10 runs per length. Power cost from published GPU TDP figures, not measured. The cluster has no AWS credentials: copy the output to a laptop and upload it with the manifest.
 - **Cloud leg:** reuses Experiment 1's runs (3 per clip length) instead of new GPU time; the report states the run counts of each leg.
-- Output under `experiments/experiment-3/<run_id>/` with a `manifest.json` (M2b §10's contract). Costs use the **measured on-demand price** ($1.861 an hour for `g6e.xlarge`) and measured runtimes; the consolidation recomputes cost per video and the break-even volume from them and shows the original planned figures beside them, labelled as planned. Never presented as observed fully-loaded costs.
+- Output under `experiments/experiment-3/<run_id>/` with a `manifest.json` (M2b §10's contract). Costs use the **measured on-demand price** ($2.61 an hour for `ml.g6e.xlarge`) and measured runtimes; the consolidation recomputes cost per video and the break-even volume from them and shows the original planned figures beside them, labelled as planned. Never presented as observed fully-loaded costs.
 
 ## 10. Scaffolding deleted before the merge into `main`
 Scaffolding is gone: the worker's shutdown script and systemd unit, the EC2 worker group and its network, and the old restart/connect scripts.

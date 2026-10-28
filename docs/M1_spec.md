@@ -6,6 +6,8 @@
 
 **Tests first, as in M0 §5:** a separate agent writes every test in §6a from this spec before the implementation exists; the implementer may not edit them and asks Josh if one looks wrong. The break-it check (M0 §8) is repeated for the worker's size and duration rejections.
 
+> **Out of date:** §1, §4-§6 and §8-§10 describe the SQS-polling worker, the old presign shape and the pre-sign-in page; §3's lifecycle, CORS and queue-visibility details are also stale. The current design is in M3e §2-§6 and §9 (dispatcher, container, queue and Terraform), with M3a §6 (presign and reservation), M3b §4 and M3f §2-§4 (page). Everything not named above is current.
+
 ## 0. What exists today (after M0)
 - `neurolens/settings.py` (config, paths, env vars, `max_duration(cfg)`, host/port), `neurolens/engagement.py` (pure maths), `neurolens/inference.py` (`load_model()`, `run_inference`, `strip_audio`, `gpu_info`), `neurolens/web/app.py` (`create_app()`: `GET /`, `GET /api/samples`, `GET /data/<path>`, `POST /api/analyse`). The root `app.py` is a launcher.
 - `POST /api/analyse` still runs the model inside the web process (the temporary M0 exception) and does a real ffprobe duration check. M1 replaces it with the worker's ffprobe check, which stays separate from the browser's estimate (§4), and removes the endpoint (§7).

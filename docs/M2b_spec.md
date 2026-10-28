@@ -8,6 +8,8 @@
 
 **Where each check runs (cost):** behaviour checks (scaling, shutdown, crash, warm hold, breaker) run on the CPU rehearsal worker (`t3.large`, about $0.08 an hour) in fake mode with a slow fake job (§1a `FAKE_INFERENCE_SECONDS`). GPU sessions are used only for the warm-up fix, the 4K test, the experiments and one real-job stop check (§6). **Order:** §8 (warm-up fix) before any experiment, so first jobs are not polluted by the warm-up.
 
+> **Out of date:** §1a, §2a-§2c, §2f, §5-§8, §10's boot-record and Experiment 2 series details, and §11-§15 describe the EC2 worker group, breaker, SQS heartbeat and old polling. The current design is M3e §4-§6 and §10, with the page in M3b §4 and M3f §2-§4. §2d-§2e, §3-§4, §9 and the rest of §10 are current.
+
 ## 1. Scope
 ### In scope
 - Autoscaling on the SQS queue, standing at zero; up to two workers for Experiment 2

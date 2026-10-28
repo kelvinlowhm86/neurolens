@@ -4,6 +4,8 @@
 
 **Ground rules:** M0 changes **no behaviour**. The app must serve the same pages and compute the same numbers as before. No AWS resources, no GPU, nothing billable. Python **3.12** everywhere (venv, CI, later the GPU worker): `tribev2` pins `torch<2.7`, which has no Python 3.14 builds, so the Mac's default Python cannot be used. The pins in §3 were checked with `uv pip compile` (installable together); whether they *run* together is proven by the real-import check (M1 §1b layer 2) and the M2 GPU run. Everything runs on a laptop without `config.json` or the model.
 
+> **Out of date:** §0 describes the app before M0; §1-§2 and §5 use the old `engagement.py` / `extract_engagement` maths, function names and golden test. The current maths and tests are in M3d §2-§3, §6 and §10 (`neurolens/response.py`, `extract_response`); the inference calls are in M2a §7a. Everything else here is current.
+
 ## 0. What exists today
 - `app.py` loads `config.json`, sets HuggingFace/torch env vars, loads the TRIBE v2 model, downloads the Destrieux atlas and builds five ROI masks, all **at import time**. It also holds the pure maths (`normalize_01`, `extract_engagement`), `run_inference`, `strip_audio`, the Flask routes (`/`, `/api/samples`, `/data/<path>`, `POST /api/analyse`) and `app.run` (0.0.0.0:5003).
 - Importing `app.py` therefore needs `config.json`, `torch`, `tribev2`, the model weights and a GPU. Nothing in it can be tested in isolation.

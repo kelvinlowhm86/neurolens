@@ -4,6 +4,8 @@
 
 **Ground rules for all of M2a:** region `us-east-1` (the `g6e` GPU family is not offered in Singapore), held in one Terraform setting (§4i). Python 3.12, as in M0. All infrastructure is Terraform in `infra/terraform/`, tagged `Project=neurolens`, `Milestone=M2a`. Run AWS commands with the `neurolens` CLI profile only. **Tests first, as in M0 §5:** the §8 tests are written by a separate agent before the implementation and are not edited by the implementer.
 
+> **Out of date:** §1-§5, §7 and §8-§12 describe the EC2 AMI, Auto Scaling group, NAT Gateway and SQS worker; the current design is M3e §4-§6, §9 and §11. §6 (results in S3) and §7a (inference corrections) are still current. Everything not named above is current.
+
 **Do first, on day one — GPU quotas.** New accounts often have 0 and increases can take days. In `us-east-1`, check and if needed request:
 - "Running On-Demand G and VT instances": at least **8 vCPUs** (the image build and the workers are all on-demand: one `g6e.xlarge` worker now, two in M2b, or one `g6e.2xlarge` fallback).
 Also run `aws ec2 describe-instance-type-offerings --location-type availability-zone --filters Name=instance-type,Values=g6e.xlarge` and use two of the listed zones for the private subnets (§4a).
