@@ -164,3 +164,16 @@ def test_from_config_builds_the_postgres_backend(db_dsn):
         "available_cents": 500,
         "reserved_cents": 0,
     }
+
+
+def test_whole_unit_intervals_cast_their_parameter():
+    """The Data API sends a Python int as bigint, and make_interval's whole-unit arguments
+    (everything but secs) take integer with no implicit cast from bigint, so Aurora refuses
+    the statement while local PostgreSQL accepts it. `secs` is double precision: no cast needed."""
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parent.parent / "neurolens"
+    for path in root.rglob("*.py"):
+        for m in re.finditer(r"make_interval\((\w+) => ([^)]*)\)", path.read_text()):
+            if m.group(1) != "secs":
+                assert m.group(2).startswith("CAST("), f"{path.name}: {m.group(0)}"

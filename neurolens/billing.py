@@ -809,7 +809,7 @@ def claim_report(db, user_id, job_id, max_tries, stale_minutes):
             "AND u.deleted_at IS NULL) "
             "AND (report_state IS NULL OR report_state = :failed OR "
             "(report_state = :writing AND report_started_at < now() - "
-            "make_interval(mins => :stale))) RETURNING job_id",
+            "make_interval(mins => CAST(:stale AS integer)))) RETURNING job_id",
             {
                 "job_id": job_id,
                 "user_id": user_id,
