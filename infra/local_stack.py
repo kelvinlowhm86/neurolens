@@ -148,7 +148,6 @@ def _canned_report(result):
         {
             "start": 0,
             "end": min(2, duration - 1),
-            "kind": "strong",
             "what_happens": "The video opens.",
             "brain_response": "The predicted response starts above typical viewing.",
             "suggestion": None,

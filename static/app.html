@@ -1915,7 +1915,7 @@ function renderReportAnswer(report) {
     button.dataset.seek = String(moment.start);
     const when = document.createElement('span');
     when.className = 'when';
-    when.textContent = `${moment.kind === 'weak' ? 'Weak' : 'Strong'} · ${fmtRange(moment)}`;
+    when.textContent = fmtRange(moment);
     const what = document.createElement('p');
     what.textContent = moment.what_happens || '';
     const brain = document.createElement('p');

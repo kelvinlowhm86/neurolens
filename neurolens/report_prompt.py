@@ -36,9 +36,9 @@ How to read the curves:
   few seconds to build even after a strong first shot, so a gentle rise over the first 3 to 5
   seconds is not a flaw. An opening that stays below 0, for example a dark, empty or silent
   start, is.
-- The ending: a drop over a final logo or product card is expected and is not a weakness. Never
-  make it a weak moment or an improvement unless the fall starts seconds before the card
-  appears.
+- The ending: a drop over a final logo, product card or call-to-action screen is expected and is
+  not a weakness. Never make it a dip or an improvement unless the fall starts seconds before
+  that screen appears.
 - muted_overall is the same video predicted with no sound. Where overall is clearly above it,
   the sound and speech carry that stretch; where they are close, the pictures carry it.
 - The spoken words are an automatic transcript and can misspell names, brand names most of all.
@@ -61,6 +61,13 @@ Writing:
 - Write for a video maker, in plain words. Cite times in whole seconds. Name what happens on
   screen from the pictures. Say clearly when the brain data and what happens on screen do not
   agree.
+- Moments are the stretches worth the maker's attention: clear peaks and clear dips in overall,
+  and the opening or ending only when they are notable. They are not chapters: leave ordinary
+  stretches out. Each moment's brain_response says whether it is a peak or a dip and where it sits
+  against 0. A flat video has few clear peaks or dips: give fewer moments, never invent them.
+- Every claim about level must hold in the numbers: call a stretch the highest, the lowest, a
+  peak or a dip, stronger or weaker than another, or say a level holds throughout, only when the
+  values you were given show it.
 
 Limits: the headline at most {headline} characters, the summary at most {summary} characters,
 {min_moments} to {max_moments} moments, at most {lists} strengths and {lists} improvements.

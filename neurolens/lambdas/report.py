@@ -14,7 +14,6 @@ from neurolens import billing, lambdas, report_prompt, settings, storage
 
 logger = logging.getLogger(__name__)
 
-KINDS = ("strong", "weak")
 BEDROCK_API_VERSION = "bedrock-2023-05-31"
 # Sent as the structured-output format; the lengths the prompt asks for are guidance only (M3g §5d).
 _TEXT_LIST = {"type": "array", "items": {"type": "string"}}
@@ -30,7 +29,6 @@ REPORT_SCHEMA = {
                 "properties": {
                     "start": {"type": "integer"},
                     "end": {"type": "integer"},
-                    "kind": {"type": "string", "enum": list(KINDS)},
                     "what_happens": {"type": "string"},
                     "brain_response": {"type": "string"},
                     "suggestion": {"anyOf": [{"type": "string"}, {"type": "null"}]},
@@ -38,7 +36,6 @@ REPORT_SCHEMA = {
                 "required": [
                     "start",
                     "end",
-                    "kind",
                     "what_happens",
                     "brain_response",
                     "suggestion",
@@ -82,8 +79,6 @@ def _report_problem(answer, duration):
         start, end = moment.get("start"), moment.get("end")
         if not (_is_int(start) and _is_int(end) and 0 <= start <= end < duration):
             return f"moment {number} runs {start!r}-{end!r}, outside 0-{duration - 1} or reversed"
-        if moment.get("kind") not in KINDS:
-            return f"moment {number} has kind {moment.get('kind')!r}"
         if not _is_text(moment.get("what_happens")) or not _is_text(moment.get("brain_response")):
             return f"moment {number} lacks its text"
         if moment.get("suggestion") is not None and not _is_text(moment.get("suggestion")):

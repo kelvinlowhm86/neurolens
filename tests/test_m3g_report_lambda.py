@@ -163,7 +163,6 @@ def valid_report(duration=3):
             {
                 "start": 0,
                 "end": 1,
-                "kind": "strong",
                 "what_happens": "Someone enters.",
                 "brain_response": "Visual areas rise.",
                 "suggestion": "Keep the opening.",
