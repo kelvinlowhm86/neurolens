@@ -29,8 +29,8 @@ mkdir -p "$STAGE/static" "$STAGE/data"
 git archive HEAD static | tar -x -C "$STAGE"
 cp static/index.html "$STAGE/index.html"
 cp static/app.html "$STAGE/app"
-# Only samples whose clip is listed in data/videos/SOURCES.md (open-licensed) are public; third-party
-# ads never are. Their video and thumbnail go with them. None qualifies today: the list is empty.
+# Only samples whose clip is listed in data/videos/SOURCES.md are public; their video, thumbnail and
+# brain file go with them.
 python3 -I - "$STAGE" <<'PY'
 import json, re, shutil, sys
 from pathlib import Path
