@@ -10,7 +10,9 @@ from neurolens import results
 MAX_HEADLINE = 120
 MAX_SUMMARY = 900
 MIN_MOMENTS, MAX_MOMENTS = 1, 8
-MAX_DIFFERENCES = 6
+MAX_VERDICT = 400
+MAX_DIFFERENCES = 3
+MAX_COMPARISON_LISTS = 2
 MAX_LISTS = 4
 
 _INTRO = """You write a short report about a video for the person who made it. You are
@@ -96,22 +98,25 @@ Comparing:
   a final logo or product card are expected in both.
 
 Writing:
-- Verdict first: the headline and summary open with which video draws the stronger response
-  overall and why (which groups, which stretches), then where the other one does better. Be
-  accurate rather than kind. If they are close, say so.
+- The headline and summary are the verdict, shown beside the chart: which video draws the
+  stronger response overall, the main reason, and where the other one does better, in two or
+  three sentences. Leave the stretch-by-stretch story to the differences. Be accurate rather
+  than kind. If they are close, say so.
 - A stronger response may be called stronger brain engagement, or said to suggest more
   attention. Never claim anything about what real viewers do: views, watch time, retention,
   drop-off, clicks or sharing, and never give a score.
 - Write for a video maker, in plain words. Cite times in whole seconds, always naming the video
   (A 12 s, B 20-24 s). Name what happens on screen from the pictures.
-- Differences are the stretches that explain the verdict: each one names its time in A, in B or
-  in both (null for the video where it has no match), what differs on screen, and how the
-  response differs. Leave out stretches where the two behave alike.
+- Differences are the few stretches that explain the verdict most, no two covering the same
+  stretch: each one names its time in A, in B or in both (null for the video where it has no
+  match), what differs on screen and how the response differs, one sentence each. Leave out
+  stretches where the two behave alike.
+- Each list item is one short sentence that adds to the differences, not a repeat of one.
 - Every claim about level must hold in the numbers you were given.
 
-Limits: the headline at most {MAX_HEADLINE} characters, the summary at most {MAX_SUMMARY}
-characters, 1 to {MAX_DIFFERENCES} differences, at most {MAX_LISTS} items in each list. Times
-are whole seconds from 0 to that video's last_second, both included, start <= end."""
+Limits: the headline at most {MAX_HEADLINE} characters, the summary at most {MAX_VERDICT}
+characters, 1 to {MAX_DIFFERENCES} differences, at most {MAX_COMPARISON_LISTS} items in each
+list. Times are whole seconds from 0 to that video's last_second, both included, start <= end."""
 
 
 def _cell(values, second):
