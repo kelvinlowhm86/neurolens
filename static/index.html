@@ -6,7 +6,8 @@
 <title>NeuroLens</title>
 <link rel="icon" href="data:,">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script>
   if (/(?:^|;\s*)nl_signed_in=1(?:;|$)/.test(document.cookie)) {
     document.documentElement.classList.add('signed-in');
@@ -14,71 +15,93 @@
 </script>
 <style>
   :root {
-    --stage: #0E0F11; --stage-2: #17181B; --stage-text: #ECEDEF; --stage-muted: #A0A6AF; --stage-rule: #24262B;
-    --paper: #0E0F11; --surface: #17181B; --ink: #ECEDEF; --ink-2: #B4B9C0; --ink-3: #8A9099; --rule: #24262B;
-    --heat: #FF8A2A; --cool: #6F7E99;
-    --display: 'Geist', system-ui, sans-serif; --text: 'Geist', system-ui, sans-serif;
+    --bg: #0B0C0E; --bar: #0B0C0E; --panel: rgba(17, 19, 22, .92); --well: #0E1013;
+    --line: #262A31; --text: #E8EAED; --muted: #9097A1;
+    --accent: #FF8A2A; --accent-2: #FFC24A; --cool: #6F7E99;
+    --display: 'Space Grotesk', system-ui, sans-serif;
+    --mono: 'JetBrains Mono', ui-monospace, monospace;
+    --grid: linear-gradient(rgba(255, 255, 255, .035) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(255, 255, 255, .035) 1px, transparent 1px);
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   [hidden] { display: none !important; }
-  body { background: var(--paper); color: var(--ink); font: 14px/1.55 var(--text); letter-spacing: -0.003em; }
+  html { background: var(--bg); }
+  body { min-height: 100vh; background-color: var(--bg); background-image: var(--grid); background-size: 24px 24px; color: var(--text); font: 14px/1.55 var(--display); letter-spacing: -0.003em; }
   a { color: inherit; }
-  :focus-visible { outline: 2px solid var(--heat); outline-offset: 2px; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-  .bar { background: var(--stage); color: var(--stage-text); display: flex; align-items: center; gap: 12px; padding: 0 24px; height: 52px; border-bottom: 1px solid var(--rule); }
+  .bar { background: var(--bar); color: var(--text); display: flex; align-items: center; gap: 12px; padding: 0 24px; height: 56px; border-bottom: 1px solid var(--line); }
   .brand { font: 600 17px/1 var(--display); letter-spacing: -0.02em; margin-right: auto; color: inherit; text-decoration: none; }
-  .btn-white { background: var(--ink); color: var(--paper); border-radius: 6px; padding: 9px 16px; font-weight: 600; text-decoration: none; display: inline-block; white-space: nowrap; }
-  .btn-white:hover { background: #fff; }
-  .btn-line { border: 1px solid var(--stage-rule); color: var(--stage-text); border-radius: 6px; padding: 8px 15px; text-decoration: none; display: inline-block; white-space: nowrap; }
-  .btn-line:hover { border-color: var(--stage-muted); }
-  h1 { font: 600 clamp(34px, 4.4vw, 58px)/1.02 var(--display); letter-spacing: -0.035em; }
-  h2 { font: 600 26px/1.15 var(--display); letter-spacing: -0.02em; }
-  h3 { font: 600 17px/1.25 var(--display); letter-spacing: -0.02em; }
-  .lede { font-size: 17px; color: var(--stage-muted); max-width: 34em; }
-  .credit { font-size: 12px; color: var(--stage-muted); }
+  .btn-white { background: var(--text); color: var(--bg); border: 1px solid var(--text); border-radius: 3px; padding: 10px 16px; font-weight: 600; text-decoration: none; display: inline-block; white-space: nowrap; }
+  .btn-white:hover { background: #fff; border-color: #fff; }
+  .btn-line { border: 1px solid var(--line); color: var(--text); border-radius: 3px; padding: 9px 15px; text-decoration: none; display: inline-block; white-space: nowrap; }
+  .btn-line:hover { border-color: var(--muted); }
+  h1 { font: 600 clamp(34px, 4.4vw, 58px)/1.04 var(--display); letter-spacing: -0.035em; }
+  h2 { font: 600 clamp(24px, 2.6vw, 34px)/1.15 var(--display); letter-spacing: -0.025em; }
+  h3 { font: 600 18px/1.3 var(--display); letter-spacing: -0.015em; }
+  .lede { font-size: 17px; line-height: 1.6; color: var(--muted); max-width: 32em; }
   .actions { display: flex; gap: 10px; flex-wrap: wrap; }
   html.signed-in .explore { display: none; }
 
-  .hero { background: var(--stage); color: var(--stage-text); display: grid; grid-template-columns: minmax(320px, 0.9fr) 1.1fr; gap: 48px; padding: 56px 48px; min-height: calc(100vh - 52px); align-items: center; }
-  .hero-copy { display: flex; flex-direction: column; gap: 22px; }
+  .hero { max-width: 1240px; margin: 0 auto; padding: 56px 48px; min-height: calc(100vh - 56px); display: grid; grid-template-columns: minmax(300px, 0.9fr) 1.1fr; gap: 56px; align-items: center; }
+  .hero-copy { display: flex; flex-direction: column; gap: 26px; }
   /* The video keeps its own 16:9 height; the brain panel takes the rest of the column. */
-  .hero-player { display: flex; flex-direction: column; gap: 12px; height: min(80vh, 760px); }
+  .hero-player { display: flex; flex-direction: column; gap: 10px; height: min(80vh, 760px); }
 
-  .video-box { position: relative; background: #000; border-radius: 6px; overflow: hidden; aspect-ratio: 16 / 9; flex: none; }
+  .video-box { position: relative; background: #000; border-radius: 3px; overflow: hidden; aspect-ratio: 16 / 9; flex: none; }
   .video-box video { width: 100%; height: 100%; display: block; object-fit: cover; cursor: pointer; }
-  .sound-toggle { position: absolute; right: 12px; bottom: 12px; width: 34px; height: 34px; border: 0; border-radius: 50%; background: var(--ink); color: var(--paper); display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 2px 8px rgba(0, 0, 0, .35); }
+  .sound-toggle { position: absolute; right: 12px; bottom: 12px; width: 34px; height: 34px; border: 0; border-radius: 50%; background: var(--text); color: var(--bg); display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 2px 8px rgba(0, 0, 0, .35); }
   .sound-toggle:hover { background: #fff; }
   .sound-toggle svg { width: 16px; height: 16px; display: block; }
-  .brain-box { position: relative; background: #15161A; border-radius: 6px; overflow: hidden; flex: 1; min-height: 0; }
+  .brain-box { position: relative; background: var(--well); border: 1px solid var(--line); border-radius: 3px; overflow: hidden; flex: 1; min-height: 0; }
   .brain-box canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
-  .brain-message { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 20px; text-align: center; font-size: 13px; color: var(--stage-muted); }
-  .brain-legend { position: absolute; left: 14px; bottom: 12px; display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--stage-muted); pointer-events: none; }
-  .brain-legend i { width: 86px; height: 6px; border-radius: 3px; background: linear-gradient(90deg, #D9DCE1, #800000 10%, #E61A0A 40%, #FF800A 66%, #FFD926 88%, #FFFFD9); }
-  .brain-time { position: absolute; right: 14px; top: 12px; font: 600 13px var(--display); color: var(--stage-muted); font-variant-numeric: tabular-nums; }
-  .brain-hint { position: absolute; right: 14px; bottom: 12px; font-size: 11px; color: var(--stage-muted); pointer-events: none; }
-  .coming-soon { background: var(--stage-2); border: 1px solid var(--stage-rule); border-radius: 6px; display: flex; align-items: center; justify-content: center; flex: 1; min-height: 300px; padding: 28px; text-align: center; color: var(--stage-muted); font-size: 15px; }
+  .brain-message { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 20px; text-align: center; font-size: 13px; color: var(--muted); }
+  .brain-legend { position: absolute; left: 14px; bottom: 12px; display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--muted); pointer-events: none; }
+  .brain-legend i { width: 86px; height: 6px; border-radius: 3px; background: linear-gradient(90deg, var(--cool), var(--line) 30%, var(--accent) 70%, var(--accent-2)); }
+  .brain-time { position: absolute; right: 14px; top: 12px; font: 500 13px var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+  .brain-hint { position: absolute; right: 14px; bottom: 12px; font-size: 11px; color: var(--muted); pointer-events: none; }
 
-  .how { max-width: 1120px; margin: 0 auto 24px; padding: 72px 48px; background: var(--surface); border-radius: 18px; display: grid; grid-template-columns: 260px 1fr; gap: 48px; }
-  .steps { list-style: none; display: grid; gap: 28px; grid-template-columns: repeat(3, 1fr); }
-  .steps li { counter-increment: step; }
-  .steps { counter-reset: step; }
-  .steps li::before { content: counter(step); display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 50%; background: var(--ink); color: var(--paper); font: 600 14px/1 var(--display); margin-bottom: 12px; }
-  .steps p { color: var(--ink-2); font-size: 14.5px; margin-top: 4px; }
-  .closing { max-width: 1120px; margin: 0 auto 64px; padding: 32px 48px; background: var(--surface); color: var(--stage-text); border-radius: 18px; display: flex; align-items: center; gap: 24px; flex-wrap: wrap; }
+  .curve-box { position: relative; flex: none; height: 84px; background: var(--well); border: 1px solid var(--line); border-radius: 3px; overflow: hidden; }
+  .curve-box svg { display: block; width: 100%; height: 100%; }
+  .curve-zero { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 2 4; opacity: .55; }
+  .curve-ghost { fill: none; stroke: var(--muted); stroke-width: 1; opacity: .28; }
+  .curve-drawn { fill: none; stroke: var(--accent); stroke-width: 1.5; stroke-linejoin: round; stroke-linecap: round; }
+  .curve-play { stroke: var(--text); stroke-width: 1; opacity: .45; }
+  .curve-dot { fill: var(--bg); stroke: var(--accent-2); stroke-width: 2; }
+  .curve-label { font: 10.5px var(--display); fill: var(--muted); text-anchor: end; paint-order: stroke; stroke: var(--well); stroke-width: 4px; stroke-linejoin: round; }
+  .curve-callout { position: absolute; left: 10px; top: 8px; max-width: min(74%, 340px); display: flex; align-items: baseline; gap: 8px; padding: 4px 9px; background: rgba(11, 12, 14, .84); border: 1px solid var(--line); border-radius: 3px; font-size: 11.5px; color: var(--text); opacity: 0; transform: translateY(3px); transition: opacity .35s ease, transform .35s ease; pointer-events: none; }
+  .curve-callout.on { opacity: 1; transform: none; }
+  .curve-callout .when { font: 500 10.5px var(--mono); color: var(--accent-2); font-variant-numeric: tabular-nums; }
+  .curve-callout .what { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .coming-soon { background: var(--well); border: 1px solid var(--line); border-radius: 3px; display: flex; align-items: center; justify-content: center; flex: 1; min-height: 300px; padding: 28px; text-align: center; color: var(--muted); font-size: 15px; }
+
+  .how { max-width: 1120px; margin: 96px auto 32px; padding: 72px 64px; background: var(--panel); border: 1px solid var(--line); border-radius: 3px; display: grid; grid-template-columns: 260px 1fr; gap: 64px; }
+  .steps { list-style: none; }
+  .step { display: grid; grid-template-columns: 44px 1fr; gap: 18px; padding: 28px 0; border-top: 1px solid var(--line); transition: opacity .55s ease, transform .55s ease; }
+  .step:first-child { border-top: 0; padding-top: 0; }
+  .step:last-child { padding-bottom: 0; }
+  html.has-reveal .step:not(.is-visible) { opacity: 0; transform: translateY(16px); }
+  .step-num { font: 500 12px/1 var(--mono); color: var(--accent-2); padding-top: 5px; font-variant-numeric: tabular-nums; }
+  .step p { margin-top: 8px; color: var(--muted); font-size: 14.5px; max-width: 38em; }
+
+  .closing { max-width: 1120px; margin: 0 auto 72px; padding: 40px 64px; background: var(--panel); border: 1px solid var(--line); border-radius: 3px; display: flex; align-items: center; gap: 24px; flex-wrap: wrap; }
   .closing h2 { margin-right: auto; }
-  footer { border-top: 1px solid var(--rule); padding: 22px 24px; font-size: 12px; color: var(--ink-3); display: flex; gap: 18px; flex-wrap: wrap; }
+  footer { border-top: 1px solid var(--line); padding: 26px 24px; font-size: 12px; color: var(--muted); display: flex; gap: 18px; flex-wrap: wrap; }
   footer a { text-decoration: none; }
-  footer a:hover { color: var(--ink); }
+  footer a:hover { color: var(--text); }
 
   @media (max-width: 860px) {
     .bar { padding: 0 16px; }
-    .hero { grid-template-columns: 1fr; padding: 32px 16px; gap: 28px; min-height: 0; }
+    .hero { grid-template-columns: 1fr; padding: 40px 16px 48px; gap: 32px; min-height: 0; }
     .hero-player { height: auto; }
-    .brain-box { min-height: 300px; }
-    .video-box { aspect-ratio: 16 / 9; }
-    .how { grid-template-columns: 1fr; padding: 48px 16px; gap: 24px; }
-    .steps { grid-template-columns: 1fr; }
-    .closing { margin: 0 16px 48px; padding: 24px 20px; }
+    .brain-box { min-height: 280px; }
+    .how { grid-template-columns: 1fr; margin: 56px 16px 24px; padding: 48px 24px; gap: 32px; }
+    .closing { margin: 0 16px 56px; padding: 28px 24px; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .step, .curve-callout { transition: none; }
+    html.has-reveal .step:not(.is-visible) { opacity: 1; transform: none; }
   }
 </style>
 </head>
@@ -112,6 +135,20 @@
         <span class="brain-time" id="brainSecond"></span>
         <span class="brain-hint">drag to turn</span>
       </div>
+      <div class="curve-box" id="curveBox" hidden>
+        <svg id="heroCurve" role="img" aria-label="Overall brain response over time">
+          <line class="curve-zero" id="curveZero" x1="0" y1="0" x2="0" y2="0"></line>
+          <text class="curve-label" id="curveLabel" x="6" y="0">typical viewing</text>
+          <path class="curve-ghost" id="curveGhost"></path>
+          <path class="curve-drawn" id="curveDrawn"></path>
+          <line class="curve-play" id="curvePlay" x1="0" y1="0" x2="0" y2="0"></line>
+          <circle class="curve-dot" id="curveDot" r="3"></circle>
+        </svg>
+        <div class="curve-callout" id="curveCallout">
+          <span class="when" id="curveWhen"></span>
+          <span class="what" id="curveWhat"></span>
+        </div>
+      </div>
       <div class="coming-soon" id="comingSoon" hidden>A sample video is coming soon.</div>
     </div>
   </section>
@@ -119,17 +156,26 @@
   <section class="how">
     <h2>How it works</h2>
     <ol class="steps">
-      <li>
-        <h3>Upload a clip</h3>
-        <p id="uploadLimit">Any video up to the upload limit. Sample videos are free to explore without an account.</p>
+      <li class="step">
+        <span class="step-num">01</span>
+        <div>
+          <h3>Upload a clip</h3>
+          <p id="uploadLimit">Any video up to the upload limit, and sample videos are free without an account.</p>
+        </div>
       </li>
-      <li>
-        <h3>A brain model predicts the response</h3>
-        <p>TRIBE v2, a research model from Meta trained on brain scans of people watching films, estimates activity at 20,484 points across the brain for every second. A result takes about 10 minutes.</p>
+      <li class="step">
+        <span class="step-num">02</span>
+        <div>
+          <h3>The GPU wakes for your video</h3>
+          <p>It starts only when a video arrives and shuts down when nobody is using it.</p>
+        </div>
       </li>
-      <li>
-        <h3>Read the report</h3>
-        <p>Curves for seven brain areas, the strongest and weakest moments, and a 3D brain that replays with your video.</p>
+      <li class="step">
+        <span class="step-num">03</span>
+        <div>
+          <h3>Curves, a brain, a report</h3>
+          <p>See second-by-second curves, a 3D brain, an AI-written report, and compare two videos.</p>
+        </div>
       </li>
     </ol>
   </section>
@@ -166,6 +212,11 @@
 <script type="module">
 import { createBrainView, decodeBrain, UNAVAILABLE } from '/static/brain_view.js';
 
+const $ = id => document.getElementById(id);
+const REDUCE_MOTION = (() => {
+  try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch { return false; }
+})();
+
 const WAKE_EVENTS = ['pointermove', 'pointerdown', 'touchstart', 'keydown', 'scroll'];
 let woke = false;
 function wake() {
@@ -179,8 +230,6 @@ for (const type of WAKE_EVENTS) {
   window.addEventListener(type, wake, { once: true, passive: true });
 }
 
-const $ = id => document.getElementById(id);
-const player = $('heroPlayer');
 const videoBox = $('videoBox');
 const brainBox = $('brainBox');
 const brainSecond = $('brainSecond');
@@ -188,10 +237,26 @@ const comingSoon = $('comingSoon');
 const footerCredit = $('footerCredit');
 const heroVideo = $('heroVideo');
 const soundToggle = $('soundToggle');
+const curveBox = $('curveBox');
+const curveSvg = $('heroCurve');
+const curveZero = $('curveZero');
+const curveLabel = $('curveLabel');
+const curveGhost = $('curveGhost');
+const curveDrawn = $('curveDrawn');
+const curvePlay = $('curvePlay');
+const curveDot = $('curveDot');
+const curveCallout = $('curveCallout');
+const curveWhen = $('curveWhen');
+const curveWhat = $('curveWhat');
 const SOUND_ON = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M2.5 6h2.5l3.5-3v10L5 10H2.5z"/><path d="M11 5.5a3.5 3.5 0 0 1 0 5M12.8 3.8a6 6 0 0 1 0 8.4"/></svg>';
 const SOUND_OFF = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M2.5 6h2.5l3.5-3v10L5 10H2.5z"/><path d="m11 6 4 4m0-4-4 4"/></svg>';
 const brainView = createBrainView(brainBox, $('brainMessage'));
 let brainShown = false;
+
+const curve = {
+  values: [], duration: 0, moments: [], width: 0, height: 84, mid: 42, range: 0.4,
+  full: '', lastPos: -1, active: -1, ready: false
+};
 
 let limitsPromise = null;
 function getLimits() {
@@ -208,14 +273,16 @@ async function loadLimit() {
   const seconds = limits && Number(limits.max_video_duration_seconds);
   if (!Number.isFinite(seconds) || seconds <= 0) return;
   const minutes = Math.max(1, Math.round(seconds / 60));
-  $('uploadLimit').textContent = `Any video up to ${minutes} ${minutes === 1 ? 'minute' : 'minutes'}. Sample videos are free to explore without an account.`;
+  $('uploadLimit').textContent = `Any video up to ${minutes} ${minutes === 1 ? 'minute' : 'minutes'}, and sample videos are free without an account.`;
 }
 
 function showComingSoon() {
   videoBox.hidden = true;
   brainBox.hidden = true;
+  curveBox.hidden = true;
   comingSoon.hidden = false;
   footerCredit.hidden = true;
+  curve.ready = false;
 }
 
 function showAttribution(text) {
@@ -251,6 +318,128 @@ async function loadBrain(sample) {
   }
 }
 
+function formatClock(seconds) {
+  const whole = Math.max(0, Math.floor(seconds));
+  return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, '0')}`;
+}
+
+function valueAt(values, position) {
+  const i = Math.max(0, Math.min(values.length - 1, Math.floor(position)));
+  const j = Math.min(values.length - 1, i + 1);
+  const fraction = Math.max(0, Math.min(1, position - i));
+  return values[i] * (1 - fraction) + values[j] * fraction;
+}
+
+function chartY(value) {
+  const amplitude = curve.mid - 8;
+  return curve.mid - (value / curve.range) * amplitude;
+}
+
+function buildPath(upto) {
+  const values = curve.values;
+  if (!values.length) return '';
+  const last = Math.min(values.length - 1, Math.max(0, upto));
+  const xOf = index => (index / (values.length - 1)) * curve.width;
+  let path = '';
+  for (let i = 0; i <= Math.floor(last); i++) {
+    path += (i ? 'L' : 'M') + xOf(i).toFixed(1) + ',' + chartY(values[i]).toFixed(1);
+  }
+  if (last > Math.floor(last)) {
+    path += 'L' + xOf(last).toFixed(1) + ',' + chartY(valueAt(values, last)).toFixed(1);
+  }
+  return path;
+}
+
+function measureCurve() {
+  if (!curve.ready) return;
+  const rect = curveSvg.getBoundingClientRect();
+  curve.width = Math.max(1, rect.width || curveBox.clientWidth || 1);
+  curve.height = Math.max(1, rect.height || 84);
+  curve.mid = curve.height / 2;
+  curveSvg.setAttribute('viewBox', `0 0 ${curve.width.toFixed(1)} ${curve.height.toFixed(1)}`);
+  curveZero.setAttribute('x1', '0');
+  curveZero.setAttribute('x2', curve.width.toFixed(1));
+  curveZero.setAttribute('y1', curve.mid.toFixed(1));
+  curveZero.setAttribute('y2', curve.mid.toFixed(1));
+  curveLabel.setAttribute('x', (curve.width - 6).toFixed(1));
+  curveLabel.setAttribute('y', (curve.mid - 5).toFixed(1));
+  curvePlay.setAttribute('y1', '0');
+  curvePlay.setAttribute('y2', curve.height.toFixed(1));
+  let largest = 0.0001;
+  for (const value of curve.values) largest = Math.max(largest, Math.abs(value));
+  curve.range = Math.max(0.15, largest * 1.15);
+  curve.full = buildPath(curve.values.length - 1);
+  curveGhost.setAttribute('d', curve.full);
+  if (REDUCE_MOTION) {
+    curveGhost.style.display = 'none';
+    curveDrawn.setAttribute('d', curve.full);
+  } else {
+    curveGhost.style.display = '';
+    curveDrawn.setAttribute('d', '');
+  }
+  curve.lastPos = -1;
+}
+
+function updateCallout(seconds) {
+  if (!curve.moments.length) return;
+  let found = -1;
+  for (let i = 0; i < curve.moments.length; i++) {
+    const moment = curve.moments[i];
+    if (seconds >= moment.start && seconds < moment.end + 1) {
+      found = i;
+      break;
+    }
+  }
+  if (found === curve.active) return;
+  curve.active = found;
+  if (found < 0) {
+    curveCallout.classList.remove('on');
+    return;
+  }
+  const moment = curve.moments[found];
+  curveWhen.textContent = formatClock(moment.start);
+  curveWhat.textContent = moment.what_happens;
+  curveCallout.classList.add('on');
+}
+
+function updateCurve(seconds) {
+  if (!curve.ready || curveBox.hidden) return;
+  const values = curve.values;
+  const duration = curve.duration || (Number.isFinite(heroVideo.duration) ? heroVideo.duration : 0);
+  const fraction = duration > 0 ? Math.max(0, Math.min(1, seconds / duration)) : 0;
+  const position = fraction * (values.length - 1);
+  if (!REDUCE_MOTION && Math.abs(position - curve.lastPos) > 0.02) {
+    curveDrawn.setAttribute('d', buildPath(position));
+    curve.lastPos = position;
+  }
+  const x = fraction * curve.width;
+  curvePlay.setAttribute('x1', x.toFixed(1));
+  curvePlay.setAttribute('x2', x.toFixed(1));
+  curveDot.setAttribute('cx', x.toFixed(1));
+  curveDot.setAttribute('cy', chartY(valueAt(values, position)).toFixed(1));
+  updateCallout(seconds);
+}
+
+function setupCurve(sample) {
+  const signals = sample.result && sample.result.signals;
+  const values = signals && Array.isArray(signals.overall) ? signals.overall : null;
+  if (!values || values.length < 2 || !values.every(value => Number.isFinite(value))) {
+    curveBox.hidden = true;
+    return;
+  }
+  curve.values = values;
+  curve.duration = Number(sample.result && sample.result.duration_seconds) || 0;
+  const report = sample.report && typeof sample.report === 'object' ? sample.report : null;
+  curve.moments = report && Array.isArray(report.moments)
+    ? report.moments.filter(moment => moment && Number.isFinite(moment.start) && Number.isFinite(moment.end) && moment.what_happens)
+    : [];
+  curve.active = -1;
+  curve.ready = true;
+  curveBox.hidden = false;
+  measureCurve();
+  updateCurve(Number.isFinite(heroVideo.currentTime) ? heroVideo.currentTime : 0);
+}
+
 async function loadHero() {
   let sample = null;
   try {
@@ -271,6 +460,8 @@ async function loadHero() {
   heroVideo.muted = true;
   heroVideo.play().catch(() => {});
   loadBrain(sample);
+  setupCurve(sample);
+  requestAnimationFrame(measureCurve);
 }
 
 function renderSoundToggle() {
@@ -278,6 +469,21 @@ function renderSoundToggle() {
   soundToggle.innerHTML = on ? SOUND_ON : SOUND_OFF;
   soundToggle.setAttribute('aria-label', on ? 'Turn sound off' : 'Turn sound on');
   soundToggle.setAttribute('aria-pressed', String(on));
+}
+
+function setupReveal() {
+  if (REDUCE_MOTION || !('IntersectionObserver' in window)) return;
+  const steps = document.querySelectorAll('.step');
+  if (!steps.length) return;
+  document.documentElement.classList.add('has-reveal');
+  const observer = new IntersectionObserver(entries => {
+    for (const entry of entries) {
+      if (!entry.isIntersecting) continue;
+      entry.target.classList.add('is-visible');
+      observer.unobserve(entry.target);
+    }
+  }, { threshold: 0.25 });
+  for (const step of steps) observer.observe(step);
 }
 
 soundToggle.addEventListener('click', event => {
@@ -298,10 +504,13 @@ function tick() {
     brainView.setSecond(t);
     brainSecond.textContent = `${Math.floor(t)} s`;
   }
+  updateCurve(t);
   requestAnimationFrame(tick);
 }
 requestAnimationFrame(tick);
+window.addEventListener('resize', measureCurve, { passive: true });
 
+setupReveal();
 loadHero();
 loadLimit();
 </script>
