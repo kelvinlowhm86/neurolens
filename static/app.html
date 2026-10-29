@@ -6,273 +6,420 @@
 <title>NeuroLens</title>
 <link rel="icon" href="data:,">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&amp;family=Space+Grotesk:wght@400;500;600&amp;display=swap" rel="stylesheet">
 <style>
   :root {
-    --stage: #0E0F11; --stage-2: #17181B; --stage-text: #ECEDEF; --stage-muted: #A0A6AF; --stage-rule: #24262B;
-    --paper: #0E0F11; --surface: #17181B; --ink: #ECEDEF; --ink-2: #B4B9C0; --ink-3: #8A9099; --rule: #24262B;
-    --heat: #FF8A2A; --cool: #6F7E99;
-    --display: 'Geist', system-ui, sans-serif; --text: 'Geist', system-ui, sans-serif;
+    --bg: #0B0C0E; --bar: #0B0C0E; --panel: rgba(17,19,22,.92); --well: #0E1013; --line: #262A31;
+    --ink: #E8EAED; --ink-2: #B4B9C0; --ink-3: #9097A1; --muted: #9097A1;
+    --accent: #FF8A2A; --accent2: #FFC24A; --heat: #FF8A2A; --cool: #6F7E99; --blue: #6FA8FF;
+    --ok: #3DDC97; --danger: #FCA5A5;
+    --rule: #262A31; --surface: rgba(17,19,22,.92);
+    --display: 'Space Grotesk', system-ui, sans-serif; --mono: 'JetBrains Mono', ui-monospace, monospace;
+    --text: 'Space Grotesk', system-ui, sans-serif; --radius: 3px;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { background: var(--paper); color: var(--ink); font: 14px/1.5 var(--text); letter-spacing: -0.003em; }
+  body {
+    min-height: 100vh; color: var(--ink); font: 14px/1.5 var(--display); letter-spacing: -0.003em;
+    background-color: var(--bg);
+    background-image:
+      linear-gradient(rgba(255,255,255,.035) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,.035) 1px, transparent 1px);
+    background-size: 24px 24px;
+  }
   button, input, select { font: inherit; }
   button { cursor: pointer; }
-  :focus-visible { outline: 2px solid var(--heat); outline-offset: 2px; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   [hidden] { display: none !important; }
+  .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
 
-  .bar { background: var(--stage); color: var(--stage-text); display: flex; align-items: center; gap: 18px; padding: 0 24px; height: 52px; border-bottom: 1px solid var(--rule); }
+  .bar { background: var(--bar); color: var(--ink); display: flex; align-items: center; gap: 16px; padding: 0 24px; height: 56px; border-bottom: 1px solid var(--line); }
   .brand { font: 600 17px/1 var(--display); letter-spacing: -0.02em; color: inherit; text-decoration: none; }
   .bar .spacer { flex: 1; }
-  .header-meta { color: var(--stage-muted); font-size: 12px; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .credit { color: var(--stage-muted); font-size: 13px; white-space: nowrap; }
+  .header-meta { color: var(--muted); font-size: 13px; max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .credit { color: var(--muted); font: 12px var(--mono); white-space: nowrap; border: 1px solid var(--line); border-radius: var(--radius); padding: 6px 12px; }
+  .credit-held, .credit-label { color: var(--muted); }
   .account-wrap { position: relative; }
-  .account { background: none; border: 0; color: var(--stage-muted); font-size: 12px; max-width: 190px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 6px 8px; border-radius: 8px; }
-  .account:hover, .account[aria-expanded="true"] { color: var(--stage-text); background: var(--stage-2); }
+  .account { background: none; border: 1px solid transparent; color: var(--muted); font-size: 12px; max-width: 190px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 6px 10px; border-radius: var(--radius); }
+  .account:hover, .account[aria-expanded="true"] { color: var(--ink); border-color: var(--line); background: var(--panel); }
   .account::after { content: "▾"; font-size: 9px; margin-left: 4px; }
-  .account-menu { position: absolute; right: 0; top: calc(100% + 6px); min-width: 160px; background: var(--stage-2); border: 1px solid var(--stage-rule); border-radius: 10px; padding: 5px; display: flex; flex-direction: column; gap: 2px; z-index: 30; box-shadow: 0 10px 24px rgba(0,0,0,.35); }
-  .account-menu button { background: none; border: 0; color: var(--stage-text); text-align: left; padding: 8px 10px; border-radius: 7px; font-size: 13px; }
-  .account-menu button:hover, .account-menu button:focus-visible { background: #23252A; }
-  .btn-white { background: #fff; color: #0E0F11; border: 0; border-radius: 6px; padding: 9px 16px; font-weight: 600; }
-  .btn-white:hover { background: #ECEDEF; }
+  .account-menu { position: absolute; right: 0; top: calc(100% + 6px); min-width: 170px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 5px; display: flex; flex-direction: column; gap: 2px; z-index: 30; box-shadow: 0 12px 30px rgba(0,0,0,.4); }
+  .account-menu button { background: none; border: 0; color: var(--ink); text-align: left; padding: 8px 10px; border-radius: 2px; font-size: 13px; }
+  .account-menu button:hover, .account-menu button:focus-visible { background: rgba(255,255,255,.06); }
+  .btn-white { background: var(--ink); color: var(--bg); border: 1px solid var(--ink); border-radius: var(--radius); padding: 9px 16px; min-height: 40px; font-weight: 600; }
+  .btn-white:hover { background: #fff; }
   .btn-white:disabled { opacity: .5; cursor: default; }
-  .btn-ghost { background: none; border: 1px solid var(--rule); color: var(--ink); border-radius: 6px; padding: 7px 12px; text-decoration: none; display: inline-block; }
-  .stage .btn-ghost, .side .btn-ghost { border-color: var(--stage-rule); color: var(--stage-text); }
-  .btn-ghost:hover { border-color: var(--ink-3); }
-  .btn-danger { background: none; border: 1px solid var(--stage-rule); color: #FCA5A5; border-radius: 6px; padding: 6px 12px; }
-  .btn-danger:hover { border-color: #FCA5A5; }
+  .btn-ghost { background: none; border: 1px solid var(--line); color: var(--ink); border-radius: var(--radius); padding: 7px 12px; min-height: 34px; text-decoration: none; display: inline-block; }
+  .btn-ghost:hover { border-color: var(--muted); }
+  .btn-danger { background: none; border: 1px solid var(--line); color: var(--danger); border-radius: var(--radius); padding: 6px 12px; min-height: 34px; }
+  .btn-danger:hover { border-color: var(--danger); }
   .btn-danger:disabled { opacity: .5; cursor: default; }
+  .btn-ghost, .btn-white, .btn-danger, .result-tab, .history-link, .batch-curve, .compare-report-link { transition: color .15s, background .15s, border-color .15s; }
 
-  .D { display: grid; grid-template-columns: minmax(360px, 38%) 1fr; height: calc(100vh - 52px); overflow: hidden; }
+  .D { display: grid; grid-template-columns: minmax(340px, 420px) minmax(0, 1fr); height: calc(100vh - 56px); overflow: hidden; }
   body:has(.D) { overflow: hidden; }
-  .D .side { background: var(--stage); color: var(--stage-text); padding: 16px 18px; display: flex; flex-direction: column; gap: 12px; min-height: 0; border-right: 1px solid var(--rule); }
-  .D .report { background: var(--paper); padding: 22px 30px 16px; display: flex; flex-direction: column; gap: 18px; min-height: 0; overflow: hidden; }
+  .D .side { background: transparent; color: var(--ink); padding: 20px; display: flex; flex-direction: column; gap: 16px; min-height: 0; border-right: 1px solid var(--line); overflow: hidden; }
+  .D .report { background: transparent; padding: 20px 24px; display: flex; flex-direction: column; gap: 16px; min-height: 0; overflow: hidden; }
+  .D.compare-view { grid-template-columns: minmax(0, 1fr); }
+  .D.compare-view .side { display: none; }
 
-  .chooser { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; scrollbar-width: thin; }
-  .chooser-panel { display: flex; flex-direction: column; gap: 12px; }
-  .box { background: var(--stage-2); border: 1px solid var(--stage-rule); border-radius: 6px; padding: 14px 16px; display: none; flex-direction: column; gap: 8px; }
+  .chooser { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; scrollbar-width: thin; }
+  .chooser-panel { display: flex; flex-direction: column; gap: 16px; min-height: 0; }
+  .box { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; display: none; flex-direction: column; gap: 8px; }
   .box.active { display: flex; }
   .box h2 { font: 600 16px/1.25 var(--display); }
-  .box p { font-size: 12.5px; color: var(--stage-muted); line-height: 1.5; }
-  .box p.error { color: #FCA5A5; }
+  .box p { font-size: 12.5px; color: var(--muted); line-height: 1.5; }
+  .box p.error { color: var(--danger); }
   .box .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 2px; align-items: center; }
-  .box a:not(.btn-white) { color: var(--stage-text); }
+  .box a:not(.btn-white) { color: var(--ink); }
   #signedOutNote:empty { display: none; }
-  .upload-zone { border: 1px dashed var(--stage-rule); border-radius: 6px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; cursor: pointer; position: relative; padding: 22px 16px; text-align: center; background: var(--stage-2); color: var(--stage-text); }
-  .upload-zone:hover { border-color: var(--stage-muted); }
+  #historyPanel { flex: 1; min-height: 0; }
+  #historyList { min-height: 0; overflow-y: auto; scrollbar-width: thin; }
+  #historyNote:empty { display: none; }
+
+  .upload-zone { position: relative; min-height: 150px; border: 0; border-radius: var(--radius); background: rgba(17,19,22,.6); color: var(--ink); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px; cursor: pointer; padding: 22px 18px; text-align: center; overflow: hidden; transition: background .2s; }
+  .upload-zone:hover { background: rgba(255,138,42,.05); }
   .upload-zone.hidden { display: none; }
-  .upload-zone .up-title { font-weight: 600; font-size: 14px; }
-  .upload-zone .up-sub { font-size: 12px; color: var(--stage-muted); }
-  .dialog-zone.dragover, .upload-zone.dragover { border-color: var(--heat); color: var(--stage-text); }
-  .dialog-zone { border: 1px dashed var(--stage-rule); border-radius: 6px; padding: 18px 16px; text-align: center; color: var(--stage-muted); font-size: 13px; cursor: pointer; position: relative; background: var(--stage); }
-  .dialog-zone:hover { border-color: var(--stage-muted); color: var(--stage-text); }
+  .upload-dash { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  .upload-dash rect { fill: none; stroke: var(--muted); stroke-width: 1.5; stroke-dasharray: 6 6; opacity: .55; animation: dashmove 22s linear infinite; vector-effect: non-scaling-stroke; transition: stroke .2s, opacity .2s; }
+  .upload-zone:hover .upload-dash rect, .upload-zone.dragover .upload-dash rect { stroke: var(--accent); opacity: 1; }
+  @keyframes dashmove { to { stroke-dashoffset: -240; } }
+  .up-icon { color: var(--muted); display: block; }
+  .upload-zone .up-title { font-weight: 600; font-size: 15px; }
+  .upload-zone .up-sub { font-size: 12px; color: var(--muted); }
+  .dialog-zone.dragover, .upload-zone.dragover { background: rgba(255,138,42,.06); color: var(--ink); }
+  .dialog-zone { position: relative; border: 1px dashed var(--line); border-radius: var(--radius); padding: 22px 16px; text-align: center; color: var(--muted); font-size: 13px; cursor: pointer; background: var(--well); }
+  .dialog-zone:hover { border-color: var(--muted); color: var(--ink); }
   .dialog-zone input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
   .batch-list { display: flex; flex-direction: column; max-height: 40vh; overflow-y: auto; scrollbar-width: thin; }
   .batch-list:empty { display: none; }
-  .batch-list:not(:empty) { border-bottom: 1px solid var(--stage-rule); padding-bottom: 8px; margin-bottom: 10px; }
-  .batch-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--stage-rule); font-size: 12px; }
+  .batch-list:not(:empty) { border-bottom: 1px solid var(--line); padding-bottom: 8px; margin-bottom: 10px; }
+  .batch-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); font-size: 12px; }
   .batch-row:first-child { border-top: 0; }
-  .batch-thumb { width: 64px; height: 40px; flex: none; border-radius: 5px; overflow: hidden; background: var(--stage-rule); display: flex; align-items: center; justify-content: center; color: var(--stage-muted); }
-  .batch-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .batch-thumb, .history-thumb { width: 64px; height: 40px; flex: none; border-radius: 2px; overflow: hidden; background: var(--line); display: flex; align-items: center; justify-content: center; color: var(--muted); }
+  .batch-thumb img, .history-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
   .batch-main { min-width: 0; flex: 1; }
   .batch-name { font-weight: 600; word-break: break-all; }
-  .batch-meta { color: var(--stage-muted); font-size: 11.5px; margin-top: 2px; }
-  .batch-meta.error { color: #FCA5A5; }
-  .batch-curve { background: none; border: 0; padding: 0; color: var(--stage-muted); font-size: 11.5px; text-decoration: underline; text-underline-offset: 2px; margin-top: 2px; }
-  .batch-curve:hover { color: var(--stage-text); }
-  .batch-x { width: 26px; height: 24px; flex: none; border: 1px solid var(--stage-rule); border-radius: 6px; background: none; color: var(--stage-muted); font-size: 14px; line-height: 1; }
-  .batch-x:hover { color: var(--stage-text); border-color: var(--stage-muted); }
-  .batch-total { font-size: 12.5px; color: var(--stage-text); }
-  .batch-total.error { color: #FCA5A5; }
+  .batch-meta { color: var(--muted); font: 11.5px var(--mono); margin-top: 2px; }
+  .batch-meta.error { color: var(--danger); }
+  .batch-curve { background: none; border: 0; padding: 0; color: var(--muted); font-size: 11.5px; text-decoration: underline; text-underline-offset: 2px; margin-top: 2px; }
+  .batch-curve:hover { color: var(--ink); }
+  .batch-x { width: 26px; height: 24px; flex: none; border: 1px solid var(--line); border-radius: var(--radius); background: none; color: var(--muted); font-size: 14px; line-height: 1; }
+  .batch-x:hover { color: var(--ink); border-color: var(--muted); }
+  .batch-total { font-size: 12.5px; color: var(--ink); }
+  .batch-total.error { color: var(--danger); }
   .batch-signed-out { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; font-size: 13px; }
-  .consent-row { display: flex; align-items: flex-start; gap: 8px; font-size: 12px; line-height: 1.45; color: var(--stage-muted); }
-  .consent-row input { margin-top: 3px; flex-shrink: 0; }
-  .consent-row a { color: var(--stage-text); }
-  .upload-progress { display: none; height: 5px; background: var(--stage); border-radius: 3px; overflow: hidden; }
+  .consent-row { display: flex; align-items: flex-start; gap: 8px; font-size: 12px; line-height: 1.45; color: var(--muted); }
+  .consent-row input { margin-top: 3px; flex-shrink: 0; accent-color: var(--accent); }
+  .consent-row a { color: var(--ink); }
+  .upload-progress { display: none; height: 3px; background: var(--line); border-radius: 2px; overflow: hidden; }
   .upload-progress.active { display: block; }
-  .upload-bar { height: 100%; width: 0; background: var(--heat); transition: width .15s; }
-  .report-empty { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: thin; }
-  .samples-section .label { font-size: 12px; font-weight: 600; color: var(--ink-3); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 14px; }
-  .samples-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 24px 20px; }
-  .sample-card { border: 0; border-radius: 6px; cursor: pointer; background: none; text-align: left; color: var(--stage-text); padding: 0; }
-  .sample-thumb { width: 100%; aspect-ratio: 16 / 9; border-radius: 6px; overflow: hidden; background: #1E2024; display: flex; align-items: center; justify-content: center; color: var(--stage-muted); transition: filter .15s; }
-  .sample-card:hover .sample-thumb { filter: brightness(1.18); }
-  .sample-card.active .sample-thumb { outline: 2px solid var(--heat); outline-offset: 2px; }
-  .sample-thumb img { width: 100%; height: 100%; object-fit: cover; }
-  .sample-info { padding: 9px 1px 0; }
-  .sample-title { font-size: 13px; font-weight: 500; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-  .sample-dur { font-size: 11.5px; color: var(--stage-muted); margin-top: 2px; }
-  .history-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0; border-top: 1px solid var(--stage-rule); font-size: 12px; }
-  .history-row:first-child { border-top: 0; }
+  .upload-bar { height: 100%; width: 0; background: var(--accent); transition: width .15s; }
+  .report-empty { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: thin; padding-right: 4px; }
+
+  .samples-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 18px; }
+  .samples-head .label { font: 600 26px/1.1 var(--display); letter-spacing: -0.02em; color: var(--ink); text-transform: none; }
+  .samples-free { font-size: 12px; color: var(--muted); }
+  .samples-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 20px; }
+  .sample-card { border: 1px solid var(--line); border-radius: var(--radius); cursor: pointer; background: var(--panel); text-align: left; color: var(--ink); padding: 0; overflow: hidden; transition: transform .25s ease, border-color .25s ease, box-shadow .25s ease; }
+  .sample-card:hover, .sample-card:focus-visible { transform: translateY(-4px); border-color: var(--accent); box-shadow: 0 0 0 1px rgba(255,138,42,.22); }
+  .sample-card.active { border-color: var(--accent); }
+  .sample-thumb { position: relative; width: 100%; aspect-ratio: 16 / 9; overflow: hidden; background: var(--well); display: flex; align-items: center; justify-content: center; color: var(--muted); }
+  .sample-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform .6s ease, filter .3s ease; }
+  .sample-card:hover .sample-thumb img { transform: scale(1.04); }
+  .sample-preview { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity .3s; pointer-events: none; z-index: 1; }
+  .sample-preview.on { opacity: 1; }
+  .sample-dur-badge { position: absolute; right: 8px; bottom: 8px; z-index: 2; font: 11px var(--mono); padding: 3px 7px; border-radius: var(--radius); background: rgba(0,0,0,.65); color: #fff; }
+  .sample-spark { display: block; width: 100%; height: 46px; background: var(--well); }
+  .sample-info { padding: 10px 14px 13px; display: flex; flex-direction: column; gap: 4px; }
+  .sample-title { font-size: 15px; font-weight: 600; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .sample-peak { font: 11px var(--mono); color: var(--muted); }
+  .sample-dur { display: none; }
+
+  .history-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 8px; border: 1px solid transparent; border-top: 1px solid var(--line); font-size: 12px; border-radius: 2px; }
+  .history-row:first-child { border-top-color: transparent; }
   .history-row.openable { cursor: pointer; }
-  .history-row.openable:hover { background: rgba(236,237,239,.04); }
-  .history-thumb { width: 64px; height: 40px; flex: none; border-radius: 5px; overflow: hidden; background: var(--stage-rule); }
-  .history-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .history-row.openable:hover { background: rgba(255,255,255,.035); border-color: var(--line); }
   .history-main { min-width: 0; flex: 1; }
   .history-name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .history-sub { color: var(--stage-muted); font-size: 11px; margin-top: 2px; }
-  .history-sub.error { color: #FCA5A5; }
+  .history-sub { color: var(--muted); font: 11px var(--mono); margin-top: 2px; }
+  .history-sub.error { color: var(--danger); }
   .history-actions { display: flex; gap: 6px; flex-shrink: 0; align-items: center; }
-  .history-link { background: none; border: 0; padding: 0; color: var(--stage-muted); font-size: 11.5px; text-decoration: underline; text-underline-offset: 2px; }
-  .history-link:hover { color: var(--stage-text); }
-  .history-more { width: 26px; height: 24px; border: 1px solid var(--stage-rule); border-radius: 6px; background: none; color: var(--stage-muted); display: grid; place-items: center; font-size: 15px; line-height: 1; }
-  .history-more:hover, .history-more[aria-expanded="true"] { color: var(--stage-text); border-color: var(--stage-muted); }
-  .row-menu { position: fixed; min-width: 160px; background: var(--stage-2); border: 1px solid var(--stage-rule); border-radius: 10px; padding: 5px; display: flex; flex-direction: column; gap: 2px; z-index: 40; box-shadow: 0 10px 24px rgba(0,0,0,.35); }
-  .row-menu button, .row-menu a { background: none; border: 0; color: var(--stage-text); text-align: left; padding: 8px 10px; border-radius: 7px; font-size: 13px; text-decoration: none; }
-  .row-menu button:hover, .row-menu a:hover, .row-menu button:focus-visible, .row-menu a:focus-visible { background: #23252A; }
-  .history-empty { font-size: 12.5px; color: var(--stage-muted); }
+  .history-link { background: none; border: 0; padding: 0; color: var(--muted); font-size: 11.5px; text-decoration: underline; text-underline-offset: 2px; }
+  .history-link:hover { color: var(--ink); }
+  .history-more { width: 26px; height: 24px; border: 1px solid var(--line); border-radius: var(--radius); background: none; color: var(--muted); display: grid; place-items: center; font-size: 15px; line-height: 1; }
+  .history-more:hover, .history-more[aria-expanded="true"] { color: var(--ink); border-color: var(--muted); }
+  .row-menu { position: fixed; min-width: 170px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 5px; display: flex; flex-direction: column; gap: 2px; z-index: 40; box-shadow: 0 12px 30px rgba(0,0,0,.4); }
+  .row-menu button, .row-menu a { background: none; border: 0; color: var(--ink); text-align: left; padding: 8px 10px; border-radius: 2px; font-size: 13px; text-decoration: none; }
+  .row-menu button:hover, .row-menu a:hover, .row-menu button:focus-visible, .row-menu a:focus-visible { background: rgba(255,255,255,.06); }
+  .history-empty { font-size: 12.5px; color: var(--muted); }
   .field-row { display: flex; gap: 8px; }
-  .field-row input { flex: 1; min-width: 0; border: 1px solid var(--stage-rule); border-radius: 8px; padding: 7px 9px; font-size: 12px; background: var(--stage); color: var(--stage-text); }
-  .modal { margin: auto; background: var(--stage-2); color: var(--stage-text); border: 1px solid var(--stage-rule); border-radius: 6px; padding: 20px 22px; width: min(430px, calc(100vw - 32px)); }
-  .modal::backdrop { background: rgba(7, 8, 10, .74); }
+  .field-row input { flex: 1; min-width: 0; border: 1px solid var(--line); border-radius: var(--radius); padding: 8px 10px; font-size: 12px; background: var(--well); color: var(--ink); }
+  .modal { margin: auto; background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px 22px; width: min(440px, calc(100vw - 32px)); }
+  .modal::backdrop { background: rgba(7, 8, 10, .78); }
   .modal h2 { font: 600 17px/1.25 var(--display); margin-bottom: 8px; }
-  .modal p { font-size: 13px; color: var(--stage-muted); line-height: 1.5; }
-  .modal p.error { color: #FCA5A5; }
+  .modal p { font-size: 13px; color: var(--muted); line-height: 1.5; }
+  .modal p.error { color: var(--danger); }
   .modal .field-row { margin-top: 12px; }
   .modal .actions { display: flex; gap: 8px; align-items: center; margin-top: 12px; }
   .modal a { color: inherit; }
   .choice-row { margin-top: 12px; }
-  .choice-row > span { display: block; font-size: 12.5px; color: var(--stage-muted); margin-bottom: 6px; }
+  .choice-row > span { display: block; font-size: 12.5px; color: var(--muted); margin-bottom: 6px; }
   .choices { display: flex; gap: 6px; flex-wrap: wrap; }
-  .choices label { border: 1px solid var(--stage-rule); border-radius: 16px; padding: 4px 12px; font-size: 12.5px; color: var(--stage-muted); cursor: pointer; }
-  .choices label:hover { color: var(--stage-text); border-color: var(--stage-muted); }
+  .choices label { border: 1px solid var(--line); border-radius: var(--radius); padding: 5px 12px; font-size: 12.5px; color: var(--muted); cursor: pointer; }
+  .choices label:hover { color: var(--ink); border-color: var(--muted); }
   .choices input { position: absolute; opacity: 0; pointer-events: none; }
-  .choices input:checked + span { color: var(--stage-text); }
-  .choices input:focus-visible + span { outline: 2px solid var(--heat); outline-offset: 2px; border-radius: 10px; }
-  .choices label:has(input:checked) { border-color: var(--heat); color: var(--stage-text); }
-  .curve-file { font-size: 12px; color: var(--stage-muted); word-break: break-all; }
+  .choices input:checked + span { color: var(--ink); }
+  .choices input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
+  .choices label:has(input:checked) { border-color: var(--accent); color: var(--ink); }
+  .curve-file { font-size: 12px; color: var(--muted); word-break: break-all; }
   .curve-file:empty { display: none; }
-  .reward-note { font-size: 12.5px; color: var(--stage-text); }
-  .reward-amount { color: var(--heat); }
+  .reward-note { font-size: 12.5px; color: var(--ink); }
+  .reward-amount { color: var(--accent); font-family: var(--mono); }
   .reward-note:empty { display: none; }
   .account-icon { display: none; width: 16px; height: 16px; }
-  .privacy-note { font-size: 11px; color: var(--stage-muted); margin-top: auto; padding: 4px 2px; }
-  .privacy-note a { color: var(--stage-muted); }
+  .privacy-note { font-size: 11px; color: var(--muted); margin-top: auto; padding: 4px 2px; }
+  .privacy-note a { color: var(--muted); }
   .privacy-note.page-end { display: none; margin-top: 4px; padding: 4px 16px; }
-  .spinner { width: 28px; height: 28px; border: 3px solid var(--stage-rule); border-top-color: var(--heat); border-radius: 50%; animation: spin .9s linear infinite; }
+  .spinner { width: 28px; height: 28px; border: 3px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: spin .9s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
 
-  .player { flex: 1; min-height: 0; display: none; flex-direction: column; gap: 10px; }
+  .player { flex: 1; min-height: 0; display: none; flex-direction: column; gap: 14px; }
   .player.active { display: flex; }
-  .side-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: nowrap; min-height: 20px; }
-  .clip-title { font: 600 15px/1.2 var(--display); letter-spacing: -0.01em; white-space: nowrap; flex: none; }
-  .side-head .btn-ghost { padding: 3px 9px; font-size: 12px; margin-left: auto; flex: none; }
-  .video-box { position: relative; background: #000; border-radius: 6px; overflow: hidden; aspect-ratio: 16 / 9; flex: none; }
-  .video-box video { width: 100%; height: 100%; display: block; object-fit: contain; cursor: pointer; }
-  .video-missing { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 22px; text-align: center; font-size: 13px; color: var(--stage-muted); background: #15161A; }
-  .brain-box { position: relative; background: #15161A; border-radius: 6px; overflow: hidden; flex: 1; min-height: 150px; }
+  .side-head { display: flex; align-items: baseline; gap: 10px; min-height: 20px; }
+  .clip-title { font: 600 15px/1.2 var(--display); letter-spacing: -0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .side-head .btn-ghost { padding: 3px 9px; min-height: 0; font-size: 12px; margin-left: auto; flex: none; }
+  .panel-head { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); min-height: 18px; }
+  .panel-head h2 { font: 600 14px var(--display); color: var(--ink); }
+  .panel-head .spacer { flex: 1; }
+  .video-panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 18px; display: flex; flex-direction: column; gap: 10px; flex: none; }
+  .video-box { position: relative; background: #000; border-radius: 2px; overflow: hidden; aspect-ratio: 16 / 9; flex: none; border: 1px solid var(--line); }
+  .video-box video { width: 100%; height: 100%; display: block; object-fit: contain; cursor: pointer; background: #000; }
+  .video-missing { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 22px; text-align: center; font-size: 13px; color: var(--muted); background: var(--well); }
+  .brain-panel { flex: 1; min-height: 190px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 16px; display: flex; flex-direction: column; gap: 8px; }
+  .brain-panel-body { flex: 1; min-height: 0; display: flex; gap: 12px; }
+  .brain-box { position: relative; flex: 1; min-height: 140px; background: var(--well); border: 1px solid var(--line); border-radius: 2px; overflow: hidden; }
   .brain-box canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
-  .brain-message { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 20px; text-align: center; font-size: 13px; color: var(--stage-muted); }
-  .brain-legend { position: absolute; left: 14px; bottom: 12px; display: flex; gap: 8px; align-items: center; font-size: 11px; color: var(--stage-muted); pointer-events: none; }
-  .brain-legend i { width: 86px; height: 6px; border-radius: 3px; background: linear-gradient(90deg, #D9DCE1, #800000 10%, #E61A0A 40%, #FF800A 66%, #FFD926 88%, #FFFFD9); }
-  .brain-time { position: absolute; right: 14px; top: 12px; font: 600 13px var(--display); color: var(--stage-muted); font-variant-numeric: tabular-nums; }
-  .sample-meta { font-size: 11.5px; color: var(--stage-muted); line-height: 1.45; margin-top: -4px; }
+  .brain-message { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 20px; text-align: center; font-size: 13px; color: var(--muted); }
+  .brain-values { width: 98px; flex: none; display: flex; flex-direction: column; gap: 8px; justify-content: center; }
+  .brain-value { display: flex; flex-direction: column; gap: 2px; padding-top: 6px; border-top: 1px solid var(--line); }
+  .brain-value-label { font-size: 11.5px; color: var(--muted); }
+  .brain-value-num { font: 500 15px var(--mono); color: var(--accent2); font-variant-numeric: tabular-nums; }
+  .brain-value.neg .brain-value-num { color: var(--cool); }
+  .brain-foot { display: flex; align-items: center; gap: 10px; font-size: 11px; color: var(--muted); }
+  .brain-legend { display: flex; gap: 8px; align-items: center; pointer-events: none; }
+  .brain-legend i { width: 96px; height: 5px; border-radius: 3px; background: linear-gradient(90deg, #D9DCE1, #800000 10%, #E61A0A 40%, #FF800A 66%, #FFD926 88%, #FFFFD9); }
+  .brain-hint { margin-left: auto; white-space: nowrap; }
+  .sample-meta { font-size: 11.5px; color: var(--muted); line-height: 1.45; }
   .sample-meta:empty { display: none; }
 
   .timeline { display: grid; grid-template-columns: auto auto 1fr auto auto; gap: 10px; align-items: center; flex: none; }
-  .tl-btn { width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--stage-rule); background: var(--stage-2); color: var(--stage-text); display: grid; place-items: center; padding: 0; }
-  .tl-btn.play { width: 42px; height: 42px; background: var(--heat); color: #1B0E03; border: 0; }
+  .tl-btn { width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--line); background: var(--panel); color: var(--ink); display: grid; place-items: center; padding: 0; }
+  .tl-btn:hover { border-color: var(--muted); }
+  .tl-btn.play { width: 42px; height: 42px; background: var(--accent); color: #1B0E03; border: 0; }
+  .tl-btn.play:hover { background: var(--accent2); }
   .tl-btn svg { width: 15px; height: 15px; }
   .tl-right { display: flex; gap: 8px; align-items: center; }
-  .tl-time { font: 600 13px var(--display); font-variant-numeric: tabular-nums; color: var(--stage-muted); min-width: 84px; text-align: right; }
+  .tl-time { font: 500 13px var(--mono); font-variant-numeric: tabular-nums; color: var(--muted); min-width: 92px; text-align: right; }
   .tl-track { position: relative; height: 50px; cursor: pointer; touch-action: none; }
   .tl-track svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
 
-  .report-body { flex: 1; min-height: 0; display: none; flex-direction: column; gap: 18px; }
+  .report-body { flex: 1; min-height: 0; display: none; flex-direction: column; gap: 16px; }
   .report-body.active { display: flex; }
-  .result-message { background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 18px 20px; font-size: 13px; line-height: 1.55; color: var(--ink-2); }
+  .result-message { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 18px; font-size: 13px; line-height: 1.55; color: var(--ink-2); }
   .result-message:empty { display: none; }
-  .result-tabs { display: flex; gap: 4px; flex: none; border-bottom: 1px solid var(--rule); }
-  .result-tab { background: none; border: 0; border-bottom: 2px solid transparent; color: var(--ink-3); padding: 6px 10px; font: 500 13px var(--display); }
-  .result-tab.active { color: var(--ink); border-bottom-color: var(--heat); }
-  .result-panel { display: none; flex: 1; min-height: 0; flex-direction: column; gap: 18px; overflow-y: auto; scrollbar-width: thin; }
+  .result-tabs { display: flex; gap: 4px; flex: none; border-bottom: 1px solid var(--line); }
+  .result-tab { background: none; border: 0; border-bottom: 2px solid transparent; color: var(--muted); padding: 8px 16px; min-height: 40px; font: 500 14px var(--display); }
+  .result-tab:hover { color: var(--ink); }
+  .result-tab.active { color: var(--ink); border-bottom-color: var(--accent); font-weight: 600; }
+  .result-panel { display: none; flex: 1; min-height: 0; flex-direction: column; gap: 16px; overflow-y: auto; scrollbar-width: thin; }
   .result-panel.active { display: flex; }
+  .report-panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px 22px; display: flex; flex-direction: column; gap: 14px; }
   .report-state { font-size: 13px; color: var(--ink-2); }
   .report-state:empty { display: none; }
   .report-answer { display: flex; flex-direction: column; gap: 14px; }
   .report-answer h2 { font: 600 20px/1.3 var(--display); }
   .report-answer p { font-size: 14px; color: var(--ink-2); line-height: 1.6; }
-  .report-answer .report-key { font: 500 13px var(--display); color: var(--ink-3); }
+  .report-answer .report-key { font: 500 13px var(--display); color: var(--muted); }
   .report-moments { display: flex; flex-direction: column; gap: 8px; }
-  .report-moment { background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; padding: 10px 12px; text-align: left; color: inherit; display: flex; flex-direction: column; gap: 3px; }
-  .report-moment:hover { border-color: var(--ink-3); }
-  .report-moment .when { font: 500 13px var(--display); color: var(--heat); font-variant-numeric: tabular-nums; }
+  .report-moment { background: var(--well); border: 1px solid var(--line); border-radius: 2px; padding: 10px 12px; text-align: left; color: inherit; display: flex; flex-direction: column; gap: 3px; }
+  .report-moment:hover { border-color: var(--muted); }
+  .report-moment .when { font: 500 13px var(--mono); color: var(--accent); font-variant-numeric: tabular-nums; }
   .report-moment p { font-size: 13px; color: var(--ink-2); }
   .report-moment .suggestion { color: var(--ink); }
   .report-list h3 { font: 600 13px var(--display); color: var(--ink-2); margin-bottom: 4px; }
   .report-list ul { padding-left: 18px; font-size: 13px; color: var(--ink-2); }
   .report-actions { display: flex; gap: 8px; align-items: center; }
-  .report-free { font-size: 12px; color: var(--ink-3); }
+  .report-free { font-size: 12px; color: var(--muted); }
 
   .top { display: block; flex: none; }
   .top:empty { display: none; }
 
-  .chart-head { display: flex; align-items: baseline; gap: 10px 14px; flex-wrap: wrap; }
-  .chart-head h2 { font: 600 14px var(--display); color: var(--ink-2); letter-spacing: 0; }
-  .keys { display: flex; flex-wrap: wrap; gap: 4px 16px; order: 1; flex-basis: 100%; }
+  .chart-head { display: flex; align-items: flex-start; gap: 8px 16px; flex-wrap: wrap; }
+  .chart-title { min-width: 0; }
+  .chart-title h2 { font: 600 18px/1.2 var(--display); letter-spacing: -0.01em; }
+  .chart-sub { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 6px; font-size: 12px; color: var(--muted); }
+  .chart-download { min-height: 26px; padding: 2px 9px; font-size: 11.5px; color: var(--muted); }
+  .keys { display: flex; flex-wrap: wrap; gap: 4px 16px; order: 5; flex-basis: 100%; }
   #chartKeys:empty { display: none; }
   .chart-controls { display: inline-flex; align-items: center; gap: 14px; margin-left: auto; flex-wrap: wrap; }
-  .sound-line { font-size: 12.5px; color: var(--ink-3); }
-  .legend-key { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--ink-2); white-space: nowrap; }
-  .legend-key i { width: 18px; height: 0; border-top: 2px solid var(--heat); }
-  .legend-key i.dash { border-top: 2px dashed var(--cool); }
-  .toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--ink-2); white-space: nowrap; }
-  .toggle input { accent-color: var(--heat); }
-  .compare-pick { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--ink-2); }
-  .compare-pick select { border: 1px solid var(--rule); border-radius: 8px; padding: 4px 8px; background: var(--surface); color: var(--ink); font-size: 12px; max-width: 190px; }
+  .sound-line { font-size: 12px; color: var(--muted); }
+  .legend-key { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-2); white-space: nowrap; }
+  .legend-key i { width: 18px; height: 0; border-top: 2px solid var(--accent); }
+  .legend-key i.dash { border-top: 2px dashed var(--blue); }
+  .toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); white-space: nowrap; border: 1px solid var(--line); border-radius: var(--radius); padding: 2px 8px; min-height: 24px; cursor: pointer; }
+  .toggle:hover { color: var(--ink); border-color: var(--muted); }
+  .toggle:has(input:checked) { color: var(--ink); border-color: var(--accent); background: rgba(255,138,42,.08); }
+  .toggle input { accent-color: var(--accent); }
+  .readout { margin-left: auto; text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+  .readout-value { font: 500 28px/1 var(--mono); color: var(--accent2); font-variant-numeric: tabular-nums; }
+  .readout-value.neg { color: var(--cool); }
+  .readout-sub { font-size: 12px; color: var(--muted); }
+  .compare-pick { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--muted); }
+  .compare-pick select { border: 1px solid var(--line); border-radius: var(--radius); padding: 5px 8px; background: var(--well); color: var(--ink); font-size: 12px; max-width: 220px; }
   .compare-msg { font-size: 12px; color: var(--ink-2); min-height: 0; }
   .compare-msg:empty { display: none; }
-  .compare-msg.error { color: #FCA5A5; }
-  .main-chart { flex: 1.25 1 0; min-height: 120px; display: flex; flex-direction: column; }
-  .main-chart .note { font-size: 12.5px; color: var(--ink-3); margin: 0; }
-  .main-chart .chart { flex: 1; min-height: 0; margin-top: 8px; position: relative; }
-  .chart { position: relative; width: 100%; }
-  .chart svg { display: block; width: 100%; overflow: visible; cursor: pointer; }
-  .xaxis { display: flex; justify-content: space-between; font-size: 11px; color: var(--ink-3); height: 16px; }
-  .chart-label { position: absolute; left: 4px; font: 500 11px var(--text); color: var(--ink-3); pointer-events: none; }
+  .compare-msg.error { color: var(--danger); }
+  .main-chart { flex: 1.25 1 0; min-height: 250px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 20px 12px; display: flex; flex-direction: column; gap: 6px; }
+  .main-chart .note { font-size: 12px; color: var(--muted); }
+  .moments-lane { position: relative; height: 48px; flex: none; margin-top: 4px; }
+  .moment-chip { position: absolute; height: 19px; max-width: calc(100% - 4px); overflow: hidden; padding: 0 8px; display: flex; align-items: center; gap: 6px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--bg); color: var(--muted); font: 11px var(--display); white-space: nowrap; transition: color .15s, border-color .15s, background .15s; }
+  .moment-chip .moment-text { max-width: 14ch; overflow: hidden; text-overflow: ellipsis; display: inline-block; vertical-align: bottom; }
+  .moment-chip .moment-when { font: 10.5px var(--mono); color: var(--muted); }
+  .moment-chip:hover, .moment-chip.active { border-color: var(--accent); color: var(--ink); background: var(--panel); z-index: 5; }
+  .moment-chip:hover .moment-text, .moment-chip.active .moment-text { max-width: none; }
+  .chart { position: relative; width: 100%; flex: 1; min-height: 0; }
+  .chart svg { display: block; width: 100%; overflow: visible; cursor: crosshair; }
+  .xaxis { display: flex; justify-content: space-between; font: 10.5px var(--mono); color: var(--muted); height: 16px; }
+  .chart-label { position: absolute; left: 4px; font: 500 11px var(--display); color: var(--muted); pointer-events: none; }
 
-  .strips-wrap { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; }
-  #stripsCard .chart-head { margin-bottom: 2px; }
-  #stripsCard > p.note { font-size: 12.5px; color: var(--ink-3); margin-bottom: 10px; }
-  .strips { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; }
+  .strips-wrap { flex: 1 1 0; min-height: 180px; display: flex; flex-direction: column; gap: 10px; }
+  #stripsCard .panel-head { margin-bottom: 0; }
+  #stripsCard .note { font-size: 12px; color: var(--muted); }
+  .strips { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
   .strips.swapped { grid-template-columns: 1fr; }
-  .strip { min-width: 0; display: flex; flex-direction: column; }
-  .strip h3, .parts h3 { display: flex; justify-content: space-between; align-items: baseline; font: 500 13px var(--display); gap: 8px; margin-bottom: 4px; }
-  .strip h3 button, .parts h3 button { background: none; border: 0; font: 500 12.5px var(--text); color: var(--ink-2); padding: 0; }
+  .strip { min-width: 0; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+  .strip h3, .parts h3 { display: flex; justify-content: space-between; align-items: baseline; font: 600 14px var(--display); gap: 8px; margin-bottom: 0; }
+  .strip h3 button, .parts h3 button { background: none; border: 0; font: 500 12px var(--display); color: var(--muted); padding: 0; }
   .strip h3 button:hover, .parts h3 button:hover { color: var(--ink); }
   .strip .chart { flex: 1; min-height: 0; }
-  .parts { display: flex; flex-direction: column; min-height: 0; height: 100%; }
+  .parts { display: flex; flex-direction: column; min-height: 0; height: 100%; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; gap: 8px; }
   .parts h3 { justify-content: flex-start; gap: 12px; white-space: nowrap; }
   .parts .parts-row { flex: 1; min-height: 0; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 18px; }
   .parts .parts-row > div { display: flex; flex-direction: column; min-width: 0; }
-  .parts h4, .sub h4 { font: 500 12px var(--text); color: var(--ink-2); margin-bottom: 2px; }
+  .parts h4, .sub h4 { font: 500 12px var(--display); color: var(--ink-2); margin-bottom: 2px; }
   .parts .chart { flex: 1; min-height: 0; }
 
-  .end-marker { position: absolute; font-size: 11px; line-height: 1.3; color: var(--ink-2); background: rgba(14,15,17,.85); padding: 0 3px; border-radius: 3px; white-space: nowrap; pointer-events: none; }
+  .end-marker { position: absolute; font-size: 11px; line-height: 1.3; color: var(--ink-2); background: rgba(11,12,14,.9); padding: 0 3px; border-radius: 2px; white-space: nowrap; pointer-events: none; }
   .end-drop { position: absolute; border-left: 1px dotted var(--cool); pointer-events: none; }
   .end-dot { position: absolute; width: 6px; height: 6px; border-radius: 50%; transform: translate(-50%, -50%); pointer-events: none; }
 
-  .compare-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  .compare-table th, .compare-table td { text-align: left; padding: 8px 12px 8px 0; border-bottom: 1px solid var(--rule); vertical-align: top; }
-  .compare-table th { font: 500 12.5px var(--text); color: var(--ink-2); }
-  .compare-table td.v { font: 600 15px var(--display); }
+  .compare-table { width: 100%; border-collapse: collapse; font-size: 13px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); }
+  .compare-table th, .compare-table td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  .compare-table tr:last-child th, .compare-table tr:last-child td { border-bottom: 0; }
+  .compare-table th { font: 500 12.5px var(--display); color: var(--muted); }
+  .compare-table td.v { font: 500 15px var(--mono); }
   .compare-table .compare-swap { padding: 4px 10px; font-size: 12px; cursor: pointer; }
 
+  .compare-panel { overflow-y: auto; }
+  .compare-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; flex: none; }
+  .compare-time { color: var(--muted); font-size: 12px; }
+  .compare-head .spacer { flex: 1; }
+  .compare-videos { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; flex: none; }
+  .compare-video { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 10px 12px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+  .compare-video-head { display: flex; align-items: baseline; gap: 8px; min-width: 0; font-size: 12px; }
+  .compare-video-head span:first-child { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .compare-video-head .mono { margin-left: auto; color: var(--muted); font-size: 10.5px; }
+  .compare-video-host { position: relative; aspect-ratio: 16 / 9; background: #000; border: 1px solid var(--line); border-radius: 2px; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+  .compare-video-host video { width: 100%; height: 100%; object-fit: contain; display: block; background: #000; }
+  .compare-video-note { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 16px; text-align: center; color: var(--muted); font-size: 12px; background: var(--well); }
+  .compare-bars { height: 3px; background: rgba(255,255,255,.1); border-radius: 2px; overflow: hidden; }
+  .compare-bars span { display: block; height: 100%; width: 0; background: var(--accent); }
+  .compare-bars.blue span { background: var(--blue); }
+  .compare-body { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 16px; }
+  .compare-chart-panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 16px; display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+  .compare-chart-panel .chart { min-height: 140px; flex: none; height: 160px; }
+  .compare-legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 11.5px; color: var(--muted); }
+  .compare-legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .compare-legend i { width: 14px; height: 2px; background: var(--accent); display: block; }
+  .compare-legend i.blue { background: var(--blue); }
+  .compare-diffs { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; scrollbar-width: thin; }
+  .compare-diff { text-align: left; border: 1px solid transparent; background: transparent; border-radius: 2px; padding: 7px 10px; color: var(--ink); display: flex; flex-direction: column; gap: 2px; }
+  .compare-diff:hover { background: rgba(255,255,255,.03); }
+  .compare-diff.active { border-color: var(--line); background: rgba(255,255,255,.03); }
+  .compare-diff .diff-chips { display: flex; gap: 14px; flex-wrap: wrap; font-size: 11px; color: var(--muted); }
+  .compare-diff .diff-chip { display: flex; align-items: center; gap: 6px; }
+  .compare-diff .diff-chip i { width: 6px; height: 6px; border-radius: 50%; display: block; }
+  .compare-diff .diff-what { font-size: 12.5px; line-height: 1.4; color: var(--ink); margin-top: 2px; }
+  .compare-diff .diff-brain { font-size: 12px; line-height: 1.4; color: var(--muted); }
+  .compare-verdict { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; display: flex; flex-direction: column; gap: 8px; min-height: 0; overflow-y: auto; scrollbar-width: thin; }
+  .kicker { font-size: 11px; color: var(--muted); letter-spacing: .02em; }
+  .compare-verdict h3 { font: 600 15px/1.35 var(--display); }
+  .compare-verdict p { font-size: 13px; line-height: 1.55; color: var(--ink); }
+  .compare-key { font-size: 11px; color: var(--muted); }
+  .compare-verdict .compare-report-link { margin-top: 2px; }
+  .ai-note { margin-top: auto; padding-top: 12px; border-top: 1px solid var(--line); font-size: 10.5px; line-height: 1.45; color: var(--muted); }
+  .compare-report-link { align-self: flex-start; background: none; border: 0; padding: 0; color: var(--accent); font: 600 13px var(--display); }
+  .compare-report-link:hover { color: var(--accent2); }
+
+  .progress-panel { flex: 1; min-height: 0; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 24px 28px; display: flex; flex-direction: column; gap: 20px; }
+  .progress-head { display: flex; align-items: flex-end; gap: 16px; flex: none; }
+  .progress-head .kicker { display: block; margin-bottom: 6px; }
+  .progress-head h1 { font: 600 28px/1.1 var(--display); letter-spacing: -0.02em; overflow-wrap: anywhere; }
+  .progress-clock { margin-left: auto; text-align: right; display: flex; flex-direction: column; gap: 4px; flex: none; }
+  #progressElapsed { font: 500 38px/1 var(--mono); font-variant-numeric: tabular-nums; }
+  #progressStatus { font: 11px var(--mono); color: var(--muted); }
+  .progress-body { flex: 1; min-height: 0; display: flex; gap: 32px; }
+  .stage-list { list-style: none; margin: 0; padding: 0; width: 380px; flex: none; overflow-y: auto; scrollbar-width: thin; }
+  .stage-item { display: flex; gap: 14px; min-height: 52px; }
+  .stage-rail { width: 18px; flex: none; display: flex; flex-direction: column; align-items: center; }
+  .stage-dot { width: 12px; height: 12px; margin-top: 4px; border-radius: 50%; box-sizing: border-box; border: 2px solid var(--line); background: transparent; flex: none; }
+  .stage-line { width: 2px; flex: 1; background: var(--line); margin: 4px 0; }
+  .stage-content { flex: 1; display: flex; flex-direction: column; gap: 5px; padding-bottom: 12px; min-width: 0; }
+  .stage-top { display: flex; align-items: baseline; gap: 8px; }
+  .stage-label { font-size: 15px; color: var(--muted); }
+  .stage-time { margin-left: auto; font: 12px var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+  .stage-progress { height: 3px; background: var(--line); border-radius: 2px; overflow: hidden; }
+  .stage-progress span { display: block; height: 3px; width: 0; background: var(--accent); }
+  .stage-item.active .stage-progress span { animation: stagepulse 1.4s ease-in-out infinite alternate; }
+  @keyframes stagepulse { from { width: 16%; opacity: .55; } to { width: 58%; opacity: 1; } }
+  .stage-item.done .stage-dot { border-color: var(--accent); background: var(--accent); }
+  .stage-item.done .stage-line { background: var(--accent); }
+  .stage-item.done .stage-label, .stage-item.active .stage-label { color: var(--ink); }
+  .stage-item.active .stage-dot { border-color: var(--accent); background: var(--bg); box-shadow: 0 0 0 3px rgba(255,138,42,.16); }
+  .stage-item.active .stage-label { font-weight: 600; }
+  .stage-item.skipped .stage-label, .stage-item.skipped .stage-time { opacity: .45; }
+  .progress-art { flex: 1; min-width: 0; border: 1px solid var(--line); border-radius: 2px; background: var(--well); display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden; }
+  .progress-art svg { width: min(440px, 92%); height: auto; display: block; }
+  .progress-scan { animation: scan 2.6s ease-in-out infinite alternate; }
+  @keyframes scan { from { transform: translateX(-90px); } to { transform: translateX(90px); } }
+  .progress-caption { position: absolute; left: 14px; bottom: 10px; font-size: 12px; color: var(--muted); }
+  .progress-foot { display: flex; align-items: center; gap: 12px; flex: none; }
+  .progress-note { flex: 1; font-size: 13px; color: var(--muted); line-height: 1.45; }
+
+  @media (max-width: 1100px) {
+    .compare-body { grid-template-columns: minmax(0, 1fr); }
+    .compare-verdict { max-height: 320px; }
+  }
   @media (max-width: 860px), (max-height: 620px) {
     .D { display: block; height: auto; overflow: visible; }
     body:has(.D) { overflow: auto; }
+    .D .side { border-right: 0; border-bottom: 1px solid var(--line); }
     .chooser { overflow: visible; }
-    .player .brain-box { aspect-ratio: 16 / 10; flex: none; }
+    .player .brain-panel { aspect-ratio: 16 / 10; flex: none; }
     .main-chart { flex: none; }
-    .main-chart .chart { height: 200px; flex: none; }
-    .D .report { padding: 20px 16px 60px; overflow: visible; }
+    .main-chart .chart { height: 210px; flex: none; }
+    .D .report { padding: 18px 14px 60px; overflow: visible; }
     .result-panel { overflow: visible; }
     .strips-wrap { flex: none; }
     .strips { grid-template-columns: 1fr; }
-    .strip .chart { height: 120px; flex: none; }
+    .strip .chart { height: 110px; flex: none; }
     .parts { height: auto; }
     .parts .parts-row { grid-auto-flow: row; grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .parts .chart { height: 100px; flex: none; }
+    .compare-videos { grid-template-columns: 1fr; }
+    .progress-body { flex-direction: column; }
+    .stage-list { width: auto; }
+    .progress-art { min-height: 220px; }
   }
   @media (max-width: 860px) {
     .bar { padding: 0 14px; gap: 10px; }
@@ -295,15 +442,18 @@
     .timeline { grid-template-columns: auto auto auto 1fr; }
     .tl-track { grid-column: 1 / -1; grid-row: 1; }
     .tl-right { justify-self: end; }
+    .brain-values { width: 82px; }
   }
-  @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto; } }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; scroll-behavior: auto !important; }
+  }
 </style>
 </head>
 <body>
 <header class="bar">
   <a class="brand" href="/">NeuroLens</a>
-  <div class="spacer"></div>
   <span class="header-meta" id="headerMeta"></span>
+  <div class="spacer"></div>
   <span class="credit" id="balance"></span>
   <div class="account-wrap" id="accountWrap" hidden>
     <button class="account" id="account" aria-haspopup="menu" aria-expanded="false" aria-controls="accountMenu">
@@ -318,7 +468,7 @@
   <button class="btn-white" id="topUpload" hidden>Upload <span class="bar-hide-sm">a video</span></button>
 </header>
 
-<div class="D">
+<div class="D" id="appShell">
   <aside class="side">
     <div class="chooser" id="chooser">
       <div class="box active" id="startupPanel">
@@ -336,12 +486,15 @@
 
       <div class="chooser-panel" id="analysesPanel">
         <button class="upload-zone hidden" id="uploadZone" type="button">
+          <svg class="upload-dash" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><rect x="0.7" y="1.2" width="98.6" height="97.6" rx="0.7"></rect></svg>
+          <svg class="up-icon" width="28" height="28" viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 19V5M8 11l6-6 6 6M5 19v4h18v-4"/></svg>
           <span class="up-title" id="uploadZoneTitle">Drop videos or click to choose</span>
           <span class="up-sub" id="limitsText">MP4, MOV or WebM</span>
         </button>
         <div class="box" id="noCreditPanel"><p>You don't have enough credit for a video. Ask the NeuroLens team for test credit.</p></div>
 
         <div class="box" id="historyPanel">
+          <div class="panel-head"><span>Your videos</span><span class="spacer"></span><span class="mono" id="historyCount"></span></div>
           <div id="historyList"></div>
           <p class="history-empty" id="historyEmpty" hidden>No analyses yet.</p>
           <p id="historyNote"></p>
@@ -356,16 +509,27 @@
         <span class="clip-title" id="clipTitle"></span>
         <button class="btn-ghost" id="btnNew">Back</button>
       </div>
-      <div class="video-box" id="videoBox">
-        <video id="videoPlayer" playsinline muted></video>
-        <div class="video-missing" id="videoMissing" hidden></div>
-      </div>
+      <section class="video-panel">
+        <div class="panel-head"><span>Video</span><span class="spacer"></span><span class="mono" id="videoClock"></span></div>
+        <div class="video-box" id="videoBox">
+          <video id="videoPlayer" playsinline muted></video>
+          <div class="video-missing" id="videoMissing" hidden></div>
+        </div>
+      </section>
       <div class="sample-meta" id="sampleMeta"></div>
-      <div class="brain-box" id="brainHost">
-        <div class="brain-message" id="brainMessage">The 3D view is not available for this video.</div>
-        <div class="brain-legend"><span>typical</span><i></i><span>higher</span></div>
-        <span class="brain-time" id="brainSecond"></span>
-      </div>
+      <section class="brain-panel">
+        <div class="panel-head"><span>Brain</span><span class="spacer"></span><span class="mono" id="brainSecond"></span></div>
+        <div class="brain-panel-body">
+          <div class="brain-box" id="brainHost">
+            <div class="brain-message" id="brainMessage">The 3D view is not available for this video.</div>
+          </div>
+          <div class="brain-values" id="brainValues"></div>
+        </div>
+        <div class="brain-foot">
+          <div class="brain-legend"><span>typical</span><i></i><span>higher</span></div>
+          <span class="brain-hint">Drag to rotate</span>
+        </div>
+      </section>
       <div class="timeline" id="timeline"></div>
       <button class="history-link" id="retentionLink" type="button" hidden>Add audience retention</button>
     </div>
@@ -374,54 +538,129 @@
   <div class="report">
     <div class="report-empty" id="reportEmpty">
       <div class="samples-section">
-        <div class="label">Samples</div>
+        <div class="samples-head"><h1 class="label">Samples</h1><span class="samples-free">Free to explore</span></div>
         <div class="samples-grid" id="samplesGrid"></div>
         <p class="up-sub" id="samplesEmpty" hidden>Sample videos coming soon.</p>
       </div>
     </div>
     <div class="report-body" id="reportBody">
       <div class="result-message" id="resultMessage" hidden></div>
+
+      <section class="progress-panel" id="progressPanel" hidden>
+        <div class="progress-head">
+          <div><span class="kicker">Analysing</span><h1 id="progressTitle"></h1></div>
+          <div class="progress-clock"><span id="progressElapsed">00:00</span><span id="progressStatus"></span></div>
+        </div>
+        <div class="progress-body">
+          <ol class="stage-list" id="progressStages"></ol>
+          <div class="progress-art" aria-hidden="true">
+            <svg viewBox="0 0 400 250">
+              <path d="M70,140 C52,96 82,52 140,40 C186,22 250,24 300,46 C346,66 368,104 362,140 C358,170 336,186 310,190 C300,206 280,214 258,210 C236,224 196,226 172,212 C140,214 112,204 96,186 C78,176 72,160 70,140 Z" fill="none" stroke="rgba(232,234,237,.55)" stroke-width="1.2"></path>
+              <ellipse cx="322" cy="198" rx="32" ry="16" fill="none" stroke="rgba(232,234,237,.55)" stroke-width="1"></ellipse>
+              <path d="M120,70 C150,90 160,120 150,150 M190,46 C200,80 210,110 200,150 M250,44 C252,80 262,110 280,130 M110,172 C150,160 200,162 250,180 M300,70 C310,100 330,120 350,130" fill="none" stroke="rgba(232,234,237,.35)" stroke-width="1" stroke-dasharray="3 3"></path>
+              <rect class="progress-scan" x="200" y="20" width="2" height="210" fill="#FFC24A" opacity=".85"></rect>
+            </svg>
+            <span class="progress-caption" id="progressCaption"></span>
+          </div>
+        </div>
+        <div class="progress-foot">
+          <p class="progress-note" id="progressNote"></p>
+          <button class="btn-ghost" id="progressCancel" type="button" hidden>Cancel</button>
+        </div>
+      </section>
+
       <div class="result-tabs" id="resultTabs" hidden>
         <button class="result-tab active" id="chartsTabBtn" type="button">Analysis</button>
         <button class="result-tab" id="reportTabBtn" type="button">Report</button>
+        <button class="result-tab" id="compareTabBtn" type="button" hidden>Compare</button>
       </div>
+
       <div class="result-panel active" id="chartsTab">
         <div class="top" id="topArea"></div>
         <section class="main-chart" id="chartCard">
           <div class="chart-head">
-            <h2>Brain response over time</h2>
+            <div class="chart-title">
+              <h2>Brain response over time</h2>
+              <div class="chart-sub">
+                <span class="legend-key"><i></i>with sound</span>
+                <label class="toggle" id="mutedLabel"><input type="checkbox" id="mutedToggle"> Show if muted</label>
+                <span class="sound-line" id="soundLine"></span>
+                <a class="btn-ghost chart-download" id="downloadCsv" hidden>Download CSV</a>
+              </div>
+            </div>
             <span class="keys" id="chartKeys"></span>
-            <span class="chart-controls">
-              <span class="sound-line" id="soundLine"></span>
-              <label class="compare-pick" id="compareRow" hidden><span>Compare with…</span><select id="compareSelect"></select></label>
-              <label class="toggle" id="mutedLabel"><input type="checkbox" id="mutedToggle"> Show if muted</label>
-            </span>
+            <div class="readout"><span class="readout-value" id="overallReadout">—</span><span class="readout-sub">vs typical viewing <span class="mono" id="overallSecond">0 s</span></span></div>
           </div>
-          <p class="note">Predicted for an average viewer.</p>
+          <p class="note">Predicted for an average viewer. 0 = typical viewing.</p>
           <p class="compare-msg" id="compareMsg"></p>
+          <div class="moments-lane" id="momentsLane"></div>
           <div class="chart" id="mainChartBox"></div>
         </section>
         <section class="strips-wrap" id="stripsCard">
-          <div class="chart-head"><h2>What the brain is doing</h2></div>
-          <p class="note">Same scale on all three.</p>
+          <div class="panel-head"><h2>What the brain is doing</h2><span class="spacer"></span><span class="note">Same scale on all three</span></div>
           <div class="strips" id="stripsHost"></div>
         </section>
       </div>
+
       <div class="result-panel" id="reportTab" hidden>
-        <p class="report-state" id="reportStateText"></p>
-        <div class="report-answer" id="reportAnswer" hidden>
-          <p class="report-key" id="reportKey" hidden></p>
-          <h2 id="reportHeadline"></h2>
-          <p id="reportSummary"></p>
-          <div class="report-moments" id="reportMoments"></div>
-          <div class="report-list" id="reportStrengthsWrap"><h3>Strengths</h3><ul id="reportStrengths"></ul></div>
-          <div class="report-list" id="reportImprovementsWrap"><h3>Improvements</h3><ul id="reportImprovements"></ul></div>
-          <div class="report-list" id="reportSuggestionsWrap"><h3>Suggestions</h3><ul id="reportSuggestions"></ul></div>
-          <p class="note">Written by AI from predicted brain responses, not viewer data.</p>
+        <div class="report-panel">
+          <p class="report-state" id="reportStateText"></p>
+          <div class="report-answer" id="reportAnswer" hidden>
+            <p class="report-key" id="reportKey" hidden></p>
+            <h2 id="reportHeadline"></h2>
+            <p id="reportSummary"></p>
+            <div class="report-moments" id="reportMoments"></div>
+            <div class="report-list" id="reportStrengthsWrap"><h3>Strengths</h3><ul id="reportStrengths"></ul></div>
+            <div class="report-list" id="reportImprovementsWrap"><h3>Improvements</h3><ul id="reportImprovements"></ul></div>
+            <div class="report-list" id="reportSuggestionsWrap"><h3>Suggestions</h3><ul id="reportSuggestions"></ul></div>
+            <p class="note">Written by AI from predicted brain responses, not viewer data.</p>
+          </div>
+          <div class="report-actions" id="reportActions" hidden>
+            <button class="btn-white" id="reportWrite" type="button">Write report</button>
+            <span class="report-free" id="reportFree">Free</span>
+          </div>
         </div>
-        <div class="report-actions" id="reportActions" hidden>
-          <button class="btn-white" id="reportWrite" type="button">Write report</button>
-          <span class="report-free" id="reportFree">Free</span>
+      </div>
+
+      <div class="result-panel compare-panel" id="compareTab" hidden>
+        <div class="compare-head">
+          <label class="compare-pick" id="compareRow"><span>Compare with</span><select id="compareSelect"></select></label>
+          <span class="compare-time mono" id="compareTime">0:00 / 0:00</span>
+          <span class="spacer"></span>
+          <button class="btn-ghost" id="comparePlay" type="button">Play both</button>
+          <button class="btn-ghost" id="compareSwap" type="button">⇄ Swap</button>
+        </div>
+        <div class="compare-videos">
+          <section class="compare-video">
+            <div class="compare-video-head"><span id="compareNameA"></span><span class="mono" id="compareClockA">0:00</span></div>
+            <div class="compare-video-host" id="compareVideoHostA"></div>
+            <div class="compare-bars"><span id="compareBarA"></span></div>
+          </section>
+          <section class="compare-video">
+            <div class="compare-video-head"><span id="compareNameB"></span><span class="mono" id="compareClockB">0:00</span></div>
+            <div class="compare-video-host" id="compareVideoHostB"></div>
+            <div class="compare-bars blue"><span id="compareBarB"></span></div>
+          </section>
+        </div>
+        <div class="compare-body">
+          <section class="compare-chart-panel">
+            <div class="panel-head">
+              <span>Overall response</span>
+              <div class="compare-legend"><span><i></i><span id="compareLegendA"></span></span><span><i class="blue"></i><span id="compareLegendB"></span></span></div>
+              <span class="spacer"></span>
+              <span class="mono" id="compareChartTime"></span>
+            </div>
+            <div class="chart" id="compareChartBox"></div>
+            <div class="compare-diffs" id="compareDiffs"></div>
+          </section>
+          <aside class="compare-verdict">
+            <span class="kicker">AI verdict</span>
+            <h3 id="compareHeadline"></h3>
+            <p id="compareSummary"></p>
+            <span class="compare-key" id="compareKey"></span>
+            <button class="compare-report-link" id="compareReportLink" type="button">Full report →</button>
+            <span class="ai-note">Written by AI from predicted brain responses, not viewer data.</span>
+          </aside>
         </div>
       </div>
     </div>
@@ -528,10 +767,39 @@ let signedIn = false, me = null, limits = null;
 let virtualTime = 0, virtualPlaying = false, virtualAnchor = 0, virtualRaf = 0, videoRaf = 0;
 let videoJob = null, videoRetried = false, videoRequest = 0, videoPlaying = false;
 let playheads = [];
+let currentTab = 'charts';
+let chartMoments = [];
+let comparisonReport = null, comparisonState = '', comparisonStateText = '';
+let comparisonCurrentSide = 'a', comparisonABNames = { aName: '', bName: '' };
+let comparisonCandidates = [], compareActiveDiff = -1, compareVideoSeq = 0, compareVideoKey = '', compareOffset = 0;
+let progressJobId = null, progressStartedAt = 0, progressStatus = '', progressTimer = null;
+const REDUCED_MOTION = (() => {
+  try { return matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { return false; }
+})();
+const compareVideoB = document.createElement('video');
+compareVideoB.id = 'compareVideoB';
+compareVideoB.playsInline = true;
+compareVideoB.muted = true;
 
 function fmt(s) {
   const n = Math.max(0, Math.floor(Number.isFinite(s) ? s : 0));
   return `${Math.floor(n / 60)}:${String(n % 60).padStart(2, '0')}`;
+}
+function fmtSigned(v) {
+  if (!Number.isFinite(v)) return '—';
+  const rounded = Math.round(v * 100) / 100;
+  if (rounded > 0) return `+${rounded.toFixed(2)}`;
+  if (rounded < 0) return `−${Math.abs(rounded).toFixed(2)}`;
+  return '0.00';
+}
+function seriesAt(values, t) {
+  if (!Array.isArray(values) || !values.length) return null;
+  const i = Math.max(0, Math.min(values.length - 1, Math.floor(t)));
+  const j = Math.min(values.length - 1, i + 1);
+  const u = Math.max(0, Math.min(1, t - i));
+  const a = Number.isFinite(values[i]) ? values[i] : 0;
+  const b = Number.isFinite(values[j]) ? values[j] : 0;
+  return a + (b - a) * u;
 }
 function fmtRange(m) { return `${fmt(m.start)}–${fmt(m.end)}`; }
 function cap(word) { return word ? word[0].toUpperCase() + word.slice(1) : word; }
@@ -907,6 +1175,8 @@ function renderHistory(jobs) {
     const name = videoBaseName(title);
     $('clipTitle').textContent = shortName(name);
     $('clipTitle').title = name;
+    const span = totalSeconds();
+    $('headerMeta').textContent = `${shortName(name)}${span ? ` · ${fmt(span)}` : ''}`;
     showRetention(shown.job_id, title);
   }
   updateTabTitle(jobs);
@@ -917,6 +1187,7 @@ function renderHistory(jobs) {
     ...jobs.map(job => [`job:${job.job_id}`, JSON.stringify([job, historyDetail(job), curveFailures.get(job.job_id), cancelWindows.has(job.job_id), localFrames.has(job.job_id)]), () => historyRow(job)]),
   ]);
   $('historyPanel').classList.add('active');
+  $('historyCount').textContent = jobs.length + uploadQueue.length ? String(jobs.length + uploadQueue.length) : '';
   $('historyEmpty').hidden = uploadQueue.length + jobs.length > 0;
   $('historyNote').textContent = '';
   if (currentResult) showCompareRow();
@@ -1033,7 +1304,7 @@ function queueRow(entry) {
 }
 
 function historyRow(job) {
-  const canOpen = !!job.result_available;
+  const canOpen = !!job.result_available || job.status === 'queued' || job.status === 'processing';
   const row = document.createElement('div');
   row.className = 'history-row' + (canOpen ? ' openable' : '');
   if (canOpen) {
@@ -1095,6 +1366,11 @@ function historyRow(job) {
 
 function openJob(job) {
   resetUI();
+  if (job.status === 'queued' || job.status === 'processing') {
+    showProgress(job);
+    trackJob(job.job_id);
+    return;
+  }
   // Switch to the player at once; the result replaces this line when it arrives (§4.16).
   setViewName('player');
   $('reportBody').classList.add('active');
@@ -1172,6 +1448,37 @@ async function loadSamples() {
   }
 }
 
+function sampleSparkline(values) {
+  const svg = document.createElementNS(NS, 'svg');
+  svg.setAttribute('viewBox', '0 0 270 46');
+  svg.setAttribute('preserveAspectRatio', 'none');
+  svg.setAttribute('class', 'sample-spark');
+  svg.setAttribute('aria-hidden', 'true');
+  const mid = document.createElementNS(NS, 'line');
+  mid.setAttribute('x1', '0'); mid.setAttribute('x2', '270');
+  mid.setAttribute('y1', '23'); mid.setAttribute('y2', '23');
+  mid.setAttribute('stroke', 'var(--line)');
+  mid.setAttribute('stroke-dasharray', '2 4');
+  svg.append(mid);
+  if (!Array.isArray(values) || values.length < 2) return svg;
+  const range = niceRange(values);
+  const n = values.length;
+  const d = values.map((v, i) => {
+    const x = (i / (n - 1)) * 270;
+    const y = 23 - (Math.max(-range, Math.min(range, Number.isFinite(v) ? v : 0)) / range) * 20;
+    return `${i ? 'L' : 'M'}${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(' ');
+  const path = document.createElementNS(NS, 'path');
+  path.setAttribute('d', d);
+  path.setAttribute('fill', 'none');
+  path.setAttribute('stroke', 'var(--accent)');
+  path.setAttribute('stroke-width', '1.4');
+  path.setAttribute('stroke-linejoin', 'round');
+  path.setAttribute('vector-effect', 'non-scaling-stroke');
+  svg.append(path);
+  return svg;
+}
+
 function renderSamples() {
   const grid = $('samplesGrid');
   if (!samplesData || !samplesData.samples || samplesData.samples.length === 0) {
@@ -1182,31 +1489,71 @@ function renderSamples() {
   $('samplesEmpty').hidden = true;
   grid.replaceChildren();
   samplesData.samples.forEach((s, idx) => {
+    const overall = s.result && s.result.signals && s.result.signals.overall;
     const card = document.createElement('button');
     card.className = 'sample-card';
     card.dataset.idx = idx;
     const thumb = document.createElement('div');
     thumb.className = 'sample-thumb';
+    let preview = null;
     if (s.thumbnail) {
       const img = document.createElement('img');
       img.src = `/data/${s.thumbnail}`;
       img.alt = '';
-      img.addEventListener('error', () => thumb.textContent = '▶');
+      img.addEventListener('error', () => { img.remove(); thumb.textContent = '▶'; });
       thumb.append(img);
     } else {
       thumb.textContent = '▶';
     }
+    const seconds = s.result && s.result.duration_seconds;
+    if (Number.isFinite(seconds)) {
+      const badge = document.createElement('span');
+      badge.className = 'sample-dur-badge';
+      badge.textContent = fmt(seconds);
+      thumb.append(badge);
+    }
+    const startPreview = () => {
+      if (REDUCED_MOTION || !s.video_file) return;
+      if (!preview) {
+        preview = document.createElement('video');
+        preview.className = 'sample-preview';
+        preview.muted = true;
+        preview.playsInline = true;
+        preview.preload = 'metadata';
+        preview.src = `/data/${s.video_file}`;
+        preview.addEventListener('error', () => { preview.remove(); preview = null; });
+        preview.addEventListener('timeupdate', () => { if (preview.currentTime > 6) preview.pause(); });
+        thumb.append(preview);
+      }
+      try { preview.currentTime = 0; } catch (e) { /* the preview starts at the beginning anyway */ }
+      preview.play().then(() => preview.classList.add('on')).catch(() => {});
+    };
+    const stopPreview = () => {
+      if (!preview) return;
+      preview.classList.remove('on');
+      preview.pause();
+      try { preview.currentTime = 0; } catch (e) { /* the preview is a nicety */ }
+    };
+    card.addEventListener('pointerenter', startPreview);
+    card.addEventListener('pointerleave', stopPreview);
+    card.addEventListener('focus', startPreview);
+    card.addEventListener('blur', stopPreview);
     const info = document.createElement('div');
     info.className = 'sample-info';
     const title = document.createElement('div');
     title.className = 'sample-title';
     title.textContent = s.title || 'Sample';
-    const duration = document.createElement('div');
-    duration.className = 'sample-dur';
-    const seconds = s.result && s.result.duration_seconds;
-    duration.textContent = Number.isFinite(seconds) ? `${seconds}s` : '';
-    info.append(title, duration);
-    card.append(thumb, info);
+    info.append(title);
+    if (Array.isArray(overall) && overall.length) {
+      const peak = overall.reduce((best, v, i) => (v > overall[best] ? i : best), 0);
+      const peakText = document.createElement('div');
+      peakText.className = 'sample-peak';
+      peakText.textContent = `Peak ${fmtSigned(overall[peak])} at ${fmt(peak)}`;
+      info.append(peakText);
+    }
+    card.append(thumb);
+    if (Array.isArray(overall) && overall.length) card.append(sampleSparkline(overall));
+    card.append(info);
     card.addEventListener('click', () => loadSample(idx));
     grid.appendChild(card);
   });
@@ -1759,7 +2106,7 @@ async function cancelJob(jobId) {
 
 async function pollJob(jobId) {
   if (trackedJob !== jobId) return;
-  let again = true;
+  let again = true, delay = POLL_MS;
   try {
     const res = await fetch(`/api/jobs/${jobId}/status`);
     if (trackedJob !== jobId) return;
@@ -1786,10 +2133,152 @@ async function pollJob(jobId) {
         resetUI();
         loadHistory();
         refreshAccount();
+      } else if (st.status === 'queued' || st.status === 'processing') {
+        showProgress(st);
+        delay = 3000;
       }
     }
   } catch (e) { /* try again */ }
-  if (again && trackedJob === jobId) pollTimer = setTimeout(() => pollJob(jobId), POLL_MS);
+  if (again && trackedJob === jobId) pollTimer = setTimeout(() => pollJob(jobId), delay);
+}
+
+const WORK_STAGE_LABELS = {
+  transcribing: 'Listening for speech',
+  inference_full: 'Predicting with sound',
+  inference_noaudio: 'Predicting on mute',
+  extracting_roi: 'Reading brain areas',
+  saving_dataset: 'Saving the research copy',
+  saving_result: 'Saving the result',
+};
+const WORK_STAGE_ORDER = Object.keys(WORK_STAGE_LABELS);
+
+function stageTimes(stages) {
+  const parsed = [];
+  (Array.isArray(stages) ? stages : []).forEach(entry => {
+    if (!entry || typeof entry.stage !== 'string') return;
+    const at = new Date(entry.at).getTime();
+    if (Number.isFinite(at)) parsed.push({ stage: entry.stage, at });
+  });
+  return parsed.sort((a, b) => a.at - b.at);
+}
+
+function stageRow(key, label, state, atMs, durationMs) {
+  const li = document.createElement('li');
+  li.className = `stage-item ${state}`;
+  li.dataset.stageKey = key;
+  const rail = document.createElement('span');
+  rail.className = 'stage-rail';
+  const dot = document.createElement('span');
+  dot.className = 'stage-dot';
+  const line = document.createElement('span');
+  line.className = 'stage-line';
+  rail.append(dot, line);
+  const content = document.createElement('span');
+  content.className = 'stage-content';
+  const top = document.createElement('span');
+  top.className = 'stage-top';
+  const name = document.createElement('span');
+  name.className = 'stage-label';
+  name.textContent = label;
+  const time = document.createElement('span');
+  time.className = 'stage-time';
+  time.textContent = Number.isFinite(durationMs) && durationMs >= 0 ? fmt(durationMs / 1000) : '';
+  top.append(name, time);
+  content.append(top);
+  if (state === 'active') {
+    const bar = document.createElement('span');
+    bar.className = 'stage-progress';
+    bar.append(document.createElement('span'));
+    content.append(bar);
+  }
+  li.append(rail, content);
+  return li;
+}
+
+function stopProgress() {
+  clearInterval(progressTimer);
+  progressTimer = null;
+  progressJobId = null;
+  progressStatus = '';
+  progressStartedAt = 0;
+  $('progressPanel').hidden = true;
+}
+
+function updateProgressClock() {
+  if ($('progressPanel').hidden || !progressStartedAt) return;
+  const elapsed = Math.max(0, Date.now() - progressStartedAt);
+  $('progressElapsed').textContent = fmt(elapsed / 1000);
+  const active = document.querySelector('#progressStages .stage-item.active[data-stage-start]');
+  if (active) active.querySelector('.stage-time').textContent = fmt((Date.now() - Number(active.dataset.stageStart)) / 1000);
+}
+
+function showProgress(job) {
+  if (!job) return;
+  const jobId = job.job_id || progressJobId || trackedJob;
+  const cached = (jobsCache || []).find(item => item.job_id === jobId);
+  const title = job.filename || (cached && cached.filename) || 'Your video';
+  const status = job.status || (cached && cached.status) || 'queued';
+  const stages = stageTimes(job.stages || (cached && cached.stages));
+  const created = new Date(job.created_at || (cached && cached.created_at) || Date.now()).getTime();
+  const claimed = new Date(job.claimed_at || (cached && cached.claimed_at) || 0).getTime();
+  const now = Date.now();
+
+  progressJobId = jobId || null;
+  progressStatus = status;
+  progressStartedAt = status === 'processing' ? (Number.isFinite(claimed) && claimed > 0 ? claimed : now) : (Number.isFinite(created) ? created : now);
+
+  if (currentTab === 'compare') { currentTab = 'charts'; $('appShell').classList.remove('compare-view'); leaveCompareVideos(); }
+  video.pause();
+  compareVideoB.pause();
+  setViewName('chooser');
+  $('reportBody').classList.add('active');
+  $('reportEmpty').style.display = 'none';
+  $('resultMessage').hidden = true;
+  $('resultTabs').hidden = true;
+  $('chartsTab').hidden = true;
+  $('reportTab').hidden = true;
+  $('compareTab').hidden = true;
+  $('progressPanel').hidden = false;
+  $('progressTitle').textContent = shortName(title, 64);
+
+  const atByName = new Map(stages.map(entry => [entry.stage, entry.at]));
+  const firstWork = stages.length ? stages[0].at : null;
+  const lastStage = stages.length ? stages[stages.length - 1].stage : null;
+  const rows = [];
+  rows.push(stageRow('uploaded', 'Uploaded', 'done', created, 0));
+  rows.push(stageRow('queued', 'Waiting for the GPU', status === 'queued' ? 'active' : 'done', created,
+    status === 'queued' ? null : (firstWork != null ? firstWork - created : (claimed > 0 ? claimed - created : null))));
+
+  WORK_STAGE_ORDER.forEach((key, i) => {
+    const at = atByName.get(key);
+    const laterStarted = WORK_STAGE_ORDER.slice(i + 1).some(next => atByName.has(next));
+    let state = 'pending';
+    if (at != null) state = status === 'processing' && key === lastStage ? 'active' : 'done';
+    else if (laterStarted) state = 'skipped';
+    let duration = null;
+    if (at != null) {
+      const next = stages.find(entry => entry.at > at);
+      duration = next ? next.at - at : (status === 'processing' && key === lastStage ? now - at : null);
+    }
+    const li = stageRow(key, WORK_STAGE_LABELS[key], state, at, duration);
+    if (at != null) li.dataset.stageStart = String(at);
+    rows.push(li);
+  });
+  $('progressStages').replaceChildren(...rows);
+
+  const activeLabel = status === 'queued'
+    ? 'Waiting for the GPU'
+    : (stages.length ? WORK_STAGE_LABELS[lastStage] : 'Starting the GPU');
+  $('progressStatus').textContent = status === 'queued' ? 'waiting for the GPU' : 'running';
+  $('progressCaption').textContent = activeLabel;
+  $('progressNote').textContent = status === 'queued'
+    ? 'The GPU starts when it is your turn. This can take several minutes.'
+    : 'This page updates itself; the result opens here when it is ready.';
+  $('progressCancel').hidden = status !== 'queued';
+  $('progressCancel').disabled = false;
+  updateProgressClock();
+  clearInterval(progressTimer);
+  progressTimer = setInterval(updateProgressClock, 1000);
 }
 
 function clearVideoSource() {
@@ -1846,6 +2335,7 @@ function showResultUnavailable(message) {
   stopVirtual();
   resetReportPanel();
   currentResult = null; currentSummary = null; currentContext = null; comparison = null;
+  comparisonCandidates = []; compareActiveDiff = -1; compareOffset = 0; comparisonReport = null; comparisonState = ''; comparisonStateText = '';
   mutedOn = false; virtualTime = 0;
   clearAllCharts();
   $('resultMessage').textContent = message;
@@ -1855,12 +2345,19 @@ function showResultUnavailable(message) {
   $('chartCard').hidden = true;
   $('stripsCard').hidden = true;
   $('compareRow').hidden = true;
+  $('compareTabBtn').hidden = true;
   $('compareSelect').replaceChildren();
+  $('downloadCsv').hidden = true;
+  $('downloadCsv').removeAttribute('href');
   $('compareMsg').textContent = '';
+  $('progressPanel').hidden = true;
   $('reportEmpty').style.display = 'none';
   $('reportBody').classList.add('active');
   $('mutedToggle').checked = false;
   $('brainSecond').textContent = '';
+  $('brainValues').replaceChildren();
+  $('momentsLane').replaceChildren();
+  $('headerMeta').textContent = '';
   window.brainMap.clear(BRAIN_UNAVAILABLE);
   $('sampleMeta').textContent = '';
   $('timeline').replaceChildren();
@@ -1871,14 +2368,41 @@ function showResultUnavailable(message) {
   $('clipTitle').title = '';
 }
 
+function enterCompareVideos() {
+  const host = $('compareVideoHostA');
+  if (!host) return;
+  if (video.parentElement !== host) host.append(video);
+}
+
+function leaveCompareVideos() {
+  const box = $('videoBox');
+  if (box && video.parentElement !== box) box.append(video);
+  compareVideoB.pause();
+}
+
 function setResultTab(name) {
-  const showReport = name === 'report';
-  $('chartsTab').hidden = showReport;
+  const wantsCompare = name === 'compare' && !!comparison && !!currentResult;
+  const showReport = name === 'report' && !wantsCompare;
+  currentTab = wantsCompare ? 'compare' : (showReport ? 'report' : 'charts');
+  $('chartsTab').hidden = currentTab !== 'charts';
   $('reportTab').hidden = !showReport;
-  $('chartsTab').classList.toggle('active', !showReport);
+  $('compareTab').hidden = !wantsCompare;
+  $('chartsTab').classList.toggle('active', currentTab === 'charts');
   $('reportTab').classList.toggle('active', showReport);
-  $('chartsTabBtn').classList.toggle('active', !showReport);
+  $('compareTab').classList.toggle('active', wantsCompare);
+  $('chartsTabBtn').classList.toggle('active', currentTab === 'charts');
   $('reportTabBtn').classList.toggle('active', showReport);
+  $('compareTabBtn').classList.toggle('active', wantsCompare);
+  $('appShell').classList.toggle('compare-view', wantsCompare);
+  if (wantsCompare) {
+    enterCompareVideos();
+    buildCompareView();
+    seekCompareVideoB();
+    if (hasLocalVideo() && !video.paused) compareVideoB.play().catch(() => {});
+  } else {
+    leaveCompareVideos();
+    if (currentTab === 'charts' && currentResult && chartMoments.length) renderMomentsLane();
+  }
 }
 
 function stopReportPolling() {
@@ -1922,8 +2446,16 @@ function resetReportPanel() {
   reportSeq += 1;
   stopReportPolling();
   stopComparisonPolling();
+  stopProgress();
   comparisonReportSeq += 1;
   reportWritingSince = 0;
+  comparisonReport = null;
+  comparisonState = '';
+  comparisonStateText = '';
+  comparisonCurrentSide = 'a';
+  comparisonABNames = { aName: '', bName: '' };
+  compareActiveDiff = -1; compareOffset = 0;
+  chartMoments = [];
   $('reportStateText').textContent = '';
   hideReportAnswer();
   $('reportActions').hidden = true;
@@ -1963,6 +2495,7 @@ function renderReportAnswer(report) {
   fillReportList('reportImprovements', 'reportImprovementsWrap', 'Improvements', report.improvements);
   $('reportSuggestionsWrap').hidden = true;
   $('reportAnswer').hidden = false;
+  setChartMoments(report.moments || []);
 }
 
 function sampleById(id) {
@@ -2003,6 +2536,10 @@ function sampleComparisonEntry() {
 function renderComparisonAnswer(source) {
   hideReportAnswer();
   const report = source.report || {};
+  comparisonReport = report;
+  comparisonState = 'ready';
+  comparisonStateText = '';
+  chartMoments = [];
   const { aName, bName } = comparisonNames(source);
   $('reportKey').textContent = `A: ${shortName(aName)} · B: ${shortName(bName)}`;
   $('reportKey').hidden = false;
@@ -2010,6 +2547,8 @@ function renderComparisonAnswer(source) {
   $('reportSummary').textContent = report.summary || '';
   const currentId = currentContext && (currentContext.sampleId || currentContext.jobId);
   const side = source.a === currentId ? 'a' : (source.b === currentId ? 'b' : null);
+  comparisonCurrentSide = side === 'b' ? 'b' : 'a';
+  comparisonABNames = { aName, bName };
   for (const difference of report.differences || []) {
     const when = document.createElement('span');
     when.className = 'when';
@@ -2041,6 +2580,7 @@ function renderComparisonAnswer(source) {
     `Where ${shortName(bName)} does better`, report.b_does_better);
   fillReportList('reportSuggestions', 'reportSuggestionsWrap', 'Suggestions', report.suggestions);
   $('reportAnswer').hidden = false;
+  refreshComparePanel();
 }
 
 function applyComparisonState(data) {
@@ -2054,7 +2594,11 @@ function applyComparisonState(data) {
   if (state === 'writing') {
     $('reportStateText').textContent = 'Writing your comparison…';
     $('reportActions').hidden = true;
+    comparisonReport = null;
+    comparisonState = 'writing';
+    comparisonStateText = 'Writing your comparison…';
     hideReportAnswer();
+    refreshComparePanel();
     if (!comparisonWritingSince) comparisonWritingSince = Date.now();
     if (Date.now() - comparisonWritingSince <= 10 * 60 * 1000) {
       clearTimeout(comparisonPollTimer);
@@ -2063,6 +2607,8 @@ function applyComparisonState(data) {
       comparisonPollTimer = setTimeout(() => refreshComparison(target, seq), 5000);
     } else {
       $('reportStateText').textContent = 'The comparison is taking too long. Try again later.';
+      comparisonStateText = 'The comparison is taking too long. Try again later.';
+      refreshComparePanel();
     }
     return;
   }
@@ -2070,11 +2616,19 @@ function applyComparisonState(data) {
     $('reportStateText').textContent = "Couldn't write the comparison.";
     $('reportActions').hidden = !(data.tries_left > 0);
     $('reportWrite').textContent = 'Try again';
+    comparisonReport = null;
+    comparisonState = 'failed';
+    comparisonStateText = "Couldn't write the comparison.";
+    refreshComparePanel();
     return;
   }
   $('reportStateText').textContent = '';
   $('reportActions').hidden = false;
   $('reportWrite').textContent = 'Write comparison';
+  comparisonReport = null;
+  comparisonState = 'none';
+  comparisonStateText = '';
+  refreshComparePanel();
 }
 
 async function refreshComparison(target, seq) {
@@ -2088,6 +2642,10 @@ async function refreshComparison(target, seq) {
   } catch (e) {
     if (seq === comparisonReportSeq && comparison === target) {
       $('reportStateText').textContent = "Couldn't reach the server.";
+      comparisonReport = null;
+      comparisonState = 'failed';
+      comparisonStateText = "Couldn't reach the server.";
+      refreshComparePanel();
     }
     return;
   }
@@ -2095,6 +2653,10 @@ async function refreshComparison(target, seq) {
   if (res.status === 401) return window.location.reload();
   if (!res.ok) {
     $('reportStateText').textContent = data.message || "Couldn't load the comparison.";
+    comparisonReport = null;
+    comparisonState = 'failed';
+    comparisonStateText = data.message || "Couldn't load the comparison.";
+    refreshComparePanel();
     return;
   }
   applyComparisonState(data);
@@ -2111,18 +2673,27 @@ function setupComparisonReport() {
   hideReportAnswer();
   $('reportActions').hidden = true;
   $('reportWrite').disabled = false;
+  comparisonReport = null;
+  comparisonState = 'loading';
+  comparisonStateText = '';
   if (comparison.kind === 'sample') {
     const entry = sampleComparisonEntry();
     if (!entry) {
       $('reportStateText').textContent = 'No report for this pair.';
+      comparisonState = 'none';
+      comparisonStateText = 'No report for this pair.';
+      refreshComparePanel();
       return;
     }
     renderComparisonAnswer(entry);
     return;
   }
-  if (!currentContext || !currentContext.jobId) return;
+  if (!currentContext || !currentContext.jobId) { refreshComparePanel(); return; }
   if (!currentResult || !currentResult.frames || !comparison.result || !comparison.result.frames) {
     $('reportStateText').textContent = 'No report for this pair.';
+    comparisonState = 'none';
+    comparisonStateText = 'No report for this pair.';
+    refreshComparePanel();
     return;
   }
   refreshComparison(comparison, comparisonReportSeq);
@@ -2140,6 +2711,7 @@ function applyReportState(jobId, seq, data) {
     $('reportStateText').textContent = 'Writing your report…';
     $('reportActions').hidden = true;
     hideReportAnswer();
+    setChartMoments([]);
     if (!reportWritingSince) reportWritingSince = Date.now();
     if (Date.now() - reportWritingSince <= 10 * 60 * 1000) {
       clearTimeout(reportPollTimer);
@@ -2153,11 +2725,13 @@ function applyReportState(jobId, seq, data) {
     $('reportStateText').textContent = "Couldn't write the report.";
     $('reportActions').hidden = !(data.tries_left > 0);
     $('reportWrite').textContent = 'Try again';
+    setChartMoments([]);
     return;
   }
   $('reportStateText').textContent = '';
   $('reportActions').hidden = false;
   $('reportWrite').textContent = 'Write report';
+  setChartMoments([]);
 }
 
 async function refreshReport(jobId, seq) {
@@ -2758,16 +3332,19 @@ function compareTable() {
 function swapComparison() {
   const previousId = currentContext && currentContext.jobId;
   if (!previousId || !comparison) return;
+  const wasCompare = currentTab === 'compare';
   const previous = { result: currentResult, label: currentContext.title };
   const other = comparison;
   clearTimeout(pollTimer);
   trackedJob = other.jobId;
   setJobInUrl(other.jobId);
+  compareVideoKey = '';
   openResult(other.jobId, other.result);
-  const canCompare = [...$('compareSelect').options].some(option => option.value === previousId);
+  const canCompare = comparisonCandidates.some(item => item.value === previousId);
   if (currentContext && currentContext.jobId === other.jobId && canCompare) {
     useComparison(previousId, previous.label, previous.result);
   }
+  if (wasCompare && comparison) setResultTab('compare');
 }
 
 function updateSoundLine() {
@@ -2800,13 +3377,20 @@ function buildTop() {
 
 function renderResult(result, summary, ctx) {
   resultSeq += 1;
+  stopProgress();
   currentResult = result;
   currentSummary = summary || {};
   currentContext = ctx || {};
   comparison = null;
   mutedOn = false;
   virtualTime = 0;
+  chartMoments = [];
+  compareActiveDiff = -1; compareOffset = 0;
+  comparisonReport = null;
+  comparisonState = '';
+  comparisonStateText = '';
   stopVirtual();
+  $('progressPanel').hidden = true;
   $('mutedToggle').checked = false;
   $('mutedToggle').disabled = false;
   $('resultMessage').hidden = true;
@@ -2823,6 +3407,15 @@ function renderResult(result, summary, ctx) {
   const name = videoBaseName(ctx.title || '');
   $('clipTitle').textContent = shortName(name);
   $('clipTitle').title = name;
+  const span = totalSeconds();
+  $('headerMeta').textContent = name ? `${shortName(name)}${span ? ` · ${fmt(span)}` : ''}` : '';
+  if (ctx.jobId) {
+    $('downloadCsv').href = `/api/jobs/${ctx.jobId}/result.csv`;
+    $('downloadCsv').hidden = false;
+  } else {
+    $('downloadCsv').removeAttribute('href');
+    $('downloadCsv').hidden = true;
+  }
   buildTop();
   buildAllCharts();
   showCompareRow();
@@ -2849,9 +3442,12 @@ function clearAllCharts() {
   $('mainChartBox').replaceChildren();
   $('stripsHost').replaceChildren();
   $('timeline').replaceChildren();
+  $('momentsLane').replaceChildren();
+  $('compareChartBox').replaceChildren();
+  $('compareDiffs').replaceChildren();
 }
 
-function drawChart(host, { lines, range, height = 200, axisLabels = false, dark = false, fill = false, span = null, scope, yLabels = false, playhead = null }) {
+function drawChart(host, { lines, range, height = 200, axisLabels = false, dark = false, fill = false, span = null, scope, yLabels = false, playhead = null, moments = null, bands = null }) {
   host.replaceChildren();
   const T = span || totalSeconds();
   if (!T) return;
@@ -2862,6 +3458,10 @@ function drawChart(host, { lines, range, height = 200, axisLabels = false, dark 
   svg.style.height = fill ? `calc(100% - ${axisLabels ? 16 : 0}px)` : `${H}px`;
   host.appendChild(svg);
 
+  const step = T > 40 ? 10 : Math.max(1, Math.ceil(T / 6));
+  for (let s = step; s < T; s += step) {
+    svgEl('line', { x1: x(s), x2: x(s), y1: padT, y2: H - padB, stroke: 'rgba(255,255,255,.05)', 'vector-effect': 'non-scaling-stroke' }, svg);
+  }
   svgEl('line', { x1: 0, x2: W, y1: y(0), y2: y(0), stroke: dark ? 'rgba(236,237,239,.30)' : '#B9BEC8', 'stroke-dasharray': '6 6', 'vector-effect': 'non-scaling-stroke' }, svg);
 
   if (yLabels) {
@@ -2876,6 +3476,22 @@ function drawChart(host, { lines, range, height = 200, axisLabels = false, dark 
     };
     label('higher', at(padT));
     label('typical', at(y(0)), 'translateY(-100%)');
+  }
+
+  if (bands) {
+    bands.forEach(band => {
+      const from = Math.max(0, Math.min(T - 1, band.start));
+      const to = Math.max(0, Math.min(T - 1, band.end));
+      svgEl('rect', { x: x(from), y: 0, width: Math.max(2, x(to) - x(from)), height: H, fill: band.colour, opacity: band.opacity || '.14' }, svg);
+    });
+  }
+
+  if (fill) {
+    lines.forEach(line => {
+      if (line.dash || !line.values.length) return;
+      const points = line.values.slice(0, T).map((v, i) => `${x(i)},${y(Math.max(-range, Math.min(range, Number.isFinite(v) ? v : 0)))}`).join(' ');
+      svgEl('polygon', { points: `0,${y(0)} ${points} ${W},${y(0)}`, fill: line.colour, opacity: '.10' }, svg);
+    });
   }
 
   lines.forEach(line => {
@@ -2913,6 +3529,19 @@ function drawChart(host, { lines, range, height = 200, axisLabels = false, dark 
     }
   });
 
+  if (moments && lines[0]) {
+    moments.forEach(moment => {
+      const i = Math.max(0, Math.min(T - 1, moment.start));
+      const raw = seriesAt(lines[0].values, i);
+      if (raw == null) return;
+      const mx = x(i), my = y(Math.max(-range, Math.min(range, raw)));
+      const mark = svgEl('g', { style: 'cursor: pointer' }, svg);
+      mark.addEventListener('click', e => { e.stopPropagation(); seek(moment.start); });
+      svgEl('line', { x1: mx, y1: my, x2: mx, y2: my + 8, stroke: 'var(--accent)', 'stroke-width': 1.5, 'vector-effect': 'non-scaling-stroke' }, mark);
+      svgEl('circle', { cx: mx, cy: my, r: 3.2, fill: '#0B0C0E', stroke: 'var(--accent)', 'stroke-width': 1.6, 'vector-effect': 'non-scaling-stroke' }, mark);
+    });
+  }
+
   const ph = svgEl('line', { y1: padT, y2: H - padB, stroke: playhead || (dark ? '#ECEDEF' : '#161B26'), 'stroke-width': 1.5, 'vector-effect': 'non-scaling-stroke' }, svg);
   playheads.push({ scope, fn: t => {
     const px = x(Math.min(Math.max(0, t), Math.max(0, T - 1)));
@@ -2938,6 +3567,70 @@ function drawChart(host, { lines, range, height = 200, axisLabels = false, dark 
   }
 }
 
+function setChartMoments(moments) {
+  chartMoments = (Array.isArray(moments) ? moments : []).filter(moment => Number.isFinite(moment.start));
+  if (currentResult) {
+    buildMainChart();
+    tick();
+  }
+}
+
+function momentFullLabel(moment) {
+  return moment.what_happens || moment.label || 'Moment';
+}
+
+function renderMomentsLane() {
+  const lane = $('momentsLane');
+  if (!lane) return;
+  lane.replaceChildren();
+  const T = totalSeconds();
+  if (!currentResult || !chartMoments.length || !T) {
+    lane.hidden = true;
+    return;
+  }
+  lane.hidden = false;
+  const W = lane.clientWidth || 640;
+  const rowRight = [];
+  const moments = [...chartMoments].filter(moment => moment.start < T).sort((a, b) => a.start - b.start);
+  moments.forEach(moment => {
+    const full = momentFullLabel(moment);
+    const label = full.length > 26 ? `${full.slice(0, 25).trimEnd()}…` : full;
+    const when = fmt(moment.start);
+    const width = Math.min(W * 0.46, Math.max(72, (label.length + when.length) * 6.1 + 28));
+    let left = (moment.start / Math.max(1, T - 1)) * W - width / 2;
+    left = Math.max(0, Math.min(W - width, left));
+    let row = 0;
+    while (row < 2 && rowRight[row] != null && left < rowRight[row] + 6) row += 1;
+    if (row >= 2 && rowRight[1] != null) { row = 1; left = Math.min(W - width, rowRight[1] + 6); }
+    rowRight[row] = left + width;
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'moment-chip';
+    chip.style.left = `${(left / W) * 100}%`;
+    chip.style.top = `${row * 22 + 2}px`;
+    chip.title = `${full} · ${fmtRange(moment)}`;
+    chip.dataset.start = String(moment.start);
+    chip.dataset.end = String(Number.isFinite(moment.end) ? moment.end : moment.start + 0.75);
+    const text = document.createElement('span');
+    text.className = 'moment-text';
+    text.textContent = full;
+    const time = document.createElement('span');
+    time.className = 'moment-when';
+    time.textContent = when;
+    chip.append(text, time);
+    chip.addEventListener('click', event => { event.stopPropagation(); seek(moment.start); });
+    lane.append(chip);
+  });
+}
+
+function updateMomentActive(t) {
+  document.querySelectorAll('#momentsLane .moment-chip').forEach(chip => {
+    const start = Number(chip.dataset.start);
+    const end = Number(chip.dataset.end);
+    chip.classList.toggle('active', Number.isFinite(start) && t >= start && t <= end);
+  });
+}
+
 function buildMainChart() {
   if (!currentResult) return;
   clearScope('main');
@@ -2958,7 +3651,8 @@ function buildMainChart() {
   });
   let range = 0;
   lines.forEach(line => { range = Math.max(range, niceRange(line.values)); });
-  drawChart(box, { lines, range, height: 220, axisLabels: true, dark: true, fill: true, span, scope: 'main', yLabels: true });
+  drawChart(box, { lines, range, height: 220, axisLabels: true, dark: true, fill: true, span, scope: 'main', yLabels: true, moments: comparison ? null : chartMoments });
+  renderMomentsLane();
   const currentKey = `<span class="legend-key" title="${escapeHtml(name)}"><i></i>${escapeHtml(shortName(name))}</span>`;
   const secondKey = secondLabel ? `<span class="legend-key" title="${escapeHtml(secondLabel)}"><i class="dash"></i>${escapeHtml(shortName(secondLabel))}</span>` : '';
   $('chartKeys').innerHTML = secondLabel ? currentKey + secondKey : '';
@@ -3125,10 +3819,58 @@ function updateTransport() {
   if (second) second.textContent = currentResult ? fmt(t) : '';
 }
 
+function ensureBrainValues() {
+  const host = $('brainValues');
+  if (!host || host.children.length) return;
+  Object.entries(GROUPS).forEach(([group, def]) => {
+    const cell = document.createElement('div');
+    cell.className = 'brain-value';
+    cell.dataset.group = group;
+    const label = document.createElement('span');
+    label.className = 'brain-value-label';
+    label.textContent = def.label;
+    const num = document.createElement('span');
+    num.className = 'brain-value-num';
+    num.textContent = '—';
+    cell.append(label, num);
+    host.append(cell);
+  });
+}
+
+function updateReadouts(t) {
+  const overall = currentResult && currentResult.signals ? seriesAt(currentResult.signals.overall, t) : null;
+  const readout = $('overallReadout');
+  if (readout) {
+    readout.textContent = overall == null ? '—' : fmtSigned(overall);
+    readout.classList.toggle('neg', overall != null && overall < 0);
+  }
+  const second = $('overallSecond');
+  if (second) second.textContent = `${Math.floor(t)} s`;
+  const clock = $('videoClock');
+  if (clock) clock.textContent = currentResult ? `${fmt(t)} / ${fmt(totalSeconds())}` : '';
+}
+
+function updateBrainValues(t) {
+  const host = $('brainValues');
+  if (!host) return;
+  ensureBrainValues();
+  Object.keys(GROUPS).forEach(group => {
+    const cell = host.querySelector(`[data-group="${group}"]`);
+    if (!cell) return;
+    const value = currentResult && currentResult.signals ? seriesAt(currentResult.signals[group], t) : null;
+    cell.querySelector('.brain-value-num').textContent = value == null ? '—' : fmtSigned(value);
+    cell.classList.toggle('neg', value != null && value < 0);
+  });
+}
+
 function tick() {
   const t = currentTime();
   playheads.forEach(p => p.fn(t));
   updateTransport();
+  updateReadouts(t);
+  updateBrainValues(t);
+  updateMomentActive(t);
+  updateCompareTransport(t);
   if (currentResult) window.brainMap.setSecond(t);
 }
 
@@ -3139,8 +3881,239 @@ function buildAllCharts() {
   tick();
 }
 
+function compareNames() {
+  const sampleTitle = currentContext && currentContext.sampleId && currentContext.title;
+  return {
+    aName: sampleTitle || currentVideoName(),
+    bName: comparison ? (comparison.label || 'Other video') : 'Other video',
+  };
+}
+
+function clearCompareChart() {
+  clearScope('compare');
+  $('compareChartBox').replaceChildren();
+  $('compareDiffs').replaceChildren();
+}
+
+function buildCompareChart() {
+  if (!currentResult || !comparison || !comparison.result || !comparison.result.signals) return;
+  clearScope('compare');
+  const span = chartSpan();
+  const lines = [
+    { values: currentResult.signals.overall || [], colour: 'var(--accent)', width: 1.8 },
+    { values: comparison.result.signals.overall || [], colour: 'var(--blue)', width: 1.4 },
+  ];
+  let range = 0;
+  lines.forEach(line => { range = Math.max(range, niceRange(line.values)); });
+  const bands = [];
+  const diff = comparisonReport && comparisonReport.differences ? comparisonReport.differences[compareActiveDiff] : null;
+  if (diff) {
+    if (diff.a) bands.push({ start: diff.a.start, end: diff.a.end, colour: comparisonCurrentSide === 'a' ? 'var(--accent)' : 'var(--blue)' });
+    if (diff.b) bands.push({ start: diff.b.start, end: diff.b.end, colour: comparisonCurrentSide === 'b' ? 'var(--accent)' : 'var(--blue)' });
+  }
+  drawChart($('compareChartBox'), { lines, range, height: 160, axisLabels: true, dark: true, span, scope: 'compare', bands });
+}
+
+function renderCompareDiffs() {
+  const host = $('compareDiffs');
+  host.replaceChildren();
+  if (!comparisonReport || !Array.isArray(comparisonReport.differences)) return;
+  const { aName, bName } = comparisonABNames.aName ? comparisonABNames : compareNames();
+  const aColour = comparisonCurrentSide === 'a' ? 'var(--accent)' : 'var(--blue)';
+  const bColour = comparisonCurrentSide === 'b' ? 'var(--accent)' : 'var(--blue)';
+  const spanChip = (label, span, colour) => {
+    const chip = document.createElement('span');
+    chip.className = 'diff-chip';
+    const dot = document.createElement('i');
+    dot.style.background = colour;
+    const text = document.createElement('span');
+    text.textContent = `${shortName(label, 18)} ${fmt(span.start)}–${fmt(span.end)}`;
+    chip.append(dot, text);
+    return chip;
+  };
+  comparisonReport.differences.forEach((difference, index) => {
+    const row = document.createElement('button');
+    row.type = 'button';
+    row.className = 'compare-diff' + (index === compareActiveDiff ? ' active' : '');
+    const chips = document.createElement('div');
+    chips.className = 'diff-chips';
+    const onlyA = difference.a && !difference.b;
+    const onlyB = difference.b && !difference.a;
+    if (difference.a) chips.append(spanChip(onlyA ? `only in ${aName}` : aName, difference.a, aColour));
+    if (difference.b) chips.append(spanChip(onlyB ? `only in ${bName}` : bName, difference.b, bColour));
+    const what = document.createElement('p');
+    what.className = 'diff-what';
+    what.textContent = difference.what_differs || '';
+    const brain = document.createElement('p');
+    brain.className = 'diff-brain';
+    brain.textContent = difference.brain_response || '';
+    row.append(chips, what, brain);
+    row.addEventListener('click', () => selectCompareDiff(index));
+    host.append(row);
+  });
+}
+
+function renderCompareVerdict() {
+  const headline = $('compareHeadline');
+  const summary = $('compareSummary');
+  const { aName, bName } = comparisonABNames.aName ? comparisonABNames : compareNames();
+  $('compareKey').textContent = comparison ? `A = ${shortName(aName)} · B = ${shortName(bName)}` : '';
+  if (comparisonReport) {
+    headline.textContent = comparisonReport.headline || '';
+    summary.textContent = comparisonReport.summary || '';
+  } else {
+    headline.textContent = comparisonState === 'loading' ? 'Loading the comparison…'
+      : (comparisonStateText || 'No comparison report yet.');
+    summary.textContent = '';
+  }
+  headline.hidden = !headline.textContent;
+  summary.hidden = !summary.textContent;
+  // The link opens the Report tab: to read the report, or to write one when that is offered.
+  const link = $('compareReportLink');
+  const canWrite = !comparisonReport && !$('reportActions').hidden;
+  link.hidden = !comparisonReport && !canWrite;
+  link.textContent = comparisonReport ? 'Full report →' : `${$('reportWrite').textContent} →`;
+}
+
+function compareTargetTime() {
+  const base = Number.isFinite(video.currentTime) ? video.currentTime : virtualTime;
+  const target = Math.max(0, base + compareOffset);
+  return Number.isFinite(compareVideoB.duration)
+    ? Math.min(target, Math.max(0, compareVideoB.duration - 0.05))
+    : target;
+}
+
+function seekCompareVideoB() {
+  if (!compareVideoB.getAttribute('src')) return;
+  try { compareVideoB.currentTime = compareTargetTime(); } catch (e) { /* the seek is a convenience */ }
+}
+
+async function loadCompareVideoB() {
+  const host = $('compareVideoHostB');
+  if (!host || !comparison) return;
+  if (compareVideoB.parentElement !== host) host.append(compareVideoB);
+  const key = comparison.kind === 'sample' ? `s:${comparison.sampleId}` : `j:${comparison.jobId}`;
+  if (key === compareVideoKey && compareVideoB.getAttribute('src')) return;
+  compareVideoKey = key;
+  const seq = ++compareVideoSeq;
+  compareVideoB.pause();
+  compareVideoB.removeAttribute('src');
+  compareVideoB.load();
+  host.querySelector('.compare-video-note')?.remove();
+  let url = null;
+  try {
+    if (comparison.kind === 'sample') {
+      const sample = sampleById(comparison.sampleId);
+      if (sample && sample.video_file) url = `/data/${sample.video_file}`;
+    } else {
+      const res = await fetch(`/api/jobs/${comparison.jobId}/video`);
+      if (res.status === 401) { window.location.reload(); return; }
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) url = data.url;
+    }
+  } catch (e) { /* the note below says the video is unavailable */ }
+  if (seq !== compareVideoSeq || compareVideoKey !== key) return;
+  if (!url) {
+    const note = document.createElement('div');
+    note.className = 'compare-video-note';
+    note.textContent = "This video can't be played here.";
+    host.append(note);
+    return;
+  }
+  compareVideoB.src = url;
+  compareVideoB.load();
+  compareVideoB.addEventListener('loadedmetadata', () => {
+    if (currentTab !== 'compare' || seq !== compareVideoSeq) return;
+    seekCompareVideoB();
+    if (hasLocalVideo() && !video.paused) compareVideoB.play().catch(() => {});
+  }, { once: true });
+  compareVideoB.addEventListener('error', () => {
+    if (seq !== compareVideoSeq) return;
+    if (!host.querySelector('.compare-video-note')) {
+      const note = document.createElement('div');
+      note.className = 'compare-video-note';
+      note.textContent = "This video can't be played here.";
+      host.append(note);
+    }
+  }, { once: true });
+}
+
+function buildCompareView() {
+  if (!currentResult || !comparison) { clearCompareChart(); return; }
+  const { aName, bName } = compareNames();
+  $('compareNameA').textContent = shortName(aName, 48);
+  $('compareNameA').title = aName;
+  $('compareNameB').textContent = shortName(bName, 48);
+  $('compareNameB').title = bName;
+  $('compareLegendA').textContent = shortName(aName, 24);
+  $('compareLegendB').textContent = shortName(bName, 24);
+  const kept = comparison.kind === 'sample' ? comparison.sampleId : comparison.jobId;
+  if ([...$('compareSelect').options].some(option => option.value === kept)) $('compareSelect').value = kept;
+  $('compareSwap').hidden = !(currentContext && currentContext.jobId && comparison.kind === 'job');
+  buildCompareChart();
+  renderCompareDiffs();
+  renderCompareVerdict();
+  loadCompareVideoB();
+  tick();
+}
+
+function refreshComparePanel() {
+  if (currentTab !== 'compare') return;
+  buildCompareView();
+}
+
+function selectCompareDiff(index) {
+  compareActiveDiff = index;
+  const difference = comparisonReport && comparisonReport.differences ? comparisonReport.differences[index] : null;
+  if (difference) {
+    const mainSpan = comparisonCurrentSide === 'a' ? difference.a : difference.b;
+    const otherSpan = comparisonCurrentSide === 'a' ? difference.b : difference.a;
+    const fallback = difference.a ? difference.a.start : (difference.b ? difference.b.start : 0);
+    const mainStart = mainSpan ? mainSpan.start : fallback;
+    const otherStart = otherSpan ? otherSpan.start : mainStart;
+    compareOffset = otherStart - mainStart;
+    seek(mainStart);
+    setTimeout(() => {
+      if (currentTab !== 'compare') return;
+      seekCompareVideoB();
+    }, 40);
+  }
+  renderCompareDiffs();
+  buildCompareChart();
+  tick();
+}
+
+function updateCompareTransport(t) {
+  if (currentTab !== 'compare') return;
+  const span = chartSpan();
+  const clock = `${fmt(t)} / ${fmt(span)}`;
+  $('compareTime').textContent = clock;
+  $('compareChartTime').textContent = clock;
+  $('compareClockA').textContent = fmt(t);
+  const bTime = compareVideoB.getAttribute('src') && Number.isFinite(compareVideoB.currentTime) ? compareVideoB.currentTime : t;
+  $('compareClockB').textContent = fmt(bTime);
+  const mainSpan = totalSeconds();
+  const otherSpan = comparison && comparison.result && comparison.result.signals && Array.isArray(comparison.result.signals.overall)
+    ? comparison.result.signals.overall.length : 0;
+  $('compareBarA').style.width = `${mainSpan ? Math.min(100, (t / mainSpan) * 100) : 0}%`;
+  $('compareBarB').style.width = `${otherSpan ? Math.min(100, (bTime / otherSpan) * 100) : 0}%`;
+  const playing = hasLocalVideo() ? !video.paused : virtualPlaying;
+  $('comparePlay').textContent = playing ? 'Pause both' : 'Play both';
+}
+
+async function openCompareTab() {
+  if (!currentResult) return;
+  if (!comparison) {
+    const first = comparisonCandidates[0];
+    if (!first) return;
+    $('compareSelect').value = first.value;
+    await loadComparison();
+  }
+  if (comparison) setResultTab('compare');
+}
+
 function showCompareRow() {
-  const row = $('compareRow'), select = $('compareSelect');
+  const row = $('compareRow'), select = $('compareSelect'), button = $('compareTabBtn');
   const sampleId = currentContext && currentContext.sampleId;
   const jobId = currentContext && currentContext.jobId;
   const candidates = sampleId
@@ -3148,22 +4121,33 @@ function showCompareRow() {
     : (signedIn ? (jobsCache || []).filter(j =>
         j.result_available && j.status === 'done' && j.job_id !== jobId) : []);
   const valueOf = item => sampleId ? item.id : item.job_id;
+  comparisonCandidates = candidates.map(item => ({
+    value: valueOf(item),
+    label: sampleId ? (item.title || item.id) : (item.filename || `Job ${item.job_id.slice(0, 8)}`),
+  }));
   const kept = comparison
     ? (comparison.kind === 'sample' ? comparison.sampleId : comparison.jobId)
     : '';
   const clear = () => {
     comparison = null;
+    compareActiveDiff = -1; compareOffset = 0;
+    comparisonReport = null;
+    comparisonState = '';
+    comparisonStateText = '';
     buildTop(); buildMainChart(); buildStrips();
     setupReport(jobId, currentResult);
+    if (currentTab === 'compare') setResultTab('charts');
   };
   if (!currentResult || candidates.length === 0 || (!sampleId && !signedIn)) {
     row.hidden = true;
+    button.hidden = true;
     select.replaceChildren();
     $('mutedToggle').disabled = false;
     if (comparison) clear();
     return;
   }
   row.hidden = false;
+  button.hidden = false;
   select.replaceChildren();
   const none = document.createElement('option');
   none.value = ''; none.textContent = 'None';
@@ -3193,9 +4177,15 @@ async function loadComparison() {
   msg.classList.remove('error');
   if (!id) {
     comparison = null; msg.textContent = '';
+    compareActiveDiff = -1; compareOffset = 0;
+    comparisonReport = null;
+    comparisonState = '';
+    comparisonStateText = '';
+    clearCompareChart();
     $('mutedToggle').disabled = false;
     buildTop(); buildMainChart(); buildStrips(); tick();
     setupReport(currentContext && currentContext.jobId, currentResult);
+    if (currentTab === 'compare') setResultTab('charts');
     return;
   }
   if (currentContext && currentContext.sampleId) {
@@ -3204,9 +4194,15 @@ async function loadComparison() {
       msg.textContent = "Couldn't load that sample.";
       msg.classList.add('error');
       comparison = null;
+      compareActiveDiff = -1; compareOffset = 0;
+      comparisonReport = null;
+      comparisonState = 'none';
+      comparisonStateText = "Couldn't load that sample.";
+      clearCompareChart();
       $('mutedToggle').disabled = false;
       buildTop(); buildMainChart(); buildStrips();
       setupReport(null, currentResult);
+      if (currentTab === 'compare') setResultTab('charts');
       return;
     }
     useSampleComparison(sample);
@@ -3227,9 +4223,15 @@ async function loadComparison() {
         : `Couldn't load that result (HTTP ${res.status}).`);
       msg.classList.add('error');
       comparison = null;
+      compareActiveDiff = -1; compareOffset = 0;
+      comparisonReport = null;
+      comparisonState = 'none';
+      comparisonStateText = data.message || "Couldn't load the comparison.";
+      clearCompareChart();
       $('mutedToggle').disabled = false;
       buildTop(); buildMainChart(); buildStrips();
       setupReport(currentContext && currentContext.jobId, currentResult);
+      if (currentTab === 'compare') setResultTab('charts');
       return;
     }
     useComparison(id, label, data);
@@ -3238,9 +4240,15 @@ async function loadComparison() {
     msg.textContent = "Couldn't reach the server. Please try again.";
     msg.classList.add('error');
     comparison = null;
+    compareActiveDiff = -1; compareOffset = 0;
+    comparisonReport = null;
+    comparisonState = 'none';
+    comparisonStateText = "Couldn't reach the server.";
+    clearCompareChart();
     $('mutedToggle').disabled = false;
     buildTop(); buildMainChart(); buildStrips();
     setupReport(currentContext && currentContext.jobId, currentResult);
+    if (currentTab === 'compare') setResultTab('charts');
   }
 }
 function useComparison(id, label, data) {
@@ -3248,11 +4256,18 @@ function useComparison(id, label, data) {
   comparison = { kind: 'job', result: data, summary: data.summary || {}, label, jobId: id };
   $('compareSelect').value = id;
   mutedOn = false;
+  compareActiveDiff = -1; compareOffset = 0;
+  comparisonReport = null;
+  comparisonState = 'loading';
+  comparisonStateText = '';
+  comparisonCurrentSide = 'a';
+  comparisonABNames = { aName: '', bName: '' };
   $('mutedToggle').checked = false;
   $('compareMsg').textContent = '';
   $('compareMsg').classList.remove('error');
   buildTop(); buildMainChart(); buildStrips(); tick();
   setupComparisonReport();
+  if (currentTab === 'compare') buildCompareView();
 }
 function useSampleComparison(sample) {
   ++compareRequest;
@@ -3266,22 +4281,48 @@ function useSampleComparison(sample) {
   };
   $('compareSelect').value = sample.id;
   mutedOn = false;
+  compareActiveDiff = -1; compareOffset = 0;
+  comparisonReport = null;
+  comparisonState = 'loading';
+  comparisonStateText = '';
+  comparisonCurrentSide = 'a';
+  comparisonABNames = { aName: '', bName: '' };
   $('mutedToggle').checked = false;
   $('compareMsg').textContent = '';
   $('compareMsg').classList.remove('error');
   buildTop(); buildMainChart(); buildStrips(); tick();
   setupComparisonReport();
+  if (currentTab === 'compare') buildCompareView();
 }
 $('compareSelect').addEventListener('change', loadComparison);
+$('compareTabBtn').addEventListener('click', openCompareTab);
+$('comparePlay').addEventListener('click', togglePlay);
+$('compareSwap').addEventListener('click', swapComparison);
+$('compareReportLink').addEventListener('click', () => setResultTab('report'));
+compareVideoB.addEventListener('click', togglePlay);
+$('progressCancel').addEventListener('click', async () => {
+  const jobId = progressJobId;
+  if (!jobId) return;
+  $('progressCancel').disabled = true;
+  await cancelJob(jobId);
+  $('progressCancel').disabled = false;
+  if (trackedJob === jobId) pollJob(jobId);
+});
 
 $('mutedToggle').addEventListener('change', () => {
   mutedOn = $('mutedToggle').checked;
   if (mutedOn && comparison) {
     comparison = null;
+    compareActiveDiff = -1; compareOffset = 0;
+    comparisonReport = null;
+    comparisonState = '';
+    comparisonStateText = '';
+    clearCompareChart();
     $('compareSelect').value = '';
     $('mutedToggle').disabled = false;
     buildTop();
     setupReport(currentContext && currentContext.jobId, currentResult);
+    if (currentTab === 'compare') setResultTab('charts');
   }
   buildMainChart(); buildStrips(); tick();
 });
@@ -3363,6 +4404,21 @@ video.addEventListener('click', togglePlay);
 video.addEventListener('seeked', tick);
 video.addEventListener('timeupdate', () => { if (video.paused) tick(); });
 video.addEventListener('loadedmetadata', tick);
+video.addEventListener('play', () => {
+  if (currentTab !== 'compare' || !compareVideoB.getAttribute('src')) return;
+  seekCompareVideoB();
+  compareVideoB.play().catch(() => {});
+});
+video.addEventListener('pause', () => { compareVideoB.pause(); });
+video.addEventListener('seeking', () => {
+  if (currentTab !== 'compare' || !compareVideoB.getAttribute('src')) return;
+  seekCompareVideoB();
+});
+video.addEventListener('timeupdate', () => {
+  if (currentTab !== 'compare' || !compareVideoB.getAttribute('src')) return;
+  if (!Number.isFinite(compareVideoB.duration) || compareVideoB.paused) return;
+  if (Math.abs(compareVideoB.currentTime - compareTargetTime()) > 0.35) seekCompareVideoB();
+});
 video.addEventListener('error', async () => {
   const jobId = videoJob;
   if (!jobId || !currentContext || currentContext.jobId !== jobId) return;
@@ -3438,11 +4494,20 @@ async function loadBrain() {
 function resetUI() {
   resultSeq += 1;
   stopVirtual();
+  stopProgress();
   resetReportPanel();
   currentResult = null; currentSummary = null; currentContext = null; comparison = null;
+  comparisonCandidates = []; compareActiveDiff = -1; compareOffset = 0; comparisonReport = null; comparisonState = ''; comparisonStateText = '';
   mutedOn = false; virtualTime = 0;
+  chartMoments = [];
   clearAllCharts();
   clearVideoSource();
+  compareVideoB.pause();
+  compareVideoB.removeAttribute('src');
+  compareVideoB.load();
+  compareVideoKey = '';
+  $('progressPanel').hidden = true;
+  $('appShell').classList.remove('compare-view');
   $('videoMissing').textContent = '';
   $('mutedToggle').checked = false;
   $('mutedToggle').disabled = false;
@@ -3452,13 +4517,19 @@ function resetUI() {
   $('topArea').classList.remove('compare');
   updateSoundLine();
   $('chartKeys').replaceChildren();
+  $('downloadCsv').hidden = true;
+  $('downloadCsv').removeAttribute('href');
   $('compareRow').hidden = true;
+  $('compareTabBtn').hidden = true;
   $('compareSelect').replaceChildren();
   $('compareMsg').textContent = '';
   $('compareMsg').classList.remove('error');
   $('chartCard').hidden = false;
   $('stripsCard').hidden = false;
   $('brainSecond').textContent = '';
+  $('brainValues').replaceChildren();
+  $('momentsLane').replaceChildren();
+  $('videoClock').textContent = '';
   $('sampleMeta').textContent = '';
   $('clipTitle').textContent = '';
   $('clipTitle').title = '';
@@ -3499,6 +4570,15 @@ $('deleteAccountBtn').addEventListener('click', async () => {
     $('deleteAccountMsg').textContent = "Couldn't reach the server. Please try again.";
     $('deleteAccountMsg').classList.add('error');
   }
+});
+
+let laneResizeTimer = null;
+window.addEventListener('resize', () => {
+  clearTimeout(laneResizeTimer);
+  laneResizeTimer = setTimeout(() => {
+    if (currentResult && !comparison && chartMoments.length) renderMomentsLane();
+    if (currentTab === 'compare' && comparison) { buildCompareChart(); tick(); }
+  }, 120);
 });
 
 start();
