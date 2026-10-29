@@ -43,7 +43,7 @@ Spot saved 1-9% a month and was often unavailable. Spot capacity is AWS's unused
 ## Candidates
 Every GPU instance type in us-east-1 (AWS price list and `aws ec2 describe-instance-types`, 2026-10-03), filtered by four requirements:
 
-1. **GPU memory of at least about 22 GB usable.** The real pipeline peaked at 19.8 GB of GPU memory on a 119 s clip (first GPU run, 2026-10-03, `nvidia-smi` total including WhisperX).
+1. **GPU memory of at least about 22 GB usable.** The real pipeline peaked at 19.8 GB of GPU memory on a 119 s clip (first GPU run, 2026-10-03, `nvidia-smi` total including WhisperX). This holds because the sound goes to the audio model in pieces of at most 60 s (equal pieces since commit `4ce57b0`). Before that, a 60-90 s video went as one piece: a 76 s video ran out of memory on an L4 (job `6fa47f14`, 2026-10-29) and on a GPU capped at 21.95 GiB (Slurm job 1036282). With equal pieces, the 76 s video and the 119 s clip peaked at 19.88 GB under the same cap (Slurm job 1037606, 2026-10-30).
 2. **Runs our software:** x86 processor and a GPU that PyTorch below 2.7 supports (tribev2 requires `torch<2.7`).
 3. **One GPU:** tribev2 runs on a single GPU. A multi-GPU machine could run several jobs side by side, but per GPU it costs more than the single-GPU types (for example 4 x L4 in `g6.12xlarge` is about $1.15 per GPU-hour against $0.98 for `g6.2xlarge`; 4 x A10G about $1.42 against $1.21).
 4. **Smallest size with at least 32 GB RAM** (peak 13.7 GB). Larger sizes have the same GPU; the GPU was about 90% busy during video encoding, so extra CPU and RAM would not help. This is a judgment (keep about 4 GB free; running out of RAM kills the job), not a measurement: the 16 GB `xlarge` sizes would leave about 2 GB.
