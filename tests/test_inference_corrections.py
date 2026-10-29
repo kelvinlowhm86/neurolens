@@ -7,6 +7,8 @@ DataFrames (the shape tribev2's events and WhisperX transcripts take), and the o
 through pd.DataFrame(...), which accepts a DataFrame or a list of dicts alike.
 """
 
+import math
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -68,6 +70,61 @@ def placed(out):
 
 # 119 s file split the way tribev2 splits audio longer than 60 s.
 CHUNKS_119 = ((0, 0, 60), (60, 60, 59))
+
+
+# ---------------------------------------------------------------- audio_piece_length
+
+
+@pytest.mark.parametrize(
+    "duration,piece",
+    [(30, 30), (60, 60), (76, 38), (89.9, 44.95), (119, 59.5), (150, 50)],
+)
+def test_audio_piece_length_gives_equal_pieces_of_at_most_60_seconds(duration, piece):
+    assert inference.audio_piece_length(duration) == pytest.approx(piece)
+
+
+def test_audio_piece_length_keeps_every_piece_between_30_and_60_seconds_above_60():
+    for duration in np.arange(601, 3001) / 10:
+        piece = inference.audio_piece_length(duration)
+        assert 30.0 <= piece <= 60.0
+        assert piece * math.ceil(duration / 60.0) == pytest.approx(duration)
+
+
+@pytest.mark.parametrize("duration", [0, -0.1, -60])
+def test_audio_piece_length_rejects_a_non_positive_duration(duration):
+    with pytest.raises(ValueError):
+        inference.audio_piece_length(duration)
+
+
+def test_neuralset_chunk_events_splits_audio_into_equal_pieces(tmp_path):
+    transforms = pytest.importorskip("neuralset.events.transforms")
+    standardize_events = pytest.importorskip("neuralset.events.utils").standardize_events
+
+    wav = tmp_path / "clip.wav"
+    wav.write_bytes(b"")
+    for duration, expected_pieces in [(76.0, 2), (119.0, 2), (150.0, 3)]:
+        events = standardize_events(
+            pd.DataFrame(
+                [
+                    {
+                        "type": "Audio",
+                        "filepath": str(wav),
+                        "start": 0.0,
+                        "duration": duration,
+                        "frequency": 16000,
+                        "timeline": "default",
+                    }
+                ]
+            )
+        )
+        piece = inference.audio_piece_length(duration)
+        out = transforms.ChunkEvents(
+            event_type_to_chunk="Audio", max_duration=piece, min_duration=piece / 2
+        )(events)
+        audio = out.loc[out.type == "Audio"].sort_values("start")
+        assert len(audio) == expected_pieces
+        assert list(audio["start"]) == pytest.approx([piece * i for i in range(expected_pieces)])
+        assert list(audio["duration"]) == pytest.approx([piece] * expected_pieces)
 
 
 # ---------------------------------------------------------------- attach_chunk_words

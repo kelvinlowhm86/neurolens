@@ -348,12 +348,26 @@ def _chunk_aware_word_step():
     return _word_step_class
 
 
+def audio_piece_length(duration, max_piece=60.0):
+    """The equal piece length that splits `duration` into pieces of at most `max_piece` seconds.
+
+    The audio model's GPU memory grows fast with piece length, so an audio track longer than
+    60 s is split into `ceil(duration / max_piece)` equal pieces. Equal pieces keep every piece
+    <= max_piece and, above 60 s, at least 30 s, so no cut is dropped.
+    """
+    if duration <= 0:
+        raise ValueError(f"audio duration must be positive, got {duration}")
+    return duration / math.ceil(duration / max_piece)
+
+
 def build_events(video_path):
     """The events tribev2 needs for one video: video, audio and words on one timeline.
 
     The same steps, parameters and order as tribev2's demo_utils.get_audio_and_text_events at the
-    pinned commit af58661 (requirements/model.txt), except that the word step is
-    ChunkAwareExtractWordsFromAudio. Re-check this list whenever the pin changes.
+    pinned commit af58661 (requirements/model.txt), except for two changes: the word step is
+    ChunkAwareExtractWordsFromAudio, and audio is split into equal pieces of at most 60 s (see
+    audio_piece_length) so a long track never becomes one memory-hungry piece. Re-check this list
+    whenever the pin changes.
     In fake mode: a stand-in that needs no model.
     """
     if fake_mode():
@@ -371,16 +385,6 @@ def build_events(video_path):
     from neuralset.events.utils import standardize_events
 
     logger.info(f"Building events from {video_path}...")
-    steps = [
-        ExtractAudioFromVideo(),
-        ChunkEvents(event_type_to_chunk="Audio", max_duration=60, min_duration=30),
-        ChunkEvents(event_type_to_chunk="Video", max_duration=60, min_duration=30),
-        _chunk_aware_word_step()(),
-        AddText(),
-        AddSentenceToWords(max_unmatched_ratio=0.05),
-        AddContextToWords(sentence_only=False, max_context_len=1024, split_field=""),
-        RemoveMissing(),
-    ]
     video = {
         "type": "Video",
         "filepath": str(video_path),
@@ -389,6 +393,24 @@ def build_events(video_path):
         "subject": "default",
     }
     events = standardize_events(pd.DataFrame([video]))
+    events = ExtractAudioFromVideo()(events)
+    audio = events.loc[events.type == "Audio"]
+    if len(audio) > 1:
+        raise RuntimeError(f"expected at most one Audio event from one video, got {len(audio)}")
+    steps = []
+    if len(audio) == 1:  # a video with no sound track has no Audio event
+        piece = audio_piece_length(float(audio.iloc[0]["duration"]))
+        steps.append(
+            ChunkEvents(event_type_to_chunk="Audio", max_duration=piece, min_duration=piece / 2)
+        )
+    steps += [
+        ChunkEvents(event_type_to_chunk="Video", max_duration=60, min_duration=30),
+        _chunk_aware_word_step()(),
+        AddText(),
+        AddSentenceToWords(max_unmatched_ratio=0.05),
+        AddContextToWords(sentence_only=False, max_context_len=1024, split_field=""),
+        RemoveMissing(),
+    ]
     for step in steps:
         events = step(events)
     return standardize_events(events)
