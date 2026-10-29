@@ -231,6 +231,17 @@ resource "aws_sagemaker_endpoint" "main" {
   depends_on = [aws_cloudwatch_log_group.sagemaker_endpoint]
 
   tags = { Milestone = "M3e" }
+
+  # An update SageMaker rolls back (for example no GPU capacity) ends InService on the old
+  # configuration, and the provider reports success. Without this check Terraform would then
+  # delete the old configuration and model the endpoint still uses (30 Oct), leaving it unable
+  # to start or update. Failing here keeps them.
+  lifecycle {
+    postcondition {
+      condition     = self.endpoint_config_name == awscc_sagemaker_endpoint_config.main[0].endpoint_config_name
+      error_message = "The endpoint did not switch to the new configuration (SageMaker rolled the update back; see FailureReason in describe-endpoint). The old configuration and model are kept: run the apply again later."
+    }
+  }
 }
 
 # The lifecycle policy's first rule protects the `live` tag. Move it to the deployed digest
