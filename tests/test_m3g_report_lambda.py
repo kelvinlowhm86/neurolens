@@ -385,17 +385,18 @@ def test_build_request_carries_the_results_numbers():
 
     _, content = build_request(result, [b"\xff\xd8zero"], [])
 
-    data = next(_json_blocks(content))
-    assert data["duration_seconds"] == 3
-    assert data["last_second"] == 2  # a moment's end is checked against it (M3g §5d)
-    numeric = _numeric_lists(data)
-    for name in results.SERIES:
-        assert result["signals"][name] in numeric
-    for name in results.GROUPS:
-        assert result["signals"][name] in numeric
-    assert result["signals"]["overall"] in numeric
-    assert result["muted"]["overall"] in numeric
-    assert "summary" not in data
+    table = content[0]["text"]
+    lines = table.splitlines()
+    assert lines[0].startswith("duration_seconds 3, last_second 2.")
+    header = lines[1].split()
+    assert header == ["t", *results.SERIES, "muted_overall"]
+    rows = [line.split() for line in lines[2:]]
+    assert [int(row[0]) for row in rows] == [0, 1, 2]
+    for second, row in enumerate(rows):
+        expected = [result["signals"][name][second] for name in results.SERIES]
+        expected.append(result["muted"]["overall"][second])
+        assert [float(cell) for cell in row[1:]] == pytest.approx(expected)
+    assert "summary" not in table
 
 
 def test_build_request_includes_the_spoken_words_when_there_are_some():

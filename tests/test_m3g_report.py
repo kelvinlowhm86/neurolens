@@ -554,7 +554,7 @@ def test_post_report_starts_a_report(aws, db, pg, make_cfg, tmp_path):
 
     assert resp.status_code == 202
     assert resp.get_json()["report_state"] == "writing"
-    assert starter.calls == [job_id]
+    assert starter.calls == [{"job_id": job_id}]
     job = pg.job(job_id)
     assert (job["report_state"], job["report_tries"]) == ("writing", 1)
 
