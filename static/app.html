@@ -192,6 +192,7 @@
   .report-answer { display: flex; flex-direction: column; gap: 14px; }
   .report-answer h2 { font: 600 20px/1.3 var(--display); }
   .report-answer p { font-size: 14px; color: var(--ink-2); line-height: 1.6; }
+  .report-answer .report-key { font: 500 13px var(--display); color: var(--ink-3); }
   .report-moments { display: flex; flex-direction: column; gap: 8px; }
   .report-moment { background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; padding: 10px 12px; text-align: left; color: inherit; display: flex; flex-direction: column; gap: 3px; }
   .report-moment:hover { border-color: var(--ink-3); }
@@ -409,11 +410,13 @@
       <div class="result-panel" id="reportTab" hidden>
         <p class="report-state" id="reportStateText"></p>
         <div class="report-answer" id="reportAnswer" hidden>
+          <p class="report-key" id="reportKey" hidden></p>
           <h2 id="reportHeadline"></h2>
           <p id="reportSummary"></p>
           <div class="report-moments" id="reportMoments"></div>
           <div class="report-list" id="reportStrengthsWrap"><h3>Strengths</h3><ul id="reportStrengths"></ul></div>
           <div class="report-list" id="reportImprovementsWrap"><h3>Improvements</h3><ul id="reportImprovements"></ul></div>
+          <div class="report-list" id="reportSuggestionsWrap"><h3>Suggestions</h3><ul id="reportSuggestions"></ul></div>
           <p class="note">Written by AI from predicted brain responses, not viewer data.</p>
         </div>
         <div class="report-actions" id="reportActions" hidden>
@@ -520,6 +523,7 @@ let samplesData = null, jobsCache = [];
 let currentResult = null, currentSummary = null, currentContext = null;
 let comparison = null, mutedOn = false, resultSeq = 0, compareRequest = 0;
 let reportSeq = 0, reportPollTimer = null, reportJob = null, reportWritingSince = 0;
+let comparisonReportSeq = 0, comparisonPollTimer = null, comparisonWritingSince = 0;
 let signedIn = false, me = null, limits = null;
 let virtualTime = 0, virtualPlaying = false, virtualAnchor = 0, virtualRaf = 0, videoRaf = 0;
 let videoJob = null, videoRetried = false, videoRequest = 0, videoPlaying = false;
@@ -1219,6 +1223,7 @@ function loadSample(idx) {
   showVideo(true);
   renderResult(s.result, s.summary || s.result.summary || {}, {
     jobId: null,
+    sampleId: s.id,
     brainUrl: s.brain_file ? `/data/${s.brain_file}` : null,
     description: s.description,
     attribution: s.attribution,
@@ -1882,18 +1887,42 @@ function stopReportPolling() {
   reportJob = null;
 }
 
+function stopComparisonPolling() {
+  clearTimeout(comparisonPollTimer);
+  comparisonPollTimer = null;
+  comparisonWritingSince = 0;
+}
+
+function fillReportList(host, wrap, heading, items) {
+  $(host).replaceChildren();
+  const title = $(wrap).querySelector('h3');
+  if (title) title.textContent = heading;
+  for (const item of items || []) {
+    const li = document.createElement('li');
+    li.textContent = item;
+    $(host).append(li);
+  }
+  $(wrap).hidden = !(items || []).length;
+}
+
 function hideReportAnswer() {
   $('reportAnswer').hidden = true;
+  $('reportKey').hidden = true;
+  $('reportKey').textContent = '';
   $('reportHeadline').textContent = '';
   $('reportSummary').textContent = '';
   $('reportMoments').replaceChildren();
   $('reportStrengths').replaceChildren();
   $('reportImprovements').replaceChildren();
+  $('reportSuggestions').replaceChildren();
+  $('reportSuggestionsWrap').hidden = true;
 }
 
 function resetReportPanel() {
   reportSeq += 1;
   stopReportPolling();
+  stopComparisonPolling();
+  comparisonReportSeq += 1;
   reportWritingSince = 0;
   $('reportStateText').textContent = '';
   hideReportAnswer();
@@ -1906,6 +1935,7 @@ function resetReportPanel() {
 
 function renderReportAnswer(report) {
   hideReportAnswer();
+  $('reportKey').hidden = true;
   $('reportHeadline').textContent = report.headline || '';
   $('reportSummary').textContent = report.summary || '';
   for (const moment of report.moments || []) {
@@ -1929,16 +1959,173 @@ function renderReportAnswer(report) {
     }
     $('reportMoments').append(button);
   }
-  for (const [host, items] of [['reportStrengths', report.strengths], ['reportImprovements', report.improvements]]) {
-    for (const item of items || []) {
-      const li = document.createElement('li');
-      li.textContent = item;
-      $(host).append(li);
-    }
-  }
-  $('reportStrengthsWrap').hidden = !(report.strengths || []).length;
-  $('reportImprovementsWrap').hidden = !(report.improvements || []).length;
+  fillReportList('reportStrengths', 'reportStrengthsWrap', 'Strengths', report.strengths);
+  fillReportList('reportImprovements', 'reportImprovementsWrap', 'Improvements', report.improvements);
+  $('reportSuggestionsWrap').hidden = true;
   $('reportAnswer').hidden = false;
+}
+
+function sampleById(id) {
+  return (samplesData && samplesData.samples || []).find(sample => sample.id === id);
+}
+
+function jobDisplayName(id) {
+  if (currentContext && currentContext.jobId === id) return currentVideoName();
+  if (comparison && comparison.jobId === id) return comparison.label;
+  const job = (jobsCache || []).find(item => item.job_id === id);
+  return job && job.filename ? job.filename : `Job ${String(id).slice(0, 8)}`;
+}
+
+function comparisonNames(source) {
+  if (comparison && comparison.kind === 'sample') {
+    const a = sampleById(source.a), b = sampleById(source.b);
+    return {
+      aName: a ? (a.title || a.id) : source.a,
+      bName: b ? (b.title || b.id) : source.b,
+    };
+  }
+  return { aName: jobDisplayName(source.a), bName: jobDisplayName(source.b) };
+}
+
+function spanText(name, span) {
+  return `${shortName(name)} ${span.start}-${span.end} s`;
+}
+
+function sampleComparisonEntry() {
+  if (!comparison || comparison.kind !== 'sample' || !samplesData) return null;
+  const mainId = currentContext && currentContext.sampleId;
+  const otherId = comparison.sampleId;
+  return (samplesData.comparisons || []).find(entry =>
+    (entry.a === mainId && entry.b === otherId) ||
+    (entry.a === otherId && entry.b === mainId)) || null;
+}
+
+function renderComparisonAnswer(source) {
+  hideReportAnswer();
+  const report = source.report || {};
+  const { aName, bName } = comparisonNames(source);
+  $('reportKey').textContent = `A: ${shortName(aName)} · B: ${shortName(bName)}`;
+  $('reportKey').hidden = false;
+  $('reportHeadline').textContent = report.headline || '';
+  $('reportSummary').textContent = report.summary || '';
+  const currentId = currentContext && (currentContext.sampleId || currentContext.jobId);
+  const side = source.a === currentId ? 'a' : (source.b === currentId ? 'b' : null);
+  for (const difference of report.differences || []) {
+    const when = document.createElement('span');
+    when.className = 'when';
+    const left = difference.a ? spanText(aName, difference.a) : '';
+    const right = difference.b ? spanText(bName, difference.b) : '';
+    if (left && right) when.textContent = `${left} · ${right}`;
+    else if (left) when.textContent = `only in ${shortName(aName)}`;
+    else when.textContent = `only in ${shortName(bName)}`;
+    const what = document.createElement('p');
+    what.textContent = difference.what_differs || '';
+    const brain = document.createElement('p');
+    brain.textContent = difference.brain_response || '';
+    const span = side ? difference[side] : null;
+    let card;
+    if (span) {
+      card = document.createElement('button');
+      card.type = 'button';
+      card.dataset.seek = String(span.start);
+    } else {
+      card = document.createElement('div');
+    }
+    card.className = 'report-moment';
+    card.append(when, what, brain);
+    $('reportMoments').append(card);
+  }
+  fillReportList('reportStrengths', 'reportStrengthsWrap',
+    `Where ${shortName(aName)} does better`, report.a_does_better);
+  fillReportList('reportImprovements', 'reportImprovementsWrap',
+    `Where ${shortName(bName)} does better`, report.b_does_better);
+  fillReportList('reportSuggestions', 'reportSuggestionsWrap', 'Suggestions', report.suggestions);
+  $('reportAnswer').hidden = false;
+}
+
+function applyComparisonState(data) {
+  const state = data.report_state;
+  if (state === 'ready' && data.report) {
+    $('reportStateText').textContent = '';
+    $('reportActions').hidden = true;
+    renderComparisonAnswer({ a: data.a, b: data.b, report: data.report });
+    return;
+  }
+  if (state === 'writing') {
+    $('reportStateText').textContent = 'Writing your comparison…';
+    $('reportActions').hidden = true;
+    hideReportAnswer();
+    if (!comparisonWritingSince) comparisonWritingSince = Date.now();
+    if (Date.now() - comparisonWritingSince <= 10 * 60 * 1000) {
+      clearTimeout(comparisonPollTimer);
+      const target = comparison;
+      const seq = comparisonReportSeq;
+      comparisonPollTimer = setTimeout(() => refreshComparison(target, seq), 5000);
+    } else {
+      $('reportStateText').textContent = 'The comparison is taking too long. Try again later.';
+    }
+    return;
+  }
+  if (state === 'failed') {
+    $('reportStateText').textContent = "Couldn't write the comparison.";
+    $('reportActions').hidden = !(data.tries_left > 0);
+    $('reportWrite').textContent = 'Try again';
+    return;
+  }
+  $('reportStateText').textContent = '';
+  $('reportActions').hidden = false;
+  $('reportWrite').textContent = 'Write comparison';
+}
+
+async function refreshComparison(target, seq) {
+  if (seq !== comparisonReportSeq || comparison !== target) return;
+  const main = currentContext && currentContext.jobId;
+  if (!main || !target.jobId) return;
+  let res, data = {};
+  try {
+    res = await fetch(`/api/compare/${main}/${target.jobId}/report`);
+    data = await res.json().catch(() => ({}));
+  } catch (e) {
+    if (seq === comparisonReportSeq && comparison === target) {
+      $('reportStateText').textContent = "Couldn't reach the server.";
+    }
+    return;
+  }
+  if (seq !== comparisonReportSeq || comparison !== target) return;
+  if (res.status === 401) return window.location.reload();
+  if (!res.ok) {
+    $('reportStateText').textContent = data.message || "Couldn't load the comparison.";
+    return;
+  }
+  applyComparisonState(data);
+}
+
+function setupComparisonReport() {
+  comparisonReportSeq += 1;
+  stopComparisonPolling();
+  stopReportPolling();
+  comparisonWritingSince = 0;
+  if (!comparison) return;
+  $('resultTabs').hidden = false;
+  $('reportStateText').textContent = '';
+  hideReportAnswer();
+  $('reportActions').hidden = true;
+  $('reportWrite').disabled = false;
+  if (comparison.kind === 'sample') {
+    const entry = sampleComparisonEntry();
+    if (!entry) {
+      $('reportStateText').textContent = 'No report for this pair.';
+      return;
+    }
+    renderComparisonAnswer(entry);
+    return;
+  }
+  if (!currentContext || !currentContext.jobId) return;
+  if (!currentResult || !currentResult.frames || !comparison.result || !comparison.result.frames) {
+    $('reportStateText').textContent = 'No report for this pair.';
+    return;
+  }
+  refreshComparison(comparison, comparisonReportSeq);
 }
 
 function applyReportState(jobId, seq, data) {
@@ -1996,6 +2183,18 @@ function setupReport(jobId, result) {
   resetReportPanel();
   $('resultTabs').hidden = false;
   setResultTab('charts');
+  if (comparison) {
+    setupComparisonReport();
+    return;
+  }
+  const sample = currentContext && currentContext.sampleId
+    ? sampleById(currentContext.sampleId) : null;
+  if (sample) {
+    $('reportActions').hidden = true;
+    if (sample.report) renderReportAnswer(sample.report);
+    else $('reportStateText').textContent = 'No report for this sample.';
+    return;
+  }
   if (!result || !result.frames) {
     $('reportStateText').textContent = 'No report for this video.';
     return;
@@ -2050,9 +2249,58 @@ async function requestReport() {
   }
 }
 
+async function requestComparison() {
+  const target = comparison;
+  const main = currentContext && currentContext.jobId;
+  const seq = comparisonReportSeq;
+  if (!target || target.kind !== 'job' || !main || !target.jobId) return;
+  const button = $('reportWrite');
+  button.disabled = true;
+  button.textContent = 'Starting…';
+  $('reportActions').hidden = false;
+  try {
+    const res = await postJSON(`/api/compare/${main}/${target.jobId}/report`, {});
+    const data = await res.json().catch(() => ({}));
+    if (seq !== comparisonReportSeq || comparison !== target) return;
+    if (res.status === 401) return window.location.reload();
+    if (res.status === 202) {
+      comparisonWritingSince = Date.now();
+      $('reportStateText').textContent = 'Writing your comparison…';
+      $('reportActions').hidden = true;
+      clearTimeout(comparisonPollTimer);
+      comparisonPollTimer = setTimeout(() => refreshComparison(target, seq), 5000);
+      return;
+    }
+    if (data.error === 'report_ready' || data.error === 'report_writing') {
+      await refreshComparison(target, seq);
+      return;
+    }
+    if (data.error === 'no_frames') {
+      $('reportStateText').textContent = 'No report for this pair.';
+      $('reportActions').hidden = true;
+      return;
+    }
+    if (data.error === 'no_tries_left') {
+      $('reportStateText').textContent = "Couldn't write the comparison.";
+      $('reportActions').hidden = true;
+      return;
+    }
+    $('reportStateText').textContent = data.message || "Couldn't start the comparison.";
+    button.textContent = 'Try again';
+  } catch (e) {
+    $('reportStateText').textContent = "Couldn't reach the server. Please try again.";
+    button.textContent = 'Try again';
+  } finally {
+    button.disabled = false;
+  }
+}
+
 $('chartsTabBtn').addEventListener('click', () => setResultTab('charts'));
 $('reportTabBtn').addEventListener('click', () => setResultTab('report'));
-$('reportWrite').addEventListener('click', requestReport);
+$('reportWrite').addEventListener('click', () => {
+  if (comparison) requestComparison();
+  else requestReport();
+});
 
 async function showResult(jobId) {
   const seq = resultSeq;
@@ -2893,35 +3141,49 @@ function buildAllCharts() {
 
 function showCompareRow() {
   const row = $('compareRow'), select = $('compareSelect');
-  const currentId = currentContext && currentContext.jobId;
-  const candidates = (jobsCache || []).filter(j => j.result_available && j.status === 'done' && j.job_id !== currentId);
-  if (!signedIn || !currentResult || candidates.length === 0) {
+  const sampleId = currentContext && currentContext.sampleId;
+  const jobId = currentContext && currentContext.jobId;
+  const candidates = sampleId
+    ? (samplesData && samplesData.samples || []).filter(s => s.id !== sampleId && s.result)
+    : (signedIn ? (jobsCache || []).filter(j =>
+        j.result_available && j.status === 'done' && j.job_id !== jobId) : []);
+  const valueOf = item => sampleId ? item.id : item.job_id;
+  const kept = comparison
+    ? (comparison.kind === 'sample' ? comparison.sampleId : comparison.jobId)
+    : '';
+  const clear = () => {
+    comparison = null;
+    buildTop(); buildMainChart(); buildStrips();
+    setupReport(jobId, currentResult);
+  };
+  if (!currentResult || candidates.length === 0 || (!sampleId && !signedIn)) {
     row.hidden = true;
     select.replaceChildren();
     $('mutedToggle').disabled = false;
-    if (comparison) { comparison = null; buildTop(); buildMainChart(); buildStrips(); }
+    if (comparison) clear();
     return;
   }
   row.hidden = false;
-  const keep = comparison ? comparison.jobId : '';
   select.replaceChildren();
   const none = document.createElement('option');
   none.value = ''; none.textContent = 'None';
   select.append(none);
-  candidates.forEach(job => {
-    const label = job.filename || `Job ${job.job_id.slice(0, 8)}`;
+  candidates.forEach(item => {
+    const label = sampleId
+      ? (item.title || item.id)
+      : (item.filename || `Job ${item.job_id.slice(0, 8)}`);
     const option = document.createElement('option');
-    option.value = job.job_id;
+    option.value = valueOf(item);
     option.textContent = shortName(label);
     option.title = label;
     select.append(option);
   });
-  if (keep && candidates.some(job => job.job_id === keep)) {
-    select.value = keep;
+  if (kept && candidates.some(item => valueOf(item) === kept)) {
+    select.value = kept;
   } else {
     select.value = '';
     $('mutedToggle').disabled = false;
-    if (comparison) { comparison = null; buildTop(); buildMainChart(); buildStrips(); }
+    if (comparison) clear();
   }
 }
 
@@ -2933,6 +3195,21 @@ async function loadComparison() {
     comparison = null; msg.textContent = '';
     $('mutedToggle').disabled = false;
     buildTop(); buildMainChart(); buildStrips(); tick();
+    setupReport(currentContext && currentContext.jobId, currentResult);
+    return;
+  }
+  if (currentContext && currentContext.sampleId) {
+    const sample = sampleById(id);
+    if (!sample || !sample.result) {
+      msg.textContent = "Couldn't load that sample.";
+      msg.classList.add('error');
+      comparison = null;
+      $('mutedToggle').disabled = false;
+      buildTop(); buildMainChart(); buildStrips();
+      setupReport(null, currentResult);
+      return;
+    }
+    useSampleComparison(sample);
     return;
   }
   const job = (jobsCache || []).find(j => j.job_id === id);
@@ -2952,6 +3229,7 @@ async function loadComparison() {
       comparison = null;
       $('mutedToggle').disabled = false;
       buildTop(); buildMainChart(); buildStrips();
+      setupReport(currentContext && currentContext.jobId, currentResult);
       return;
     }
     useComparison(id, label, data);
@@ -2962,18 +3240,37 @@ async function loadComparison() {
     comparison = null;
     $('mutedToggle').disabled = false;
     buildTop(); buildMainChart(); buildStrips();
+    setupReport(currentContext && currentContext.jobId, currentResult);
   }
 }
 function useComparison(id, label, data) {
   ++compareRequest;
-  comparison = { result: data, summary: data.summary || {}, label, jobId: id };
+  comparison = { kind: 'job', result: data, summary: data.summary || {}, label, jobId: id };
   $('compareSelect').value = id;
   mutedOn = false;
   $('mutedToggle').checked = false;
-  $('mutedToggle').disabled = true;
   $('compareMsg').textContent = '';
   $('compareMsg').classList.remove('error');
   buildTop(); buildMainChart(); buildStrips(); tick();
+  setupComparisonReport();
+}
+function useSampleComparison(sample) {
+  ++compareRequest;
+  comparison = {
+    kind: 'sample',
+    sampleId: sample.id,
+    jobId: null,
+    result: sample.result,
+    summary: sample.summary || sample.result.summary || {},
+    label: sample.title || sample.id,
+  };
+  $('compareSelect').value = sample.id;
+  mutedOn = false;
+  $('mutedToggle').checked = false;
+  $('compareMsg').textContent = '';
+  $('compareMsg').classList.remove('error');
+  buildTop(); buildMainChart(); buildStrips(); tick();
+  setupComparisonReport();
 }
 $('compareSelect').addEventListener('change', loadComparison);
 
@@ -2984,6 +3281,7 @@ $('mutedToggle').addEventListener('change', () => {
     $('compareSelect').value = '';
     $('mutedToggle').disabled = false;
     buildTop();
+    setupReport(currentContext && currentContext.jobId, currentResult);
   }
   buildMainChart(); buildStrips(); tick();
 });

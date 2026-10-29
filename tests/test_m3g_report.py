@@ -643,7 +643,7 @@ def test_post_report_retries_a_failed_report_with_tries_left(aws, db, pg, make_c
     resp = client.post(f"/api/jobs/{job_id}/report")
 
     assert resp.status_code == 202
-    assert starter.calls == [job_id]
+    assert starter.calls == [{"job_id": job_id}]
     job = pg.job(job_id)
     assert (job["report_state"], job["report_tries"], job["report_error"]) == ("writing", 2, None)
 

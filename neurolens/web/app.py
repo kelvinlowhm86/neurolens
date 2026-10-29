@@ -169,11 +169,11 @@ def create_app(
 
         lambda_client = boto3.client("lambda", region_name=region)
 
-        def report_starter(job_id):
+        def report_starter(event):
             lambda_client.invoke(
                 FunctionName=report_function,
                 InvocationType="Event",
-                Payload=json.dumps({"job_id": job_id}).encode(),
+                Payload=json.dumps(event).encode(),
             )
 
     root = settings.get_root()
@@ -836,7 +836,7 @@ def create_app(
         ):
             return _error("report_writing", "The report is being written.", status=409)
         try:
-            report_starter(job["job_id"])
+            report_starter({"job_id": job["job_id"]})
         except Exception:
             logger.exception(f"Could not start the report for {job['job_id']}")
             billing.release_report_try(db, job["job_id"])
@@ -864,6 +864,104 @@ def create_app(
             {
                 "report_state": state,
                 "tries_left": max(0, report_cfg["max_tries"] - job["report_tries"]),
+                "report": report,
+            }
+        )
+
+    def comparison_ids(x, y):
+        """(job_a, job_b, None) for two of the caller's jobs, or (None, None, an error)."""
+        job_x, error = owned_job(x)
+        if error:
+            return None, None, error
+        job_y, error = owned_job(y)
+        if error:
+            return None, None, error
+        try:
+            return (*storage.comparison_pair(job_x["job_id"], job_y["job_id"]), None)
+        except ValueError:
+            return (
+                None,
+                None,
+                _error("same_video", "Choose two different videos.", status=400),
+            )
+
+    @app.route("/api/compare/<x>/<y>/report", methods=["POST"])
+    def start_comparison(x, y):
+        """Claim one free comparison attempt and start the report Lambda (M3h §4)."""
+        a, b, error = comparison_ids(x, y)
+        if error:
+            return error
+        with db.transaction() as tx:
+            rows = tx.execute(
+                "SELECT job_id, status FROM jobs WHERE "
+                "job_id IN (CAST(:a AS uuid), CAST(:b AS uuid))",
+                {"a": a, "b": b},
+            )
+        if len(rows) != 2 or any(row["status"] != billing.DONE for row in rows):
+            return _not_found()
+        if s3 is None or not bucket:
+            return _not_configured()
+        result_a, result_b = (
+            storage.get_result(s3, bucket, a),
+            storage.get_result(s3, bucket, b),
+        )
+        if not result_a or not result_a.get("frames") or not result_b or not result_b.get("frames"):
+            return _error("no_frames", "This pair has no report.", status=409)
+
+        report_cfg = cfg.get("report") or {}
+        max_tries = report_cfg["max_tries"]
+        stale_minutes = report_cfg["stale_minutes"]
+        row = billing.get_comparison(db, a, b)
+        if row:
+            state = row["state"]
+            if state == "ready":
+                return _error("report_ready", "The comparison is ready.", status=409)
+            started = row["started_at"]
+            stale = started is None or started < datetime.now(UTC) - timedelta(
+                minutes=stale_minutes
+            )
+            if state == "writing" and not stale:
+                return _error("report_writing", "The comparison is being written.", status=409)
+            if row["tries"] >= max_tries:
+                return _error("no_tries_left", "No tries left for this comparison.", status=429)
+        if report_starter is None:
+            return _not_configured()
+        user_id, _ = signed_in_user()
+        if not billing.claim_comparison(db, user_id, a, b, max_tries, stale_minutes):
+            return _error("report_writing", "The comparison is being written.", status=409)
+        try:
+            report_starter({"pair": [a, b]})
+        except Exception:
+            logger.exception(f"Could not start the comparison for {a} and {b}")
+            billing.release_comparison_try(db, a, b)
+            return _error(
+                "report_failed", "Could not start the comparison. Please try again.", status=503
+            )
+        return jsonify({"report_state": "writing"}), 202
+
+    @app.route("/api/compare/<x>/<y>/report")
+    def get_comparison(x, y):
+        """The comparison's state, tries left and stored answer (M3h §4)."""
+        a, b, error = comparison_ids(x, y)
+        if error:
+            return error
+        report_cfg = cfg.get("report") or {}
+        row = billing.get_comparison(db, a, b)
+        state, tries, report = None, 0, None
+        if row:
+            state, tries = row["state"], row["tries"]
+            started = row["started_at"]
+            stale_before = datetime.now(UTC) - timedelta(minutes=report_cfg["stale_minutes"])
+            if state == "writing" and (started is None or started < stale_before):
+                state = "failed"
+            if state == "ready" and s3 is not None and bucket:
+                report = storage.get_comparison_report(s3, bucket, a, b)
+        return jsonify(
+            {
+                "a": a,
+                "b": b,
+                "report_state": state,
+                "tries_left": max(0, report_cfg["max_tries"] - tries),
                 "report": report,
             }
         )

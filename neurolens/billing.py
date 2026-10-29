@@ -364,17 +364,28 @@ def purge_job_files(db, s3, bucket, job_id):
 
     Both research prefixes always go, and the job's `retention_snapshots` rows go with them. A
     deleted job's own files (upload, result, brain, thumbnail) go too; a copy that was only
-    removed keeps the user's own result.
+    removed keeps the user's own result. Deleting a job also removes every comparison it is part
+    of, in S3 and in the database (M3h §6).
     """
     with db.transaction() as tx:
         rows = tx.execute(
             "SELECT object_key, deleted_at FROM jobs WHERE job_id = CAST(:job_id AS uuid)",
             {"job_id": job_id},
         )
+        comparisons = (
+            tx.execute(
+                "SELECT job_a, job_b FROM comparisons WHERE "
+                "job_a = CAST(:job_id AS uuid) OR job_b = CAST(:job_id AS uuid)",
+                {"job_id": job_id},
+            )
+            if rows and rows[0]["deleted_at"] is not None
+            else []
+        )
     job = rows[0] if rows else None
     storage.delete_job_prefixes(s3, bucket, job_id)
     if job is not None and job["deleted_at"] is not None:
         keys = storage.job_keys(job_id, job["object_key"])
+        keys += [storage.comparison_key(row["job_a"], row["job_b"]) for row in comparisons]
         if not storage.delete_keys(s3, bucket, keys):
             raise RuntimeError(f"{job_id}: S3 reported a failed delete")
     with db.transaction() as tx:
@@ -382,6 +393,12 @@ def purge_job_files(db, s3, bucket, job_id):
             "DELETE FROM retention_snapshots WHERE job_id = CAST(:job_id AS uuid)",
             {"job_id": job_id},
         )
+        if job is not None and job["deleted_at"] is not None:
+            tx.execute(
+                "DELETE FROM comparisons WHERE "
+                "job_a = CAST(:job_id AS uuid) OR job_b = CAST(:job_id AS uuid)",
+                {"job_id": job_id},
+            )
     mark_dataset_purged(db, job_id, own_files=job is not None and job["deleted_at"] is not None)
 
 
@@ -848,6 +865,99 @@ def release_report_try(db, job_id):
             "WHERE job_id = CAST(:job_id AS uuid) AND report_state = :writing",
             {"job_id": job_id, "failed": "failed", "writing": "writing"},
         )
+
+
+# ---------------------------------------------------------------- the comparison report
+
+
+def claim_comparison(db, user_id, job_a, job_b, max_tries, stale_minutes):
+    """Claim one comparison attempt for two of the user's done jobs (M3h §3).
+
+    Both job rows are locked first, so a racing delete either finishes before the mark (the purge
+    sees this row) or marks the job first and the claim sees it. The canonical pair means B-vs-A
+    can never start a second report. True when this call got the claim.
+    """
+    jobs = "job_id IN (CAST(:job_a AS uuid), CAST(:job_b AS uuid))"
+    eligible = (
+        f"SELECT count(*) FROM jobs WHERE {jobs} "
+        "AND user_id = :user_id AND status = :done AND deleted_at IS NULL"
+    )
+    with db.transaction() as tx:
+        tx.execute(
+            f"SELECT job_id FROM jobs WHERE {jobs} ORDER BY job_id FOR SHARE",
+            {"job_a": job_a, "job_b": job_b},
+        )
+        rows = tx.execute(
+            "INSERT INTO comparisons (job_a, job_b, state, tries, started_at) "
+            "SELECT CAST(:job_a AS uuid), CAST(:job_b AS uuid), :writing, 1, now() "
+            f"WHERE ({eligible}) = 2 "
+            "AND EXISTS (SELECT 1 FROM users WHERE user_id = :user_id AND deleted_at IS NULL) "
+            "ON CONFLICT (job_a, job_b) DO UPDATE "
+            "SET state = :writing, tries = comparisons.tries + 1, started_at = now(), "
+            "error = NULL "
+            "WHERE comparisons.tries < :max_tries "
+            "AND (comparisons.state = :failed OR (comparisons.state = :writing "
+            "AND comparisons.started_at < now() - "
+            "make_interval(mins => CAST(:stale AS integer)))) "
+            f"AND ({eligible}) = 2 "
+            "AND EXISTS (SELECT 1 FROM users WHERE user_id = :user_id AND deleted_at IS NULL) "
+            "RETURNING job_a",
+            {
+                "job_a": job_a,
+                "job_b": job_b,
+                "user_id": user_id,
+                "done": DONE,
+                "writing": "writing",
+                "failed": "failed",
+                "max_tries": max_tries,
+                "stale": stale_minutes,
+            },
+        )
+    return bool(rows)
+
+
+def finish_comparison(db, job_a, job_b, state, error=None):
+    """Finish a `writing` comparison if neither job is deleted (M3h §3). False if no row changed."""
+    with db.transaction() as tx:
+        rows = tx.execute(
+            "UPDATE comparisons SET state = :state, error = :error "
+            "WHERE job_a = CAST(:job_a AS uuid) AND job_b = CAST(:job_b AS uuid) "
+            "AND state = :writing "
+            "AND NOT EXISTS (SELECT 1 FROM jobs WHERE "
+            "job_id IN (CAST(:job_a AS uuid), CAST(:job_b AS uuid)) "
+            "AND deleted_at IS NOT NULL) RETURNING job_a",
+            {
+                "job_a": job_a,
+                "job_b": job_b,
+                "state": state,
+                "error": error,
+                "writing": "writing",
+            },
+        )
+    return bool(rows)
+
+
+def release_comparison_try(db, job_a, job_b):
+    """Mark a comparison failed and give its try back, for a Lambda that could not start
+    (M3h §4)."""
+    with db.transaction() as tx:
+        tx.execute(
+            "UPDATE comparisons SET state = :failed, tries = tries - 1 "
+            "WHERE job_a = CAST(:job_a AS uuid) AND job_b = CAST(:job_b AS uuid) "
+            "AND state = :writing",
+            {"job_a": job_a, "job_b": job_b, "failed": "failed", "writing": "writing"},
+        )
+
+
+def get_comparison(db, job_a, job_b):
+    """The comparison row (`state`, `tries`, `started_at`) or None (M3h §3)."""
+    with db.transaction() as tx:
+        rows = tx.execute(
+            "SELECT state, tries, started_at FROM comparisons "
+            "WHERE job_a = CAST(:job_a AS uuid) AND job_b = CAST(:job_b AS uuid)",
+            {"job_a": job_a, "job_b": job_b},
+        )
+    return rows[0] if rows else None
 
 
 # ---------------------------------------------------------------- retention curves

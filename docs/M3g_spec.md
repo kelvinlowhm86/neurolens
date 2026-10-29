@@ -76,19 +76,22 @@ started at all (§4).
 - `POST /api/jobs/<job_id>/report`: `owned_job`; 404 unless done; 409 `no_frames` when the result
   has no `frames`; 409 `report_ready` when ready; 409 `report_writing` when writing and not stale;
   429 `no_tries_left` when tries are used up. Otherwise `claim_report`, then start the report
-  Lambda asynchronously (`InvocationType="Event"`, payload `{"job_id": ...}`). If starting it
+  Lambda asynchronously (`InvocationType="Event"`, payload `{"job_id": ...}`; a comparison sends
+  `{"pair": [job_a, job_b]}`, M3h §4). If starting it
   raises: `release_report_try`, log, 503. Answers 202 `{"report_state": "writing"}`.
 - `GET /api/jobs/<job_id>/report`: `owned_job`; answers `{"report_state", "tries_left",
   "report"}` where `report` is the stored JSON when ready, else null. A `writing` state older than
   `stale_minutes` is answered as `failed` (the Lambda died; a new POST may claim it).
-- `create_app` gains `report_starter=None`: a callable taking a job id. In Cognito mode, when not
+- `create_app` gains `report_starter=None`: a callable taking the Lambda event (`{"job_id": id}`
+  for a report, `{"pair": [job_a, job_b]}` for a comparison, M3h §4). In Cognito mode, when not
   handed in, it is a boto3 Lambda `invoke` on `aws.report_function` (a required setting there).
   Without one, POST answers 500 `not_configured`. The web code still never imports
   `neurolens.inference` or the Anthropic SDK.
 
 ## 5. The report Lambda (`neurolens/lambdas/report.py`, `neurolens-report`)
 ### 5a. Flow
-`handler(event, context)` → `write_report(job_id, db, s3, bucket, client, cfg)`:
+`handler(event, context)` takes `{"job_id": id}` → `write_report(job_id, db, s3, bucket, client,
+cfg)`, or `{"pair": [x, y]}` → `write_comparison(job_a, job_b, …)` (M3h §5a):
 1. Read the job row; stop (log, no writes) unless `report_state = 'writing'`.
 2. Read `results/<job_id>.json` and the frames file. Missing either: `finish_report(failed,
    "missing_input")`.
@@ -205,9 +208,10 @@ with the result after 30 days.
   answers in the playground.
 
 ## 9. Laptop (`infra/local_stack.py`)
-The local stack passes a `report_starter` that runs `write_report` in a thread with a fake
-client: it returns a valid canned report built from the result alone (no Bedrock call, no
-network). Migration 008 runs on the local database like the others.
+The local stack passes a `report_starter` that takes the Lambda event and runs `write_report`
+(or, for `{"pair": …}`, `write_comparison`) in a thread with a fake client: it returns a valid
+canned report or comparison built from the results alone (no Bedrock call, no network).
+Migration 008 runs on the local database like the others.
 
 ## 10. Cost (estimate, to measure on the real run)
 Per 2-minute video: 120 frames at 640×360 ≈ 300 tokens each ≈ 36k, plus numbers and prompt

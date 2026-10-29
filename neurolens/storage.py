@@ -309,3 +309,24 @@ def get_result(s3, bucket, job_id):
 
 def get_report(s3, bucket, job_id):
     return _get_json(s3, bucket, f"results/{job_id}.report.json")
+
+
+def comparison_pair(x, y):
+    """The one canonical pair for two jobs: lowercase UUID text, sorted (M3h §2).
+
+    A-vs-B and B-vs-A are the same comparison, so every caller uses this order. Raises ValueError
+    for a non-UUID or for the same job twice.
+    """
+    a, b = str(uuid.UUID(str(x))), str(uuid.UUID(str(y)))
+    if a == b:
+        raise ValueError(f"a comparison needs two different videos: {a}")
+    return (a, b) if a < b else (b, a)
+
+
+def comparison_key(job_a, job_b):
+    """The comparison's report key, under results/ so it expires with the results (M3h §2)."""
+    return f"results/{job_a}_{job_b}.report.json"
+
+
+def get_comparison_report(s3, bucket, job_a, job_b):
+    return _get_json(s3, bucket, comparison_key(job_a, job_b))

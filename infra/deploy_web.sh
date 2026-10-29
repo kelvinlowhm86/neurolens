@@ -30,23 +30,33 @@ git archive HEAD static | tar -x -C "$STAGE"
 cp static/index.html "$STAGE/index.html"
 cp static/app.html "$STAGE/app"
 # Only samples whose clip is listed in data/videos/SOURCES.md are public; their video, thumbnail and
-# brain file go with them.
+# brain file go with them. A listed clip can be a third-party one the owner has cleared for this
+# project (the CeraVe cuts, by Josh's decision); comparisons are public only when both samples are.
 python3 -I - "$STAGE" <<'PY'
 import json, re, shutil, sys
 from pathlib import Path
 
 stage, data = Path(sys.argv[1]), Path("data")
 listed = set(re.findall(r"\|\s*`([^`]+)`", (data / "videos/SOURCES.md").read_text()))
-samples = json.loads((data / "samples.json").read_text())["samples"]
+document = json.loads((data / "samples.json").read_text())
+samples = document["samples"]
 public = [s for s in samples if s["video_file"].removeprefix("videos/") in listed]
+public_ids = {s["id"] for s in public}
+comparisons = [
+    c for c in document.get("comparisons", [])
+    if c.get("a") in public_ids and c.get("b") in public_ids
+]
 for s in public:
     for name in (s["video_file"], s.get("thumbnail"), s.get("brain_file")):
         if name:
             target = stage / "data" / name
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy(data / name, target)
-(stage / "data/samples.json").write_text(json.dumps({"samples": public}))
-print(f"{len(public)} of {len(samples)} samples are public.")
+(stage / "data/samples.json").write_text(
+    json.dumps({"samples": public, "comparisons": comparisons})
+)
+print(f"{len(public)} of {len(samples)} samples are public; "
+      f"{len(comparisons)} comparisons.")
 PY
 aws s3 sync "$STAGE" "s3://$BUCKET/site/" --delete --only-show-errors
 # The page itself: browsers must check for a new version on every load, or a tab can keep running

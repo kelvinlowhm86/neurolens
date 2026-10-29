@@ -162,6 +162,27 @@ def _canned_report(result):
     }
 
 
+def _canned_comparison(result_a, result_b):
+    """A valid comparison for the local stack, built from the two results alone (M3h §11)."""
+    end_a = min(2, result_a["duration_seconds"] - 1)
+    end_b = min(2, result_b["duration_seconds"] - 1)
+    return {
+        "headline": "A sample comparison of these videos",
+        "summary": "A local sample comparison.",
+        "differences": [
+            {
+                "a": {"start": 0, "end": end_a},
+                "b": {"start": 0, "end": end_b},
+                "what_differs": "The two videos open differently.",
+                "brain_response": "A starts slightly stronger than B.",
+            }
+        ],
+        "a_does_better": ["A has the clearer opening."],
+        "b_does_better": ["B settles later."],
+        "suggestions": ["Compare the opening seconds."],
+    }
+
+
 def _report_starter(s3, db, cfg):
     """Rows the web app's report request through the real Lambda code with a fake client."""
     from neurolens import storage
@@ -169,7 +190,30 @@ def _report_starter(s3, db, cfg):
 
     bucket = cfg["aws"]["s3_bucket"]
 
-    def start(job_id):
+    def start(event):
+        if "pair" in event:
+            job_a, job_b = storage.comparison_pair(*event["pair"])
+
+            def run_pair():
+                try:
+                    result_a = storage.get_result(s3, bucket, job_a)
+                    result_b = storage.get_result(s3, bucket, job_b)
+                    answer = _canned_comparison(result_a, result_b)
+                    report.write_comparison(
+                        job_a, job_b, db, s3, bucket, FakeReportClient(answer), cfg
+                    )
+                    print(f"Comparison {job_a}/{job_b}: written")
+                except Exception as err:
+                    print(
+                        f"Comparison {job_a}/{job_b} failed: {type(err).__name__}: {err}",
+                        file=sys.stderr,
+                    )
+
+            threading.Thread(target=run_pair, name="local-comparison", daemon=True).start()
+            return
+
+        job_id = event["job_id"]
+
         def run():
             try:
                 result = storage.get_result(s3, bucket, job_id)

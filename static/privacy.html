@@ -87,7 +87,9 @@
   <p>When you ask for a report, the video's frames (one per second), its spoken words and its
   brain numbers are sent to Claude on Amazon Bedrock, processed in AWS's US regions. AWS states that Bedrock
   does not store them or use them for training. The frames and the report are deleted with the
-  job, and expire with the result after 30 days.</p>
+  job, and expire with the result after 30 days. When you ask for a comparison, the same things
+  for both videos are sent the same way; the comparison is deleted when either video is deleted,
+  and expires after 30 days.</p>
 
   <h2>Who can see it</h2>
   <p>Only you, and the NeuroLens team, can see your videos and results. We do not sell or share
