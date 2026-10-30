@@ -103,9 +103,31 @@
     .step, .curve-callout { transition: none; }
     html.has-reveal .step:not(.is-visible) { opacity: 1; transform: none; }
   }
+
+  /* Page-to-page change (landing <-> app): the header stays put, the old page dims away
+     and a scan line sweeps down revealing the new one. */
+  @view-transition { navigation: auto; }
+  .bar { view-transition-name: bar; }
+  ::view-transition-old(root) { animation: vt-out .6s cubic-bezier(.65, 0, .35, 1) both; }
+  ::view-transition-new(root) { animation: vt-reveal .6s cubic-bezier(.65, 0, .35, 1) both; }
+  .vt-scan { position: fixed; left: 0; right: 0; top: 0; height: 2px; z-index: 1000; pointer-events: none; opacity: 0; background: linear-gradient(90deg, transparent, #FF8A2A 20%, #FFC24A 50%, #FF8A2A 80%, transparent); box-shadow: 0 0 14px 2px rgba(255, 138, 42, .5), 0 -28px 44px rgba(255, 138, 42, .1); }
+  html.vt-in .vt-scan { animation: vt-scan .6s cubic-bezier(.65, 0, .35, 1) both; }
+  @keyframes vt-out { to { opacity: 0; filter: blur(8px); transform: scale(.98); } }
+  @keyframes vt-reveal { from { clip-path: inset(0 0 100% 0); } to { clip-path: inset(0); } }
+  @keyframes vt-scan { from { transform: translateY(-2px); opacity: 1; } 85% { opacity: 1; } to { transform: translateY(calc(100vh - 2px)); opacity: 0; } }
+  @media (prefers-reduced-motion: reduce) { @view-transition { navigation: none; } }
 </style>
+<script>
+  // The scan line runs only while a page-to-page transition reveals this page.
+  addEventListener('pagereveal', e => {
+    if (!e.viewTransition) return;
+    document.documentElement.classList.add('vt-in');
+    e.viewTransition.finished.finally(() => document.documentElement.classList.remove('vt-in'));
+  });
+</script>
 </head>
 <body>
+<div class="vt-scan" aria-hidden="true"></div>
 <header class="bar">
   <a class="brand" href="/">NeuroLens</a>
   <a class="btn-line explore" href="/app">Explore samples</a>
