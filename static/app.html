@@ -4102,6 +4102,12 @@ function showCompareRow() {
     ? (samplesData && samplesData.samples || []).filter(s => s.id !== sampleId && s.result)
     : (signedIn ? (jobsCache || []).filter(j =>
         j.result_available && j.status === 'done' && j.job_id !== jobId) : []);
+  // A sample with a written comparison comes first, so opening Compare shows that verdict.
+  if (sampleId) {
+    const written = new Set((samplesData.comparisons || []).flatMap(entry =>
+      entry.a === sampleId ? [entry.b] : (entry.b === sampleId ? [entry.a] : [])));
+    candidates.sort((x, y) => written.has(y.id) - written.has(x.id));
+  }
   const valueOf = item => sampleId ? item.id : item.job_id;
   comparisonCandidates = candidates.map(item => ({
     value: valueOf(item),
