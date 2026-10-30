@@ -278,15 +278,25 @@ Modest changes; the redesign comes later.
     write the comparison." with "Try again" while tries are left. Either result without
     `frames`: no report and no write offer. The POST uses `postJSON`.
   - Samples: the stored comparison for the pair; without one, no report and no write offer.
-  - Ready: a key line "A: <name> · B: <name>" (from the GET's `a`/`b`, or the sample entry), the
-    headline and summary, then one row per difference: coloured dots with each video's times
-    ("0:00–0:06", plus "only" when just one side has it), what differs and the brain response.
-    Clicking a row moves the time cursor to that span's start. Then "Where <name> does better"
-    (twice) and "Suggestions", each hidden when empty, and the M3g note "Written by Claude from
-    predicted brain responses." When there is no report and none can be written, the whole
-    verdict aside is hidden and the chart takes the full width.
-  - Swapping the main video keeps the same pair; the rows are redrawn so the times and colours
-    follow the video now playing.
+  - Layout, one column at every width: the head row (Compare with, time, Play both, Swap, Close),
+    then the two videos side by side, then the verdict card (kicker, key, headline, summary,
+    placeholder, Write button), then the chart card (title row and chart), then the differences,
+    then one `<details>` "More: what each does better, suggestions", collapsed by default,
+    holding "Where <name> does better" (twice), "Suggestions", each hidden when empty, and the
+    M3g note "Written by Claude from predicted brain responses." When there is no report and none
+    can be written, the verdict card is hidden and the chart comes first. On a phone the two
+    videos stack; on a desktop each video is capped at about 190 px tall, 16:9 and centred.
+  - A is always the left video and orange; B is always the right video and blue. The key line
+    "A = <name> · B = <name>" uses the stored names (from the GET's `a`/`b`, or the sample entry).
+    When the open video is stored B, its section moves to the right in blue and the other
+    (stored A) moves left in orange, using CSS order while each video stays in its own host.
+    The name colours, progress bars, difference dots and chart lines follow stored A/B. Ready:
+    the headline and summary, then one row per difference, with time chips first (a coloured dot
+    and "0:00–0:06", plus "only" when just one side has it), then what differs, then the brain
+    response in muted text clamped to two lines. Clicking a row moves both videos to that span's
+    start.
+  - Swapping the main video keeps the same pair; the videos, rows and chart are redrawn so the
+    times, colours and A/B sides still follow the stored pair.
 - All model text is inserted with `textContent`, never as HTML. Compare titles show the full name
   and wrap, each in its line's colour with its average overall.
 

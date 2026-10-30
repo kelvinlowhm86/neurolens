@@ -339,29 +339,36 @@
   .compare-time { color: var(--muted); font-size: 12px; }
   .compare-head .spacer { flex: 1; }
   .compare-videos { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; flex: none; }
-  .compare-video { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 10px 12px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+  .compare-videos.a-right > section:first-child { order: 2; }
+  .compare-video { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 8px 8px 10px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
   .compare-video-head { display: flex; align-items: baseline; gap: 8px; min-width: 0; font-size: 12px; }
   .compare-video-head span:first-child { font-weight: 600; overflow-wrap: anywhere; }
   .compare-video-head .mono { margin-left: auto; color: var(--muted); font-size: 10.5px; flex: none; }
-  .compare-video-host { position: relative; aspect-ratio: 16 / 9; background: #000; border: 1px solid var(--line); border-radius: 2px; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+  .compare-video-host { position: relative; width: 100%; max-width: 338px; max-height: 190px; margin: 0 auto; aspect-ratio: 16 / 9; background: #000; border: 1px solid var(--line); border-radius: 2px; overflow: hidden; display: flex; align-items: center; justify-content: center; }
   .compare-video-host video { width: 100%; height: 100%; object-fit: contain; display: block; background: #000; }
   .compare-video-note { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 16px; text-align: center; color: var(--muted); font-size: 12px; background: var(--well); }
   .compare-bars { height: 3px; background: rgba(255,255,255,.1); border-radius: 2px; overflow: hidden; }
   .compare-bars span { display: block; height: 100%; width: 0; background: var(--accent); }
   .compare-bars.blue span { background: var(--blue); }
-  .compare-body { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 16px; align-items: start; }
-  .compare-body.verdict-hidden { grid-template-columns: minmax(0, 1fr); }
+  .compare-body { display: flex; flex-direction: column; gap: 16px; flex: none; }
   .compare-chart-panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 16px; display: flex; flex-direction: column; gap: 8px; }
   .compare-chart-panel .chart { min-height: 140px; flex: none; height: 160px; }
-  .compare-diffs { display: flex; flex-direction: column; gap: 6px; }
-  .compare-diff { text-align: left; border: 1px solid transparent; background: transparent; border-radius: 2px; padding: 7px 10px; color: var(--ink); display: flex; flex-direction: column; gap: 2px; }
+  .compare-diff-panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 8px 10px; }
+  .compare-diffs { display: flex; flex-direction: column; gap: 4px; }
+  .compare-diff { text-align: left; border: 1px solid transparent; background: transparent; border-radius: 2px; padding: 4px 8px; color: var(--ink); display: flex; flex-direction: column; gap: 1px; }
   .compare-diff:hover { background: rgba(255,255,255,.03); }
   .compare-diff.active { border-color: var(--line); background: rgba(255,255,255,.03); }
-  .compare-diff .diff-chips { display: flex; gap: 14px; flex-wrap: wrap; font-size: 11px; color: var(--muted); }
-  .compare-diff .diff-chip { display: flex; align-items: center; gap: 6px; }
+  .compare-diff .diff-chips { display: flex; gap: 12px; flex-wrap: wrap; font-size: 10.5px; color: var(--muted); }
+  .compare-diff .diff-chip { display: flex; align-items: center; gap: 5px; }
   .compare-diff .diff-chip i { width: 6px; height: 6px; border-radius: 50%; display: block; }
-  .compare-diff .diff-what { font-size: 12.5px; line-height: 1.4; color: var(--ink); margin-top: 2px; }
-  .compare-diff .diff-brain { font-size: 12px; line-height: 1.4; color: var(--muted); }
+  .compare-diff .diff-what { font-size: 12px; line-height: 1.35; color: var(--ink); }
+  .compare-diff .diff-brain { font-size: 11.5px; line-height: 1.35; color: var(--muted); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+  .compare-more { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 14px; }
+  .compare-more summary { cursor: pointer; font-size: 12.5px; color: var(--ink-2); }
+  .compare-more summary:hover { color: var(--ink); }
+  .compare-more[open] summary { margin-bottom: 8px; }
+  .compare-more-body { display: flex; flex-direction: column; gap: 12px; }
+  .compare-more .ai-note { margin-top: 0; padding-top: 10px; }
   .compare-verdict { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; display: flex; flex-direction: column; gap: 8px; }
   .kicker { font-size: 11px; color: var(--muted); letter-spacing: .02em; }
   .compare-verdict h3 { font: 600 15px/1.35 var(--display); }
@@ -407,9 +414,6 @@
   @media (max-width: 1200px) {
     .stage-list { width: 300px; }
   }
-  @media (max-width: 1100px) {
-    .compare-body { grid-template-columns: minmax(0, 1fr); }
-  }
   @media (max-width: 860px), (max-height: 620px) {
     .D { display: block; height: auto; overflow: visible; }
     body:has(.D) { overflow: auto; }
@@ -428,6 +432,7 @@
     .parts .parts-row { grid-auto-flow: row; grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .parts .chart { height: 100px; flex: none; }
     .compare-videos { grid-template-columns: 1fr; }
+    .compare-video-host { max-width: none; max-height: none; }
     .progress-body { flex-direction: column; }
     .stage-list { width: auto; }
     .progress-art { min-height: 220px; }
@@ -684,7 +689,7 @@
           <button class="btn-ghost" id="compareSwap" type="button">⇄ Swap</button>
           <button class="btn-ghost" id="compareClose" type="button">Close</button>
         </div>
-        <div class="compare-videos">
+        <div class="compare-videos" id="compareVideos">
           <section class="compare-video">
             <div class="compare-video-head"><span id="compareNameA"></span><span class="mono" id="compareClockA">0:00</span></div>
             <div class="compare-video-host" id="compareVideoHostA"></div>
@@ -697,15 +702,6 @@
           </section>
         </div>
         <div class="compare-body" id="compareBody">
-          <section class="compare-chart-panel">
-            <div class="panel-head">
-              <span>Overall response</span>
-              <span class="spacer"></span>
-              <span class="mono" id="compareChartTime"></span>
-            </div>
-            <div class="chart" id="compareChartBox"></div>
-            <div class="compare-diffs" id="compareDiffs"></div>
-          </section>
           <aside class="compare-verdict" id="compareVerdict">
             <span class="kicker">AI verdict</span>
             <span class="compare-key" id="compareKey"></span>
@@ -723,11 +719,27 @@
               <button class="btn-white" id="compareWrite" type="button">Write comparison</button>
               <span class="compare-free">Free</span>
             </div>
-            <div class="report-list" id="compareStrengthsWrap"><h3></h3><ul id="compareStrengths"></ul></div>
-            <div class="report-list" id="compareImprovementsWrap"><h3></h3><ul id="compareImprovements"></ul></div>
-            <div class="report-list" id="compareSuggestionsWrap"><h3>Suggestions</h3><ul id="compareSuggestions"></ul></div>
-            <span class="ai-note">Written by Claude from predicted brain responses.</span>
           </aside>
+          <section class="compare-chart-panel">
+            <div class="panel-head">
+              <span>Overall response</span>
+              <span class="spacer"></span>
+              <span class="mono" id="compareChartTime"></span>
+            </div>
+            <div class="chart" id="compareChartBox"></div>
+          </section>
+          <section class="compare-diff-panel">
+            <div class="compare-diffs" id="compareDiffs"></div>
+          </section>
+          <details class="compare-more">
+            <summary>More: what each does better, suggestions</summary>
+            <div class="compare-more-body">
+              <div class="report-list" id="compareStrengthsWrap"><h3></h3><ul id="compareStrengths"></ul></div>
+              <div class="report-list" id="compareImprovementsWrap"><h3></h3><ul id="compareImprovements"></ul></div>
+              <div class="report-list" id="compareSuggestionsWrap"><h3>Suggestions</h3><ul id="compareSuggestions"></ul></div>
+              <span class="ai-note">Written by Claude from predicted brain responses.</span>
+            </div>
+          </details>
         </div>
       </div>
     </div>
@@ -3906,17 +3918,19 @@ function buildCompareChart() {
   if (!currentResult || !comparison || !comparison.result || !comparison.result.signals) return;
   clearScope('compare');
   const span = compareSpan();
+  const currentColour = comparisonCurrentSide === 'b' ? 'var(--blue)' : 'var(--accent)';
+  const otherColour = comparisonCurrentSide === 'b' ? 'var(--accent)' : 'var(--blue)';
   const lines = [
-    { values: currentResult.signals.overall || [], colour: 'var(--accent)', width: 1.8 },
-    { values: comparison.result.signals.overall || [], colour: 'var(--blue)', width: 1.4 },
+    { values: currentResult.signals.overall || [], colour: currentColour, width: 1.8 },
+    { values: comparison.result.signals.overall || [], colour: otherColour, width: 1.4 },
   ];
   let range = 0;
   lines.forEach(line => { range = Math.max(range, niceRange(line.values)); });
   const bands = [];
   const diff = comparisonReport && comparisonReport.differences ? comparisonReport.differences[compareActiveDiff] : null;
   if (diff) {
-    if (diff.a) bands.push({ start: diff.a.start, end: diff.a.end, colour: comparisonCurrentSide === 'a' ? 'var(--accent)' : 'var(--blue)' });
-    if (diff.b) bands.push({ start: diff.b.start, end: diff.b.end, colour: comparisonCurrentSide === 'b' ? 'var(--accent)' : 'var(--blue)' });
+    if (diff.a) bands.push({ start: diff.a.start, end: diff.a.end, colour: 'var(--accent)' });
+    if (diff.b) bands.push({ start: diff.b.start, end: diff.b.end, colour: 'var(--blue)' });
   }
   drawChart($('compareChartBox'), { lines, range, height: 160, axisLabels: true, dark: true, span, scope: 'compare', bands });
 }
@@ -3925,8 +3939,8 @@ function renderCompareDiffs() {
   const host = $('compareDiffs');
   host.replaceChildren();
   if (!comparisonReport || !Array.isArray(comparisonReport.differences)) return;
-  const aColour = comparisonCurrentSide === 'a' ? 'var(--accent)' : 'var(--blue)';
-  const bColour = comparisonCurrentSide === 'b' ? 'var(--accent)' : 'var(--blue)';
+  const aColour = 'var(--accent)';
+  const bColour = 'var(--blue)';
   const spanChip = (span, colour, only) => {
     const chip = document.createElement('span');
     chip.className = 'diff-chip';
@@ -3991,7 +4005,6 @@ function renderCompareVerdict() {
   const showVerdict = !!comparisonReport || comparisonState === 'loading' || comparisonState === 'writing'
     || comparisonState === 'failed' || canWrite;
   $('compareVerdict').hidden = !showVerdict;
-  $('compareBody').classList.toggle('verdict-hidden', !showVerdict);
   $('compareSkeleton').hidden = comparisonState !== 'writing';
 }
 
@@ -4061,12 +4074,16 @@ async function loadCompareVideoB() {
 function buildCompareView() {
   if (!currentResult || !comparison) { clearCompareChart(); return; }
   const { aName, bName } = compareNames();
+  const side = comparisonCurrentSide === 'b' ? 'b' : 'a';
   $('compareNameA').textContent = `${aName} · avg ${averageOverall(currentResult)}`;
   $('compareNameA').title = aName;
-  $('compareNameA').style.color = 'var(--accent)';
+  $('compareNameA').style.color = side === 'b' ? 'var(--blue)' : 'var(--accent)';
   $('compareNameB').textContent = `${bName} · avg ${averageOverall(comparison.result)}`;
   $('compareNameB').title = bName;
-  $('compareNameB').style.color = 'var(--blue)';
+  $('compareNameB').style.color = side === 'b' ? 'var(--accent)' : 'var(--blue)';
+  $('compareVideos').classList.toggle('a-right', side === 'b');
+  $('compareBarA').parentElement.classList.toggle('blue', side === 'b');
+  $('compareBarB').parentElement.classList.toggle('blue', side === 'a');
   const kept = comparison.kind === 'sample' ? comparison.sampleId : comparison.jobId;
   if ([...$('compareSelect').options].some(option => option.value === kept)) $('compareSelect').value = kept;
   $('compareSwap').hidden = !(currentContext && currentContext.jobId && comparison.kind === 'job');
