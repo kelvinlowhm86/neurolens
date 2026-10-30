@@ -181,7 +181,8 @@ Limits: the headline at most {MAX_HEADLINE} characters, the summary at most {MAX
 characters, 1 to {MAX_DIFFERENCES} differences, at most {MAX_COMPARISON_LISTS} items in each
 list. Times are whole seconds from 0 to that video's last_second, both included, start <= end.
 ```
-`MAX_VERDICT = 400`, `MAX_DIFFERENCES = 3` and `MAX_COMPARISON_LISTS = 2` join the existing
+The text never quotes a table value (levels are words against typical viewing or the other
+video). `MAX_VERDICT = 400`, `MAX_DIFFERENCES = 3` and `MAX_COMPARISON_LISTS = 2` join the existing
 length constants; like them they are guidance only. They keep the comparison short (about 300
 words): the verdict sits beside the chart, the differences under it.
 Size: at most 240 images (two 120 s videos), within the 600-image limit of Sonnet 4.6's 1M

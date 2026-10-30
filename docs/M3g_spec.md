@@ -165,8 +165,9 @@ Schema:
                   "brain_response": str, "suggestion": str | null } ],
   "strengths": [str], "improvements": [str] }
 ```
-The prompt asks for a headline of at most 120 characters, a summary of at most 900, 1-8 moments
-and at most 4 strengths and 4 improvements. That is guidance only. After parsing, the code checks
+The prompt asks for a headline of at most 120 characters, a summary of at most 350 (3 to 4 short sentences), 1-8 moments
+and at most 2 strengths and 2 improvements. The text never quotes a table value: levels are
+words against typical viewing, times are whole seconds. That is guidance only. After parsing, the code checks
 only what the page relies on: every field present with its type, and
 `0 <= start <= end < duration_seconds` (each moment's time moves the video). It never rejects an
 answer for its length or counts: a long report is still a report, and `max_tokens` already stops a
