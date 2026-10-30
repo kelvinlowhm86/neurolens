@@ -273,7 +273,7 @@
   .readout { margin-left: auto; text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
   .readout-value { font: 500 28px/1 var(--mono); color: var(--accent2); font-variant-numeric: tabular-nums; }
   .readout-value.neg { color: var(--cool); }
-  .readout-sub { font-size: 12px; color: var(--muted); }
+  .readout-sub { font-size: 12px; color: var(--muted); white-space: nowrap; }
   .compare-pick { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--muted); }
   .compare-pick select { border: 1px solid var(--line); border-radius: var(--radius); padding: 5px 8px; background: var(--well); color: var(--ink); font-size: 12px; max-width: 220px; }
   .compare-msg { font-size: 12px; color: var(--ink-2); min-height: 0; }
@@ -2823,6 +2823,17 @@ async function requestReport() {
   }
 }
 
+// The Report tab and the Compare tab's verdict show the same state: set both here.
+function showComparisonMessage(text, state, canRetry) {
+  $('reportStateText').textContent = text;
+  $('reportActions').hidden = !canRetry;
+  if (canRetry) $('reportWrite').textContent = 'Try again';
+  comparisonReport = null;
+  comparisonState = state;
+  comparisonStateText = text;
+  refreshComparePanel();
+}
+
 async function requestComparison() {
   const target = comparison;
   const main = currentContext && currentContext.jobId;
@@ -2832,6 +2843,7 @@ async function requestComparison() {
   button.disabled = true;
   button.textContent = 'Starting…';
   $('reportActions').hidden = false;
+  refreshComparePanel();
   try {
     const res = await postJSON(`/api/compare/${main}/${target.jobId}/report`, {});
     const data = await res.json().catch(() => ({}));
@@ -2839,10 +2851,7 @@ async function requestComparison() {
     if (res.status === 401) return window.location.reload();
     if (res.status === 202) {
       comparisonWritingSince = Date.now();
-      $('reportStateText').textContent = 'Writing your comparison…';
-      $('reportActions').hidden = true;
-      clearTimeout(comparisonPollTimer);
-      comparisonPollTimer = setTimeout(() => refreshComparison(target, seq), 5000);
+      applyComparisonState({ report_state: 'writing' });
       return;
     }
     if (data.error === 'report_ready' || data.error === 'report_writing') {
@@ -2850,20 +2859,17 @@ async function requestComparison() {
       return;
     }
     if (data.error === 'no_frames') {
-      $('reportStateText').textContent = 'No report for this pair.';
-      $('reportActions').hidden = true;
+      showComparisonMessage('No report for this pair.', 'none', false);
       return;
     }
     if (data.error === 'no_tries_left') {
-      $('reportStateText').textContent = "Couldn't write the comparison.";
-      $('reportActions').hidden = true;
+      showComparisonMessage("Couldn't write the comparison.", 'failed', false);
       return;
     }
-    $('reportStateText').textContent = data.message || "Couldn't start the comparison.";
-    button.textContent = 'Try again';
+    showComparisonMessage(data.message || "Couldn't start the comparison.", 'failed', true);
   } catch (e) {
-    $('reportStateText').textContent = "Couldn't reach the server. Please try again.";
-    button.textContent = 'Try again';
+    if (seq !== comparisonReportSeq || comparison !== target) return;
+    showComparisonMessage("Couldn't reach the server. Please try again.", 'failed', true);
   } finally {
     button.disabled = false;
   }
@@ -3968,11 +3974,12 @@ function renderCompareVerdict() {
   }
   headline.hidden = !headline.textContent;
   summary.hidden = !summary.textContent;
-  // The link opens the Report tab: to read the report, or to write one when that is offered.
+  // The link opens the full report, or writes one here when that is offered.
   const link = $('compareReportLink');
   const canWrite = !comparisonReport && !$('reportActions').hidden;
   link.hidden = !comparisonReport && !canWrite;
-  link.textContent = comparisonReport ? 'Full report →' : `${$('reportWrite').textContent} →`;
+  link.disabled = !comparisonReport && $('reportWrite').disabled;
+  link.textContent = comparisonReport ? 'Full report →' : $('reportWrite').textContent;
 }
 
 function compareTargetTime() {
@@ -4298,7 +4305,11 @@ $('compareSelect').addEventListener('change', loadComparison);
 $('compareTabBtn').addEventListener('click', openCompareTab);
 $('comparePlay').addEventListener('click', togglePlay);
 $('compareSwap').addEventListener('click', swapComparison);
-$('compareReportLink').addEventListener('click', () => setResultTab('report'));
+// With a report it opens the full report; without one it starts writing it right here.
+$('compareReportLink').addEventListener('click', () => {
+  if (comparisonReport) setResultTab('report');
+  else if (!$('reportWrite').disabled) requestComparison();
+});
 compareVideoB.addEventListener('click', togglePlay);
 $('progressCancel').addEventListener('click', async () => {
   const jobId = progressJobId;
