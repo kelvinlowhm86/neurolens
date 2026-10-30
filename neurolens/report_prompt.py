@@ -31,7 +31,9 @@ hidden parts of the data: no signal names in brackets, no table or column names,
 
 Every value is a signed mean, not an absolute measurement, and 0 is typical film or television
 viewing on the model's own scale. Judge every level against 0. Values within about 0.05 of 0
-are close to typical: never call them high or low. A stretch that is the lowest of this video
+are close to typical: never call them high or low. A group close to typical in a stretch is
+neither above nor below it. Write "all groups", "throughout" or "most of the video" only when
+every group, or every second, in that stretch shows it. A stretch that is the lowest of this video
 but still above 0 is above typical viewing: call it the weakest part and an opportunity, never a
 failure. These are model predictions of an average viewer's brain, not
 measurements of real people.
@@ -110,8 +112,8 @@ Comparing:
 Writing:
 - The headline and summary are the verdict, shown beside the chart: which video draws the
   stronger response overall, the main reason, and where the other one does better, in two or
-  three sentences. Leave the stretch-by-stretch story to the differences. Be accurate rather
-  than kind. If they are close, say so.
+  three sentences. The headline names the video with the stronger response, or says they are
+  close. Leave the stretch-by-stretch story to the differences. Be accurate rather than kind.
 - A stronger response may be called stronger brain engagement, or said to suggest more
   attention. Never claim anything about what real viewers do: views, watch time, retention,
   drop-off, clicks or sharing, and never give a score.
