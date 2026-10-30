@@ -113,7 +113,9 @@ Writing:
 - The headline and summary are the verdict, shown beside the chart: which video draws the
   stronger response overall, the main reason, and where the other one does better, in two or
   three sentences. The headline names the video with the stronger response, or says they are
-  close. Leave the stretch-by-stretch story to the differences. Be accurate rather than kind.
+  close. Judge which is stronger by overall: higher in more of the seconds and at the peaks,
+  never by one group alone. Leave the stretch-by-stretch story to the differences. Be accurate
+  rather than kind.
 - A stronger response may be called stronger brain engagement, or said to suggest more
   attention. Never claim anything about what real viewers do: views, watch time, retention,
   drop-off, clicks or sharing, and never give a score.
