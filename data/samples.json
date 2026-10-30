@@ -3269,59 +3269,66 @@
         "audio_dependence": 0.46
       },
       "report": {
-        "headline": "Strong visual and body response drives well-above-typical engagement through a playful celebrity skincare parody",
-        "summary": "This CeraVe ad performs clearly above 0 for most of its 31 seconds, with the see group \u2014 particularly bodies and faces \u2014 doing the heavy lifting throughout. The hear group opens strongly then fades as the visual storytelling takes over, while the understand group stays modest but steady. The ad peaks during the spa and massage sequence around seconds 8\u201314, where bodies and visual responses reach their highest levels. The opening lands well above 0 immediately, helped by strong sound and a recognisable face to camera. Engagement trends downward after second 12 as the scenarios shift to a boardroom setting with smaller faces and less dynamic movement. The final product card at seconds 27\u201330 shows the expected end drop as faces and bodies leave the frame entirely. The strongest opportunity is the boardroom section around seconds 19\u201322, which is the weakest stretch of the main video but still sits above 0, and could benefit from tighter cuts or closer faces.",
+        "headline": "Strong seeing-led engagement peaks in the middle; the product end-card lands below typical",
+        "summary": "This CeraVe ad opens well above typical viewing and climbs quickly, driven almost entirely by seeing \u2014 faces and bodies carry the response throughout. Hearing contributes a clear boost in the opening seconds as Michael Cera introduces himself, but fades to near-zero by mid-video. Understanding stays modest all the way through. The peak runs from roughly seconds 8 to 14, where the spa parody and rock-climbing visuals combine with high face and body responses to produce the strongest engagement in the video. The second half gradually softens as the boardroom scene reduces visual intensity. The final product card with on-screen text and no people is the weakest stretch and dips below typical \u2014 an expected end-card drop but one worth noting because it arrives before the very last second.",
         "moments": [
           {
             "start": 0,
-            "end": 3,
-            "what_happens": "Close-up of Michael Cera speaking directly to camera, introducing himself and holding up the CeraVe tub",
-            "brain_response": "Overall starts at +0.13 and holds there \u2014 well above 0. Sound and speech are the lead drivers early on, with the see group building steadily as the face fills the frame.",
-            "suggestion": "The opening is strong. The direct-to-camera face and immediate speech work together well; no change needed here."
+            "end": 4,
+            "what_happens": "Michael Cera speaks directly to camera, holds up the CeraVe jar, introduces himself and the product.",
+            "brain_response": "Opens above typical and rises steadily. Hearing is the strongest signal early, boosted by the opening speech. Seeing builds as the face and body become more prominent.",
+            "suggestion": "The opening is strong. The direct-to-camera address with the jar held up works well \u2014 keep the face large and the speech crisp in any re-edit."
           },
           {
             "start": 7,
             "end": 14,
-            "what_happens": "Cut to cinematic spa shots: hands massaging a back in a white tent landscape, then two faces reacting at a massage table, then a climber on a rock face",
-            "brain_response": "This is the video's peak. Overall rises to +0.25 at second 7 and holds near that level through second 14. The bodies signal reaches its highest values (+0.83\u20130.86) around seconds 8\u201310, and the see group peaks at +0.50 around seconds 12\u201314. Sound has faded; pictures fully carry the engagement.",
-            "suggestion": "The body and scene imagery here is doing exceptional work. If you have any additional cinematic footage of this quality, it would sustain this peak even longer."
+            "what_happens": "Cut to close-up hands on skin, then a wide spa tent shot with Cera giving a massage, then two faces peering up from a massage table, then a rock climber scaling a cliff face.",
+            "brain_response": "The video's peak engagement. Seeing reaches its highest values (bodies above 0.8, faces above 0.5), well above typical. Hearing has faded but the pictures alone sustain the response. Overall is at its strongest here.",
+            "suggestion": "The absurdist spa-to-rock-climbing sequence is the most engaging passage. If you extend or tighten this ad, protect this stretch \u2014 the physical, body-forward imagery is doing the most work."
           },
           {
             "start": 16,
             "end": 18,
-            "what_happens": "Michael Cera flanked by two other men in open shirts, all holding CeraVe tubs, styled like a fragrance ad",
-            "brain_response": "Overall holds around +0.17\u20130.20, still above 0 but noticeably lower than the peak. The see group is declining from its high. Three faces in frame keep engagement from dropping faster.",
-            "suggestion": "The three-face composition helps. A slightly tighter crop on the trio could lift the faces signal further and slow the decline."
+            "what_happens": "Three men pose together holding CeraVe jars in a fashion-shoot style.",
+            "brain_response": "Seeing remains clearly above typical (faces around 0.45, bodies around 0.4), but is declining from the peak. Overall holds above typical. Understanding edges up slightly as speech continues.",
+            "suggestion": "The trio shot sustains good engagement. The product is visible and the faces are prominent \u2014 no change needed, though cutting it shorter would lose little."
           },
           {
             "start": 19,
-            "end": 22,
-            "what_happens": "Wide boardroom scene: many people seated around a table watching a screen, on-screen text reads CERAVE OFFICES / DERMATOLOGIST REVIEW",
-            "brain_response": "This is the weakest stretch of the main video. Overall falls to +0.12\u20130.14. The see group drops as faces become small in the wide shot. Sound reaches nearly 0. The understand group is the only signal holding steadily, around +0.08\u20130.11.",
-            "suggestion": "This is the clearest opportunity in the ad. Cutting to closer shots of faces reacting at the table \u2014 or intercutting with what is on the boardroom screen \u2014 would lift the visual and faces response during this explanation beat."
+            "end": 23,
+            "what_happens": "Boardroom scene: a crowd watches a presentation screen showing the earlier footage, with 'CeraVe Offices / Dermatologist Review' text on screen.",
+            "brain_response": "A gradual softening. Seeing (faces, bodies) continues to decline. Hearing drops to near zero or below. Understanding is the relatively strongest signal here, though still modest. Overall is the weakest passage before the end card.",
+            "suggestion": "The wide boardroom shot reduces face size and body prominence, which softens engagement. Cutting to a closer reaction shot of the dermatologists watching the screen could help maintain seeing through this reveal."
           },
           {
             "start": 27,
             "end": 29,
-            "what_happens": "Static product shot: CeraVe tub beside on-screen text reading DEVELOPED WITH DERMATOLOGISTS. NOT MICHAEL CERA.",
-            "brain_response": "Overall is at -0.04 to -0.06, dipping below 0 as the product card holds static with no people. This is the expected end-card drop.",
+            "what_happens": "Product card: CeraVe jar on a table beside on-screen text reading 'Developed with dermatologists. Not Michael Cera.'",
+            "brain_response": "Seeing drops sharply below typical; hearing and understanding near zero. Overall falls to just below typical \u2014 the lowest stretch of the video outside the final second.",
+            "suggestion": "The punchline lands in text rather than on a face, which costs engagement. Keeping Michael Cera briefly in frame alongside the text \u2014 even as a small inset \u2014 before cutting fully to the product could soften the drop without losing the joke."
+          },
+          {
+            "start": 30,
+            "end": 30,
+            "what_happens": "Final frame of the product card.",
+            "brain_response": "Overall drops sharply below typical. All seeing signals fall steeply. This is the lowest point in the video.",
             "suggestion": null
           }
         ],
         "strengths": [
-          "The see group \u2014 especially bodies and faces \u2014 drives engagement well above 0 for the majority of the video, making the visual storytelling the clear strength.",
-          "The cinematic spa and massage sequence (seconds 7\u201314) generates the highest body and visual brain response in the ad, showing that high-production scenic imagery with human movement is very effective here.",
-          "The opening is strong from the first second, with sound and speech above 0 immediately and the faces response building quickly \u2014 there is no slow or below-0 start.",
-          "The three-person styled shot at seconds 16\u201318 uses multiple faces to slow the natural decline after the peak, keeping overall above 0 through that transition."
+          "Seeing dominates from the first second and stays well above typical through the middle of the video, driven by strong face and body signals.",
+          "The opening \u2014 Michael Cera addressing camera and holding up the jar \u2014 builds quickly and combines hearing and seeing effectively.",
+          "The spa parody and rock-climbing sequence (seconds 7\u201314) is the peak of the video, with the highest body and face responses, showing the absurdist visual comedy is working hard.",
+          "The three-person fashion pose with product visible (seconds 16\u201318) sustains above-typical seeing even as the video winds down."
         ],
         "improvements": [
-          "The boardroom wide shots at seconds 19\u201322 are the weakest stretch of the main video; cutting to closer faces or reaction shots during this section would raise the visual and faces response.",
-          "The sound and speech signals fade quickly after the opening, contributing little from second 9 onward; stronger audio design or more vocal delivery in the middle section could add another layer of engagement.",
-          "The transition from the cinematic spa peak into the boardroom scene is abrupt and the overall level drops noticeably; a brief bridging shot with a closer face could smooth the fall.",
-          "The product card ending holds for about three seconds with no people, pushing overall below 0; even a brief final face-to-camera moment before the card would delay that drop."
+          "The boardroom scene (seconds 19\u201323) is the weakest passage before the end card; wider shots reduce face size and body presence, softening engagement at a key narrative moment.",
+          "Hearing fades to near zero or below from around second 19 onward \u2014 the back half of the ad is carried almost entirely by pictures, and a stronger audio element could support the final reveal.",
+          "Understanding remains modest throughout; the spoken punchline and on-screen text could be made more prominent or delivered face-to-camera to lift the social and speech response during the payoff.",
+          "The product card (seconds 27\u201329) drops below typical as soon as people leave the frame; even a brief return to a face alongside the product text would ease the dip at the moment the brand message lands."
         ],
         "model": "us.anthropic.claude-sonnet-4-6",
-        "created_at": "2026-10-30T06:49:22Z"
+        "created_at": "2026-10-30T15:38:47Z"
       }
     },
     {
@@ -5089,66 +5096,66 @@
         "audio_dependence": 0.41
       },
       "report": {
-        "headline": "Strong above-typical engagement driven by faces, bodies and sound \u2014 with a genuinely funny, well-crafted opener",
-        "summary": "This CeraVe ad predicts above-typical brain engagement for the majority of its 77 seconds. The see group (faces and bodies in particular) carries the video throughout, while the hear group adds a strong second layer from seconds 8 to 21. The understand group (speech and social) contributes meaningfully from seconds 10 to 25 and again from 54 to 70. Overall stays above 0 from second 8 through to the logo card at second 73, which is a solid result. The opening 7 seconds begin below 0 \u2014 dark curtains with no face visible \u2014 but the response climbs steadily and reaches typical levels by second 7 as a face first appears, so this is a brief and functional build rather than a problem. The bodies signal is the standout single channel, peaking above +0.60 during the spa massage scene at seconds 29\u201330. The weakest stretch of the main content is the transition around seconds 62\u201364, where overall briefly touches 0, though it never falls meaningfully below it. The logo card drop from second 73 is expected.",
+        "headline": "Strong, picture-led engagement throughout \u2014 seeing and hearing both carry this ad well above typical",
+        "summary": "This CeraVe ad performs solidly above 0 for most of its 77 seconds, with seeing leading from around second 7 onward and hearing adding a strong second layer during the dialogue-heavy middle section. Understanding contributes positively too, particularly when speech is most active between seconds 10 and 22. The opening four seconds start below 0 \u2014 curtains with no face visible \u2014 but the response climbs quickly once a figure and then Michael Cera's face appear, reaching typical levels by second 5 and above typical by second 8. The strongest stretch runs from roughly seconds 10 to 30, where all three groups are above 0 together. The section from seconds 32 to 50 is the weakest part of the video: seeing holds up but hearing and understanding dip, and overall softens \u2014 an opportunity to add a stronger audio or speech element. The final logo card from second 74 onward produces the expected drop and is not a concern.",
         "moments": [
           {
             "start": 0,
-            "end": 6,
-            "what_happens": "Dark curtains open slowly; no face is visible until second 2 when a silhouette appears, and the product jar appears at second 5.",
-            "brain_response": "Overall is below 0 for the full opening, bottoming at -0.22 at second 0. All groups are negative. The response rises steadily, crossing 0 for see by second 5 as the jar appears.",
-            "suggestion": "The below-0 opening is the one structural risk. Even a brief flash of the face or a title card before the curtain reveal would help the visual response build faster."
+            "end": 4,
+            "what_happens": "Dark curtains part; a silhouetted figure is barely visible. No face is shown clearly.",
+            "brain_response": "All groups start below 0. Seeing, hearing and understanding are all in negative territory, making this the lowest point of the video.",
+            "suggestion": "The opening could be pulled forward \u2014 showing Michael Cera's face or the product jar even a second or two earlier would help the response reach 0 faster."
           },
           {
-            "start": 8,
-            "end": 21,
-            "what_happens": "Michael Cera steps into frame, speaks directly to camera, holds up the CeraVe jar, and delivers the 'I am CeraVe' claim. The word GENEROSITY appears on screen at second 19.",
-            "brain_response": "This is the highest-engagement stretch of the video. Overall peaks at +0.29 around seconds 18\u201319. Sound rises sharply to +0.50 at second 10 as speech begins, and speech itself reaches +0.39 at second 21. The see group holds steadily above +0.20. Overall is clearly above muted_overall throughout, confirming sound and speech drive the lift here.",
+            "start": 10,
+            "end": 22,
+            "what_happens": "Michael Cera steps into full light, faces camera, and holds up the CeraVe jar while speaking directly to the viewer. Hearing peaks around second 10 at its highest level in the video.",
+            "brain_response": "This is the strongest stretch overall. Seeing is well above 0, hearing reaches its peak, and understanding climbs above 0 for the first time. All three groups are positive together.",
             "suggestion": null
           },
           {
-            "start": 27,
-            "end": 31,
-            "what_happens": "Cut to a luxury spa tent on white sands; a masseur applies cream to a man lying on a table, with the CeraVe jar visible on a side stand.",
-            "brain_response": "Bodies peaks at its highest point in the video here, reaching +0.63 at second 30. Overall holds around +0.17\u2013+0.21. Sound has dropped close to 0 and speech is quiet, so the pictures carry this stretch entirely \u2014 overall and muted_overall are nearly identical.",
-            "suggestion": "This visually sumptuous scene drives the bodies response to its peak but overall sits only moderately above 0 because sound and speech are low. A line of dialogue or music swell here could lift the full engagement level."
+            "start": 28,
+            "end": 36,
+            "what_happens": "Cut to a spa scene: a man receiving a back massage in a white tent, with the CeraVe jar on a nearby stand. Michael Cera then appears as the masseur. Hearing and speech drop toward or below 0.",
+            "brain_response": "Seeing stays clearly above 0, driven by faces and bodies, but hearing falls to near 0 and understanding weakens. Overall softens compared to the previous peak. Pictures carry the moment; sound does not add much.",
+            "suggestion": "Adding a voiceover or keeping dialogue audible during this sequence would let hearing and understanding support the strong visual response rather than leaving it to carry the scene alone."
           },
           {
             "start": 44,
             "end": 51,
-            "what_happens": "Multiple versions of Michael Cera face him in a mirrored room; then the word SKIN appears over curtain imagery; then a CGI narwhal rises from water with the subtitle 'Your skin looks so moisturized, Michael Cera.'",
-            "brain_response": "Overall softens to its weakest sustained stretch of the main content, ranging from +0.04 to +0.15. Scenes rise to +0.26\u2013+0.27 as the fantastical environments appear, but faces and bodies fall and speech goes negative. Overall and muted_overall converge, meaning sound adds little here.",
-            "suggestion": "This is the weakest passage of the video, but it stays above 0. The narwhal gag is the comedic centrepiece; consider giving it a stronger audio punchline \u2014 a voice, a sound effect, or a music hit \u2014 to bring sound and speech back above 0 at this moment."
+            "what_happens": "A surreal sequence: a group of men in white coats surrounds Cera, followed by a glowing curtain shot with the word SKIN on screen, then a lush fantasy garden and a CGI narwhal.",
+            "brain_response": "Seeing holds above 0, but hearing drops below 0 and understanding goes negative. This is the weakest stretch for hearing and understanding in the video, and overall is at its softest outside the opening.",
+            "suggestion": "This is the clearest opportunity in the ad. The visuals are inventive but the audio drops away. Even a brief line of dialogue or a stronger music cue here would lift hearing and understanding back above 0."
           },
           {
             "start": 56,
-            "end": 58,
-            "what_happens": "A split-screen of three versions of Michael Cera's face appears simultaneously.",
-            "brain_response": "Overall holds around +0.08\u2013+0.10, with faces the dominant signal at +0.16. Bodies drops below 0 as the body-less close-ups fill the frame. Sound holds around +0.18\u2013+0.20 and speech around +0.20\u2013+0.23, so the hear and understand groups are carrying this shot more than the see group.",
+            "end": 60,
+            "what_happens": "A split-screen of three different versions of the face, then Cera in a garden, then two men facing each other.",
+            "brain_response": "Hearing recovers to above 0, understanding edges positive, and overall stabilises. The picture carries more than the sound here \u2014 overall and the silent prediction are fairly close.",
             "suggestion": null
           },
           {
             "start": 67,
             "end": 70,
-            "what_happens": "Michael Cera stands flanked by two tall, open-shirted men holding CeraVe jars, in a slow, posed hero shot.",
-            "brain_response": "Overall is at +0.04\u2013+0.09, above 0 but the lowest of the second half. Bodies is negative (-0.12 to -0.22), faces is only weakly positive, and speech is at +0.08\u2013+0.18. Overall and muted_overall are close, meaning pictures and sound contribute roughly equally at this low level.",
-            "suggestion": "The hero product shot with flanking figures reads as a visual pay-off but the brain data suggests it lands softly. Bringing the camera closer to faces rather than holding a wide group pose could lift the faces and bodies response for this final impression before the logo."
+            "what_happens": "Cera stands flanked by two men in open lab coats, all holding CeraVe jars, staring into camera.",
+            "brain_response": "Seeing is above 0, hearing and understanding are close to 0 but positive. Overall is modest but above 0 \u2014 a stable close before the final curtain shot.",
+            "suggestion": null
           }
         ],
         "strengths": [
-          "The core Michael Cera performance segment (seconds 8\u201325) is the strongest stretch, with sound, speech and faces all above 0 simultaneously \u2014 a rare combination that suggests high attention.",
-          "The bodies response is the single highest-value channel in the video, peaking above +0.60 during the spa scene, showing the production design and physical comedy land well.",
-          "Overall stays above 0 for roughly 65 consecutive seconds once it rises, indicating sustained above-typical engagement across the bulk of the ad.",
-          "The sound-to-muted gap is clearly positive in the first half, confirming the spoken comedy and music work together to add engagement beyond what the pictures alone achieve."
+          "Seeing is above 0 for almost the entire video once Michael Cera's face appears at second 7, and faces and bodies stay strongly positive through to second 70.",
+          "The speech-heavy section from seconds 10 to 22 is the single strongest moment: hearing peaks at its highest level and understanding is clearly positive, giving all three groups a rare joint peak.",
+          "The product jar appears on screen alongside the face throughout most of the ad, keeping the brand visible during the highest-engagement stretches.",
+          "The overall level stays above 0 from second 8 to second 72, a long run of above-typical brain engagement relative to the model's baseline."
         ],
         "improvements": [
-          "The opening 7 seconds are below 0 across all groups; showing a face or title card earlier would help the response build before the joke lands.",
-          "The narwhal / fantastical sequence (seconds 44\u201351) is the weakest passage; adding a stronger audio moment \u2014 voice, music hit or sound effect \u2014 could recover the hear and understand groups at the comedic peak.",
-          "The spa scene (seconds 27\u201333) has a high bodies response but low sound and speech; a line of dialogue or music lift would raise overall engagement to match the visual quality.",
-          "The final group hero shot (seconds 67\u201370) lands softly just before the logo; a tighter frame on faces rather than a wide posed tableau could sustain the faces signal through to the end."
+          "The first four seconds open below 0 across all groups. Moving a recognisable face or the product into the very first shot would close that gap faster.",
+          "Hearing and understanding both drop below or near 0 between seconds 44 and 51 \u2014 the narwhal and fantasy garden sequence \u2014 leaving seeing to carry the video alone. A voiceover or audible dialogue would strengthen this section.",
+          "Understanding stays negative for the first 11 seconds and dips again from seconds 32 to 36 and 46 to 50. Earlier and more sustained speech would keep this group contributing alongside seeing.",
+          "The spa and rock-climbing sequences from seconds 27 to 41 are visually strong but hearing is near 0 for much of that stretch. A music lift or spoken line during those cuts would better match the visual energy."
         ],
         "model": "us.anthropic.claude-sonnet-4-6",
-        "created_at": "2026-10-30T06:49:38Z"
+        "created_at": "2026-10-30T15:38:49Z"
       }
     }
   ],
@@ -5157,8 +5164,8 @@
       "a": "cerave_76s",
       "b": "cerave_30s",
       "report": {
-        "headline": "B opens stronger; A sustains longer with richer visuals \u2014 two cuts of one CeraVe campaign",
-        "summary": "These are two cuts of the same Michael Cera CeraVe campaign. B opens immediately above 0 with a face and speech, reaching stronger see and bodies peaks (0.46\u20130.86) mid-video. A spends its first 6 seconds below 0 behind curtains before rising. A compensates with a longer, richer middle act \u2014 spa, rock climbing, fantasy scenes \u2014 sustaining overall above 0 for roughly 60 seconds. Both end with expected logo-card drops.",
+        "headline": "B opens stronger and peaks higher in seeing; A sustains more over its longer second half",
+        "summary": "These are two cuts of the same CeraVe campaign. B starts immediately with a face and speech, driving seeing and hearing above typical from second 0, and reaches its highest seeing response (faces +0.55, bodies +0.86) during the spa and comedy beats at 8\u201314 s. A spends its first 7 seconds on curtains and a product shot before engagement builds. Where they share material, B's tighter edit keeps seeing higher throughout; A's extended second half adds unique scenes that sustain a moderate response B never reaches.",
         "differences": [
           {
             "a": {
@@ -5167,10 +5174,10 @@
             },
             "b": {
               "start": 0,
-              "end": 3
+              "end": 2
             },
-            "what_differs": "A opens on dark curtains with no face, starting with faces and overall well below 0; B opens immediately on Michael Cera's face with speech already running, faces above 0 from the first second and overall at +0.13.",
-            "brain_response": "B's opening draws stronger face, body and sound engagement from second 0, while A's response stays negative until about second 7 as the silhouette slowly emerges."
+            "what_differs": "A opens on dark curtains with no face for several seconds before cutting to the product jar and a hand; B cuts immediately to a face delivering speech. By A 6 s, faces are only +0.13 and overall is only +0.09, while B already has faces at +0.19 and overall at +0.14 with hearing above +0.28 from frame one.",
+            "brain_response": "B's immediate face-plus-speech opening engages seeing and hearing from the first second, whereas A's curtain-and-product cold open keeps all signals below typical for the first four seconds, a real gap in early engagement."
           },
           {
             "a": {
@@ -5181,33 +5188,33 @@
               "start": 7,
               "end": 15
             },
-            "what_differs": "Both videos share the spa massage scene and rock-climbing sequence; in A these run from about 27\u201341 s with bodies peaking at +0.65, while in B the same material is compressed into 7\u201314 s with bodies peaking at +0.86 and faces at +0.55.",
-            "brain_response": "B's version of this shared material produces noticeably higher bodies and faces signals, likely because B reaches it while sound and prior face engagement are still elevated, whereas A arrives there after speech has faded."
+            "what_differs": "Both cuts share the spa massage scene, the massage-table comedy moment, and the rock-climbing sequence, but in A these run from about 27 s to 51 s while in B they are compressed into 7\u201315 s. In B, bodies peak at +0.86 and seeing at +0.50 during this block; in A the same material yields bodies peaking at +0.63 and seeing at +0.31.",
+            "brain_response": "B's earlier and faster presentation of the shared action and comedy material produces a markedly stronger seeing response, roughly double the body-area signal, suggesting the punchier pacing raises engagement above what A achieves with the same shots."
           },
           {
             "a": {
-              "start": 19,
-              "end": 25
+              "start": 44,
+              "end": 72
             },
             "b": null,
-            "what_differs": "A contains an extended sequence of Michael Cera holding the CeraVe jar with on-screen text 'GENEROSITY' and direct-to-camera delivery, with sound peaking at +0.46 and speech at +0.39 around 19\u201321 s \u2014 material absent from B.",
-            "brain_response": "This stretch gives A its highest hear and speech values in the entire video, lifting overall to +0.29 and showing that sound and speech carry this section well above what pictures alone would achieve."
+            "what_differs": "A contains an extended sequence unique to this cut: a mirror-room scene with multiple figures, a fantasy jungle environment with a narwhal, a split-screen of three faces, and a closing trio tableau with dermatologist-styled companions, running from roughly 44 s to 72 s. B has no equivalent material.",
+            "brain_response": "This stretch keeps A's overall response consistently above 0 (ranging from about +0.04 to +0.17) and seeing above 0 throughout, giving A a prolonged moderate engagement that B, ending at 30 s, never needs to sustain \u2014 an advantage in total coverage of the brand story even if individual peaks are lower than B's."
           }
         ],
         "a_does_better": [
-          "A sustains overall engagement above 0 for roughly 60 continuous seconds versus B's 22, giving the longer creative arc more time with the audience above typical viewing levels.",
-          "A's extended fantasy and multi-face sequences (48\u201370 s) keep faces and scenes above 0 through the back half, while B has already wound down by that point."
+          "A's longer runtime lets it develop the brand narrative through more varied scenes \u2014 fantasy jungle, split-screen faces, and the extended dermatologist trio \u2014 keeping seeing and understanding signals above typical for nearly a minute.",
+          "The hearing signal in A rises to +0.50 around 10 s and stays elevated through the spoken comedy lines, matching or exceeding B's hearing level during shared material."
         ],
         "b_does_better": [
-          "B's opening is above 0 immediately with a recognisable face and speech from second 0, avoiding the below-zero warm-up that costs A its first six seconds.",
-          "B reaches its highest bodies and faces values (+0.86, +0.55) earlier and at greater magnitude than A's peak for the same shared material, suggesting tighter pacing amplifies the visual response."
+          "B's immediate face-and-speech opening means all three groups \u2014 seeing, hearing, and understanding \u2014 are above typical from the very first second, while A takes roughly 7 seconds to reach that point.",
+          "B achieves its peak seeing response (bodies +0.86, overall +0.25) during the shared spa and comedy material, roughly double A's seeing level at the equivalent moment, suggesting the compressed pacing is more arresting for that sequence."
         ],
         "suggestions": [
-          "Consider starting A with a direct face shot \u2014 even one second of Michael Cera before the curtain reveal \u2014 to avoid the below-zero opening that B sidesteps entirely.",
-          "The 'GENEROSITY' speech sequence in A (19\u201321 s) produces the video's highest sound and speech scores; a version of this high-engagement moment is missing from B and could be worth adding or signalling more clearly there."
+          "Consider moving A's opening so a face and the product appear within the first two seconds, matching B's cold-open structure, to close the early engagement gap before the curtain reveal pays off.",
+          "The fantasy jungle and narwhal sequence in A (around 48\u201355 s) shows seeing well above 0 but hearing dips below typical; adding music or a brief spoken line there could lift the overall response closer to the levels achieved during the earlier speech-driven stretch."
         ],
         "model": "us.anthropic.claude-sonnet-4-6",
-        "created_at": "2026-10-30T08:28:18Z"
+        "created_at": "2026-10-30T15:38:46Z"
       }
     }
   ]
