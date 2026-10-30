@@ -385,15 +385,16 @@ def test_build_request_carries_the_results_numbers():
 
     _, content = build_request(result, [b"\xff\xd8zero"], [])
 
-    table = content[0]["text"]
+    table = content[-1]["text"]
     lines = table.splitlines()
     assert lines[0].startswith("duration_seconds 3, last_second 2.")
     header = lines[1].split()
-    assert header == ["t", *results.SERIES, "muted_overall"]
+    shown = ["see", "hear", "understand", "overall"]
+    assert header == ["t", *shown, "muted_overall"]
     rows = [line.split() for line in lines[2:]]
     assert [int(row[0]) for row in rows] == [0, 1, 2]
     for second, row in enumerate(rows):
-        expected = [result["signals"][name][second] for name in results.SERIES]
+        expected = [result["signals"][name][second] for name in shown]
         expected.append(result["muted"]["overall"][second])
         assert [float(cell) for cell in row[1:]] == pytest.approx(expected)
     assert "summary" not in table

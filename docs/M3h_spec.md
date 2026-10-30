@@ -125,11 +125,13 @@ the two differ only in inputs, schema, answer check, key and finish function.
 ### 5b. Request (`neurolens/report_prompt.py`)
 Shared builders, used by both requests:
 - `READING_RULES`: the single report's reading rules, a module constant: the text of
-  `SYSTEM_PROMPT` from "The seven signals" up to the line before "Writing:". `SYSTEM_PROMPT` is
+  `SYSTEM_PROMPT` from "The table has three groups" up to the line before "Writing:". `SYSTEM_PROMPT` is
   rebuilt from intro + `READING_RULES` + its writing rules, with unchanged text.
-- `series_table(result, label=None)`: one text block. First line
-  `[Video <label>: ]duration_seconds <n>, last_second <n-1>. One row per second.`, then a header
-  row `t` + `results.SERIES` + `muted_overall`, then one row per second `t = 0 .. n-1`: `t`
+- `series_table(result)`: one text block, sent after the pictures. First line
+  `duration_seconds <n>, last_second <n-1>. One row per second.`, then a header
+  row `t` see hear understand overall `muted_overall` (the seven sub-signals and the duplicate
+  `sound` column are left out: with them the writer drifted to a big sub-signal and called it
+  seeing), then one row per second `t = 0 .. n-1`: `t`
   right-aligned to 3, then each value formatted `+0.00`, space-separated. A missing value is left
   blank (only `muted_overall` can be shorter, as the muted pass is cut to the shared length, and
   it is the last column).
@@ -138,9 +140,14 @@ Shared builders, used by both requests:
 - `frame_blocks(frames, seconds, label=None)`: for `t < seconds`, a text block `[<label> ]t = <t>
   s` then its base64 JPEG image block.
 
-`build_request(result, frames, words)` (single, M3g §5b) = table + words + frames, no label.
+- `comparison_table(a, b)`: one block, one row per second up to the longer video:
+  `t` then `A_x B_x` pairs for see, hear, understand, overall, muted_overall; cells past the
+  shorter video are blank, so a second sits beside the same second of the other video.
+
+`build_request(result, frames, words)` (single, M3g §5b) = words + frames + table, no label.
 `build_comparison_request(a, b)`, each a `(result, frames, words)`, returns
-`(COMPARISON_PROMPT, content)`: A's table, words and frames, then B's, labelled `A` / `B`.
+`(COMPARISON_PROMPT, content)`: A's words and frames, then B's, labelled `A` / `B`, then the one
+`comparison_table`. The table comes last, right before the answer.
 
 `COMPARISON_PROMPT` (module constant; the laptop trial's accepted text):
 ```

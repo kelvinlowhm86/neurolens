@@ -15,15 +15,16 @@ MAX_DIFFERENCES = 3
 MAX_COMPARISON_LISTS = 2
 MAX_LISTS = 2
 
-_INTRO = """You write a short report about a video for the person who made it. You are
-given the predicted brain response for an average viewer, second by second, and one picture from
-each second of the video."""
+# The table's value columns: the three groups and overall (the sub-signals stay out of it).
+_SHOWN = [*results.GROUPS, "overall"]
 
-READING_RULES = """The seven signals are: faces, bodies and scenes (the visual areas that respond to
-those things), visual (the wider visual response), sound (the hearing response),
-speech and social (the language and social response), and overall. They belong to three
-groups: seeing (faces, bodies, scenes, visual), hearing (sound) and understanding (speech,
-social). Read the groups, not only overall: say which of them carry the video and which stay low.
+_INTRO = """You write a short report about a video for the person who made it. You are
+given one picture from each second of the video, then the predicted brain response for an average
+viewer, second by second, as a table."""
+
+READING_RULES = """The table has three groups and overall: see (the response to what the pictures
+show), hear (the response to sound) and understand (the response to speech and social meaning).
+Read the groups, not only overall: say which of them carry the video and which stay low.
 The table's column names are for your reading only. In the report, call the groups seeing,
 hearing and understanding, as the page does, write "with the sound off" for muted_overall, and
 never write a column name such as muted_overall, last_second or duration_seconds. Never name the
@@ -45,9 +46,10 @@ How to read the curves:
   few seconds to build even after a strong first shot, so a gentle rise over the first 3 to 5
   seconds is not a flaw. An opening that stays below 0, for example a dark, empty or silent
   start, is.
-- The ending: a drop over a final logo, product card or call-to-action screen is expected and is
-  not a weakness. Never make it a dip or an improvement unless the fall starts seconds before
-  that screen appears.
+- The ending: a drop over a short final logo, product card or call-to-action screen is expected
+  and is not a weakness. Never make it a dip or an improvement unless the fall starts seconds
+  before that screen appears, or the screen lasts longer than about 5 seconds, when trimming
+  it may be suggested.
 - muted_overall is the same video predicted with no sound. Where overall is clearly above it,
   the sound and speech carry that stretch; where they are close, the pictures carry it.
 - The spoken words are an automatic transcript and can misspell names, brand names most of all.
@@ -93,8 +95,9 @@ both included, start <= end."""
 SYSTEM_PROMPT = f"{_INTRO}\n\n{READING_RULES}\n\n{_WRITING_RULES}"
 
 COMPARISON_PROMPT = f"""You compare two videos, A and B, for the person who made them. For each
-you are given the predicted brain response for an average viewer, second by second, and
-one picture from each second. They may be two cuts of one video or two different videos:
+you are given one picture from each second and its spoken words. Then one table gives the
+predicted brain response for an average viewer, second by second, for both videos side by side
+(columns A_ and B_). They may be two cuts of one video or two different videos:
 work out which from the pictures and words, and say so.
 
 {READING_RULES}
@@ -127,7 +130,7 @@ Writing:
   stretches where the two behave alike.
 - Each list item is one short sentence that adds to the differences, not a repeat of one.
 - Every claim about level must hold in the numbers you were given.
-- Never write a number from the tables (no "+0.55" or "avg +0.09"): say it in words against
+- Never write a number from the table (no "+0.55" or "avg +0.09"): say it in words against
   typical viewing or against the other video. Times in whole seconds are fine.
 
 Limits: the headline at most {MAX_HEADLINE} characters, the summary at most {MAX_VERDICT}
@@ -141,18 +144,42 @@ def _cell(values, second):
     )
 
 
-def series_table(result, label=None):
-    """One row per second: t and every series value, never one long list per signal (M3h §5b)."""
+def series_table(result):
+    """One row per second: t, the three groups, overall and overall with the sound off. The
+    sub-signals and the duplicate sound column are left out so the writer reads one clear
+    column per group (M3g §5b)."""
     duration = result["duration_seconds"]
-    prefix = f"Video {label}: " if label else ""
     lines = [
-        f"{prefix}duration_seconds {duration}, last_second {duration - 1}. One row per second.",
-        " ".join(["t", *results.SERIES, "muted_overall"]),
+        f"duration_seconds {duration}, last_second {duration - 1}. One row per second.",
+        " ".join(["t", *_SHOWN, "muted_overall"]),
     ]
     signals, muted = result["signals"], result["muted"]["overall"]
     for second in range(duration):
-        cells = [_cell(signals[name], second) for name in results.SERIES]
+        cells = [_cell(signals[name], second) for name in _SHOWN]
         cells.append(_cell(muted, second))
+        lines.append(" ".join([f"{second:>3}", *cells]))
+    return "\n".join(lines)
+
+
+def comparison_table(a, b):
+    """One row per second for both videos side by side, a blank past the shorter one, so a
+    second can be compared with the same second of the other video (M3h §5b)."""
+    names = [(label, name) for name in [*_SHOWN, "muted_overall"] for label in "AB"]
+    seconds = max(a["duration_seconds"], b["duration_seconds"])
+    lines = [
+        f"Video A: duration_seconds {a['duration_seconds']}, last_second "
+        f"{a['duration_seconds'] - 1}. Video B: duration_seconds {b['duration_seconds']}, "
+        f"last_second {b['duration_seconds'] - 1}. One row per second.",
+        " ".join(["t", *(f"{label}_{name}" for label, name in names)]),
+    ]
+    for second in range(seconds):
+        cells = []
+        for label, name in names:
+            result = a if label == "A" else b
+            series = (
+                result["muted"]["overall"] if name == "muted_overall" else result["signals"][name]
+            )
+            cells.append(_cell(series, second) if second < result["duration_seconds"] else "")
         lines.append(" ".join([f"{second:>3}", *cells]))
     return "\n".join(lines)
 
@@ -186,7 +213,8 @@ def frame_blocks(frames, seconds, label=None):
 
 
 def _video_blocks(result, frames, words, label=None):
-    content = [{"type": "text", "text": series_table(result, label)}]
+    """The spoken words, then the pictures; the table comes after them (M3g §5b)."""
+    content = []
     spoken = words_block(words, label)
     if spoken:
         content.append({"type": "text", "text": spoken})
@@ -196,13 +224,16 @@ def _video_blocks(result, frames, words, label=None):
 
 def build_request(result, frames, words):
     """(system, content) for one video's report (M3g §5b)."""
-    return SYSTEM_PROMPT, _video_blocks(result, frames, words)
+    content = _video_blocks(result, frames, words)
+    content.append({"type": "text", "text": series_table(result)})
+    return SYSTEM_PROMPT, content
 
 
 def build_comparison_request(a, b):
-    """(system, content) for a comparison: A's table, words and frames, then B's (M3h §5b)."""
+    """(system, content) for a comparison: A's words and frames, B's, then one table (M3h §5b)."""
     result_a, frames_a, words_a = a
     result_b, frames_b, words_b = b
     content = _video_blocks(result_a, frames_a, words_a, "A")
     content.extend(_video_blocks(result_b, frames_b, words_b, "B"))
+    content.append({"type": "text", "text": comparison_table(result_a, result_b)})
     return COMPARISON_PROMPT, content
