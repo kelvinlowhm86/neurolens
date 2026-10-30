@@ -178,10 +178,13 @@ A Report tab beside the charts of a finished job. States, few words:
 - no `frames` in the result: "No report for this video."
 - not yet asked: a "Write report" button, with "Free" beside it; disabled from the click until
   the POST answers.
-- writing: "Writing your report…"; the page checks `GET …/report` every 5 s, stops after 10 min.
+- writing: "Writing your report…" in an `aria-live="polite"` element, with a shimmering
+  placeholder shaped like the finished report (headline bar, text lines, two moment blocks);
+  the page checks `GET …/report` every 5 s, stops after 10 min. The placeholder is static under
+  `prefers-reduced-motion: reduce`.
 - ready: headline, summary, then the moments (each time a button that moves the time cursor,
-  like the existing moment links), strengths, improvements; the note "Written by AI from
-  predicted brain responses, not viewer data."
+  like the existing moment links), strengths, improvements; the note "Written by Claude from
+  predicted brain responses."
 - failed with tries left: "Couldn't write the report." and "Try again"; none left: the first
   line only.
 All model text is inserted as text (`textContent`), never as HTML.

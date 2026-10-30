@@ -273,15 +273,17 @@ Modest changes; the redesign comes later.
   Analysis or Report, and clearing it (None) returns to Analysis. There is no "Full report" link.
   - Jobs: `GET /api/compare/<main>/<other>/report`, then the same states and wording pattern as
     M3g §6: "Write comparison" with "Free"; "Writing your comparison…" (checks every 5 s, stops
-    after 10 min); "Couldn't write the comparison." with "Try again" while tries are left. Either
-    result without `frames`: "No report for this pair." The POST uses `postJSON`.
-  - Samples: the stored comparison for the pair, or "No report for this pair."
+    after 10 min; the verdict shows the same shimmering placeholder as a report); "Couldn't
+    write the comparison." with "Try again" while tries are left. Either result without
+    `frames`: no report and no write offer. The POST uses `postJSON`.
+  - Samples: the stored comparison for the pair; without one, no report and no write offer.
   - Ready: a key line "A: <name> · B: <name>" (from the GET's `a`/`b`, or the sample entry), the
     headline and summary, then one row per difference: coloured dots with each video's times
     ("0:00–0:06", plus "only" when just one side has it), what differs and the brain response.
     Clicking a row moves the time cursor to that span's start. Then "Where <name> does better"
-    (twice) and "Suggestions", each hidden when empty, and the M3g note "Written by AI from
-    predicted brain responses, not viewer data."
+    (twice) and "Suggestions", each hidden when empty, and the M3g note "Written by Claude from
+    predicted brain responses." When there is no report and none can be written, the whole
+    verdict aside is hidden and the chart takes the full width.
   - Swapping the main video keeps the same pair; the rows are redrawn so the times and colours
     follow the video now playing.
 - All model text is inserted with `textContent`, never as HTML. Compare titles show the full name
