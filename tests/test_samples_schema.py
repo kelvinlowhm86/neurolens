@@ -42,7 +42,8 @@ SUMMARY_KEYS = {"audio_dependence"}
 
 @pytest.mark.parametrize("sample", SAMPLES, ids=[s.get("id", "?") for s in SAMPLES])
 def test_sample_has_the_new_entry_shape(sample):
-    assert set(sample) == ENTRY_KEYS
+    # M3h §7: a sample may also carry its stored report.
+    assert ENTRY_KEYS <= set(sample) <= ENTRY_KEYS | {"report"}
     assert sample["result"]["format"] == 2
     assert set(sample["result"]["signals"]) == SERIES
     assert set(sample["result"]["muted"]) == SERIES
