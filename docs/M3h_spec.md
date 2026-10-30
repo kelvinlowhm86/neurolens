@@ -266,26 +266,26 @@ Modest changes; the redesign comes later.
   sample." A job keeps M3g §6.
 - Compare for samples: while a sample is open and there are at least two samples, the "Compare
   with…" row lists the other samples, for every visitor, signed in or not. Picking one uses its
-  result from `samples.json` (no fetch): the same curve overlay and table as a job comparison.
-  Swap stays jobs-only. Jobs are compared only with jobs, samples only with samples.
-- While comparing, the Report tab shows the comparison instead of the single report; clearing
-  the comparison (None, or the muted toggle) brings the single report back.
+  result from `samples.json` (no fetch): the same curve overlay and comparison view as a job
+  comparison. Swap stays jobs-only. Jobs are compared only with jobs, samples only with samples.
+- The comparison and all its states live only in the Compare tab; the Report tab always shows
+  the open video's own report (or its states). The comparison stays selected while visiting
+  Analysis or Report, and clearing it (None) returns to Analysis. There is no "Full report" link.
   - Jobs: `GET /api/compare/<main>/<other>/report`, then the same states and wording pattern as
     M3g §6: "Write comparison" with "Free"; "Writing your comparison…" (checks every 5 s, stops
     after 10 min); "Couldn't write the comparison." with "Try again" while tries are left. Either
     result without `frames`: "No report for this pair." The POST uses `postJSON`.
   - Samples: the stored comparison for the pair, or "No report for this pair."
   - Ready: a key line "A: <name> · B: <name>" (from the GET's `a`/`b`, or the sample entry), the
-    headline and summary, then one card per difference: its times named by video
-    ("<name> 0-5 s · <name> 0-8 s", or "only in <name>"), what differs, the brain response. A
-    card whose difference has a span in the video now playing is a button that moves the time
-    cursor to that span's start; otherwise it is plain. Then "Where <name> does better" (twice)
-    and "Suggestions", each hidden when empty, and the M3g note "Written by AI from predicted
-    brain responses, not viewer data."
-  - Swapping the main video keeps the same pair; the cards are redrawn so the buttons follow
-    the video now playing.
-- All model text is inserted with `textContent`, never as HTML. Names are shortened as in the
-  compare table.
+    headline and summary, then one row per difference: coloured dots with each video's times
+    ("0:00–0:06", plus "only" when just one side has it), what differs and the brain response.
+    Clicking a row moves the time cursor to that span's start. Then "Where <name> does better"
+    (twice) and "Suggestions", each hidden when empty, and the M3g note "Written by AI from
+    predicted brain responses, not viewer data."
+  - Swapping the main video keeps the same pair; the rows are redrawn so the times and colours
+    follow the video now playing.
+- All model text is inserted with `textContent`, never as HTML. Compare titles show the full name
+  and wrap, each in its line's colour with its average overall.
 
 ## 9. Privacy page (`static/privacy.html`)
 The "AI reports" section adds one sentence: when you ask for a comparison, the same things

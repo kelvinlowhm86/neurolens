@@ -53,7 +53,7 @@
   .btn-danger { background: none; border: 1px solid var(--line); color: var(--danger); border-radius: var(--radius); padding: 6px 12px; min-height: 34px; }
   .btn-danger:hover { border-color: var(--danger); }
   .btn-danger:disabled { opacity: .5; cursor: default; }
-  .btn-ghost, .btn-white, .btn-danger, .result-tab, .history-link, .batch-curve, .compare-report-link { transition: color .15s, background .15s, border-color .15s; }
+  .btn-ghost, .btn-white, .btn-danger, .result-tab, .history-link, .batch-curve { transition: color .15s, background .15s, border-color .15s; }
 
   .D { display: grid; grid-template-columns: minmax(340px, 420px) minmax(0, 1fr); height: calc(100vh - 56px); overflow: hidden; }
   body:has(.D) { overflow: hidden; }
@@ -251,9 +251,6 @@
   .report-actions { display: flex; gap: 8px; align-items: center; }
   .report-free { font-size: 12px; color: var(--muted); }
 
-  .top { display: block; flex: none; }
-  .top:empty { display: none; }
-
   .chart-head { display: flex; align-items: flex-start; gap: 8px 16px; flex-wrap: wrap; }
   .chart-title { min-width: 0; }
   .chart-title h2 { font: 600 18px/1.2 var(--display); letter-spacing: -0.01em; }
@@ -281,15 +278,16 @@
   .compare-msg.error { color: var(--danger); }
   .main-chart { flex: 1.25 1 0; min-height: 250px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 20px 12px; display: flex; flex-direction: column; gap: 6px; }
   .main-chart .note { font-size: 12px; color: var(--muted); }
-  .moments-lane { position: relative; height: 48px; flex: none; margin-top: 4px; }
-  .moment-chip { position: absolute; height: 19px; max-width: calc(100% - 4px); overflow: hidden; padding: 0 8px; display: flex; align-items: center; gap: 6px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--bg); color: var(--muted); font: 11px var(--display); white-space: nowrap; transition: color .15s, border-color .15s, background .15s; }
-  .moment-chip .moment-text { max-width: 14ch; overflow: hidden; text-overflow: ellipsis; display: inline-block; vertical-align: bottom; }
-  .moment-chip .moment-when { font: 10.5px var(--mono); color: var(--muted); }
-  .moment-chip:hover, .moment-chip.active { border-color: var(--accent); color: var(--ink); background: var(--panel); z-index: 5; }
-  .moment-chip:hover .moment-text, .moment-chip.active .moment-text { max-width: none; }
+  .moment-caption { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; margin-top: 4px; font-size: 12px; line-height: 1.45; color: var(--ink-2); min-height: 2.9em; }
+  .moment-mark { position: absolute; width: 16px; height: 16px; padding: 0; border: 0; border-radius: 50%; background: transparent; transform: translate(-50%, -50%); }
+  .moment-mark::after { content: ""; position: absolute; inset: 5px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 2px var(--bg); }
+  .moment-mark:hover::after, .moment-mark:focus-visible::after, .moment-mark.active::after { inset: 3px; background: var(--accent2); box-shadow: 0 0 0 2px var(--bg), 0 0 0 3px var(--accent); }
   .chart { position: relative; width: 100%; flex: 1; min-height: 0; }
   .chart svg { display: block; width: 100%; overflow: visible; cursor: crosshair; }
-  .xaxis { display: flex; justify-content: space-between; font: 10.5px var(--mono); color: var(--muted); height: 16px; }
+  .xaxis { position: relative; font: 10.5px var(--mono); color: var(--muted); height: 16px; }
+  .xaxis span { position: absolute; top: 0; transform: translateX(-50%); white-space: nowrap; }
+  .xaxis span:first-child { transform: none; }
+  .xaxis span.end { transform: translateX(-100%); }
   .chart-label { position: absolute; left: 4px; font: 500 11px var(--display); color: var(--muted); pointer-events: none; }
 
   .strips-wrap { flex: 1 1 0; min-height: 180px; display: flex; flex-direction: column; gap: 10px; }
@@ -313,36 +311,24 @@
   .end-drop { position: absolute; border-left: 1px dotted var(--cool); pointer-events: none; }
   .end-dot { position: absolute; width: 6px; height: 6px; border-radius: 50%; transform: translate(-50%, -50%); pointer-events: none; }
 
-  .compare-table { width: 100%; border-collapse: collapse; font-size: 13px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); }
-  .compare-table th, .compare-table td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
-  .compare-table tr:last-child th, .compare-table tr:last-child td { border-bottom: 0; }
-  .compare-table th { font: 500 12.5px var(--display); color: var(--muted); }
-  .compare-table td.v { font: 500 15px var(--mono); }
-  .compare-table .compare-swap { padding: 4px 10px; font-size: 12px; cursor: pointer; }
-
-  .compare-panel { overflow-y: auto; }
   .compare-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; flex: none; }
   .compare-time { color: var(--muted); font-size: 12px; }
   .compare-head .spacer { flex: 1; }
   .compare-videos { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; flex: none; }
   .compare-video { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 10px 12px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
   .compare-video-head { display: flex; align-items: baseline; gap: 8px; min-width: 0; font-size: 12px; }
-  .compare-video-head span:first-child { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .compare-video-head .mono { margin-left: auto; color: var(--muted); font-size: 10.5px; }
+  .compare-video-head span:first-child { font-weight: 600; overflow-wrap: anywhere; }
+  .compare-video-head .mono { margin-left: auto; color: var(--muted); font-size: 10.5px; flex: none; }
   .compare-video-host { position: relative; aspect-ratio: 16 / 9; background: #000; border: 1px solid var(--line); border-radius: 2px; overflow: hidden; display: flex; align-items: center; justify-content: center; }
   .compare-video-host video { width: 100%; height: 100%; object-fit: contain; display: block; background: #000; }
   .compare-video-note { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 16px; text-align: center; color: var(--muted); font-size: 12px; background: var(--well); }
   .compare-bars { height: 3px; background: rgba(255,255,255,.1); border-radius: 2px; overflow: hidden; }
   .compare-bars span { display: block; height: 100%; width: 0; background: var(--accent); }
   .compare-bars.blue span { background: var(--blue); }
-  .compare-body { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 16px; }
-  .compare-chart-panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 16px; display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+  .compare-body { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 16px; align-items: start; }
+  .compare-chart-panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 16px; display: flex; flex-direction: column; gap: 8px; }
   .compare-chart-panel .chart { min-height: 140px; flex: none; height: 160px; }
-  .compare-legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 11.5px; color: var(--muted); }
-  .compare-legend span { display: inline-flex; align-items: center; gap: 6px; }
-  .compare-legend i { width: 14px; height: 2px; background: var(--accent); display: block; }
-  .compare-legend i.blue { background: var(--blue); }
-  .compare-diffs { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; scrollbar-width: thin; }
+  .compare-diffs { display: flex; flex-direction: column; gap: 6px; }
   .compare-diff { text-align: left; border: 1px solid transparent; background: transparent; border-radius: 2px; padding: 7px 10px; color: var(--ink); display: flex; flex-direction: column; gap: 2px; }
   .compare-diff:hover { background: rgba(255,255,255,.03); }
   .compare-diff.active { border-color: var(--line); background: rgba(255,255,255,.03); }
@@ -351,15 +337,14 @@
   .compare-diff .diff-chip i { width: 6px; height: 6px; border-radius: 50%; display: block; }
   .compare-diff .diff-what { font-size: 12.5px; line-height: 1.4; color: var(--ink); margin-top: 2px; }
   .compare-diff .diff-brain { font-size: 12px; line-height: 1.4; color: var(--muted); }
-  .compare-verdict { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; display: flex; flex-direction: column; gap: 8px; min-height: 0; overflow-y: auto; scrollbar-width: thin; }
+  .compare-verdict { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; display: flex; flex-direction: column; gap: 8px; }
   .kicker { font-size: 11px; color: var(--muted); letter-spacing: .02em; }
   .compare-verdict h3 { font: 600 15px/1.35 var(--display); }
   .compare-verdict p { font-size: 13px; line-height: 1.55; color: var(--ink); }
   .compare-key { font-size: 11px; color: var(--muted); }
-  .compare-verdict .compare-report-link { margin-top: 2px; }
+  .compare-actions { display: flex; gap: 8px; align-items: center; }
+  .compare-free { font-size: 12px; color: var(--muted); }
   .ai-note { margin-top: auto; padding-top: 12px; border-top: 1px solid var(--line); font-size: 10.5px; line-height: 1.45; color: var(--muted); }
-  .compare-report-link { align-self: flex-start; background: none; border: 0; padding: 0; color: var(--accent); font: 600 13px var(--display); }
-  .compare-report-link:hover { color: var(--accent2); }
 
   .progress-panel { flex: 1; min-height: 0; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 24px 28px; display: flex; flex-direction: column; gap: 20px; }
   .progress-head { display: flex; align-items: flex-end; gap: 16px; flex: none; }
@@ -398,7 +383,6 @@
 
   @media (max-width: 1100px) {
     .compare-body { grid-template-columns: minmax(0, 1fr); }
-    .compare-verdict { max-height: 320px; }
   }
   @media (max-width: 860px), (max-height: 620px) {
     .D { display: block; height: auto; overflow: visible; }
@@ -576,7 +560,6 @@
       </div>
 
       <div class="result-panel active" id="chartsTab">
-        <div class="top" id="topArea"></div>
         <section class="main-chart" id="chartCard">
           <div class="chart-head">
             <div class="chart-title">
@@ -589,11 +572,11 @@
               </div>
             </div>
             <span class="keys" id="chartKeys"></span>
-            <div class="readout"><span class="readout-value" id="overallReadout">—</span><span class="readout-sub">vs typical viewing <span class="mono" id="overallSecond">0 s</span></span></div>
+            <div class="readout"><span class="readout-value" id="overallReadout">—</span><span class="readout-sub">at <span class="mono" id="overallSecond">0:00</span></span></div>
           </div>
           <p class="note">Predicted for an average viewer. 0 = typical viewing.</p>
           <p class="compare-msg" id="compareMsg"></p>
-          <div class="moments-lane" id="momentsLane"></div>
+          <p class="moment-caption" id="momentCaption"></p>
           <div class="chart" id="mainChartBox"></div>
         </section>
         <section class="strips-wrap" id="stripsCard">
@@ -612,7 +595,6 @@
             <div class="report-moments" id="reportMoments"></div>
             <div class="report-list" id="reportStrengthsWrap"><h3>Strengths</h3><ul id="reportStrengths"></ul></div>
             <div class="report-list" id="reportImprovementsWrap"><h3>Improvements</h3><ul id="reportImprovements"></ul></div>
-            <div class="report-list" id="reportSuggestionsWrap"><h3>Suggestions</h3><ul id="reportSuggestions"></ul></div>
             <p class="note">Written by AI from predicted brain responses, not viewer data.</p>
           </div>
           <div class="report-actions" id="reportActions" hidden>
@@ -629,6 +611,7 @@
           <span class="spacer"></span>
           <button class="btn-ghost" id="comparePlay" type="button">Play both</button>
           <button class="btn-ghost" id="compareSwap" type="button">⇄ Swap</button>
+          <button class="btn-ghost" id="compareClose" type="button">Close</button>
         </div>
         <div class="compare-videos">
           <section class="compare-video">
@@ -646,7 +629,6 @@
           <section class="compare-chart-panel">
             <div class="panel-head">
               <span>Overall response</span>
-              <div class="compare-legend"><span><i></i><span id="compareLegendA"></span></span><span><i class="blue"></i><span id="compareLegendB"></span></span></div>
               <span class="spacer"></span>
               <span class="mono" id="compareChartTime"></span>
             </div>
@@ -658,7 +640,13 @@
             <span class="compare-key" id="compareKey"></span>
             <h3 id="compareHeadline"></h3>
             <p id="compareSummary"></p>
-            <button class="compare-report-link" id="compareReportLink" type="button">Full report →</button>
+            <div class="compare-actions" id="compareActions" hidden>
+              <button class="btn-white" id="compareWrite" type="button">Write comparison</button>
+              <span class="compare-free">Free</span>
+            </div>
+            <div class="report-list" id="compareStrengthsWrap"><h3></h3><ul id="compareStrengths"></ul></div>
+            <div class="report-list" id="compareImprovementsWrap"><h3></h3><ul id="compareImprovements"></ul></div>
+            <div class="report-list" id="compareSuggestionsWrap"><h3>Suggestions</h3><ul id="compareSuggestions"></ul></div>
             <span class="ai-note">Written by AI from predicted brain responses, not viewer data.</span>
           </aside>
         </div>
@@ -768,8 +756,8 @@ let virtualTime = 0, virtualPlaying = false, virtualAnchor = 0, virtualRaf = 0, 
 let videoJob = null, videoRetried = false, videoRequest = 0, videoPlaying = false;
 let playheads = [];
 let currentTab = 'charts';
-let chartMoments = [];
-let comparisonReport = null, comparisonState = '', comparisonStateText = '';
+let chartMoments = [], momentFocus = null;
+let comparisonReport = null, comparisonState = '', comparisonStateText = '', comparisonCanRetry = false;
 let comparisonCurrentSide = 'a', comparisonABNames = { aName: '', bName: '' };
 let comparisonCandidates = [], compareActiveDiff = -1, compareVideoSeq = 0, compareVideoKey = '', compareOffset = 0;
 let progressJobId = null, progressStartedAt = 0, progressStatus = '', progressTimer = null;
@@ -818,7 +806,8 @@ function videoBaseName(name) { return String(name || '').replace(/\.(mp4|mov|web
 function hasLocalVideo() { return !!video.getAttribute('src'); }
 function currentTime() { return hasLocalVideo() ? (Number.isFinite(video.currentTime) ? video.currentTime : 0) : virtualTime; }
 function totalSeconds() { return currentResult && currentResult.signals && Array.isArray(currentResult.signals.overall) ? currentResult.signals.overall.length : 0; }
-function chartSpan() {
+function chartSpan() { return totalSeconds(); }
+function compareSpan() {
   let span = totalSeconds();
   if (comparison && comparison.result && comparison.result.signals && Array.isArray(comparison.result.signals.overall)) {
     span = Math.max(span, comparison.result.signals.overall.length);
@@ -1575,7 +1564,6 @@ function loadSample(idx) {
     description: s.description,
     attribution: s.attribution,
     title: s.title,
-    fileName: s.video_file || s.title,
   });
   $('clipTitle').textContent = shortName(s.title || 'Sample');
   $('clipTitle').title = s.title || 'Sample';
@@ -2324,8 +2312,6 @@ async function loadJobVideo(jobId, seq, resume) {
     }, { once: true });
   }
   showVideo(true);
-  // The video link arrived, so redraw the top area (the compare table, when one is open).
-  buildTop();
   updateTransport();
   return { ok: true };
 }
@@ -2335,12 +2321,11 @@ function showResultUnavailable(message) {
   stopVirtual();
   resetReportPanel();
   currentResult = null; currentSummary = null; currentContext = null; comparison = null;
-  comparisonCandidates = []; compareActiveDiff = -1; compareOffset = 0; comparisonReport = null; comparisonState = ''; comparisonStateText = '';
+  comparisonCandidates = []; compareActiveDiff = -1; compareOffset = 0; comparisonReport = null; comparisonState = ''; comparisonStateText = ''; comparisonCanRetry = false;
   mutedOn = false; virtualTime = 0;
   clearAllCharts();
   $('resultMessage').textContent = message;
   $('resultMessage').hidden = false;
-  $('topArea').replaceChildren();
   updateSoundLine();
   $('chartCard').hidden = true;
   $('stripsCard').hidden = true;
@@ -2356,7 +2341,9 @@ function showResultUnavailable(message) {
   $('mutedToggle').checked = false;
   $('brainSecond').textContent = '';
   $('brainValues').replaceChildren();
-  $('momentsLane').replaceChildren();
+  $('momentCaption').textContent = '';
+  $('momentCaption').title = '';
+  $('momentCaption').hidden = true;
   $('headerMeta').textContent = '';
   window.brainMap.clear(BRAIN_UNAVAILABLE);
   $('sampleMeta').textContent = '';
@@ -2401,7 +2388,6 @@ function setResultTab(name) {
     if (hasLocalVideo() && !video.paused) compareVideoB.play().catch(() => {});
   } else {
     leaveCompareVideos();
-    if (currentTab === 'charts' && currentResult && chartMoments.length) renderMomentsLane();
   }
 }
 
@@ -2438,8 +2424,6 @@ function hideReportAnswer() {
   $('reportMoments').replaceChildren();
   $('reportStrengths').replaceChildren();
   $('reportImprovements').replaceChildren();
-  $('reportSuggestions').replaceChildren();
-  $('reportSuggestionsWrap').hidden = true;
 }
 
 function resetReportPanel() {
@@ -2452,6 +2436,7 @@ function resetReportPanel() {
   comparisonReport = null;
   comparisonState = '';
   comparisonStateText = '';
+  comparisonCanRetry = false;
   comparisonCurrentSide = 'a';
   comparisonABNames = { aName: '', bName: '' };
   compareActiveDiff = -1; compareOffset = 0;
@@ -2493,7 +2478,6 @@ function renderReportAnswer(report) {
   }
   fillReportList('reportStrengths', 'reportStrengthsWrap', 'Strengths', report.strengths);
   fillReportList('reportImprovements', 'reportImprovementsWrap', 'Improvements', report.improvements);
-  $('reportSuggestionsWrap').hidden = true;
   $('reportAnswer').hidden = false;
   setChartMoments(report.moments || []);
 }
@@ -2520,10 +2504,6 @@ function comparisonNames(source) {
   return { aName: jobDisplayName(source.a), bName: jobDisplayName(source.b) };
 }
 
-function spanText(name, span) {
-  return `${shortName(name)} ${span.start}-${span.end} s`;
-}
-
 function sampleComparisonEntry() {
   if (!comparison || comparison.kind !== 'sample' || !samplesData) return null;
   const mainId = currentContext && currentContext.sampleId;
@@ -2534,70 +2514,30 @@ function sampleComparisonEntry() {
 }
 
 function renderComparisonAnswer(source) {
-  hideReportAnswer();
   const report = source.report || {};
   comparisonReport = report;
   comparisonState = 'ready';
   comparisonStateText = '';
-  chartMoments = [];
+  comparisonCanRetry = false;
   const { aName, bName } = comparisonNames(source);
-  $('reportKey').textContent = `A: ${shortName(aName)} · B: ${shortName(bName)}`;
-  $('reportKey').hidden = false;
-  $('reportHeadline').textContent = report.headline || '';
-  $('reportSummary').textContent = report.summary || '';
   const currentId = currentContext && (currentContext.sampleId || currentContext.jobId);
   const side = source.a === currentId ? 'a' : (source.b === currentId ? 'b' : null);
   comparisonCurrentSide = side === 'b' ? 'b' : 'a';
   comparisonABNames = { aName, bName };
-  for (const difference of report.differences || []) {
-    const when = document.createElement('span');
-    when.className = 'when';
-    const left = difference.a ? spanText(aName, difference.a) : '';
-    const right = difference.b ? spanText(bName, difference.b) : '';
-    if (left && right) when.textContent = `${left} · ${right}`;
-    else if (left) when.textContent = `only in ${shortName(aName)}`;
-    else when.textContent = `only in ${shortName(bName)}`;
-    const what = document.createElement('p');
-    what.textContent = difference.what_differs || '';
-    const brain = document.createElement('p');
-    brain.textContent = difference.brain_response || '';
-    const span = side ? difference[side] : null;
-    let card;
-    if (span) {
-      card = document.createElement('button');
-      card.type = 'button';
-      card.dataset.seek = String(span.start);
-    } else {
-      card = document.createElement('div');
-    }
-    card.className = 'report-moment';
-    card.append(when, what, brain);
-    $('reportMoments').append(card);
-  }
-  fillReportList('reportStrengths', 'reportStrengthsWrap',
-    `Where ${shortName(aName)} does better`, report.a_does_better);
-  fillReportList('reportImprovements', 'reportImprovementsWrap',
-    `Where ${shortName(bName)} does better`, report.b_does_better);
-  fillReportList('reportSuggestions', 'reportSuggestionsWrap', 'Suggestions', report.suggestions);
-  $('reportAnswer').hidden = false;
   refreshComparePanel();
 }
 
 function applyComparisonState(data) {
   const state = data.report_state;
   if (state === 'ready' && data.report) {
-    $('reportStateText').textContent = '';
-    $('reportActions').hidden = true;
     renderComparisonAnswer({ a: data.a, b: data.b, report: data.report });
     return;
   }
   if (state === 'writing') {
-    $('reportStateText').textContent = 'Writing your comparison…';
-    $('reportActions').hidden = true;
     comparisonReport = null;
     comparisonState = 'writing';
     comparisonStateText = 'Writing your comparison…';
-    hideReportAnswer();
+    comparisonCanRetry = false;
     refreshComparePanel();
     if (!comparisonWritingSince) comparisonWritingSince = Date.now();
     if (Date.now() - comparisonWritingSince <= 10 * 60 * 1000) {
@@ -2606,28 +2546,25 @@ function applyComparisonState(data) {
       const seq = comparisonReportSeq;
       comparisonPollTimer = setTimeout(() => refreshComparison(target, seq), 5000);
     } else {
-      $('reportStateText').textContent = 'The comparison is taking too long. Try again later.';
+      comparisonState = 'failed';
       comparisonStateText = 'The comparison is taking too long. Try again later.';
+      comparisonCanRetry = false;
       refreshComparePanel();
     }
     return;
   }
   if (state === 'failed') {
-    $('reportStateText').textContent = "Couldn't write the comparison.";
-    $('reportActions').hidden = !(data.tries_left > 0);
-    $('reportWrite').textContent = 'Try again';
     comparisonReport = null;
     comparisonState = 'failed';
     comparisonStateText = "Couldn't write the comparison.";
+    comparisonCanRetry = data.tries_left > 0;
     refreshComparePanel();
     return;
   }
-  $('reportStateText').textContent = '';
-  $('reportActions').hidden = false;
-  $('reportWrite').textContent = 'Write comparison';
   comparisonReport = null;
   comparisonState = 'none';
   comparisonStateText = '';
+  comparisonCanRetry = true;
   refreshComparePanel();
 }
 
@@ -2641,10 +2578,10 @@ async function refreshComparison(target, seq) {
     data = await res.json().catch(() => ({}));
   } catch (e) {
     if (seq === comparisonReportSeq && comparison === target) {
-      $('reportStateText').textContent = "Couldn't reach the server.";
       comparisonReport = null;
       comparisonState = 'failed';
       comparisonStateText = "Couldn't reach the server.";
+      comparisonCanRetry = true;
       refreshComparePanel();
     }
     return;
@@ -2652,10 +2589,10 @@ async function refreshComparison(target, seq) {
   if (seq !== comparisonReportSeq || comparison !== target) return;
   if (res.status === 401) return window.location.reload();
   if (!res.ok) {
-    $('reportStateText').textContent = data.message || "Couldn't load the comparison.";
     comparisonReport = null;
     comparisonState = 'failed';
     comparisonStateText = data.message || "Couldn't load the comparison.";
+    comparisonCanRetry = true;
     refreshComparePanel();
     return;
   }
@@ -2665,21 +2602,16 @@ async function refreshComparison(target, seq) {
 function setupComparisonReport() {
   comparisonReportSeq += 1;
   stopComparisonPolling();
-  stopReportPolling();
   comparisonWritingSince = 0;
+  comparisonCanRetry = false;
   if (!comparison) return;
-  $('resultTabs').hidden = false;
-  $('reportStateText').textContent = '';
-  hideReportAnswer();
-  $('reportActions').hidden = true;
-  $('reportWrite').disabled = false;
   comparisonReport = null;
   comparisonState = 'loading';
   comparisonStateText = '';
+  $('compareWrite').disabled = false;
   if (comparison.kind === 'sample') {
     const entry = sampleComparisonEntry();
     if (!entry) {
-      $('reportStateText').textContent = 'No report for this pair.';
       comparisonState = 'none';
       comparisonStateText = 'No report for this pair.';
       refreshComparePanel();
@@ -2690,7 +2622,6 @@ function setupComparisonReport() {
   }
   if (!currentContext || !currentContext.jobId) { refreshComparePanel(); return; }
   if (!currentResult || !currentResult.frames || !comparison.result || !comparison.result.frames) {
-    $('reportStateText').textContent = 'No report for this pair.';
     comparisonState = 'none';
     comparisonStateText = 'No report for this pair.';
     refreshComparePanel();
@@ -2757,10 +2688,6 @@ function setupReport(jobId, result) {
   resetReportPanel();
   $('resultTabs').hidden = false;
   setResultTab('charts');
-  if (comparison) {
-    setupComparisonReport();
-    return;
-  }
   const sample = currentContext && currentContext.sampleId
     ? sampleById(currentContext.sampleId) : null;
   if (sample) {
@@ -2823,14 +2750,12 @@ async function requestReport() {
   }
 }
 
-// The Report tab and the Compare tab's verdict show the same state: set both here.
+// One place renders the comparison's state: the Compare tab's verdict.
 function showComparisonMessage(text, state, canRetry) {
-  $('reportStateText').textContent = text;
-  $('reportActions').hidden = !canRetry;
-  if (canRetry) $('reportWrite').textContent = 'Try again';
   comparisonReport = null;
   comparisonState = state;
   comparisonStateText = text;
+  comparisonCanRetry = canRetry;
   refreshComparePanel();
 }
 
@@ -2839,11 +2764,10 @@ async function requestComparison() {
   const main = currentContext && currentContext.jobId;
   const seq = comparisonReportSeq;
   if (!target || target.kind !== 'job' || !main || !target.jobId) return;
-  const button = $('reportWrite');
+  const button = $('compareWrite');
   button.disabled = true;
   button.textContent = 'Starting…';
-  $('reportActions').hidden = false;
-  refreshComparePanel();
+  $('compareActions').hidden = false;
   try {
     const res = await postJSON(`/api/compare/${main}/${target.jobId}/report`, {});
     const data = await res.json().catch(() => ({}));
@@ -2877,10 +2801,7 @@ async function requestComparison() {
 
 $('chartsTabBtn').addEventListener('click', () => setResultTab('charts'));
 $('reportTabBtn').addEventListener('click', () => setResultTab('report'));
-$('reportWrite').addEventListener('click', () => {
-  if (comparison) requestComparison();
-  else requestReport();
-});
+$('reportWrite').addEventListener('click', requestReport);
 
 async function showResult(jobId) {
   const seq = resultSeq;
@@ -2926,7 +2847,7 @@ function openResult(jobId, result) {
   $('clipTitle').textContent = shortName(name);
   $('clipTitle').title = name;
   try {
-    renderResult(result, result.summary || {}, { jobId, brainUrl: `/api/jobs/${jobId}/brain`, title, fileName: title });
+    renderResult(result, result.summary || {}, { jobId, brainUrl: `/api/jobs/${jobId}/brain`, title });
   } catch (e) {
     showResultUnavailable('The result could not be drawn.');
     return true;
@@ -3307,31 +3228,16 @@ function escapeHtml(text) {
 
 function currentVideoName() {
   const ctx = currentContext || {};
-  if (ctx.fileName) return ctx.fileName;
+  if (ctx.sampleId) {
+    const sample = sampleById(ctx.sampleId);
+    if (sample && sample.title) return sample.title;
+    return ctx.title || 'Sample';
+  }
   if (ctx.jobId) {
     const job = (jobsCache || []).find(j => j.job_id === ctx.jobId);
     if (job && job.filename) return job.filename;
   }
   return ctx.title || 'Untitled video';
-}
-
-function compareTable() {
-  const other = comparison ? comparison.summary || {} : {};
-  const row = (name, a, b) => `<tr><th scope="row">${name}</th><td class="v">${a}</td><td class="v">${b}</td></tr>`;
-  // A sound share of 0 keeps its value; the cell just says so on hover (§4.3).
-  const audio = s => {
-    const pct = audioPercent(s);
-    if (pct === 0) return '<span title="Responds as strongly with the sound off">—</span>';
-    return pct === null ? '—' : `${pct}%`;
-  };
-  const name = currentVideoName();
-  const otherName = comparison ? comparison.label : '';
-  const swap = comparison && currentContext && currentContext.jobId
-    ? `<button class="btn-ghost compare-swap" title="Make the other video the main one" data-swap="${escapeHtml(comparison.jobId)}">⇄ Swap</button>` : '';
-  return `<table class="compare-table"><thead><tr><th>${swap}</th><th title="${escapeHtml(name)}">${escapeHtml(shortName(name))}</th><th title="${escapeHtml(otherName)}">${escapeHtml(shortName(otherName))}</th></tr></thead><tbody>
-    ${row('Average (overall)', averageOverall(currentResult), averageOverall(comparison && comparison.result))}
-    ${row('Sound share', audio(currentSummary), audio(other))}
-  </tbody></table>`;
 }
 
 // Both results are already loaded: redraw from them, so the page never blanks or refetches.
@@ -3356,7 +3262,7 @@ function swapComparison() {
 function updateSoundLine() {
   const line = $('soundLine');
   if (!line) return;
-  if (!currentResult || comparison) {  // while comparing, the table's Sound share row has it
+  if (!currentResult) {
     line.hidden = true;
     line.textContent = '';
     return;
@@ -3366,19 +3272,6 @@ function updateSoundLine() {
   line.textContent = pct === 0 ? 'Responds as strongly with the sound off'
     : pct === null ? 'No strong response to measure'
     : `${pct}% of the response comes from the sound`;
-}
-
-function buildTop() {
-  const top = $('topArea');
-  updateSoundLine();
-  if (!currentResult) { top.replaceChildren(); return; }
-  if (comparison) {
-    top.classList.add('compare');
-    top.innerHTML = compareTable();
-  } else {
-    top.classList.remove('compare');
-    top.replaceChildren();
-  }
 }
 
 function renderResult(result, summary, ctx) {
@@ -3395,10 +3288,10 @@ function renderResult(result, summary, ctx) {
   comparisonReport = null;
   comparisonState = '';
   comparisonStateText = '';
+  comparisonCanRetry = false;
   stopVirtual();
   $('progressPanel').hidden = true;
   $('mutedToggle').checked = false;
-  $('mutedToggle').disabled = false;
   $('resultMessage').hidden = true;
   $('resultMessage').textContent = '';
   $('chartCard').hidden = false;
@@ -3422,7 +3315,7 @@ function renderResult(result, summary, ctx) {
     $('downloadCsv').removeAttribute('href');
     $('downloadCsv').hidden = true;
   }
-  buildTop();
+  updateSoundLine();
   buildAllCharts();
   showCompareRow();
   loadBrain();
@@ -3448,7 +3341,9 @@ function clearAllCharts() {
   $('mainChartBox').replaceChildren();
   $('stripsHost').replaceChildren();
   $('timeline').replaceChildren();
-  $('momentsLane').replaceChildren();
+  $('momentCaption').textContent = '';
+  $('momentCaption').title = '';
+  $('momentCaption').hidden = true;
   $('compareChartBox').replaceChildren();
   $('compareDiffs').replaceChildren();
 }
@@ -3495,8 +3390,10 @@ function drawChart(host, { lines, range, height = 200, axisLabels = false, dark 
   if (fill) {
     lines.forEach(line => {
       if (line.dash || !line.values.length) return;
-      const points = line.values.slice(0, T).map((v, i) => `${x(i)},${y(Math.max(-range, Math.min(range, Number.isFinite(v) ? v : 0)))}`).join(' ');
-      svgEl('polygon', { points: `0,${y(0)} ${points} ${W},${y(0)}`, fill: line.colour, opacity: '.10' }, svg);
+      const used = line.values.slice(0, T);
+      const points = used.map((v, i) => `${x(i)},${y(Math.max(-range, Math.min(range, Number.isFinite(v) ? v : 0)))}`).join(' ');
+      const last = used.length - 1;
+      svgEl('polygon', { points: `0,${y(0)} ${points} ${x(last)},${y(0)}`, fill: line.colour, opacity: '.10' }, svg);
     });
   }
 
@@ -3536,15 +3433,30 @@ function drawChart(host, { lines, range, height = 200, axisLabels = false, dark 
   });
 
   if (moments && lines[0]) {
+    const topFor = py => axisLabels ? `calc(${(py / H) * 100}% - ${(py / H) * 16}px)` : `${(py / H) * 100}%`;
     moments.forEach(moment => {
+      if (!Number.isFinite(moment.start) || moment.start >= T) return;
       const i = Math.max(0, Math.min(T - 1, moment.start));
       const raw = seriesAt(lines[0].values, i);
       if (raw == null) return;
       const mx = x(i), my = y(Math.max(-range, Math.min(range, raw)));
-      const mark = svgEl('g', { style: 'cursor: pointer' }, svg);
+      const full = momentFullLabel(moment);
+      const mark = document.createElement('button');
+      mark.type = 'button';
+      mark.className = 'moment-mark';
+      mark.moment = moment;
+      mark.title = `${full} · ${fmtRange(moment)}`;
+      mark.setAttribute('aria-label', `${full} · ${fmtRange(moment)}`);
+      mark.dataset.start = String(moment.start);
+      mark.dataset.end = String(momentEnd(moment));
+      mark.style.left = `${(mx / W) * 100}%`;
+      mark.style.top = topFor(my);
       mark.addEventListener('click', e => { e.stopPropagation(); seek(moment.start); });
-      svgEl('line', { x1: mx, y1: my, x2: mx, y2: my + 8, stroke: 'var(--accent)', 'stroke-width': 1.5, 'vector-effect': 'non-scaling-stroke' }, mark);
-      svgEl('circle', { cx: mx, cy: my, r: 3.2, fill: '#0B0C0E', stroke: 'var(--accent)', 'stroke-width': 1.6, 'vector-effect': 'non-scaling-stroke' }, mark);
+      mark.addEventListener('pointerenter', () => showMomentCaption(moment));
+      mark.addEventListener('pointerleave', () => clearMomentCaption());
+      mark.addEventListener('focus', () => showMomentCaption(moment));
+      mark.addEventListener('blur', () => clearMomentCaption());
+      host.append(mark);
     });
   }
 
@@ -3564,9 +3476,13 @@ function drawChart(host, { lines, range, height = 200, axisLabels = false, dark 
     const axis = document.createElement('div');
     axis.className = 'xaxis';
     const step = T > 40 ? 10 : Math.max(1, Math.ceil(T / 6));
-    for (let s = 0; s <= T; s += step) {
+    // Each label sits at its own second, the same place x() puts that second's point.
+    for (let s = 0; s <= T - 1; s += step) {
       const span = document.createElement('span');
       span.textContent = fmt(s);
+      const at = T > 1 ? s / (T - 1) : 0;
+      span.style.left = `${at * 100}%`;
+      if (s > 0 && at > 0.97) span.classList.add('end');
       axis.appendChild(span);
     }
     host.appendChild(axis);
@@ -3585,56 +3501,40 @@ function momentFullLabel(moment) {
   return moment.what_happens || moment.label || 'Moment';
 }
 
-function renderMomentsLane() {
-  const lane = $('momentsLane');
-  if (!lane) return;
-  lane.replaceChildren();
-  const T = totalSeconds();
-  if (!currentResult || !chartMoments.length || !T) {
-    lane.hidden = true;
-    return;
-  }
-  lane.hidden = false;
-  const W = lane.clientWidth || 640;
-  const rowRight = [];
-  const moments = [...chartMoments].filter(moment => moment.start < T).sort((a, b) => a.start - b.start);
-  moments.forEach(moment => {
-    const full = momentFullLabel(moment);
-    const label = full.length > 26 ? `${full.slice(0, 25).trimEnd()}…` : full;
-    const when = fmt(moment.start);
-    const width = Math.min(W * 0.46, Math.max(72, (label.length + when.length) * 6.1 + 28));
-    let left = (moment.start / Math.max(1, T - 1)) * W - width / 2;
-    left = Math.max(0, Math.min(W - width, left));
-    let row = 0;
-    while (row < 2 && rowRight[row] != null && left < rowRight[row] + 6) row += 1;
-    if (row >= 2 && rowRight[1] != null) { row = 1; left = Math.min(W - width, rowRight[1] + 6); }
-    rowRight[row] = left + width;
-    const chip = document.createElement('button');
-    chip.type = 'button';
-    chip.className = 'moment-chip';
-    chip.style.left = `${(left / W) * 100}%`;
-    chip.style.top = `${row * 22 + 2}px`;
-    chip.title = `${full} · ${fmtRange(moment)}`;
-    chip.dataset.start = String(moment.start);
-    chip.dataset.end = String(Number.isFinite(moment.end) ? moment.end : moment.start + 0.75);
-    const text = document.createElement('span');
-    text.className = 'moment-text';
-    text.textContent = full;
-    const time = document.createElement('span');
-    time.className = 'moment-when';
-    time.textContent = when;
-    chip.append(text, time);
-    chip.addEventListener('click', event => { event.stopPropagation(); seek(moment.start); });
-    lane.append(chip);
-  });
+function momentEnd(moment) {
+  return Number.isFinite(moment.end) ? moment.end : moment.start + 0.75;
+}
+
+function setMomentCaption(moment) {
+  const caption = $('momentCaption');
+  if (!caption) return;
+  const full = moment ? `${fmt(moment.start)} ${momentFullLabel(moment)}` : '';
+  caption.textContent = full;
+  caption.title = full;
+}
+
+function showMomentCaption(moment) {
+  momentFocus = moment;
+  setMomentCaption(moment);
+}
+
+function clearMomentCaption() {
+  momentFocus = null;
+  updateMomentActive(currentTime());
 }
 
 function updateMomentActive(t) {
-  document.querySelectorAll('#momentsLane .moment-chip').forEach(chip => {
-    const start = Number(chip.dataset.start);
-    const end = Number(chip.dataset.end);
-    chip.classList.toggle('active', Number.isFinite(start) && t >= start && t <= end);
+  const caption = $('momentCaption');
+  if (caption) caption.hidden = !chartMoments.length;
+  let active = null;
+  document.querySelectorAll('#mainChartBox .moment-mark').forEach(mark => {
+    const start = Number(mark.dataset.start);
+    const end = Number(mark.dataset.end);
+    const isActive = Number.isFinite(start) && t >= start && t <= end;
+    mark.classList.toggle('active', isActive);
+    if (isActive) active = mark.moment || null;
   });
+  setMomentCaption(momentFocus || active);
 }
 
 function buildMainChart() {
@@ -3645,10 +3545,7 @@ function buildMainChart() {
   const name = currentVideoName();
   const lines = [{ values: currentResult.signals.overall, colour: 'var(--heat)', width: 2.5, name }];
   let secondLabel = '';
-  if (comparison && comparison.result.signals) {
-    lines.push({ values: comparison.result.signals.overall || [], colour: 'var(--cool)', dash: true, width: 1.8, name: comparison.label });
-    secondLabel = comparison.label;
-  } else if (mutedOn && currentResult.muted && currentResult.muted.overall) {
+  if (mutedOn && currentResult.muted && currentResult.muted.overall) {
     lines.push({ values: currentResult.muted.overall, colour: 'var(--cool)', dash: true, width: 1.8 });
     secondLabel = 'muted';
   }
@@ -3657,8 +3554,7 @@ function buildMainChart() {
   });
   let range = 0;
   lines.forEach(line => { range = Math.max(range, niceRange(line.values)); });
-  drawChart(box, { lines, range, height: 220, axisLabels: true, dark: true, fill: true, span, scope: 'main', yLabels: true, moments: comparison ? null : chartMoments });
-  renderMomentsLane();
+  drawChart(box, { lines, range, height: 220, axisLabels: true, dark: true, fill: true, span, scope: 'main', yLabels: true, moments: chartMoments });
   const currentKey = `<span class="legend-key" title="${escapeHtml(name)}"><i></i>${escapeHtml(shortName(name))}</span>`;
   const secondKey = secondLabel ? `<span class="legend-key" title="${escapeHtml(secondLabel)}"><i class="dash"></i>${escapeHtml(shortName(secondLabel))}</span>` : '';
   $('chartKeys').innerHTML = secondLabel ? currentKey + secondKey : '';
@@ -3667,17 +3563,12 @@ function buildMainChart() {
 function stripRange() {
   const values = [];
   Object.keys(GROUPS).forEach(g => { if (currentResult.signals[g]) values.push(...currentResult.signals[g]); });
-  if (comparison && comparison.result.signals) {
-    Object.keys(GROUPS).forEach(g => { if (comparison.result.signals[g]) values.push(...comparison.result.signals[g]); });
-  }
   return niceRange(values);
 }
 
 function partsRange(group) {
   const values = [];
-  [currentResult, comparison && comparison.result].forEach(r => {
-    if (r && r.signals) GROUPS[group].signals.forEach(sig => { if (r.signals[sig]) values.push(...r.signals[sig]); });
-  });
+  GROUPS[group].signals.forEach(sig => { if (currentResult.signals[sig]) values.push(...currentResult.signals[sig]); });
   return niceRange(values);
 }
 
@@ -3708,9 +3599,6 @@ function buildStrips() {
     host.append(strip);
 
     const lines = [{ values: currentResult.signals[group] || [], colour: 'var(--ink)', width: 1.75 }];
-    if (comparison && comparison.result.signals) {
-      lines.push({ values: comparison.result.signals[group] || [], colour: 'var(--cool)', dash: true, width: 1.5 });
-    }
     drawChart(chart, { lines, range, height: 78, dark: true, fill: true, span, scope: 'strips', playhead: 'rgba(236,237,239,.28)' });
   });
 }
@@ -3747,9 +3635,6 @@ function swapParts(group) {
     cell.append(h4, chart);
     row.append(cell);
     const lines = [{ values: currentResult.signals[signal] || [], colour: 'var(--ink-2)', width: 1.5 }];
-    if (comparison && comparison.result.signals) {
-      lines.push({ values: comparison.result.signals[signal] || [], colour: 'var(--cool)', dash: true, width: 1.4 });
-    }
     drawChart(chart, { lines, range: partsRange(group), height: 56, dark: true, fill: true, span, scope: 'strips-parts', playhead: 'rgba(236,237,239,.28)' });
   });
   wrap.append(head, row);
@@ -3851,7 +3736,7 @@ function updateReadouts(t) {
     readout.classList.toggle('neg', overall != null && overall < 0);
   }
   const second = $('overallSecond');
-  if (second) second.textContent = `${Math.floor(t)} s`;
+  if (second) second.textContent = fmt(t);
   const clock = $('videoClock');
   if (clock) clock.textContent = currentResult ? `${fmt(t)} / ${fmt(totalSeconds())}` : '';
 }
@@ -3888,9 +3773,8 @@ function buildAllCharts() {
 }
 
 function compareNames() {
-  const sampleTitle = currentContext && currentContext.sampleId && currentContext.title;
   return {
-    aName: sampleTitle || currentVideoName(),
+    aName: currentVideoName(),
     bName: comparison ? (comparison.label || 'Other video') : 'Other video',
   };
 }
@@ -3904,7 +3788,7 @@ function clearCompareChart() {
 function buildCompareChart() {
   if (!currentResult || !comparison || !comparison.result || !comparison.result.signals) return;
   clearScope('compare');
-  const span = chartSpan();
+  const span = compareSpan();
   const lines = [
     { values: currentResult.signals.overall || [], colour: 'var(--accent)', width: 1.8 },
     { values: comparison.result.signals.overall || [], colour: 'var(--blue)', width: 1.4 },
@@ -3924,16 +3808,15 @@ function renderCompareDiffs() {
   const host = $('compareDiffs');
   host.replaceChildren();
   if (!comparisonReport || !Array.isArray(comparisonReport.differences)) return;
-  const { aName, bName } = comparisonABNames.aName ? comparisonABNames : compareNames();
   const aColour = comparisonCurrentSide === 'a' ? 'var(--accent)' : 'var(--blue)';
   const bColour = comparisonCurrentSide === 'b' ? 'var(--accent)' : 'var(--blue)';
-  const spanChip = (label, span, colour) => {
+  const spanChip = (span, colour, only) => {
     const chip = document.createElement('span');
     chip.className = 'diff-chip';
     const dot = document.createElement('i');
     dot.style.background = colour;
     const text = document.createElement('span');
-    text.textContent = `${shortName(label, 18)} ${fmt(span.start)}–${fmt(span.end)}`;
+    text.textContent = `${fmt(span.start)}–${fmt(span.end)}${only ? ' only' : ''}`;
     chip.append(dot, text);
     return chip;
   };
@@ -3945,8 +3828,8 @@ function renderCompareDiffs() {
     chips.className = 'diff-chips';
     const onlyA = difference.a && !difference.b;
     const onlyB = difference.b && !difference.a;
-    if (difference.a) chips.append(spanChip(onlyA ? `only in ${aName}` : aName, difference.a, aColour));
-    if (difference.b) chips.append(spanChip(onlyB ? `only in ${bName}` : bName, difference.b, bColour));
+    if (difference.a) chips.append(spanChip(difference.a, aColour, onlyA));
+    if (difference.b) chips.append(spanChip(difference.b, bColour, onlyB));
     const what = document.createElement('p');
     what.className = 'diff-what';
     what.textContent = difference.what_differs || '';
@@ -3974,12 +3857,20 @@ function renderCompareVerdict() {
   }
   headline.hidden = !headline.textContent;
   summary.hidden = !summary.textContent;
-  // The link opens the full report, or writes one here when that is offered.
-  const link = $('compareReportLink');
-  const canWrite = !comparisonReport && !$('reportActions').hidden;
-  link.hidden = !comparisonReport && !canWrite;
-  link.disabled = !comparisonReport && $('reportWrite').disabled;
-  link.textContent = comparisonReport ? 'Full report →' : $('reportWrite').textContent;
+  if (comparisonReport) {
+    fillReportList('compareStrengths', 'compareStrengthsWrap',
+      `Where ${shortName(aName)} does better`, comparisonReport.a_does_better);
+    fillReportList('compareImprovements', 'compareImprovementsWrap',
+      `Where ${shortName(bName)} does better`, comparisonReport.b_does_better);
+    fillReportList('compareSuggestions', 'compareSuggestionsWrap', 'Suggestions', comparisonReport.suggestions);
+  } else {
+    fillReportList('compareStrengths', 'compareStrengthsWrap', '', []);
+    fillReportList('compareImprovements', 'compareImprovementsWrap', '', []);
+    fillReportList('compareSuggestions', 'compareSuggestionsWrap', 'Suggestions', []);
+  }
+  const canWrite = !comparisonReport && comparison && comparison.kind === 'job' && comparisonCanRetry;
+  $('compareActions').hidden = !canWrite;
+  $('compareWrite').textContent = comparisonState === 'failed' ? 'Try again' : 'Write comparison';
 }
 
 function compareTargetTime() {
@@ -4048,12 +3939,12 @@ async function loadCompareVideoB() {
 function buildCompareView() {
   if (!currentResult || !comparison) { clearCompareChart(); return; }
   const { aName, bName } = compareNames();
-  $('compareNameA').textContent = shortName(aName, 48);
+  $('compareNameA').textContent = `${aName} · avg ${averageOverall(currentResult)}`;
   $('compareNameA').title = aName;
-  $('compareNameB').textContent = shortName(bName, 48);
+  $('compareNameA').style.color = 'var(--accent)';
+  $('compareNameB').textContent = `${bName} · avg ${averageOverall(comparison.result)}`;
   $('compareNameB').title = bName;
-  $('compareLegendA').textContent = shortName(aName, 24);
-  $('compareLegendB').textContent = shortName(bName, 24);
+  $('compareNameB').style.color = 'var(--blue)';
   const kept = comparison.kind === 'sample' ? comparison.sampleId : comparison.jobId;
   if ([...$('compareSelect').options].some(option => option.value === kept)) $('compareSelect').value = kept;
   $('compareSwap').hidden = !(currentContext && currentContext.jobId && comparison.kind === 'job');
@@ -4092,7 +3983,7 @@ function selectCompareDiff(index) {
 
 function updateCompareTransport(t) {
   if (currentTab !== 'compare') return;
-  const span = chartSpan();
+  const span = compareSpan();
   const clock = `${fmt(t)} / ${fmt(span)}`;
   $('compareTime').textContent = clock;
   $('compareChartTime').textContent = clock;
@@ -4141,7 +4032,7 @@ function showCompareRow() {
     comparisonReport = null;
     comparisonState = '';
     comparisonStateText = '';
-    buildTop(); buildMainChart(); buildStrips();
+    buildMainChart(); buildStrips();
     setupReport(jobId, currentResult);
     if (currentTab === 'compare') setResultTab('charts');
   };
@@ -4149,7 +4040,6 @@ function showCompareRow() {
     row.hidden = true;
     button.hidden = true;
     select.replaceChildren();
-    $('mutedToggle').disabled = false;
     if (comparison) clear();
     return;
   }
@@ -4173,7 +4063,6 @@ function showCompareRow() {
     select.value = kept;
   } else {
     select.value = '';
-    $('mutedToggle').disabled = false;
     if (comparison) clear();
   }
 }
@@ -4189,8 +4078,7 @@ async function loadComparison() {
     comparisonState = '';
     comparisonStateText = '';
     clearCompareChart();
-    $('mutedToggle').disabled = false;
-    buildTop(); buildMainChart(); buildStrips(); tick();
+    buildMainChart(); buildStrips(); tick();
     setupReport(currentContext && currentContext.jobId, currentResult);
     if (currentTab === 'compare') setResultTab('charts');
     return;
@@ -4206,8 +4094,7 @@ async function loadComparison() {
       comparisonState = 'none';
       comparisonStateText = "Couldn't load that sample.";
       clearCompareChart();
-      $('mutedToggle').disabled = false;
-      buildTop(); buildMainChart(); buildStrips();
+      buildMainChart(); buildStrips();
       setupReport(null, currentResult);
       if (currentTab === 'compare') setResultTab('charts');
       return;
@@ -4235,8 +4122,7 @@ async function loadComparison() {
       comparisonState = 'none';
       comparisonStateText = data.message || "Couldn't load the comparison.";
       clearCompareChart();
-      $('mutedToggle').disabled = false;
-      buildTop(); buildMainChart(); buildStrips();
+      buildMainChart(); buildStrips();
       setupReport(currentContext && currentContext.jobId, currentResult);
       if (currentTab === 'compare') setResultTab('charts');
       return;
@@ -4252,8 +4138,7 @@ async function loadComparison() {
     comparisonState = 'none';
     comparisonStateText = "Couldn't reach the server.";
     clearCompareChart();
-    $('mutedToggle').disabled = false;
-    buildTop(); buildMainChart(); buildStrips();
+    buildMainChart(); buildStrips();
     setupReport(currentContext && currentContext.jobId, currentResult);
     if (currentTab === 'compare') setResultTab('charts');
   }
@@ -4262,17 +4147,15 @@ function useComparison(id, label, data) {
   ++compareRequest;
   comparison = { kind: 'job', result: data, summary: data.summary || {}, label, jobId: id };
   $('compareSelect').value = id;
-  mutedOn = false;
   compareActiveDiff = -1; compareOffset = 0;
   comparisonReport = null;
   comparisonState = 'loading';
   comparisonStateText = '';
   comparisonCurrentSide = 'a';
   comparisonABNames = { aName: '', bName: '' };
-  $('mutedToggle').checked = false;
   $('compareMsg').textContent = '';
   $('compareMsg').classList.remove('error');
-  buildTop(); buildMainChart(); buildStrips(); tick();
+  buildMainChart(); buildStrips(); tick();
   setupComparisonReport();
   if (currentTab === 'compare') buildCompareView();
 }
@@ -4287,17 +4170,15 @@ function useSampleComparison(sample) {
     label: sample.title || sample.id,
   };
   $('compareSelect').value = sample.id;
-  mutedOn = false;
   compareActiveDiff = -1; compareOffset = 0;
   comparisonReport = null;
   comparisonState = 'loading';
   comparisonStateText = '';
   comparisonCurrentSide = 'a';
   comparisonABNames = { aName: '', bName: '' };
-  $('mutedToggle').checked = false;
   $('compareMsg').textContent = '';
   $('compareMsg').classList.remove('error');
-  buildTop(); buildMainChart(); buildStrips(); tick();
+  buildMainChart(); buildStrips(); tick();
   setupComparisonReport();
   if (currentTab === 'compare') buildCompareView();
 }
@@ -4305,11 +4186,8 @@ $('compareSelect').addEventListener('change', loadComparison);
 $('compareTabBtn').addEventListener('click', openCompareTab);
 $('comparePlay').addEventListener('click', togglePlay);
 $('compareSwap').addEventListener('click', swapComparison);
-// With a report it opens the full report; without one it starts writing it right here.
-$('compareReportLink').addEventListener('click', () => {
-  if (comparisonReport) setResultTab('report');
-  else if (!$('reportWrite').disabled) requestComparison();
-});
+$('compareWrite').addEventListener('click', requestComparison);
+$('compareClose').addEventListener('click', () => setResultTab('charts'));
 compareVideoB.addEventListener('click', togglePlay);
 $('progressCancel').addEventListener('click', async () => {
   const jobId = progressJobId;
@@ -4322,25 +4200,10 @@ $('progressCancel').addEventListener('click', async () => {
 
 $('mutedToggle').addEventListener('change', () => {
   mutedOn = $('mutedToggle').checked;
-  if (mutedOn && comparison) {
-    comparison = null;
-    compareActiveDiff = -1; compareOffset = 0;
-    comparisonReport = null;
-    comparisonState = '';
-    comparisonStateText = '';
-    clearCompareChart();
-    $('compareSelect').value = '';
-    $('mutedToggle').disabled = false;
-    buildTop();
-    setupReport(currentContext && currentContext.jobId, currentResult);
-    if (currentTab === 'compare') setResultTab('charts');
-  }
   buildMainChart(); buildStrips(); tick();
 });
 
 $('reportBody').addEventListener('click', e => {
-  const swap = e.target.closest('[data-swap]');
-  if (swap) return swapComparison();
   const target = e.target.closest('[data-seek]');
   if (target) seek(+target.dataset.seek);
 });
@@ -4508,7 +4371,7 @@ function resetUI() {
   stopProgress();
   resetReportPanel();
   currentResult = null; currentSummary = null; currentContext = null; comparison = null;
-  comparisonCandidates = []; compareActiveDiff = -1; compareOffset = 0; comparisonReport = null; comparisonState = ''; comparisonStateText = '';
+  comparisonCandidates = []; compareActiveDiff = -1; compareOffset = 0; comparisonReport = null; comparisonState = ''; comparisonStateText = ''; comparisonCanRetry = false;
   mutedOn = false; virtualTime = 0;
   chartMoments = [];
   clearAllCharts();
@@ -4521,11 +4384,8 @@ function resetUI() {
   $('appShell').classList.remove('compare-view');
   $('videoMissing').textContent = '';
   $('mutedToggle').checked = false;
-  $('mutedToggle').disabled = false;
   $('resultMessage').hidden = true;
   $('resultMessage').textContent = '';
-  $('topArea').replaceChildren();
-  $('topArea').classList.remove('compare');
   updateSoundLine();
   $('chartKeys').replaceChildren();
   $('downloadCsv').hidden = true;
@@ -4539,7 +4399,9 @@ function resetUI() {
   $('stripsCard').hidden = false;
   $('brainSecond').textContent = '';
   $('brainValues').replaceChildren();
-  $('momentsLane').replaceChildren();
+  $('momentCaption').textContent = '';
+  $('momentCaption').title = '';
+  $('momentCaption').hidden = true;
   $('videoClock').textContent = '';
   $('sampleMeta').textContent = '';
   $('clipTitle').textContent = '';
@@ -4587,7 +4449,6 @@ let laneResizeTimer = null;
 window.addEventListener('resize', () => {
   clearTimeout(laneResizeTimer);
   laneResizeTimer = setTimeout(() => {
-    if (currentResult && !comparison && chartMoments.length) renderMomentsLane();
     if (currentTab === 'compare' && comparison) { buildCompareChart(); tick(); }
   }, 120);
 });
