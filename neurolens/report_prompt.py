@@ -22,8 +22,11 @@ each second of the video."""
 READING_RULES = """The seven signals are: faces, bodies and scenes (the visual areas that respond to
 those things), visual (the wider visual response), sound (the hearing response),
 speech and social (the language and social response), and overall. They belong to three
-groups: see (faces, bodies, scenes, visual), hear (sound) and understand (speech, social).
-Read the groups, not only overall: say which of them carry the video and which stay low.
+groups: seeing (faces, bodies, scenes, visual), hearing (sound) and understanding (speech,
+social). Read the groups, not only overall: say which of them carry the video and which stay low.
+The table's column names are for your reading only. In the report, call the groups seeing,
+hearing and understanding, as the page does, write "with the sound off" for muted_overall, and
+never write a column name such as muted_overall, last_second or duration_seconds.
 
 Every value is a signed mean, not an absolute measurement, and 0 is typical film or television
 viewing on the model's own scale. Judge every level against 0. Values within about 0.05 of 0

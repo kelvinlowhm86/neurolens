@@ -112,7 +112,9 @@ normally (no Lambda retry). The Lambda's async retries are set to 0 and its time
   maker in plain words; cite times in whole seconds; never guess what was said beyond the
   words given. How to read the curves (checked against the CeraVe 30 s and 76 s cuts, 29 Oct):
   judge every level against 0, so the lowest stretch of a video above 0 is an opportunity, not a
-  failure; read the three groups, not only overall; the response trails the screen by about
+  failure; read the three groups, not only overall, and name them seeing, hearing and
+  understanding as the page does, never writing a table column name (`muted_overall` becomes
+  "with the sound off"); the response trails the screen by about
   1-3 s and is smoothed; judge the opening by its level and rise (vision needs a few seconds to
   build), and treat a drop over a final logo card as expected; overall above `muted.overall`
   means sound carries that stretch; the transcript can misspell names (take them from on-screen
