@@ -61,6 +61,13 @@
   .D .report { background: transparent; padding: 20px 24px; display: flex; flex-direction: column; gap: 16px; min-height: 0; overflow: hidden; }
   .D.compare-view { grid-template-columns: minmax(0, 1fr); }
   .D.compare-view .side { display: none; }
+  .D.page-scroll { height: auto; min-height: calc(100vh - 56px); overflow: visible; }
+  .D.page-scroll .report { overflow: visible; }
+  .D.page-scroll .report-body, .D.page-scroll .result-panel { flex: none; overflow: visible; }
+  body:has(.D.page-scroll) { overflow: auto; }
+  @media (min-width: 861px) and (min-height: 621px) {
+    .D.page-scroll .side { height: calc(100vh - 56px); position: sticky; top: 0; }
+  }
 
   .chooser { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; scrollbar-width: thin; }
   .chooser-panel { display: flex; flex-direction: column; gap: 16px; min-height: 0; }
@@ -242,12 +249,19 @@
   .report-answer h2 { font: 600 20px/1.3 var(--display); }
   .report-answer p { font-size: 14px; color: var(--ink-2); line-height: 1.6; }
   .report-answer .report-key { font: 500 13px var(--display); color: var(--muted); }
+  .report-lists { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; align-items: start; }
   .report-moments { display: flex; flex-direction: column; gap: 8px; }
-  .report-moment { background: var(--well); border: 1px solid var(--line); border-radius: 2px; padding: 10px 12px; text-align: left; color: inherit; display: flex; flex-direction: column; gap: 3px; }
+  .report-moment { background: var(--well); border: 1px solid var(--line); border-radius: 2px; padding: 10px 12px; text-align: left; color: inherit; display: flex; flex-direction: column; gap: 4px; }
   .report-moment:hover { border-color: var(--muted); }
-  .report-moment .when { font: 500 13px var(--mono); color: var(--accent); font-variant-numeric: tabular-nums; }
-  .report-moment p { font-size: 13px; color: var(--ink-2); }
-  .report-moment .suggestion { color: var(--ink); }
+  .report-moment:focus-visible { border-color: var(--accent); }
+  .moment-head { display: flex; align-items: center; gap: 8px; }
+  .moment-icon { width: 0; height: 0; border-left: 7px solid var(--accent); border-top: 5px solid transparent; border-bottom: 5px solid transparent; flex: none; }
+  .report-moment .when { font: 500 13px var(--mono); color: var(--accent); font-variant-numeric: tabular-nums; text-decoration: underline; text-decoration-color: transparent; text-underline-offset: 3px; transition: color .15s, text-decoration-color .15s; }
+  .report-moment:hover .when, .report-moment:focus-visible .when { color: var(--accent2); text-decoration-color: currentColor; }
+  .report-moment .m-line { display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 10px; align-items: baseline; font-size: 13px; color: var(--ink-2); }
+  .report-moment .m-label { font: 500 10.5px var(--display); color: var(--muted); }
+  .report-moment .m-text { line-height: 1.5; }
+  .report-moment .m-line.do .m-text { color: var(--ink); }
   .report-list h3 { font: 600 13px var(--display); color: var(--ink-2); margin-bottom: 4px; }
   .report-list ul { padding-left: 18px; font-size: 13px; color: var(--ink-2); }
   .report-actions { display: flex; gap: 8px; align-items: center; }
@@ -405,6 +419,7 @@
     .main-chart { flex: none; }
     .main-chart .chart { height: 210px; flex: none; }
     .D .report { padding: 18px 14px 60px; overflow: visible; }
+    .result-tabs { position: sticky; top: 0; z-index: 20; background: var(--bg); }
     .result-panel { overflow: visible; }
     .strips-wrap { flex: none; }
     .strips { grid-template-columns: 1fr; }
@@ -646,9 +661,11 @@
             <p class="report-key" id="reportKey" hidden></p>
             <h2 id="reportHeadline"></h2>
             <p id="reportSummary"></p>
+            <div class="report-lists">
+              <div class="report-list" id="reportStrengthsWrap"><h3>Strengths</h3><ul id="reportStrengths"></ul></div>
+              <div class="report-list" id="reportImprovementsWrap"><h3>Improvements</h3><ul id="reportImprovements"></ul></div>
+            </div>
             <div class="report-moments" id="reportMoments"></div>
-            <div class="report-list" id="reportStrengthsWrap"><h3>Strengths</h3><ul id="reportStrengths"></ul></div>
-            <div class="report-list" id="reportImprovementsWrap"><h3>Improvements</h3><ul id="reportImprovements"></ul></div>
             <p class="note">Written by Claude from predicted brain responses.</p>
           </div>
           <div class="report-actions" id="reportActions" hidden>
@@ -2291,7 +2308,11 @@ function showProgress(job) {
   progressStages = stages;
   progressStartedAt = status === 'processing' ? (Number.isFinite(claimed) && claimed > 0 ? claimed : now) : (Number.isFinite(created) ? created : now);
 
-  if (currentTab === 'compare') { currentTab = 'charts'; $('appShell').classList.remove('compare-view'); leaveCompareVideos(); }
+  if (currentTab !== 'charts') {
+    if (currentTab === 'compare') leaveCompareVideos();
+    currentTab = 'charts';
+    $('appShell').classList.remove('compare-view', 'page-scroll');
+  }
   video.pause();
   compareVideoB.pause();
   setViewName('chooser');
@@ -2450,6 +2471,7 @@ function setResultTab(name) {
   $('reportTabBtn').classList.toggle('active', showReport);
   $('compareTabBtn').classList.toggle('active', wantsCompare);
   $('appShell').classList.toggle('compare-view', wantsCompare);
+  $('appShell').classList.toggle('page-scroll', currentTab !== 'charts');
   if (wantsCompare) {
     enterCompareVideos();
     buildCompareView();
@@ -2472,16 +2494,18 @@ function stopComparisonPolling() {
   comparisonWritingSince = 0;
 }
 
-function fillReportList(host, wrap, heading, items) {
+function fillReportList(host, wrap, heading, items, max) {
   $(host).replaceChildren();
+  const list = items || [];
+  const shown = max ? list.slice(0, max) : list;
   const title = $(wrap).querySelector('h3');
   if (title) title.textContent = heading;
-  for (const item of items || []) {
+  for (const item of shown) {
     const li = document.createElement('li');
     li.textContent = item;
     $(host).append(li);
   }
-  $(wrap).hidden = !(items || []).length;
+  $(wrap).hidden = !shown.length;
 }
 
 function hideReportAnswer() {
@@ -2521,6 +2545,19 @@ function resetReportPanel() {
   setResultTab('charts');
 }
 
+function reportMomentLine(label, text, cls) {
+  const line = document.createElement('p');
+  line.className = 'm-line' + (cls ? ' ' + cls : '');
+  const name = document.createElement('span');
+  name.className = 'm-label';
+  name.textContent = label;
+  const value = document.createElement('span');
+  value.className = 'm-text';
+  value.textContent = text || '';
+  line.append(name, value);
+  return line;
+}
+
 function renderReportAnswer(report) {
   hideReportAnswer();
   $('reportKey').hidden = true;
@@ -2531,24 +2568,25 @@ function renderReportAnswer(report) {
     button.type = 'button';
     button.className = 'report-moment';
     button.dataset.seek = String(moment.start);
+    const head = document.createElement('span');
+    head.className = 'moment-head';
+    const icon = document.createElement('span');
+    icon.className = 'moment-icon';
+    icon.setAttribute('aria-hidden', 'true');
     const when = document.createElement('span');
     when.className = 'when';
     when.textContent = fmtRange(moment);
-    const what = document.createElement('p');
-    what.textContent = moment.what_happens || '';
-    const brain = document.createElement('p');
-    brain.textContent = moment.brain_response || '';
-    button.append(when, what, brain);
-    if (moment.suggestion) {
-      const suggestion = document.createElement('p');
-      suggestion.className = 'suggestion';
-      suggestion.textContent = moment.suggestion;
-      button.append(suggestion);
-    }
+    head.append(icon, when);
+    button.append(head);
+    button.append(
+      reportMomentLine('On screen', moment.what_happens),
+      reportMomentLine('Brain', moment.brain_response),
+    );
+    if (moment.suggestion) button.append(reportMomentLine('Do', moment.suggestion, 'do'));
     $('reportMoments').append(button);
   }
-  fillReportList('reportStrengths', 'reportStrengthsWrap', 'Strengths', report.strengths);
-  fillReportList('reportImprovements', 'reportImprovementsWrap', 'Improvements', report.improvements);
+  fillReportList('reportStrengths', 'reportStrengthsWrap', 'Strengths', report.strengths, 2);
+  fillReportList('reportImprovements', 'reportImprovementsWrap', 'Improvements', report.improvements, 2);
   $('reportAnswer').hidden = false;
   setChartMoments(report.moments || []);
 }
@@ -4471,7 +4509,7 @@ function resetUI() {
   compareVideoB.load();
   compareVideoKey = '';
   $('progressPanel').hidden = true;
-  $('appShell').classList.remove('compare-view');
+  $('appShell').classList.remove('compare-view', 'page-scroll');
   $('videoMissing').textContent = '';
   $('mutedToggle').checked = false;
   $('resultMessage').hidden = true;

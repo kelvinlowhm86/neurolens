@@ -185,12 +185,16 @@ A Report tab beside the charts of a finished job. States, few words:
   placeholder shaped like the finished report (headline bar, text lines, two moment blocks);
   the page checks `GET …/report` every 5 s, stops after 10 min. The placeholder is static under
   `prefers-reduced-motion: reduce`.
-- ready: headline, summary, then the moments (each time a button that moves the time cursor,
-  like the existing moment links), strengths, improvements; the note "Written by Claude from
-  predicted brain responses."
+- ready: headline, summary, then strengths and improvements (side by side on desktop, stacked
+  when narrow; at most the first two of each), then the moments; the note "Written by Claude
+  from predicted brain responses."
+- Each moment is a button that moves the time cursor: a play triangle and its time (underlined
+  on hover or keyboard focus), then three labelled lines: "On screen" (`what_happens`),
+  "Brain" (`brain_response`) and "Do" (`suggestion`, left out when there is none).
 - failed with tries left: "Couldn't write the report." and "Try again"; none left: the first
   line only.
-All model text is inserted as text (`textContent`), never as HTML.
+All model text is inserted as text (`textContent`), never as HTML. A long report scrolls the
+page as a whole, not the panel; on a phone the tab bar sticks to the top while scrolling.
 
 ## 7. Privacy page (`static/privacy.html`)
 A short section: when you ask for a report, the video's frames (1 per second), its words and its
