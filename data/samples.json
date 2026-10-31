@@ -810,7 +810,8 @@
         "model": "us.anthropic.claude-sonnet-4-6",
         "created_at": "2026-10-31T00:22:47Z"
       },
-      "csv_file": "output/cerave_30s/result.csv"
+      "csv_file": "output/cerave_30s/result.csv",
+      "pdf_file": "output/cerave_30s/report.pdf"
     },
     {
       "id": "cerave_76s",
@@ -2634,7 +2635,8 @@
         "model": "us.anthropic.claude-sonnet-4-6",
         "created_at": "2026-10-31T00:26:31Z"
       },
-      "csv_file": "output/cerave_76s/result.csv"
+      "csv_file": "output/cerave_76s/result.csv",
+      "pdf_file": "output/cerave_76s/report.pdf"
     },
     {
       "id": "sintel_trailer_720p",
@@ -3930,7 +3932,8 @@
         "model": "us.anthropic.claude-sonnet-4-6",
         "created_at": "2026-10-31T00:23:51Z"
       },
-      "csv_file": "output/sintel_trailer_720p/result.csv"
+      "csv_file": "output/sintel_trailer_720p/result.csv",
+      "pdf_file": "output/sintel_trailer_720p/report.pdf"
     },
     {
       "id": "bbb_720p_55s",
@@ -5256,7 +5259,8 @@
         "model": "us.anthropic.claude-sonnet-4-6",
         "created_at": "2026-10-31T00:22:59Z"
       },
-      "csv_file": "output/bbb_720p_55s/result.csv"
+      "csv_file": "output/bbb_720p_55s/result.csv",
+      "pdf_file": "output/bbb_720p_55s/report.pdf"
     }
   ],
   "comparisons": [
@@ -5318,7 +5322,8 @@
         ],
         "model": "us.anthropic.claude-sonnet-4-6",
         "created_at": "2026-10-31T00:22:46Z"
-      }
+      },
+      "pdf_file": "output/compare/bbb_720p_55s__sintel_trailer_720p.pdf"
     },
     {
       "a": "cerave_30s",
@@ -5374,7 +5379,8 @@
         ],
         "model": "us.anthropic.claude-sonnet-4-6",
         "created_at": "2026-10-31T00:23:37Z"
-      }
+      },
+      "pdf_file": "output/compare/cerave_30s__cerave_76s.pdf"
     }
   ]
 }
