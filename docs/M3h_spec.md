@@ -308,7 +308,7 @@ Modest changes; the redesign comes later.
   - Swapping the main video keeps the same pair; the videos, rows and chart are redrawn so the
     times, colours and A/B sides still follow the stored pair.
 - All model text is inserted with `textContent`, never as HTML. Compare titles show the full name
-  and wrap, each in its line's colour with its average overall.
+  and wrap, each in its line's colour with its average overall in words (M3d §8).
 
 ## 9. Privacy page (`static/privacy.html`)
 The "AI reports" section adds one sentence: when you ask for a comparison, the same things

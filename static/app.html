@@ -212,7 +212,7 @@
   .brain-values { width: 98px; flex: none; display: flex; flex-direction: column; gap: 8px; justify-content: center; }
   .brain-value { display: flex; flex-direction: column; gap: 2px; padding-top: 6px; border-top: 1px solid var(--line); }
   .brain-value-label { font-size: 11.5px; color: var(--muted); }
-  .brain-value-num { font: 500 15px var(--mono); color: var(--accent2); font-variant-numeric: tabular-nums; }
+  .brain-value-num { font: 500 14px var(--display); color: var(--accent2); font-variant-numeric: tabular-nums; }
   .brain-value.neg .brain-value-num { color: var(--cool); }
   .brain-foot { display: flex; align-items: center; gap: 10px; font-size: 11px; color: var(--muted); }
   .brain-legend { display: flex; gap: 8px; align-items: center; pointer-events: none; }
@@ -291,8 +291,9 @@
   .toggle:has(input:checked) { color: var(--ink); border-color: var(--accent); background: rgba(255,138,42,.08); }
   .toggle input { accent-color: var(--accent); }
   .readout { margin-left: auto; text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
-  .readout-value { font: 500 28px/1 var(--mono); color: var(--accent2); font-variant-numeric: tabular-nums; }
+  .readout-value { font: 500 20px/1 var(--display); color: var(--accent2); font-variant-numeric: tabular-nums; }
   .readout-value.neg { color: var(--cool); }
+  .readout-value.flat, .brain-value.flat .brain-value-num { color: var(--ink); }
   .readout-sub { font-size: 12px; color: var(--muted); white-space: nowrap; }
   .compare-pick { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--muted); }
   .compare-pick select { border: 1px solid var(--line); border-radius: var(--radius); padding: 5px 8px; background: var(--well); color: var(--ink); font-size: 12px; max-width: 220px; }
@@ -308,7 +309,7 @@
   .moment-tip-time { display: block; margin-bottom: 2px; font: 500 11px var(--mono); color: var(--accent); font-variant-numeric: tabular-nums; }
   .chart { position: relative; width: 100%; flex: 1; min-height: 0; }
   .chart svg { display: block; width: 100%; overflow: visible; cursor: crosshair; }
-  .xaxis { position: relative; font: 10.5px var(--mono); color: var(--muted); height: 16px; }
+  .xaxis { position: relative; font: 12px var(--mono); color: var(--ink-2); height: 16px; }
   .xaxis span { position: absolute; top: 0; transform: translateX(-50%); white-space: nowrap; }
   .xaxis span:first-child { transform: none; }
   .xaxis span.end { transform: translateX(-100%); }
@@ -870,6 +871,16 @@ function fmtSigned(v) {
   if (rounded > 0) return `+${rounded.toFixed(2)}`;
   if (rounded < 0) return `−${Math.abs(rounded).toFixed(2)}`;
   return '0.00';
+}
+// Words for a value against typical viewing (0); the number goes in a tooltip only.
+// Within 0.05 of 0 is typical, the same line the report prompt draws.
+function levelWord(v, short = false) {
+  if (!Number.isFinite(v)) return '—';
+  const a = Math.abs(v);
+  if (a < 0.05) return 'Typical';
+  const word = `${a >= 0.2 ? 'Well ' : ''}${v > 0 ? 'above' : 'below'}`;
+  const text = short ? word : `${word} typical`;
+  return text.charAt(0).toUpperCase() + text.slice(1);
 }
 function seriesAt(values, t) {
   if (!Array.isArray(values) || !values.length) return null;
@@ -3326,12 +3337,8 @@ function audioPercent(s) {
 function averageOverall(result) {
   const values = result && result.signals && Array.isArray(result.signals.overall) ? result.signals.overall : [];
   const used = values.length > 1 ? values.slice(1) : values;
-  if (!used.length) return '—';
-  const mean = used.reduce((sum, v) => sum + v, 0) / used.length;
-  const rounded = Math.round(mean * 100) / 100;
-  if (rounded > 0) return `+${rounded.toFixed(2)}`;
-  if (rounded < 0) return `-${Math.abs(rounded).toFixed(2)}`;
-  return '0.00';
+  if (!used.length) return null;
+  return used.reduce((sum, v) => sum + v, 0) / used.length;
 }
 
 function escapeHtml(text) {
@@ -3457,6 +3464,11 @@ function clearAllCharts() {
   $('compareDiffs').replaceChildren();
 }
 
+// About four time labels whatever the length, on round seconds.
+function axisStep(T) {
+  return [5, 10, 15, 20, 30, 60, 120, 300].find(s => T / s <= 5) || Math.ceil(T / 5);
+}
+
 function drawChart(host, { lines, range, height = 200, axisLabels = false, dark = false, fill = false, span = null, scope, yLabels = false, playhead = null, moments = null, bands = null }) {
   host.replaceChildren();
   const T = span || totalSeconds();
@@ -3468,7 +3480,7 @@ function drawChart(host, { lines, range, height = 200, axisLabels = false, dark 
   svg.style.height = fill ? `calc(100% - ${axisLabels ? 16 : 0}px)` : `${H}px`;
   host.appendChild(svg);
 
-  const step = T > 40 ? 10 : Math.max(1, Math.ceil(T / 6));
+  const step = axisStep(T);
   for (let s = step; s < T; s += step) {
     svgEl('line', { x1: x(s), x2: x(s), y1: padT, y2: H - padB, stroke: 'rgba(255,255,255,.05)', 'vector-effect': 'non-scaling-stroke' }, svg);
   }
@@ -3611,7 +3623,7 @@ function drawChart(host, { lines, range, height = 200, axisLabels = false, dark 
   if (axisLabels) {
     const axis = document.createElement('div');
     axis.className = 'xaxis';
-    const step = T > 40 ? 10 : Math.max(1, Math.ceil(T / 6));
+    const step = axisStep(T);
     // Each label sits at its own second, the same place x() puts that second's point.
     for (let s = 0; s <= T - 1; s += step) {
       const span = document.createElement('span');
@@ -3845,8 +3857,10 @@ function updateReadouts(t) {
   const overall = currentResult && currentResult.signals ? seriesAt(currentResult.signals.overall, t) : null;
   const readout = $('overallReadout');
   if (readout) {
-    readout.textContent = overall == null ? '—' : fmtSigned(overall);
+    readout.textContent = overall == null ? '—' : levelWord(overall);
+    readout.title = overall == null ? '' : fmtSigned(overall);
     readout.classList.toggle('neg', overall != null && overall < 0);
+    readout.classList.toggle('flat', overall != null && Math.abs(overall) < 0.05);
   }
   const second = $('overallSecond');
   if (second) second.textContent = fmt(t);
@@ -3862,8 +3876,11 @@ function updateBrainValues(t) {
     const cell = host.querySelector(`[data-group="${group}"]`);
     if (!cell) return;
     const value = currentResult && currentResult.signals ? seriesAt(currentResult.signals[group], t) : null;
-    cell.querySelector('.brain-value-num').textContent = value == null ? '—' : fmtSigned(value);
+    const num = cell.querySelector('.brain-value-num');
+    num.textContent = value == null ? '—' : levelWord(value, true);
+    num.title = value == null ? '' : `${levelWord(value)} (${fmtSigned(value)})`;
     cell.classList.toggle('neg', value != null && value < 0);
+    cell.classList.toggle('flat', value != null && Math.abs(value) < 0.05);
   });
 }
 
@@ -4059,11 +4076,14 @@ function buildCompareView() {
   if (!currentResult || !comparison) { clearCompareChart(); return; }
   const { aName, bName } = compareNames();
   const side = comparisonCurrentSide === 'b' ? 'b' : 'a';
-  $('compareNameA').textContent = `${aName} · avg ${averageOverall(currentResult)}`;
-  $('compareNameA').title = aName;
+  const avgA = averageOverall(currentResult), avgB = averageOverall(comparison.result);
+  const onAverage = v => v == null ? '' : ` · ${levelWord(v).toLowerCase()} on average`;
+  const averageTip = v => v == null ? '' : ` · average ${fmtSigned(v)}`;
+  $('compareNameA').textContent = `${aName}${onAverage(avgA)}`;
+  $('compareNameA').title = `${aName}${averageTip(avgA)}`;
   $('compareNameA').style.color = side === 'b' ? 'var(--blue)' : 'var(--accent)';
-  $('compareNameB').textContent = `${bName} · avg ${averageOverall(comparison.result)}`;
-  $('compareNameB').title = bName;
+  $('compareNameB').textContent = `${bName}${onAverage(avgB)}`;
+  $('compareNameB').title = `${bName}${averageTip(avgB)}`;
   $('compareNameB').style.color = side === 'b' ? 'var(--accent)' : 'var(--blue)';
   $('compareVideos').classList.toggle('a-right', side === 'b');
   $('compareBarA').parentElement.classList.toggle('blue', side === 'b');
