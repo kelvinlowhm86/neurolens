@@ -4,6 +4,8 @@
 -r experiments.txt
 -r lambdas.txt
 pytest>=8.0
+# Step 6: reads the PDFs back in the tests
+pypdf>=5.0
 ruff>=0.6
 moto[s3,sqs,autoscaling,ssm]>=5.0
 # M3a: the billing tests run against a real PostgreSQL 16 (NEUROLENS_TEST_DSN)

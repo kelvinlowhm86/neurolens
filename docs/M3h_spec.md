@@ -402,3 +402,113 @@ comparison row and object are gone. Bedrock line in Cost Explorer the next day.
 - M3d §9: a sample entry may carry `report`, and `samples.json` may carry `comparisons` (§7).
 - The test that pins the starter call, `tests/test_m3g_report.py::test_post_report_starts_a_report`
   (`starter.calls == [job_id]`), changes deliberately to `[{"job_id": job_id}]`.
+
+## 18. PDF download (report and comparison)
+Decided 31 Oct (Josh): a server-made PDF of a written report and of a written comparison; light
+paper, the page's fonts and orange, A first and orange, B blue; no 3D brain. Generated on click
+in the web function, never stored for jobs. Design approved from real CeraVe previews, then
+reviewed by an independent Opus pass; its fixes are part of this section.
+
+### 18a. Module `neurolens/report_pdf.py` (no AWS, no database)
+- `report_pdf(name, result, report, frames) -> bytes` and
+  `comparison_pdf(a, b, report) -> bytes`, where `a` and `b` are `(name, result, frames)`.
+  `frames` is the list `storage.get_frames` returns (JPEG bytes, index = second), or `[]`.
+- `fpdf2` is imported inside the functions (cold start unchanged). Fonts live in
+  `neurolens/fonts/` with their OFL licence texts: Space Grotesk Regular/Medium/Bold and
+  JetBrains Mono Regular/Medium (as on the page), plus Noto Sans SC and Noto Sans KR as fallbacks
+  for Chinese, Japanese and Korean, trimmed by `infra/make_cjk_fonts.py` to the regular weight
+  and the national standard sets (GB 2312, Big5, JIS, KS X 1001; ~8 MB instead of 28 MB). The
+  fallbacks are registered only when the text holds a character the main fonts lack (they are
+  large and slow to load). A character no font has (emoji, rare characters) is drawn as "?",
+  never dropped silently. A test renders one name mixing simplified and traditional Chinese,
+  Japanese and Korean and fails if any character comes back as "?".
+- A4 portrait, 18 mm side margins, text left-aligned (never justified). Header on every page:
+  "NeuroLens" left, the kind ("Brain response report" / "Comparison report") right. Footer:
+  "Written by Claude from predicted brain responses (TRIBE v2), not viewer data. 0 = typical
+  viewing." and "n / N". The date (the report's `created_at`, e.g. "31 Oct 2026") appears once,
+  in the meta line under the name.
+- Single report, in order: name; meta line (length m:ss · date); headline; summary; the overall
+  chart; a one-line key ("With sound", and "Sound off: the same video with the sound removed"
+  only when `result["muted"]["overall"]` exists); the Seeing / Hearing / Understanding strips;
+  "What works" and "What to improve" side by side; "Moments".
+- Comparison, in order: "A <name>" in orange and "B <name>" in blue; meta line (A m:ss · B m:ss
+  · date); headline; summary; one chart with both overall lines, no fill, no difference marks;
+  key; "A does better" (orange marks) and "B does better" (blue marks) side by side; "Where they
+  differ"; "Suggestions".
+- Chart: level words on the left instead of numbers ("Well above" at +0.2, "Typical" at 0,
+  dashed, "Well below" at -0.2), drawn only when inside the range; range at least ±0.3, widened
+  to fit the data. Time labels m:ss, chosen by width so there are at least 3 (one sample: a dot,
+  not a line). Single report only: each moment is a shaded band from `start` to `end + 1`, cut
+  at the last second, with a small gap between bands that touch, numbered 1..n above the chart
+  (numbers nudged apart when they would overlap); the numbers match the Moments rows.
+- Strips: one shared scale for all three groups (the main chart's), a faint ±0.2 line, orange
+  above typical and grey below, and a one-line key saying so.
+- Moments row: the picture for second `(start + end) // 2` (clamped to the frames list), fitted
+  inside a box of the frame's own shape so a tall phone frame keeps its shape (black bars in the
+  frame itself are left as they are); then the number, the time `m:ss–m:ss` (en dash, `start` to
+  `end`, as the page's `fmtRange`), what happens, the brain response, and "Try" + suggestion when
+  there is one. No frame for that second (or no frames at all): the row has no picture and its
+  text takes the full width. Differences rows: A's picture and time, then B's ("Not in A" / "Not
+  in B" box when a side is null), then the text.
+- Page breaks: a row (moment or difference) never splits across pages; a heading never ends a
+  page alone; the two side-by-side lists move to the next page as one block when they do not fit;
+  rows are tight enough that six moments fit on one page after the first.
+- Names: a name wider than its space is shortened in the middle with "…", keeping the extension.
+- Size: frames are 640 px JPEGs (~50 KB); at most 8 moments or 3 differences (6 pictures), so a
+  PDF stays well under 1 MB, far below the web function's 6 MB response cap (about 4.5 MB of
+  binary after base64).
+
+### 18b. Routes (`neurolens/web/app.py`)
+- `GET /api/jobs/<id>/report.pdf`: `owned_result` (its errors unchanged: 404 not yours, 404 not
+  ready, expired, refunded); then the report must be `ready` and stored, else 409 `no_report`.
+  Frames from `storage.get_frames`; a missing frames object gives a PDF without pictures, any
+  other S3 error is raised (500). Name = the upload's file name.
+- `GET /api/compare/<x>/<y>/report.pdf`: `comparison_ids` (400 `same_video`, 404 not yours), both
+  results through `owned_result`, the comparison row `ready` and its report stored, else 409
+  `no_report`. A and B as stored (canonical pair, §2).
+- Both answer `application/pdf` with an attachment name built like the CSV's
+  (`_csv_disposition` generalised to take the suffix): "<stem> – NeuroLens report.pdf" and
+  "<stem A> vs <stem B> – NeuroLens comparison.pdf" (ASCII fallback in `filename`, full name in
+  `filename*`). Signed out: 401, like every `/api/*` route. `binary_support=True` already makes
+  the Lambda return the bytes base64-encoded.
+
+### 18c. Page (`static/app.html`)
+- The Download menu (step 3d) gains "PDF" when the open job's report is ready, and "Comparison
+  PDF" in the Compare tab when the pair's comparison is ready. Samples: "PDF" from the sample's
+  `pdf_file`, "Comparison PDF" from the comparison entry's `pdf_file`, with the download name
+  built like the sample CSV's. No item when there is no written report.
+
+### 18d. Samples (`infra/make_sample.py`, `infra/deploy_web.sh`)
+- Both forms write the PDF with the same module: `data/output/<id>/report.pdf` (name = the
+  sample title) when the sample has a report, and `data/output/compare/<a>__<b>.pdf` for a
+  comparison; they record `pdf_file` in the entry. Frames come from `results/<job_id>.frames`
+  (the job id is in the sample's result). A third form, `make_sample.py pdfs`, re-renders every
+  sample's and comparison's PDF from `samples.json` (run it after a layout change).
+- `deploy_web.sh` copies each public sample's and public comparison's `pdf_file` with the rest.
+  `data/output/` stays git-ignored, as for the CSV.
+
+### 18e. Shipping the web code through S3
+- With fpdf2 (and its Pillow and fontTools) and the fonts, the web zip is about 48 MB, at the
+  50 MB limit for a direct upload. So the zip goes through S3: Terraform uploads it as
+  `aws_s3_object` `deploy/web_lambda.zip` in the main bucket and the function reads `s3_bucket` /
+  `s3_key` (code changes stay `deploy_web.sh`'s job: `ignore_changes` on the code arguments);
+  `deploy_web.sh` copies the new zip to the same key, then `update-function-code --s3-bucket
+  --s3-key`. The limit becomes 250 MB unzipped. `deploy/` is private (CloudFront serves only
+  `site/`), has no expiry rule, and the deploy user already has S3 rights on the bucket: no IAM
+  change.
+
+### 18f. Tests (light treatment + a security check of the two routes)
+- `pypdf` in `requirements/dev.txt` to read the text back. A PDF starts with `%PDF`, and its text
+  holds the headline and the name, for a single report and a comparison, on the fake app.
+- Hard cases render without error: no frames; a 1- and 2-second video; no muted series; a
+  comparison side that is null; a Chinese/Japanese/Korean name (the characters come back in the
+  text); a name of 200 characters; eight moments with long text (no row split: checked by the
+  module, not pixel tests).
+- Routes: signed out 401; another user's job or pair 404; no report or not ready 409
+  `no_report`; the attachment name.
+
+### 18g. Known limitations
+- Thai, Tamil, Arabic and other scripts outside the fonts print as "?" in the PDF (the page is
+  unaffected).
+- The PDF is a second layout to keep in step with the page; a layout change means re-running
+  `make_sample.py pdfs` for the samples.
