@@ -9,17 +9,19 @@ same two prefixes. Consent stores the version and time only when it is given.
 """
 
 import json
+import re
 import uuid
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 
 import pytest
 from botocore.client import BaseClient
 from conftest import STARTER_CENTS, WEB_USER_ID, sign_in
-from neurolens import billing, storage
+from neurolens import billing, settings, storage
 from neurolens.web.app import create_app
 
 OTHER_USER = "someone-else"
 DAY = 24 * 60 * 60
+REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
 def app_for(aws, db, make_cfg, tmp_path, s3_client=None):
@@ -463,9 +465,35 @@ def test_the_90_day_rule_keeps_a_job_that_gained_a_snapshot_after_selection(
 def test_consent_stores_the_version_and_time(db, pg):
     job_id, _ = make_job(db, consent=True)
     job = pg.job(job_id)
-    assert billing.CONSENT_VERSION == "2026-10-25"
+    assert billing.CONSENT_VERSION == "2026-10-31"
     assert job["consent_version"] == billing.CONSENT_VERSION
     assert job["consented_at"] is not None
+
+
+def test_page_consent_version_matches_the_server():
+    html = (REPO_ROOT / "static" / "app.html").read_text()
+    match = re.search(r"const\s+CONSENT_VERSION\s*=\s*['\"](?P<version>[^'\"]+)['\"]", html)
+    assert match, "static/app.html has no `const CONSENT_VERSION = '...'` literal"
+    assert match.group("version") == billing.CONSENT_VERSION, (
+        "the page and the server disagree on the consent version; the server would refuse "
+        "every shared upload"
+    )
+
+
+def test_privacy_page_states_the_reward_limits_the_server_enforces():
+    html = (REPO_ROOT / "static" / "privacy.html").read_text()
+    start = re.search(r'<h2[^>]*id="research"[^>]*>', html)
+    assert start, 'static/privacy.html has no <h2 id="research"> section'
+    rest = html[start.end() :]
+    end = re.search(r"<h2\b", rest)
+    section = rest[: end.start()] if end else rest
+    text = " ".join(re.sub(r"<[^>]+>", " ", section).split())
+
+    research = settings.load_settings()["research"]
+    cap = research["curve_rewards_per_window"]
+    days = research["curve_reward_window_days"]
+    assert "once per video" in text
+    assert f"up to {cap} videos every {days} days" in text
 
 
 def test_no_consent_leaves_the_version_and_time_empty(db, pg):
