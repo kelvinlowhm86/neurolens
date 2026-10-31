@@ -359,70 +359,82 @@ def _analyse(
             "The video was replaced after it was checked.",
         )
 
-    try:
-        thumbnail = inference.make_thumbnail(video_path, duration / 2)
-    except inference.ThumbnailFailed:
-        logger.error(f"Could not make a thumbnail for {job_id}")
-        thumbnail = None
+    play_path = video_path.with_name(f"{video_path.stem}.play.mp4")
+    with inference.PlayCopy(video_path, play_path) as play_copy:
+        try:
+            thumbnail = inference.make_thumbnail(video_path, duration / 2)
+        except inference.ThumbnailFailed:
+            logger.error(f"Could not make a thumbnail for {job_id}")
+            thumbnail = None
 
-    logger.info(f"Analysing {object_key} ({duration:.1f}s)")
-    t0 = time.time()
-    inference.reset_gpu_peak()
-    stage("transcribing")
-    events = inference.build_events(video_path)
-    stage("inference_full")
-    preds_full = inference.predict(events, duration)
-    stage("inference_noaudio")
-    preds_noaudio = inference.predict(inference.without_audio(events), duration)
-    stage("extracting_roi")
-    result = extract_response(preds_full, preds_noaudio, roi_masks)
-    # Cast and check before any write: an overflowing or non-finite value must fail the job
-    # before the dataset copy or the result exists (M3d §5).
-    brain = storage.brain_bytes(preds_full)
+        logger.info(f"Analysing {object_key} ({duration:.1f}s)")
+        t0 = time.time()
+        inference.reset_gpu_peak()
+        stage("transcribing")
+        events = inference.build_events(video_path)
+        stage("inference_full")
+        preds_full = inference.predict(events, duration)
+        stage("inference_noaudio")
+        preds_noaudio = inference.predict(inference.without_audio(events), duration)
+        stage("extracting_roi")
+        result = extract_response(preds_full, preds_noaudio, roi_masks)
+        # Cast and check before any write: an overflowing or non-finite value must fail the job
+        # before the dataset copy or the result exists (M3d §5).
+        brain = storage.brain_bytes(preds_full)
 
-    # Frames are for the optional report: cutting or storing them never fails the paid job.
-    try:
-        frames = inference.make_frames(video_path, result["duration_seconds"])
-        storage.put_frames(s3, bucket, job_id, _frames_zip(frames, inference.spoken_words(events)))
-    except inference.FramesFailed:
-        logger.error(f"FRAMES_FAILED {job_id}")
-    except Exception:
-        logger.exception(f"FRAMES_FAILED {job_id}")
-    else:
-        result["frames"] = len(frames)
+        # Frames are for the optional report: cutting or storing them never fails the paid job.
+        try:
+            frames = inference.make_frames(video_path, result["duration_seconds"])
+            storage.put_frames(
+                s3, bucket, job_id, _frames_zip(frames, inference.spoken_words(events))
+            )
+        except inference.FramesFailed:
+            logger.error(f"FRAMES_FAILED {job_id}")
+        except Exception:
+            logger.exception(f"FRAMES_FAILED {job_id}")
+        else:
+            result["frames"] = len(frames)
 
-    result["job_id"] = job_id
-    result["processing_time_seconds"] = round(time.time() - t0, 1)
-    if inference.fake_mode():
-        result["fake_inference"] = True
-    gpu = inference.gpu_info()
-    if gpu is not None:
-        result["gpu"] = gpu
+        result["job_id"] = job_id
+        result["processing_time_seconds"] = round(time.time() - t0, 1)
+        if inference.fake_mode():
+            result["fake_inference"] = True
+        gpu = inference.gpu_info()
+        if gpu is not None:
+            result["gpu"] = gpu
 
-    if research_consent:
-        stage("saving_dataset")
-        # Recorded before the copy, so a copy that fails still leaves the hash (M3f §5b).
-        billing.record_video_hash(db, job_id, _sha256_file(video_path))
-        storage.put_dataset(s3, bucket, job_id, object_key, result, brain=brain)
+        if research_consent:
+            stage("saving_dataset")
+            # Recorded before the copy, so a copy that fails still leaves the hash (M3f §5b).
+            billing.record_video_hash(db, job_id, _sha256_file(video_path))
+            storage.put_dataset(s3, bucket, job_id, object_key, result, brain=brain)
 
-    stage("saving_result")
-    if thumbnail is not None:
-        storage.put_thumbnail(s3, bucket, job_id, thumbnail)
-    storage.put_brain(s3, bucket, job_id, preds_full)
-    published = storage.put_result(s3, bucket, job_id, result)
-    try:
-        settled = billing.settle_success(db, job_id)
-    except Exception:
-        # The result is public now: nothing refunds or deletes; the error handler settles it.
-        logger.exception(f"SETTLE_FAILED {job_id}")
-        return Outcome.FAILED
-    if not settled:
-        logger.warning(f"{job_id} was already settled or refunded; the result is not charged")
-    if not published:
-        logger.warning(f"Duplicate {job_id}: a result already exists, left unchanged")
-        return Outcome.DUPLICATE
-    logger.info(f"Done {job_id} in {result['processing_time_seconds']}s")
-    return Outcome.DONE
+        stage("saving_result")
+        # The phone copy is only for playback, so it never fails the paid job.
+        if play_copy.wait(inference.PLAY_COPY_WAIT_SECONDS):
+            try:
+                storage.put_play_copy(s3, bucket, job_id, play_path)
+            except Exception:
+                logger.exception(f"PLAY_COPY_FAILED {job_id}")
+        else:
+            logger.error(f"PLAY_COPY_FAILED {job_id}: no phone copy")
+        if thumbnail is not None:
+            storage.put_thumbnail(s3, bucket, job_id, thumbnail)
+        storage.put_brain(s3, bucket, job_id, preds_full)
+        published = storage.put_result(s3, bucket, job_id, result)
+        try:
+            settled = billing.settle_success(db, job_id)
+        except Exception:
+            # The result is public now: nothing refunds or deletes; the error handler settles it.
+            logger.exception(f"SETTLE_FAILED {job_id}")
+            return Outcome.FAILED
+        if not settled:
+            logger.warning(f"{job_id} was already settled or refunded; the result is not charged")
+        if not published:
+            logger.warning(f"Duplicate {job_id}: a result already exists, left unchanged")
+            return Outcome.DUPLICATE
+        logger.info(f"Done {job_id} in {result['processing_time_seconds']}s")
+        return Outcome.DONE
 
 
 def boot_record(container_start_utc, model_loaded_utc, warmup_done_utc, ready_utc, gpu_name):

@@ -153,6 +153,19 @@ def put_thumbnail(s3, bucket, job_id, data):
     )
 
 
+def put_play_copy(s3, bucket, job_id, path):
+    """Write results/<job_id>.play.mp4 from a local file, replacing an earlier copy (M3d §5c).
+
+    `upload_file` streams large videos in multipart uploads, so the whole copy is never in memory.
+    """
+    s3.upload_file(
+        str(path),
+        bucket,
+        f"results/{job_id}.play.mp4",
+        ExtraArgs={"ContentType": "video/mp4"},
+    )
+
+
 def put_frames(s3, bucket, job_id, data):
     """Write results/<job_id>.frames, replacing an earlier copy (M3g §2b)."""
     s3.put_object(
@@ -246,7 +259,7 @@ def object_exists(s3, bucket, key):
 
 
 def job_keys(job_id, object_key):
-    """The job's own S3 keys: the upload, its result, brain and thumbnail.
+    """The job's own S3 keys: the upload, its result, brain, thumbnail, frames and phone copy.
 
     The research copy is not a fixed list any more (M3f §5b): dataset/<job_id>/ also holds
     retention snapshots, and our output lives under academic/<job_id>/. Both prefixes are removed
@@ -260,6 +273,7 @@ def job_keys(job_id, object_key):
         f"results/{job_id}.jpg",
         f"results/{job_id}.frames",
         f"results/{job_id}.report.json",
+        f"results/{job_id}.play.mp4",
     ]
 
 

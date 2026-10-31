@@ -638,12 +638,18 @@ def create_app(
 
     @app.route("/api/jobs/<job_id>/video")
     def job_video(job_id):
-        """A one-hour presigned GET of the caller's own video (M3d §7)."""
+        """A one-hour presigned GET of the caller's own video (M3d §7).
+
+        The phone copy is tried first, then the upload, then a consented job's dataset copy.
+        """
         _, job, error = owned_result(job_id)
         if error:
             return error
         key = job["object_key"]
-        if not storage.object_exists(s3, bucket, key):
+        play_key = f"results/{job['job_id']}.play.mp4"
+        if storage.object_exists(s3, bucket, play_key):
+            key = play_key
+        elif not storage.object_exists(s3, bucket, key):
             ext = PurePosixPath(key).suffix
             key = f"dataset/{job['job_id']}/video{ext}"
             if not (job["research_consent"] and storage.object_exists(s3, bucket, key)):

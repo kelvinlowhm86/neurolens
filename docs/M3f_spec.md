@@ -190,7 +190,7 @@ place in line among other users, waking the database from the landing page.
   then `delete_job_prefixes`; on success `jobs.dataset_purged_at = now()` (migration 006). A failed
   delete leaves `dataset_purged_at` empty and every reaper run retries the purge for consented jobs
   that are marked (removed or deleted) and not purged. For a deleted job the purge also deletes the job's own files (upload, result, brain,
-  thumbnail), so `dataset_purged_at` means all its files are gone; the reaper's retry covers every
+  thumbnail, phone copy), so `dataset_purged_at` means all its files are gone; the reaper's retry covers every
   marked job, consented or not. A route that has marked answers success even if the purge failed (it
   logs an error; the reaper finishes), since the user can no longer see or retry it. A purge that did not delete the job's own files records nothing if the job was
   deleted meanwhile. Marking a job

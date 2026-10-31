@@ -53,7 +53,8 @@ After `extract_response` and before the `saving_dataset` stage. In a `try` that 
 `FramesFailed` and any S3 error from `put_frames`: logs `FRAMES_FAILED <job_id>` and carries on.
 Only when the put succeeded, `result["frames"] = <count>` is set; the result is written after, so
 a result with `frames` always has its file. A retried attempt cuts and puts again (overwrite is
-fine). The research dataset copy does not include frames.
+fine). The research dataset copy does not include frames. The phone copy (M3d §5c) runs alongside:
+started in the background before inference, uploaded in `saving_result`.
 
 ## 3. Migration 008 (`infra/migrations/008_report.sql`)
 `jobs` gains:

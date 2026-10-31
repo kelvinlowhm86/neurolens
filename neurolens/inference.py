@@ -170,6 +170,106 @@ def make_thumbnail(path, seconds):
     return result.stdout
 
 
+PLAY_COPY_WAIT_SECONDS = 300  # the analysis waits this long for the phone copy before the result
+
+
+class PlayCopy:
+    """The phone-friendly H.264 copy of the upload, encoded in the background (M3d §5c).
+
+    Some uploads (VP9, HEVC) do not play on phones. The copy caps the long edge at 1920 px and
+    keeps both sides even, in an MP4 with the moov atom first so it starts while it loads. Entering
+    the block starts ffmpeg at lower priority, so the encode never slows the paid analysis much;
+    `wait` gives it up to its timeout and is never a failure of the job: it returns False and logs
+    PLAY_COPY_FAILED when the copy could not be made. Leaving the block stops an encode still
+    running, including when the analysis raises.
+    """
+
+    def __init__(self, src_path, dst_path):
+        self.src_path = Path(src_path)
+        self.dst_path = Path(dst_path)
+        self.process = None
+
+    def __enter__(self):
+        try:
+            self._start()
+        except OSError:
+            logger.exception(f"PLAY_COPY_FAILED {self.src_path}: ffmpeg did not start")
+        return self
+
+    def _start(self):
+        # `nice` rather than preexec_fn: the worker runs a heartbeat thread, and preexec_fn is
+        # unsafe in a process with threads.
+        self.process = subprocess.Popen(
+            [
+                "nice",
+                "-n",
+                "10",
+                "ffmpeg",
+                "-v",
+                "error",
+                "-y",
+                "-i",
+                str(self.src_path),
+                "-map",
+                "0:v:0",
+                "-map",
+                "0:a:0?",
+                "-vf",
+                "scale='min(iw,1920)':'min(ih,1920)':"
+                "force_original_aspect_ratio=decrease:force_divisible_by=2",
+                "-c:v",
+                "libx264",
+                "-preset",
+                "veryfast",
+                "-crf",
+                "23",
+                "-pix_fmt",
+                "yuv420p",
+                "-profile:v",
+                "high",
+                "-movflags",
+                "+faststart",
+                "-c:a",
+                "aac",
+                "-b:a",
+                "128k",
+                str(self.dst_path),
+            ],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+        )
+
+    def wait(self, timeout_s=None):
+        """True only if ffmpeg finished cleanly and wrote a non-empty file; never raises."""
+        if self.process is None:
+            return False
+        try:
+            _, stderr = self.process.communicate(timeout=timeout_s)
+        except subprocess.TimeoutExpired:
+            self.process.kill()
+            self.process.communicate()
+            logger.error(f"PLAY_COPY_FAILED {self.src_path}: timed out after {timeout_s}s")
+            return False
+        if self.process.returncode != 0 or not self._written():
+            detail = stderr.decode(errors="replace").strip().splitlines()[-5:]
+            logger.error(f"PLAY_COPY_FAILED {self.src_path}: {' | '.join(detail)}")
+            return False
+        return True
+
+    def _written(self):
+        try:
+            return self.dst_path.is_file() and self.dst_path.stat().st_size > 0
+        except OSError:
+            return False
+
+    def __exit__(self, exc_type, exc, tb):
+        if self.process is not None and self.process.poll() is None:
+            self.process.kill()
+            self.process.wait()
+        return False
+
+
 JPEG_END = b"\xff\xd9"
 
 

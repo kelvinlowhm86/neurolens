@@ -265,7 +265,7 @@ def test_play_copy_caps_the_long_edge_and_keeps_both_sides_even(tmp_path, size, 
         assert (width, height) == expected
     else:
         assert max(width, height) <= 1920
-        assert width > height
+        assert height > width
         assert width % 2 == 0 and height % 2 == 0
 
 
