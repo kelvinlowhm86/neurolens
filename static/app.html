@@ -2210,7 +2210,13 @@ async function uploadEntry(entry) {
       clearStallTimer();
       entry.xhr = null;
       untrackQueueEntry(entry);
-      cancelReservedJob(jobId);
+      // The file can arrive although the browser saw an error; a job the server would not cancel is
+      // real, so its own row replaces this one (which hides it while it is in the queue).
+      cancelReservedJob(jobId).then(cancelled => {
+        if (cancelled) return;
+        uploadQueue = uploadQueue.filter(en => en !== entry);
+        loadHistory();
+      });
       if (entry.removed) {
         uploadQueue = uploadQueue.filter(en => en !== entry);
       } else {
@@ -2250,12 +2256,14 @@ async function uploadEntry(entry) {
   });
 }
 
+// True only when the server cancelled the job.
 async function cancelReservedJob(jobId) {
   try {
     const res = await postJSON(`/api/jobs/${jobId}/cancel`, {});
-    if (res.status === 401) return window.location.reload();
+    if (res.status === 401) { window.location.reload(); return true; }
     if (res.ok || res.status === 409) refreshAccount();
-  } catch (e) { /* the row keeps its state; the job can be cancelled from History */ }
+    return res.ok;
+  } catch (e) { return false; /* the job's own row shows it; it can be cancelled from History */ }
 }
 
 // The 15-second cancel window counts down each second in place of the "⋯" menu.

@@ -245,15 +245,30 @@ resource "aws_sagemaker_endpoint" "main" {
 }
 
 # The endpoint resource can return while SageMaker is still updating it, and the scaling target is
-# refused until it is back in service (31 Oct). Wait for that whenever the configuration changes;
-# the waiter fails loudly if the endpoint ends Failed.
+# refused until it is back in service (31 Oct). Wait for that whenever the configuration changes,
+# then fail unless the endpoint runs the new configuration: an update SageMaker rolls back also
+# ends InService, and the old configuration and model must then be kept (see the postcondition).
+# Referencing the configuration directly makes Terraform delete the old one only after this passes.
 resource "terraform_data" "endpoint_in_service" {
   count = local.image_ready ? 1 : 0
 
-  triggers_replace = aws_sagemaker_endpoint.main[0].endpoint_config_name
+  triggers_replace = awscc_sagemaker_endpoint_config.main[0].endpoint_config_name
+
+  depends_on = [aws_sagemaker_endpoint.main]
 
   provisioner "local-exec" {
-    command = "aws sagemaker wait endpoint-in-service --endpoint-name ${aws_sagemaker_endpoint.main[0].name} --region ${var.region}"
+    command = <<-EOT
+      set -eu
+      aws sagemaker wait endpoint-in-service \
+        --endpoint-name ${aws_sagemaker_endpoint.main[0].name} --region ${var.region}
+      running=$(aws sagemaker describe-endpoint \
+        --endpoint-name ${aws_sagemaker_endpoint.main[0].name} --region ${var.region} \
+        --query EndpointConfigName --output text)
+      if [ "$running" != "${awscc_sagemaker_endpoint_config.main[0].endpoint_config_name}" ]; then
+        echo "The endpoint runs $running, not the new configuration (SageMaker rolled the update back; see FailureReason in describe-endpoint). The old configuration and model are kept: run the apply again later." >&2
+        exit 1
+      fi
+    EOT
   }
 }
 
@@ -264,7 +279,7 @@ resource "terraform_data" "live_image" {
 
   triggers_replace = local.image_digest
 
-  depends_on = [aws_sagemaker_endpoint.main]
+  depends_on = [terraform_data.endpoint_in_service]
 
   provisioner "local-exec" {
     command = <<-EOT
