@@ -46,7 +46,8 @@ The dispatcher Lambda; the container (`neurolens/worker.py` rewritten), its imag
      - `not_queued` (cancelled or claimed meanwhile) → skip;
      - otherwise it refunded (too long, or not enough credit) → delete the upload.
   7. **Time left:** `ttl = min(7200, 10800 − seconds since created_at)`. Below 300 → refund `deadline_passed`, delete the upload. This keeps the 4-hour bound of §5 true for a job dispatched late (an outage, redeliveries): its request expires before the reaper may refund it.
-  8. `InvokeEndpointAsync(EndpointName, InputLocation="s3://<bucket>/<key>", InferenceId=job_id, CustomAttributes=job_id, ContentType="application/octet-stream", RequestTTLSeconds=ttl, InvocationTimeoutSeconds=3600)`.
+  8. **Paused:** `scaling.endpoint_paused(appscaling, endpoint)` (`neurolens/scaling.py`, shared with the web's presign check, §8): scaling maximum 0 or no scalable target → refund `processing_paused`, delete the upload, never invoke (so nothing starts the GPU after `stop_work.sh`). A failed read propagates like any other error. It runs last before the invoke, so an upload presigned before a pause and landing after it is refunded.
+  9. `InvokeEndpointAsync(EndpointName, InputLocation="s3://<bucket>/<key>", InferenceId=job_id, CustomAttributes=job_id, ContentType="application/octet-stream", RequestTTLSeconds=ttl, InvocationTimeoutSeconds=3600)`.
 - **Refunds** use `issue_refund(..., queued=True)`, so a job claimed meanwhile is never refunded.
 - **Errors:** any other exception (S3, Data API, SageMaker throttling, `ProbeFailed`) propagates, so SQS redelivers the message. The jobs queue's visibility timeout is 1080 s (AWS's rule: at least 6 times the function timeout of 180 s), so a slow run is not redelivered while it is still invoking.
 - **Cancel window:** the jobs queue delays every message by 15 s (`delay_seconds`), so the dispatcher runs at least 15 s after the upload lands and the user can still cancel in that time (§8). A second dispatch of the same job is harmless: `verify_queued` is idempotent (the price difference is then 0), and the container skips a job it cannot claim.
@@ -159,7 +160,7 @@ The same rules as the old `verify` (length limit first, then record the duration
   - then polls `DescribeEndpoint` (every 10 s, up to 15 min). AWS refuses a capacity change while the endpoint is updating, and setting the target to 0/0 often starts such an update itself, so the script waits while the status is `Creating`, `Updating` or `SystemUpdating`; once `InService`, it calls `UpdateEndpointWeightsAndCapacities(DesiredInstanceCount=0)` only if the desired count is not already 0 (a refusal that names an in-progress update just means waiting again; any other failure is a problem). Any other status (`Failed`, `RollingBack`, `OutOfService`, `Deleting`) is a problem;
   - prints `ALL STOPPED` only when the endpoint is `InService` with desired and current count 0. Still updating or above 0 after 15 min is a problem that names the last status and count.
 
-  A running job dies and is refunded (§5). Uploads are refused while paused (§8).
+  A running job dies and is refunded (§5). Uploads are refused while paused (§8), and one already uploading when the pause starts is refunded by the dispatcher (§3 step 8).
 - **`start_work.sh`** sets max 1 (the normal state; also what Terraform applies).
   - `--keep-warm --hours N` (1–4): first a one-time scheduled action that sets min back to 0 at the end (`--schedule "at(YYYY-MM-DDThh:mm:ss)"`, UTC), then min 1. In that order, a failure never leaves min 1 without an end. AWS ends a keep-warm without anyone remembering. Running it again moves the end.
   - Neither script touches Aurora's minimum capacity, and Terraform no longer ignores changes to it.
@@ -197,7 +198,7 @@ waiting and progress texts, the consent box and its version, the retention curve
 Stop sharing, the CSV name, the landing samples and the phone layout. Only the web tier's technical
 behaviour remains below.
 
-- **Pause check:** `_endpoint_paused(appscaling, endpoint)` reads `DescribeScalableTargets` for the variant. Max 0, or no target → paused. It replaces `_worker_group_paused`, with the same 503 and the same "could not read" → 500.
+- **Pause check:** `scaling.endpoint_paused(appscaling, endpoint)` (also used by the dispatcher, §3) reads `DescribeScalableTargets` for the variant. Max 0, or no target → paused. It replaces `_worker_group_paused`, with the same 503 and the same "could not read" → 500.
 - **Settings:** `NEUROLENS_WORKER_GROUP`/`aws.worker_group` becomes `NEUROLENS_GPU_ENDPOINT`/`aws.gpu_endpoint`, required in Cognito mode. `NEUROLENS_SQS_QUEUE_URL`/`aws.sqs_queue_url` is removed (nothing read it: the queue triggers the dispatcher directly), with its `.env.example` line and the `queue_url`, `queue_arn` and `dlq_url` outputs. The unused `llama_repo_id` and `pre_download_llama` leave `config.json`.
 - **Status and result come from the database alone.** `/status` reports the job's own status, and `/result` (and `/result.csv`) serve only a `done` job; an unfinished job answers `result_not_ready` even if its result object exists. The old crash window (result written, job not yet settled) now closes by itself: nothing refunds after the result is published, and the error handler or the reaper settles such a job (§5). The user waits a few minutes longer in that rare case, the page never shows a result before it is charged, and each status poll makes no S3 call.
 - **Page:**
@@ -235,7 +236,7 @@ behaviour remains below.
 - the topic `neurolens-gpu-errors` and its Lambda subscription;
 - the Lambdas `dispatcher`, `gpu_failed` and `gpu_guard` (the one M3a zip; the dispatcher also gets the ffprobe layer), their schedules and alarms;
 - their roles, each scoped to `neurolens` resources:
-  - `dispatcher`: consume the jobs queue (receive, delete, get attributes); `s3:GetObject` and `s3:DeleteObject` on `uploads/*`, `s3:ListBucket` on the bucket; `sagemaker:InvokeEndpointAsync` on the endpoint; the Data API and the database secret; its logs;
+  - `dispatcher`: consume the jobs queue (receive, delete, get attributes); `s3:GetObject` and `s3:DeleteObject` on `uploads/*`, `s3:ListBucket` on the bucket; `sagemaker:InvokeEndpointAsync` on the endpoint; `application-autoscaling:DescribeScalableTargets` (read-only, AWS offers no narrower resource than `*`) for the pause check; the Data API and the database secret; its logs;
   - `gpu_failed`: the M3a Lambda role (the DLQ handler's rights, same work);
   - the M3a Lambda role deletes `uploads/*`, `results/*`, `dataset/*` and `academic/*` (`s3:DeleteObject`) and reads `results/*` and `uploads/*` (`s3:GetObject`); the reaper checks `retention_snapshots` in the database, not `retention.csv` in S3, so it needs no read on `dataset/*`;
   - `gpu_guard`: §6c's permissions, the Data API and the database secret, its logs;
