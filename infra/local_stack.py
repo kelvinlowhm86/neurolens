@@ -287,10 +287,18 @@ def _serve_web(app):
     return server, thread
 
 
+class _NeverPaused:
+    """The local stack has no GPU scaling, so its only scalable target has a maximum of 1."""
+
+    def describe_scalable_targets(self, **kwargs):
+        return {"ScalableTargets": [{"MinCapacity": 0, "MaxCapacity": 1}]}
+
+
 def _dispatch_loop(sqs, queue_url, s3, sagemaker, db, cfg):
     from neurolens import storage
     from neurolens.lambdas import dispatcher
 
+    appscaling = _NeverPaused()
     while True:
         response = sqs.receive_message(
             QueueUrl=queue_url,
@@ -307,6 +315,7 @@ def _dispatch_loop(sqs, queue_url, s3, sagemaker, db, cfg):
                         key,
                         s3=s3,
                         sagemaker=sagemaker,
+                        appscaling=appscaling,
                         db=db,
                         endpoint="local",
                         max_upload_bytes=cfg["max_upload_bytes"],

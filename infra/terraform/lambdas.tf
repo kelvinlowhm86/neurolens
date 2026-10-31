@@ -17,6 +17,7 @@ locals {
     "neurolens/pricing.py",
     "neurolens/report_prompt.py",
     "neurolens/results.py",
+    "neurolens/scaling.py",
     "neurolens/settings.py",
     "neurolens/storage.py",
     "neurolens/lambdas/__init__.py",
@@ -257,6 +258,13 @@ resource "aws_iam_role_policy" "dispatcher" {
         Effect   = "Allow"
         Action   = ["sagemaker:DescribeEndpoint", "sagemaker:UpdateEndpointWeightsAndCapacities"]
         Resource = local.endpoint_arn
+      },
+      {
+        # Is processing paused (stop_work.sh)? Read-only; AWS offers no narrower resource.
+        Sid      = "ReadScalingTargets"
+        Effect   = "Allow"
+        Action   = "application-autoscaling:DescribeScalableTargets"
+        Resource = "*"
       },
       {
         Sid      = "OwnLogs"

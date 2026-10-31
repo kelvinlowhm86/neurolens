@@ -21,7 +21,7 @@ from urllib.parse import quote
 from flask import Flask, jsonify, redirect, request, send_from_directory, session
 from werkzeug.exceptions import HTTPException
 
-from neurolens import billing, pricing, results, settings, storage
+from neurolens import billing, pricing, results, scaling, settings, storage
 from neurolens import db as dbmod
 from neurolens.web import auth
 
@@ -105,17 +105,6 @@ def _delete_curve_files(s3, bucket, keys, job_id):
             logger.error(f"S3 reported failed deletes for the refused curve of {job_id}")
     except Exception:
         logger.exception(f"Could not delete the refused curve files of {job_id}")
-
-
-def _endpoint_paused(autoscaling, endpoint):
-    """True when the SageMaker endpoint's scalable target has a maximum of 0 (stop_work.sh), so
-    no upload could ever run. A missing target counts as paused. Raises if it cannot be read."""
-    targets = autoscaling.describe_scalable_targets(
-        ServiceNamespace="sagemaker",
-        ResourceIds=[f"endpoint/{endpoint}/variant/main"],
-        ScalableDimension="sagemaker:variant:DesiredInstanceCount",
-    )["ScalableTargets"]
-    return not targets or targets[0].get("MaxCapacity", 0) == 0
 
 
 def _s3_client(cfg):
@@ -419,7 +408,7 @@ def create_app(
         if autoscaling is not None:
             # Before any reservation: while GPU work is stopped no upload could run (§4a).
             try:
-                paused = _endpoint_paused(autoscaling, gpu_endpoint)
+                paused = scaling.endpoint_paused(autoscaling, gpu_endpoint)
             except Exception:
                 logger.exception("Presign refused: could not read the GPU endpoint")
                 return _error("presign_failed", "Could not prepare the upload.", status=500)

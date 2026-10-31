@@ -12,7 +12,7 @@ from datetime import UTC, datetime
 
 from botocore.exceptions import ClientError
 
-from neurolens import billing, lambdas, storage
+from neurolens import billing, lambdas, scaling, storage
 from neurolens.media import UnreadableVideo, probe_duration
 
 logger = logging.getLogger(__name__)
@@ -54,6 +54,7 @@ def dispatch(
     *,
     s3,
     sagemaker,
+    appscaling,
     db,
     endpoint,
     max_upload_bytes,
@@ -111,6 +112,9 @@ def dispatch(
     if ttl < MIN_TTL_S:
         return _refund(db, s3, bucket, key, job_id, "deadline_passed")
 
+    if scaling.endpoint_paused(appscaling, endpoint):
+        return _refund(db, s3, bucket, key, job_id, "processing_paused")
+
     sagemaker.invoke_endpoint_async(
         EndpointName=endpoint,
         InputLocation=f"s3://{bucket}/{key}",
@@ -164,6 +168,7 @@ def handler(event, context):
     lambdas.setup_logging()
     s3, db = lambdas.s3_client(), lambdas.database()
     sagemaker = lambdas.sagemaker_runtime_client()
+    appscaling = lambdas.appscaling_client()
     endpoint = os.environ["NEUROLENS_GPU_ENDPOINT"]
     max_upload_bytes = int(os.environ["NEUROLENS_MAX_UPLOAD_BYTES"])
     max_duration_s = int(os.environ["NEUROLENS_MAX_DURATION_SECONDS"])
@@ -176,6 +181,7 @@ def handler(event, context):
                     key,
                     s3=s3,
                     sagemaker=sagemaker,
+                    appscaling=appscaling,
                     db=db,
                     endpoint=endpoint,
                     max_upload_bytes=max_upload_bytes,
