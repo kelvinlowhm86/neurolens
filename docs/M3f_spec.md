@@ -165,8 +165,9 @@ place in line among other users, waking the database from the landing page.
   the uploader confirms rights and that identifiable people agreed to appear, keeps all rights and
   gives a free, non-exclusive licence for these purposes; as a thank-you, a valid audience-retention
   curve can make that video's analysis free: its price comes back as credit (not cash), once per
-  video (the same file uploaded twice counts once), up to 5 videos every 30 days, only on accounts
-  that have had credit added; valid means at least 20 points, not flat and not rising overall.
+  video (the same file uploaded twice counts once), up to 5 videos in any 30 days, only on accounts
+  that have had credit added; valid means at least 20 points, not flat, not rising overall and never
+  above 1,000%. A test keeps these numbers equal to config.json and `results`.
 
 ### 5b. What is stored where
 - `dataset/<job_id>/`: the video (`video<ext>`) and retention snapshots
@@ -218,7 +219,8 @@ place in line among other users, waking the database from the landing page.
   row, and always in its "⋯" menu (a newer snapshot). On the results page, until its first snapshot,
   a bordered thank-you card: "Thanks for sharing. This analysis can be free." when a reward is
   possible (the job's `curve_reward_cents` > 0), otherwise "Thanks for sharing.", with a quiet
-  "Add audience retention" button. In the upload dialog, per row (§2a).
+  "Add audience retention" button. The card shows only once the History list has the job (shared, no
+  curve); a job not yet listed gets it when the list arrives. In the upload dialog, per row (§2a).
 - The form (a small pop-up): the video name, the guide link, "Choose file", and three required choice
   rows: views ("Under 1k", "1k–10k", "10k–100k", "Over 100k"), published ("This week", "This month",
   "Earlier"), promoted with ads ("Yes", "No"). When a reward is possible (below) the form says "Add a

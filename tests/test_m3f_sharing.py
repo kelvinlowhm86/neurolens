@@ -16,7 +16,7 @@ from pathlib import Path, PurePosixPath
 import pytest
 from botocore.client import BaseClient
 from conftest import STARTER_CENTS, WEB_USER_ID, sign_in
-from neurolens import billing, settings, storage
+from neurolens import billing, results, settings, storage
 from neurolens.web.app import create_app
 
 OTHER_USER = "someone-else"
@@ -493,7 +493,9 @@ def test_privacy_page_states_the_reward_limits_the_server_enforces():
     cap = research["curve_rewards_per_window"]
     days = research["curve_reward_window_days"]
     assert "once per video" in text
-    assert f"up to {cap} videos every {days} days" in text
+    assert f"up to {cap} videos in any {days} days" in text
+    assert f"at least {results.MIN_CURVE_POINTS} points" in text
+    assert f"never goes above {results.MAX_WATCH_RATIO * 100:,}%" in text
 
 
 def test_no_consent_leaves_the_version_and_time_empty(db, pg):

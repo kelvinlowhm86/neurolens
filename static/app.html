@@ -3087,16 +3087,15 @@ let resultCurve = null;
 function showRetention(jobId, title) {
   let cached = null;
   if (jobId) {
+    // Only a job the list shows as shared; a job not in the list yet gets the card when it arrives.
     cached = jobsCache.find(j => j.job_id === jobId);
-    const sharing = cached ? !!cached.sharing : true;
-    const noCurve = cached ? cached.curve_count === 0 : true;
-    resultCurve = sharing && noCurve ? { jobId, title } : null;
+    resultCurve = cached && cached.sharing && cached.curve_count === 0 ? { jobId, title } : null;
   } else {
     resultCurve = null;
   }
   $('retentionCard').hidden = !resultCurve;
   if (resultCurve) {
-    const reward = jobCurveTarget(cached || { job_id: jobId, filename: title }).rewardCents;
+    const reward = jobCurveTarget(cached).rewardCents;
     $('retentionCardText').textContent = reward > 0
       ? 'Thanks for sharing. This analysis can be free.'
       : 'Thanks for sharing.';
