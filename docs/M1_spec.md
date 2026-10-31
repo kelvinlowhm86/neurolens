@@ -32,7 +32,7 @@ Place this comment above `max_duration` in `neurolens/settings.py`:
 ```
 
 ### Interfaces fixed by this spec (the §6a tests are written against exactly these)
-- `neurolens.pricing.estimate_cost_cents(duration_seconds: float) -> int`: `90 * max(1, ceil((d - 0.5) / 30))`, i.e. $0.90 per started 30-second block, with a half-second allowance so a 30.02 s ad is one block. `estimate_cost_usd(d) -> float` is `estimate_cost_cents(d) / 100`, for display.
+- `neurolens.pricing.estimate_cost_cents(duration_seconds: float) -> int`: `CENTS_PER_BLOCK * max(1, ceil((d - ALLOWANCE_SECONDS) / BLOCK_SECONDS))` with the module constants 100, 30 and 0.5, i.e. $1.00 per started 30-second block, with a half-second allowance so a 30.02 s ad is one block. `estimate_cost_usd(d) -> float` is `estimate_cost_cents(d) / 100`, for display.
 - `neurolens.storage`:
   - `presign_upload(s3, bucket, content_type, max_bytes, expires_in=300) -> dict` with keys `job_id`, `url`, `fields`, `object_key`, `expires_in`. Key is `uploads/placeholder-user/{job_id}{ext}`, where `ext` comes from `content_type` (`video/mp4` → `.mp4`, `video/quicktime` → `.mov`, `video/webm` → `.webm`), never from the user's filename. The signed form also pins the stored content type: `fields` includes `Content-Type` equal to `content_type`, and the policy has the condition `{"Content-Type": content_type}`.
   - `parse_s3_event(body: str) -> list[tuple[str, str]]`: `(bucket, key)` for every record, keys outside `uploads/` dropped. A body without `Records` (S3 sends `{"Event": "s3:TestEvent", ...}` once when the notification is created) returns `[]`.
@@ -133,7 +133,7 @@ Success 200: {
   "fields": { "key": "uploads/placeholder-user/<uuid>.mp4", "policy": "<signed policy>", "x-amz-signature": "..." },
   "object_key": "uploads/placeholder-user/<uuid>.mp4",
   "expires_in": 300,
-  "estimated_cost_usd": 0.90
+  "estimated_cost_usd": 1.00
 }
 
 Error 400 (bad content_type): { "error": "unsupported_content_type", "message": "..." }
@@ -158,7 +158,7 @@ GET /api/limits
 200: {
   "max_video_duration_seconds": 120,
   "max_upload_bytes": 300000000,
-  "price": { "cents_per_block": 90, "block_seconds": 30, "allowance_seconds": 0.5 }
+  "price": { "cents_per_block": 100, "block_seconds": 30, "allowance_seconds": 0.5 }
 }
 ```
 Returns `settings.max_duration(cfg)`, `cfg["max_upload_bytes"]` (`null` when the config has none) and the `price` from `neurolens.pricing`. The numbers are public and need no sign-in. **The page reads them when it loads, so `config.json` is the only place these two limits are set and `neurolens.pricing` is the only place the price is set**; `static/` holds no copy of any of them.
@@ -208,7 +208,7 @@ Add `max_upload_bytes` to `config.json` as a top-level field alongside `max_vide
 **Automated tests** in `tests/`, run with `FAKE_INFERENCE=1 pytest` (CI sets the variable). `moto` fakes S3 and SQS in memory, so tests make no real AWS calls and cost nothing. Only the manual end-to-end check (§9) touches the real bucket and queue, using the `neurolens` profile. Tests that need a video generate a few-second clip with `ffmpeg -f lavfi` in a fixture (no binary files in git), so CI gains an `apt-get install ffmpeg` step. Worker tests pass tiny hand-made ROI masks to `handle_record`; nothing downloads the atlas.
 
 Required tests:
-- **Cost formula:** `estimate_cost_cents` for 0.2 s, 1 s, 30 s, 30.4 s (all 90), 30.6 s, 60 s (180) and 120 s (360). The pages take the price from `/api/limits`; `static/` holds no copy of it.
+- **Cost formula:** `estimate_cost_cents` for 0.2 s, 1 s, 30 s, 30.4 s (all one block), 30.6 s, 60 s (two blocks) and 120 s (four blocks), as blocks times `CENTS_PER_BLOCK`. The pages take the price from `/api/limits`; `static/` holds no copy of it.
 - **Presign endpoint** (Flask test client + moto): rejects a bad content type, an over-long duration and an oversize file with the documented error codes; on success returns `job_id`, `url`, `fields`, and a key under `uploads/placeholder-user/` that contains the `job_id`.
 - **S3 event parsing:** a message with several `Records` is handled record by record; records outside `uploads/` are ignored; the `s3:TestEvent` body returns `[]` and its message is deleted.
 - **Presign key:** the object key's extension follows `content_type`, even when the filename says otherwise.

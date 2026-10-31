@@ -239,7 +239,7 @@ Per 2-minute video: 120 frames at 640×360 ≈ 300 tokens each ≈ 36k, plus num
 ≈ 12k, so ≈ 48k input tokens; ≈ 3k output with thinking. At ~$2.20 / $11 per million
 (us-east-1 Bedrock; aggregator figure, verify on the AWS pricing page) ≈ $0.14 per report,
 less for shorter videos. At most `report.max_tries` (3) tries per video, so ≤ $0.45 against the
-video's own price of $0.90-$3.60. Frame cutting adds an estimated 5-20 s of GPU time
+video's own price of $1.00-$4.00. Frame cutting adds an estimated 5-20 s of GPU time
 (< $0.02). The report is free to the user; its cost is part of the video's price.
 
 ## 11. Tests (written first by a separate agent; PostgreSQL for billing)

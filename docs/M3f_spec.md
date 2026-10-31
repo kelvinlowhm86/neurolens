@@ -36,9 +36,9 @@ place in line among other users, waking the database from the landing page.
 - **Server limit:** presign refuses with 429 `too_many_waiting` ("Too many videos waiting. Try again
   when some finish.") when the user already has `upload.max_waiting_jobs` (10, `config.json`) jobs
   queued. The page shows it on the row like any presign refusal.
-- Below the rows: one total, "$3.60 · charged only for videos that finish · cancel within 15 s", the
+- Below the rows: one total, "$4.00 · charged only for videos that finish · cancel within 15 s", the
   consent box (§5a, one for the whole batch), and Upload.
-- If the total is more than the available credit: "Needs $4.50; you have $3.70" and Upload stays
+- If the total is more than the available credit: "Needs $5.00; you have $3.70" and Upload stays
   disabled until rows are removed. With no valid row Upload is disabled.
 - When the consent box is ticked, each valid row shows a quiet "Add audience retention" link (the
   video is already on YouTube). It opens the curve form (§5d) for that row; the curve is held by the

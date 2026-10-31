@@ -1,7 +1,7 @@
 """Tests for neurolens.pricing. Written from docs/M1_spec.md sections 1 and 6a.
 
 The formula is CENTS_PER_BLOCK * max(1, ceil((d - ALLOWANCE_SECONDS) / BLOCK_SECONDS)) cents:
-$0.90 per started 30-second block today, with a half-second allowance. The module constants are the
+$1.00 per started 30-second block today, with a half-second allowance. The module constants are the
 one place the price lives; the pages read them from /api/limits.
 """
 
@@ -11,8 +11,8 @@ import pytest
 from neurolens import pricing
 from neurolens.pricing import estimate_cost_cents, estimate_cost_usd
 
-# (duration in seconds, started 30-second blocks). The first four are the spec's "all 90"; the rest
-# follow the formula and agree with the spec's 60 s -> 180 and 120 s -> 360.
+# (duration in seconds, started 30-second blocks), as in the spec: up to 30.5 s is one block,
+# 60 s two and 120 s four.
 CASES = [
     (0.2, 1),
     (1, 1),
@@ -40,8 +40,8 @@ def test_estimate_cost_cents_matches_the_written_formula(duration, blocks):
     assert estimate_cost_cents(duration) == expected
 
 
-def test_todays_constants_are_90_cents_per_30_second_block_with_a_half_second_allowance():
-    assert pricing.CENTS_PER_BLOCK == 90
+def test_todays_constants_are_100_cents_per_30_second_block_with_a_half_second_allowance():
+    assert pricing.CENTS_PER_BLOCK == 100
     assert pricing.BLOCK_SECONDS == 30
     assert pricing.ALLOWANCE_SECONDS == 0.5
 
