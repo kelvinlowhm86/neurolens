@@ -1375,13 +1375,17 @@ function renderHistory(jobs) {
   updateTabTitle(jobs);
   sendPendingCurves(jobs);
   const list = $('historyList');
+  // The presign reserves the job before its file is sent, so while this tab is still uploading it the
+  // upload row stands for it; listing the job too would show the same video twice.
+  const uploading = new Set(uploadQueue.map(entry => entry.jobId).filter(Boolean));
+  const listed = jobs.filter(job => !uploading.has(job.job_id));
   reconcileRows(list, [
     ...uploadQueue.map(entry => [`queue:${entry.item.id}`, JSON.stringify([entry.state, entry.reason, entry.signedOut, entry.item.thumb]), () => queueRow(entry)]),
-    ...jobs.map(job => [`job:${job.job_id}`, JSON.stringify([job, historyDetail(job), historyNumber(job), curveFailures.get(job.job_id), cancelWindows.has(job.job_id), localFrames.has(job.job_id)]), () => historyRow(job)]),
+    ...listed.map(job => [`job:${job.job_id}`, JSON.stringify([job, historyDetail(job), historyNumber(job), curveFailures.get(job.job_id), cancelWindows.has(job.job_id), localFrames.has(job.job_id)]), () => historyRow(job)]),
   ]);
   $('historyPanel').classList.add('active');
-  $('historyCount').textContent = jobs.length + uploadQueue.length ? String(jobs.length + uploadQueue.length) : '';
-  $('historyEmpty').hidden = uploadQueue.length + jobs.length > 0;
+  $('historyCount').textContent = listed.length + uploadQueue.length ? String(listed.length + uploadQueue.length) : '';
+  $('historyEmpty').hidden = uploadQueue.length + listed.length > 0;
   $('historyNote').textContent = '';
   if (currentResult) showCompareRow();
 

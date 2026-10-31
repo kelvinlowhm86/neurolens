@@ -244,6 +244,19 @@ resource "aws_sagemaker_endpoint" "main" {
   }
 }
 
+# The endpoint resource can return while SageMaker is still updating it, and the scaling target is
+# refused until it is back in service (31 Oct). Wait for that whenever the configuration changes;
+# the waiter fails loudly if the endpoint ends Failed.
+resource "terraform_data" "endpoint_in_service" {
+  count = local.image_ready ? 1 : 0
+
+  triggers_replace = aws_sagemaker_endpoint.main[0].endpoint_config_name
+
+  provisioner "local-exec" {
+    command = "aws sagemaker wait endpoint-in-service --endpoint-name ${aws_sagemaker_endpoint.main[0].name} --region ${var.region}"
+  }
+}
+
 # The lifecycle policy's first rule protects the `live` tag. Move it to the deployed digest
 # whenever worker_image changes; `--image-tag` with a manifest moves an existing tag.
 resource "terraform_data" "live_image" {
@@ -296,7 +309,7 @@ resource "aws_appautoscaling_target" "endpoint" {
   min_capacity       = 0
   max_capacity       = var.max_instances
 
-  depends_on = [aws_sagemaker_endpoint.main]
+  depends_on = [terraform_data.endpoint_in_service]
 }
 
 # One waiting request with no capacity adds one instance.
