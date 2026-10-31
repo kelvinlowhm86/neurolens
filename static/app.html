@@ -50,6 +50,7 @@
   .btn-white:disabled { opacity: .5; cursor: default; }
   .btn-ghost { background: none; border: 1px solid var(--line); color: var(--ink); border-radius: var(--radius); padding: 7px 12px; min-height: 34px; text-decoration: none; display: inline-block; }
   .btn-ghost:hover { border-color: var(--muted); }
+  .btn-ghost:disabled { opacity: .5; cursor: default; border-color: var(--line); }
   .btn-danger { background: none; border: 1px solid var(--line); color: var(--danger); border-radius: var(--radius); padding: 6px 12px; min-height: 34px; }
   .btn-danger:hover { border-color: var(--danger); }
   .btn-danger:disabled { opacity: .5; cursor: default; }
@@ -826,6 +827,7 @@
 <dialog class="modal" id="curveDialog" aria-labelledby="curveDialogTitle">
   <h2 id="curveDialogTitle">Add audience retention</h2>
   <p id="curveVideo"></p>
+  <p id="curveSampleNote" hidden>Sample: nothing is sent.</p>
   <p>Choose the video's audience-retention report (the .json file from YouTube). <a href="/static/retention_guide.html" target="_blank" rel="noopener">How to get the report</a></p>
   <p class="reward-note" id="curveReward"></p>
   <div class="actions" style="margin-top:12px">
@@ -3155,11 +3157,21 @@ function showRetention(jobId, title) {
       : 'Thanks for sharing.';
   }
 }
+function showSampleRetention(ctx) {
+  const sample = ctx && ctx.sampleId ? sampleById(ctx.sampleId) : null;
+  if (!sample || !sample.sharing_example) return;
+  resultCurve = { sampleId: sample.id, title: sample.title || 'Sample' };
+  $('retentionCardText').textContent = 'Example of a shared video.';
+  $('retentionCard').hidden = false;
+}
 $('retentionCardBtn').addEventListener('click', () => {
-  if (resultCurve) {
-    const cached = jobsCache.find(j => j.job_id === resultCurve.jobId);
-    openCurve(jobCurveTarget(cached || { job_id: resultCurve.jobId, filename: resultCurve.title }));
+  if (!resultCurve) return;
+  if (resultCurve.sampleId) {
+    openCurve({ kind: 'sample', sampleId: resultCurve.sampleId, title: resultCurve.title });
+    return;
   }
+  const cached = jobsCache.find(j => j.job_id === resultCurve.jobId);
+  openCurve(jobCurveTarget(cached || { job_id: resultCurve.jobId, filename: resultCurve.title }));
 });
 
 function jobCurveTarget(job) {
@@ -3192,7 +3204,7 @@ function choiceGroup(host, name, options) {
   });
 }
 
-let curveTarget = null, curveFile = null;
+let curveTarget = null, curveFile = null, curvePreview = false;
 
 function curveList(items) {
   if (items.length <= 1) return items[0] || '';
@@ -3282,6 +3294,10 @@ function setCurveMsg(text, isError, withGuideLink) {
 function openCurve(target) {
   curveTarget = target;
   curveFile = null;
+  curvePreview = target.kind === 'sample';
+  $('curvePick').disabled = curvePreview;
+  $('curveInput').disabled = curvePreview;
+  $('curveSampleNote').hidden = !curvePreview;
   $('curveVideo').textContent = target.title;
   $('curveFileName').textContent = '';
   const reward = $('curveReward');
@@ -3308,7 +3324,7 @@ function curveChoice(name) {
 }
 
 function updateCurveSave() {
-  $('curveSave').disabled = !(curveFile && curveChoice('curveViews') && curveChoice('curvePublished') && curveChoice('curvePromoted'));
+  $('curveSave').disabled = curvePreview || !(curveFile && curveChoice('curveViews') && curveChoice('curvePublished') && curveChoice('curvePromoted'));
 }
 
 $('curvePick').addEventListener('click', () => $('curveInput').click());
@@ -3319,6 +3335,12 @@ $('curveInput').addEventListener('change', ev => {
   updateCurveSave();
 });
 $('curveClose').addEventListener('click', () => curveDialog.close());
+curveDialog.addEventListener('close', () => {
+  curvePreview = false;
+  $('curvePick').disabled = false;
+  $('curveInput').disabled = false;
+  $('curveSampleNote').hidden = true;
+});
 closeOnBackdrop(curveDialog);
 
 // After a saved curve the form is read-only: one Close button instead of Save/Cancel.
@@ -3328,7 +3350,7 @@ function curveSaved() {
 }
 
 $('curveSave').addEventListener('click', async () => {
-  if (!curveTarget || $('curveSave').disabled) return;
+  if (!curveTarget || $('curveSave').disabled || curveTarget.kind === 'sample') return;
   const target = curveTarget;
   const report = curveFile ? await curveFile.text() : '';
   const body = {
@@ -3578,6 +3600,7 @@ function renderResult(result, summary, ctx) {
   $('sampleMeta').textContent = ctx.attribution || '';
   setViewName('player');
   setupReport(ctx.jobId, result);
+  showSampleRetention(ctx);
   const name = videoBaseName(ctx.title || '');
   $('clipTitle').textContent = shortName(name);
   $('clipTitle').title = name;

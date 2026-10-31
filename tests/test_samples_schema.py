@@ -45,11 +45,17 @@ SUMMARY_KEYS = {"audio_dependence"}
 @pytest.mark.parametrize("sample", SAMPLES, ids=[s.get("id", "?") for s in SAMPLES])
 def test_sample_has_the_new_entry_shape(sample):
     # M3h §7/§18d: a sample may also carry its stored report and its PDF.
-    assert ENTRY_KEYS <= set(sample) <= ENTRY_KEYS | {"report", "pdf_file"}
+    assert ENTRY_KEYS <= set(sample) <= ENTRY_KEYS | {"report", "pdf_file", "sharing_example"}
     assert sample["result"]["format"] == 2
     assert set(sample["result"]["signals"]) == SERIES
     assert set(sample["result"]["muted"]) == SERIES
     assert set(sample["summary"]) == SUMMARY_KEYS
+
+
+def test_at_most_one_sample_is_the_sharing_example():
+    flagged = [sample for sample in SAMPLES if "sharing_example" in sample]
+    assert all(isinstance(sample["sharing_example"], bool) for sample in flagged)
+    assert sum(1 for sample in flagged if sample["sharing_example"]) <= 1
 
 
 @pytest.mark.parametrize("sample", SAMPLES, ids=[s.get("id", "?") for s in SAMPLES])

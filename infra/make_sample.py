@@ -176,6 +176,14 @@ def add_sample(args):
 
     document = _document()
     samples = document.get("samples", [])
+    existing = next((sample for sample in samples if sample.get("id") == sample_id), None)
+    if args.sharing_example:
+        entry["sharing_example"] = True
+        for sample in samples:
+            if sample.get("id") != sample_id:
+                sample.pop("sharing_example", None)
+    elif existing and existing.get("sharing_example"):
+        entry["sharing_example"] = True
     for index, sample in enumerate(samples):
         if sample.get("id") == sample_id:
             samples[index] = entry
@@ -330,6 +338,11 @@ def main():
     parser.add_argument("--description", default=None)
     parser.add_argument(
         "--thumbnail-at", type=float, default=1.0, help="the frame to use, in seconds (default 1)"
+    )
+    parser.add_argument(
+        "--sharing-example",
+        action="store_true",
+        help="mark this sample as the example of a shared video",
     )
     add_sample(parser.parse_args(values))
 

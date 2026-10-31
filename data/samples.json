@@ -3939,6 +3939,7 @@
       "id": "bbb_720p_55s",
       "title": "Big Buck Bunny (55 s excerpt)",
       "description": "Animated short, no dialogue.",
+      "sharing_example": true,
       "attribution": "\u00a9 copyright 2008, Blender Foundation | www.bigbuckbunny.org, CC BY 3.0",
       "video_file": "videos/bbb_720p_55s.mp4",
       "thumbnail": "output/bbb_720p_55s/thumb.jpg",
