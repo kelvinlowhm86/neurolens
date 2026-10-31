@@ -17,10 +17,10 @@
   :root {
     --bg: #0B0C0E; --bar: #0B0C0E; --panel: rgba(17, 19, 22, .92); --well: #0E1013;
     --line: #262A31; --text: #E8EAED; --muted: #9097A1;
-    --accent: #FF8A2A; --accent-2: #FFC24A; --cool: #6F7E99;
+    --accent: #FF8A2A; --accent-2: #FFC24A;
     --display: 'Space Grotesk', system-ui, sans-serif;
     --mono: 'JetBrains Mono', ui-monospace, monospace;
-    --t-press: 80ms; --t-quick: 160ms; --t-enter: 240ms; --t-signature: 900ms; --t-page: 350ms;
+    --t-press: 80ms; --t-quick: 160ms; --t-enter: 240ms; --t-page: 350ms;
     --ease-out: cubic-bezier(.2, .7, .2, 1); --ease-io: cubic-bezier(.65, 0, .35, 1);
     --grid: linear-gradient(rgba(255, 255, 255, .035) 1px, transparent 1px),
             linear-gradient(90deg, rgba(255, 255, 255, .035) 1px, transparent 1px);
@@ -31,7 +31,7 @@
   body { min-height: 100vh; background-color: var(--bg); background-image: var(--grid); background-size: 24px 24px; color: var(--text); font: 14px/1.55 var(--display); letter-spacing: -0.003em; }
   a { color: inherit; }
   a, button { transition: color var(--t-quick) var(--ease-out), background-color var(--t-quick) var(--ease-out), border-color var(--t-quick) var(--ease-out), transform var(--t-press) var(--ease-out); }
-  button:not(.moment-mark):active, a:active { transform: scale(.98); }
+  button:active, a:active { transform: scale(.98); }
   button:disabled, [aria-disabled="true"] { opacity: .5; cursor: default; }
   :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
@@ -64,7 +64,7 @@
   .brain-skeleton { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 18px; pointer-events: none; }
   .brain-skeleton svg { width: min(72%, 260px); height: auto; }
   .brain-legend { position: absolute; left: 14px; bottom: 12px; display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--muted); pointer-events: none; }
-  .brain-legend i { width: 86px; height: 6px; border-radius: 3px; background: linear-gradient(90deg, var(--cool), var(--line) 30%, var(--accent) 70%, var(--accent-2)); }
+  .brain-legend i { width: 86px; height: 6px; border-radius: 3px; background: linear-gradient(90deg, #D9DCE1, #800000 10%, #E61A0A 40%, #FF800A 66%, #FFD926 88%, #FFFFD9); }
   .brain-time { position: absolute; right: 14px; top: 12px; font: 500 13px var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
   .brain-hint { position: absolute; right: 14px; bottom: 12px; font-size: 11px; color: var(--muted); pointer-events: none; }
 

@@ -175,7 +175,7 @@ Options are named by what they change; the help text says when to use each.
 ## 9. Experiment 3 (cloud vs on-premise cost)
 An independent track.
 - `experiments/tco_benchmark.py` times the full two-pass pipeline for 15 s, 30 s and 60 s clips and writes a CSV of wall-clock times.
-- **On-premise leg:** the school's GPU cluster via Slurm (`experiments/slurm/tco_benchmark.sbatch`, a GPU with 40 GB or more), falling back to a teammate's 2× RTX 4090 machine; 10 runs per length. Power cost from published GPU TDP figures, not measured. The cluster has no AWS credentials: copy the output to a laptop and upload it with the manifest.
+- **On-premise leg:** the school's GPU cluster via Slurm (`experiments/tco_benchmark.sbatch`, a GPU with 40 GB or more), falling back to a teammate's 2× RTX 4090 machine; 10 runs per length. Power cost from published GPU TDP figures, not measured. The cluster has no AWS credentials: copy the output to a laptop and upload it with the manifest.
 - **Cloud leg:** reuses Experiment 1's runs (3 per clip length) instead of new GPU time; the report states the run counts of each leg.
 - Output under `experiments/experiment-3/<run_id>/` with a `manifest.json` (M2b §10's contract). Costs use the **measured on-demand price** ($2.61 an hour for `ml.g6e.xlarge`) and measured runtimes; the consolidation recomputes cost per video and the break-even volume from them and shows the original planned figures beside them, labelled as planned. Never presented as observed fully-loaded costs.
 
@@ -237,7 +237,7 @@ infra/iam/neurolens-deploy-*.json  MODIFIED: Cognito, CloudFront, SageMaker, ECR
 static/                            MODIFIED: sign-in, balance, history, CSV, messages, postJSON, empty samples state; privacy.html NEW
 docs/session_checklist.md          NEW: start_work.sh --keep-warm, sign-in check, grant credit, stop_work.sh (in that order)
 experiments/tco_benchmark.py       NEW
-experiments/slurm/tco_benchmark.sbatch  NEW
+experiments/tco_benchmark.sbatch  NEW
 tests/                             MODIFIED: §11
 ```
 

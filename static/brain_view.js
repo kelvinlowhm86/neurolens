@@ -1,7 +1,7 @@
 import * as THREE from '/static/three/three.module.min.js';
 import { OrbitControls } from '/static/three/OrbitControls.js';
 
-export const VERTICES = 20484;
+const VERTICES = 20484;
 const MESH_URL = '/static/brain/fsaverage6_pial.bin';
 const HEAD_URL = '/static/brain/head.bin';
 export const UNAVAILABLE = 'The 3D view is not available for this video.';

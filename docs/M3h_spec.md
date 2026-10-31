@@ -489,7 +489,7 @@ reviewed by an independent Opus pass; its fixes are part of this section.
   results through `owned_result`, the comparison row `ready` and its report stored, else 409
   `no_report`. A and B as stored (canonical pair, §2).
 - Both answer `application/pdf` with an attachment name built like the CSV's
-  (`_csv_disposition` generalised to take the suffix): "<stem> – NeuroLens report.pdf" and
+  (`_disposition` generalised to take the suffix): "<stem> – NeuroLens report.pdf" and
   "<stem A> vs <stem B> – NeuroLens comparison.pdf" (ASCII fallback in `filename`, full name in
   `filename*`). Signed out: 401, like every `/api/*` route. `binary_support=True` already makes
   the Lambda return the bytes base64-encoded.
