@@ -29,9 +29,10 @@ mkdir -p "$STAGE/static" "$STAGE/data"
 git archive HEAD static | tar -x -C "$STAGE"
 cp static/index.html "$STAGE/index.html"
 cp static/app.html "$STAGE/app"
-# Only samples whose clip is listed in data/videos/SOURCES.md are public; their video, thumbnail and
-# brain file go with them. A listed clip can be a third-party one the owner has cleared for this
-# project (the CeraVe cuts, by Josh's decision); comparisons are public only when both samples are.
+# Only samples whose clip is listed in data/videos/SOURCES.md are public; their video, thumbnail,
+# brain and CSV files go with them. A listed clip can be a third-party one the owner has cleared
+# for this project (the CeraVe cuts, by Josh's decision); comparisons are public only when both
+# samples are.
 python3 -I - "$STAGE" <<'PY'
 import json, re, shutil, sys
 from pathlib import Path
@@ -47,7 +48,7 @@ comparisons = [
     if c.get("a") in public_ids and c.get("b") in public_ids
 ]
 for s in public:
-    for name in (s["video_file"], s.get("thumbnail"), s.get("brain_file")):
+    for name in (s["video_file"], s.get("thumbnail"), s.get("brain_file"), s.get("csv_file")):
         if name:
             target = stage / "data" / name
             target.parent.mkdir(parents=True, exist_ok=True)

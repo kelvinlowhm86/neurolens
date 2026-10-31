@@ -133,6 +133,7 @@ def sample_entry(sample_id, duration):
         "video_file": f"videos/{sample_id}.mp4",
         "thumbnail": f"output/{sample_id}/thumb.jpg",
         "brain_file": f"output/{sample_id}/brain",
+        "csv_file": f"output/{sample_id}/result.csv",
         "result": make_result(duration),
         "summary": results.summarise(make_result(duration)),
     }
@@ -164,6 +165,29 @@ def test_make_sample_stores_the_report_without_usage(script, monkeypatch):
     assert stored["id"] == "clip"
     assert stored["report"] == {key: value for key, value in report.items() if key != "usage"}
     assert "usage" not in stored["report"]
+
+
+def test_make_sample_writes_the_csv_from_the_result(script, monkeypatch):
+    module, data = script
+    job_id = str(uuid.uuid4())
+    result = make_result(3)
+    fake = FakeS3(
+        {
+            f"results/{job_id}.json": json.dumps(result).encode(),
+            f"results/{job_id}.brain": b"brain",
+        }
+    )
+
+    run(
+        module,
+        monkeypatch,
+        fake,
+        [job_id, str(data / "videos" / "clip.mp4"), "A title", "An attribution"],
+    )
+
+    stored = json.loads(module.SAMPLES.read_text())["samples"][0]
+    assert stored["csv_file"] == "output/clip/result.csv"
+    assert (data / stored["csv_file"]).read_text() == results.to_csv(result)
 
 
 def test_make_sample_refuses_a_report_that_fails_the_check(script, monkeypatch):
@@ -243,7 +267,13 @@ def test_deploy_filter_drops_a_comparison_unless_both_samples_are_public(tmp_pat
     ]
     (data / "samples.json").write_text(json.dumps({"samples": samples, "comparisons": comparisons}))
     for sample in samples[:2]:
-        for name in (sample["video_file"], sample["thumbnail"], sample["brain_file"]):
+        names = (
+            sample["video_file"],
+            sample["thumbnail"],
+            sample["brain_file"],
+            sample["csv_file"],
+        )
+        for name in names:
             target = data / name
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(b"file")
@@ -264,3 +294,5 @@ def test_deploy_filter_drops_a_comparison_unless_both_samples_are_public(tmp_pat
     assert deployed["comparisons"] == [
         {"a": "public", "b": "public2", "report": {"headline": "shown"}}
     ]
+    assert (stage / "data" / "output" / "public" / "result.csv").read_bytes() == b"file"
+    assert not (stage / "data" / "output" / "private" / "result.csv").exists()

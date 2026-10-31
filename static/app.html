@@ -240,6 +240,7 @@
   .result-tab { background: none; border: 0; border-bottom: 2px solid transparent; color: var(--muted); padding: 8px 16px; min-height: 40px; font: 500 14px var(--display); }
   .result-tab:hover { color: var(--ink); }
   .result-tab.active { color: var(--ink); border-bottom-color: var(--accent); font-weight: 600; }
+  .result-download { margin-left: auto; margin-right: 4px; align-self: center; min-height: 26px; padding: 2px 9px; font-size: 13px; color: var(--ink-2); white-space: nowrap; flex: none; }
   .result-panel { display: none; flex: 1; min-height: 0; flex-direction: column; gap: 16px; overflow-y: auto; scrollbar-width: thin; }
   .result-panel.active { display: flex; }
   .report-panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px 22px; display: flex; flex-direction: column; gap: 14px; }
@@ -278,7 +279,6 @@
   .chart-title { min-width: 0; }
   .chart-title h2 { font: 600 18px/1.2 var(--display); letter-spacing: -0.01em; }
   .chart-sub { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 6px; font-size: 12px; color: var(--muted); }
-  .chart-download { min-height: 26px; padding: 2px 9px; font-size: 11.5px; color: var(--muted); }
   .keys { display: flex; flex-wrap: wrap; gap: 4px 16px; order: 5; flex-basis: 100%; }
   #chartKeys:empty { display: none; }
   .chart-controls { display: inline-flex; align-items: center; gap: 14px; margin-left: auto; flex-wrap: wrap; }
@@ -625,6 +625,7 @@
         <button class="result-tab active" id="chartsTabBtn" type="button">Analysis</button>
         <button class="result-tab" id="reportTabBtn" type="button">Report</button>
         <button class="result-tab" id="compareTabBtn" type="button" hidden>Compare</button>
+        <button class="btn-ghost result-download" id="downloadBtn" type="button" aria-haspopup="menu" aria-expanded="false" hidden>Download</button>
       </div>
 
       <div class="result-panel active" id="chartsTab">
@@ -636,7 +637,6 @@
                 <span class="legend-key"><i></i>with sound</span>
                 <label class="toggle" id="mutedLabel"><input type="checkbox" id="mutedToggle"> Show if muted</label>
                 <span class="sound-line" id="soundLine"></span>
-                <a class="btn-ghost chart-download" id="downloadCsv" hidden>Download CSV</a>
               </div>
             </div>
             <span class="keys" id="chartKeys"></span>
@@ -1006,15 +1006,19 @@ function historyMenuItems(job) {
   return items;
 }
 function openRowMenu(trigger, job) {
+  openMenu(trigger, historyMenuItems(job));
+}
+function openMenu(trigger, items) {
   closeRowMenu();
   const menu = document.createElement('div');
   menu.className = 'row-menu';
   menu.setAttribute('role', 'menu');
-  historyMenuItems(job).forEach(item => {
+  items.forEach(item => {
     let el;
     if (item.href) {
       el = document.createElement('a');
       el.href = item.href;
+      if (item.download) el.download = item.download;
       el.addEventListener('click', e => { e.stopPropagation(); closeRowMenu(); });
     } else {
       el = document.createElement('button');
@@ -1048,6 +1052,26 @@ document.addEventListener('click', e => {
 });
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape' && rowMenu) closeRowMenu(true);
+});
+
+function resultDownloadItems() {
+  if (!currentResult || !currentContext) return [];
+  const ctx = currentContext;
+  if (ctx.jobId) return [{ label: 'CSV', href: `/api/jobs/${ctx.jobId}/result.csv` }];
+  if (ctx.csvFile) return [{ label: 'CSV', href: `/data/${ctx.csvFile}`, download: `${ctx.title || 'Sample'} – NeuroLens.csv` }];
+  return [];
+}
+function updateDownloadButton() {
+  const button = $('downloadBtn');
+  const hasItems = resultDownloadItems().length > 0;
+  button.hidden = !hasItems;
+  if (!hasItems) button.setAttribute('aria-expanded', 'false');
+}
+$('downloadBtn').addEventListener('click', () => {
+  const items = resultDownloadItems();
+  if (!items.length) return;
+  if (rowMenu && rowMenuTrigger === $('downloadBtn')) closeRowMenu(true);
+  else openMenu($('downloadBtn'), items);
 });
 
 const deleteDialog = $('deleteDialog');
@@ -1656,6 +1680,7 @@ function loadSample(idx) {
   renderResult(s.result, s.summary || s.result.summary || {}, {
     jobId: null,
     sampleId: s.id,
+    csvFile: s.csv_file,
     brainUrl: s.brain_file ? `/data/${s.brain_file}` : null,
     description: s.description,
     attribution: s.attribution,
@@ -2448,8 +2473,7 @@ function showResultUnavailable(message) {
   $('compareRow').hidden = true;
   $('compareTabBtn').hidden = true;
   $('compareSelect').replaceChildren();
-  $('downloadCsv').hidden = true;
-  $('downloadCsv').removeAttribute('href');
+  updateDownloadButton();
   $('compareMsg').textContent = '';
   $('progressPanel').hidden = true;
   $('reportEmpty').style.display = 'none';
@@ -3427,13 +3451,7 @@ function renderResult(result, summary, ctx) {
   $('clipTitle').title = name;
   const span = totalSeconds();
   $('headerMeta').textContent = name ? `${shortName(name)}${span ? ` · ${fmt(span)}` : ''}` : '';
-  if (ctx.jobId) {
-    $('downloadCsv').href = `/api/jobs/${ctx.jobId}/result.csv`;
-    $('downloadCsv').hidden = false;
-  } else {
-    $('downloadCsv').removeAttribute('href');
-    $('downloadCsv').hidden = true;
-  }
+  updateDownloadButton();
   updateSoundLine();
   buildAllCharts();
   showCompareRow();
@@ -4537,8 +4555,7 @@ function resetUI() {
   $('resultMessage').textContent = '';
   updateSoundLine();
   $('chartKeys').replaceChildren();
-  $('downloadCsv').hidden = true;
-  $('downloadCsv').removeAttribute('href');
+  updateDownloadButton();
   $('compareRow').hidden = true;
   $('compareTabBtn').hidden = true;
   $('compareSelect').replaceChildren();

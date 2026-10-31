@@ -1293,7 +1293,8 @@
         ],
         "model": "us.anthropic.claude-sonnet-4-6",
         "created_at": "2026-10-31T00:23:51Z"
-      }
+      },
+      "csv_file": "output/sintel_trailer_720p/result.csv"
     },
     {
       "id": "bbb_720p_55s",
@@ -2618,7 +2619,8 @@
         ],
         "model": "us.anthropic.claude-sonnet-4-6",
         "created_at": "2026-10-31T00:22:59Z"
-      }
+      },
+      "csv_file": "output/bbb_720p_55s/result.csv"
     },
     {
       "id": "cerave_30s",
@@ -3429,7 +3431,8 @@
         ],
         "model": "us.anthropic.claude-sonnet-4-6",
         "created_at": "2026-10-31T00:22:47Z"
-      }
+      },
+      "csv_file": "output/cerave_30s/result.csv"
     },
     {
       "id": "cerave_76s",
@@ -5252,7 +5255,8 @@
         ],
         "model": "us.anthropic.claude-sonnet-4-6",
         "created_at": "2026-10-31T00:26:31Z"
-      }
+      },
+      "csv_file": "output/cerave_76s/result.csv"
     }
   ],
   "comparisons": [

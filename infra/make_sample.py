@@ -115,6 +115,7 @@ def add_sample(args):
     output.mkdir(parents=True, exist_ok=True)
     result_path = output / "result.json"
     brain_path = output / "brain"
+    csv_path = output / "result.csv"
     thumbnail_path = output / "thumb.jpg"
 
     bucket = bucket_name()
@@ -124,6 +125,7 @@ def add_sample(args):
     result = json.loads(result_path.read_text())
     if result.get("format") != 2:
         raise SystemExit(f"results/{args.job_id}.json is not format 2: rerun the job first")
+    csv_path.write_text(results.to_csv(result), encoding="utf-8")
 
     stored_report = None
     body = _object_bytes(s3, bucket, f"results/{args.job_id}.report.json")
@@ -144,6 +146,7 @@ def add_sample(args):
         "video_file": video.relative_to(DATA).as_posix(),
         "thumbnail": thumbnail_path.relative_to(DATA).as_posix(),
         "brain_file": brain_path.relative_to(DATA).as_posix(),
+        "csv_file": csv_path.relative_to(DATA).as_posix(),
         "result": result,
         "summary": summary,
     }

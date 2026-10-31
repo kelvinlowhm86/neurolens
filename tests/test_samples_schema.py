@@ -9,6 +9,7 @@ import json
 from pathlib import Path
 
 import pytest
+from neurolens import results
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 SAMPLES = json.loads((DATA_DIR / "samples.json").read_text())["samples"]
@@ -34,6 +35,7 @@ ENTRY_KEYS = {
     "video_file",
     "thumbnail",
     "brain_file",
+    "csv_file",
     "result",
     "summary",
 }
@@ -56,3 +58,11 @@ def test_a_sample_brain_file_is_a_whole_number_of_vertex_rows(sample):
     if not brain.exists():
         return
     assert brain.stat().st_size % (N_VERTICES * 2) == 0
+
+
+@pytest.mark.parametrize("sample", SAMPLES, ids=[s.get("id", "?") for s in SAMPLES])
+def test_a_sample_csv_file_matches_its_result(sample):
+    csv_file = DATA_DIR / sample["csv_file"]
+    if not csv_file.exists():
+        return
+    assert csv_file.read_text() == results.to_csv(sample["result"])

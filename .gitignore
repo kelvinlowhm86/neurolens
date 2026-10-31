@@ -39,6 +39,7 @@ hub/
 
 # ─── Generated output ──────────────────────────────────────────────────────
 /data/output/**/*.json
+/data/output/**/*.csv
 /data/output/**/*.npy
 /data/output/**/*.png
 /data/output/**/brain
