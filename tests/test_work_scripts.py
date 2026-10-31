@@ -141,8 +141,6 @@ if key == "sagemaker describe-endpoint":
         else:
             status = w.get("status", "InService")
         out(f"{status}\t{w.get('desired', w['instances'])}\t{w['instances']}")
-    elif query == "ProductionVariants[0].CurrentInstanceCount":
-        out(str(w["instances"]))
 print("fake aws: unexpected call: " + " ".join(args), file=sys.stderr)
 sys.exit(99)
 """
