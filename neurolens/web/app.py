@@ -51,20 +51,22 @@ def _error(code, message, status=400, **extra):
     return jsonify({"error": code, "message": message, **extra}), status
 
 
-def _csv_disposition(filename):
-    """The CSV's attachment name, "<video name> – NeuroLens.csv" (M3f §4.7). HTTP headers are
-    latin-1, so the full name goes in RFC 5987's `filename*` and `filename` carries a plain-ASCII
-    fallback for old browsers."""
-    stem = PurePosixPath(filename).stem.strip() if isinstance(filename, str) else ""
+def _stem(filename):
+    """The upload's file name without its extension, or "" when there is none."""
+    return PurePosixPath(filename).stem.strip() if isinstance(filename, str) else ""
+
+
+def _disposition(stem, suffix="NeuroLens.csv", fallback="NeuroLens result.csv"):
+    """The attachment name, "<stem> – <suffix>" (M3f §4.7, M3h §18b). HTTP headers are latin-1,
+    so the full name goes in RFC 5987's `filename*`; `filename` carries a plain-ASCII fallback."""
+    stem = stem.strip()
     if not stem:
-        return (
-            "attachment; filename=\"NeuroLens result.csv\"; filename*=UTF-8''NeuroLens%20result.csv"
-        )
+        return f"attachment; filename=\"{fallback}\"; filename*=UTF-8''{quote(fallback, safe='')}"
     ascii_stem = "".join(
         c if c.isascii() and c.isprintable() and c not in '"\\' else "_" for c in stem
     )
-    full = quote(f"{stem} \u2013 NeuroLens.csv", safe="")
-    return f"attachment; filename=\"{ascii_stem} - NeuroLens.csv\"; filename*=UTF-8''{full}"
+    full = quote(f"{stem} \u2013 {suffix}", safe="")
+    return f"attachment; filename=\"{ascii_stem} - {suffix}\"; filename*=UTF-8''{full}"
 
 
 def _not_configured():
@@ -559,6 +561,15 @@ def create_app(
             return None, None, _old_result()
         return result, job, None
 
+    def frames_for(job_id):
+        """The stored frames, or [] when the frames object is missing (other S3 errors raise)."""
+        try:
+            return storage.get_frames(s3, bucket, job_id)[0]
+        except Exception as err:
+            if storage.is_not_found(err):
+                return []
+            raise
+
     @app.route("/api/jobs/<job_id>/status")
     def job_status(job_id):
         """The job as the database has it: the database alone decides its status."""
@@ -602,7 +613,34 @@ def create_app(
             200,
             {
                 "Content-Type": "text/csv; charset=utf-8",
-                "Content-Disposition": _csv_disposition(job["filename"]),
+                "Content-Disposition": _disposition(_stem(job["filename"])),
+            },
+        )
+
+    @app.route("/api/jobs/<job_id>/report.pdf")
+    def job_report_pdf(job_id):
+        """The written report as a PDF (M3h §18b)."""
+        result, job, error = owned_result(job_id)
+        if error:
+            return error
+        if job["report_state"] != "ready":
+            return _error("no_report", "There is no written report for this video.", status=409)
+        if s3 is None or not bucket:
+            return _not_configured()
+        report = storage.get_report(s3, bucket, job["job_id"])
+        if not report:
+            return _error("no_report", "There is no written report for this video.", status=409)
+        from neurolens import report_pdf
+
+        data = report_pdf.report_pdf(job["filename"], result, report, frames_for(job["job_id"]))
+        return (
+            data,
+            200,
+            {
+                "Content-Type": "application/pdf",
+                "Content-Disposition": _disposition(
+                    _stem(job["filename"]), "NeuroLens report.pdf", "NeuroLens report.pdf"
+                ),
             },
         )
 
@@ -976,6 +1014,46 @@ def create_app(
                 "tries_left": max(0, report_cfg["max_tries"] - tries),
                 "report": report,
             }
+        )
+
+    @app.route("/api/compare/<x>/<y>/report.pdf")
+    def comparison_report_pdf(x, y):
+        """The written comparison as a PDF, in the canonical pair's order (M3h §18b)."""
+        a, b, error = comparison_ids(x, y)
+        if error:
+            return error
+        result_a, job_a, error = owned_result(a)
+        if error:
+            return error
+        result_b, job_b, error = owned_result(b)
+        if error:
+            return error
+        row = billing.get_comparison(db, a, b)
+        if not row or row["state"] != "ready":
+            return _error("no_report", "There is no written comparison for this pair.", status=409)
+        if s3 is None or not bucket:
+            return _not_configured()
+        report = storage.get_comparison_report(s3, bucket, a, b)
+        if not report:
+            return _error("no_report", "There is no written comparison for this pair.", status=409)
+        from neurolens import report_pdf
+
+        data = report_pdf.comparison_pdf(
+            (job_a["filename"], result_a, frames_for(a)),
+            (job_b["filename"], result_b, frames_for(b)),
+            report,
+        )
+        stem_a, stem_b = _stem(job_a["filename"]), _stem(job_b["filename"])
+        stem = f"{stem_a} vs {stem_b}" if stem_a and stem_b else (stem_a or stem_b)
+        return (
+            data,
+            200,
+            {
+                "Content-Type": "application/pdf",
+                "Content-Disposition": _disposition(
+                    stem, "NeuroLens comparison.pdf", "NeuroLens comparison.pdf"
+                ),
+            },
         )
 
     @app.route("/api/jobs/<job_id>", methods=["DELETE"])

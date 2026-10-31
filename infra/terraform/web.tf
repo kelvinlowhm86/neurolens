@@ -200,10 +200,11 @@ resource "aws_cognito_user_pool_domain" "users" {
 # ─── The web function (M3b §3a) ───────────────────────────────────────────
 #
 # It runs outside the VPC: it reaches Cognito, Parameter Store, S3 and the Data API over AWS's
-# public endpoints, so it never depends on a NAT Gateway. Its role is in web_iam.tf. Terraform
-# uploads the zip only when it creates the function (build it first with
-# infra/build_web_lambda.sh); after that infra/deploy_web.sh ships code, so an apply for anything
-# else never needs a build and never changes the running code.
+# public endpoints, so it never depends on a NAT Gateway. Its role is in web_iam.tf. The zip is
+# too large for a direct Terraform upload with the PDF code, so it lives in the bucket and the
+# function reads it from there (M3h §18e). Build it first with infra/build_web_lambda.sh; after
+# that infra/deploy_web.sh ships code to the same key, so an apply for anything else never needs
+# a build and never changes the running code.
 
 locals {
   web_zip = "${local.repo_root}/build/web_lambda.zip"
@@ -254,6 +255,17 @@ resource "aws_cloudwatch_log_group" "web" {
   tags              = { Milestone = "M3b" }
 }
 
+resource "aws_s3_object" "web_zip" {
+  bucket = aws_s3_bucket.main.bucket
+  key    = "deploy/web_lambda.zip"
+  source = local.web_zip
+  tags   = { Milestone = "M3h" }
+
+  lifecycle {
+    ignore_changes = [source, etag] # uploaded once; deploy_web.sh replaces it
+  }
+}
+
 resource "aws_lambda_function" "web" {
   for_each = local.web_lambdas
 
@@ -262,7 +274,8 @@ resource "aws_lambda_function" "web" {
   runtime       = "python3.12"
   architectures = ["arm64"]
   handler       = each.value.handler
-  filename      = local.web_zip
+  s3_bucket     = aws_s3_bucket.main.bucket
+  s3_key        = aws_s3_object.web_zip.key
   timeout       = 60
   memory_size   = 1769 # one full vCPU: startup (AWS clients) is CPU-bound; measured 4.6-5.5 s at 512
 
@@ -271,11 +284,15 @@ resource "aws_lambda_function" "web" {
   }
 
   lifecycle {
-    ignore_changes = [filename] # code is deploy_web.sh's job
+    ignore_changes = [filename, s3_bucket, s3_key] # code is deploy_web.sh's job
   }
 
-  depends_on = [aws_cloudwatch_log_group.web, aws_iam_role_policy.web]
-  tags       = { Milestone = "M3b" }
+  depends_on = [
+    aws_cloudwatch_log_group.web,
+    aws_iam_role_policy.web,
+    aws_s3_object.web_zip,
+  ]
+  tags = { Milestone = "M3b" }
 }
 
 # The web function: callable only through this CloudFront distribution (signed requests). Function

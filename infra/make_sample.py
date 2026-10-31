@@ -9,16 +9,19 @@ The first form downloads the job's result, brain file and report (when present) 
 data/output/<id>/ (id = the video's file stem), grabs a thumbnail at 1 s (or --thumbnail-at), and
 writes the entry into data/samples.json with the summary computed from the result. Re-run it
 after a summary rule change. The compare form copies the stored comparison for two samples that
-are already in samples.json. This is an operator script: it talks to AWS and is never run by the
-tests.
+are already in samples.json. Both forms also write the PDF and record its path. `pdfs` re-renders
+every stored sample and comparison PDF from samples.json after a layout change. This is an
+operator script: it talks to AWS and is never run by the tests.
 """
 
 import argparse
+import io
 import json
 import os
 import shutil
 import subprocess
 import sys
+import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -103,10 +106,23 @@ def _without_usage(answer):
     return {key: value for key, value in answer.items() if key != "usage"}
 
 
+def _frames(s3, bucket, result):
+    """The job's stored frames, or [] when there are none (M3h §18d)."""
+    job_id = result.get("job_id") if isinstance(result, dict) else None
+    if not job_id:
+        return []
+    body = _object_bytes(s3, bucket, f"results/{job_id}.frames")
+    if body is None:
+        return []
+    with zipfile.ZipFile(io.BytesIO(body)) as archive:
+        names = sorted(name for name in archive.namelist() if name.endswith(".jpg"))
+        return [archive.read(name) for name in names]
+
+
 def add_sample(args):
     import boto3
 
-    from neurolens import results
+    from neurolens import report_pdf, results
     from neurolens.lambdas import report
 
     video = video_in_data(args.video)
@@ -117,6 +133,7 @@ def add_sample(args):
     brain_path = output / "brain"
     csv_path = output / "result.csv"
     thumbnail_path = output / "thumb.jpg"
+    pdf_path = output / "report.pdf"
 
     bucket = bucket_name()
     s3 = boto3.client("s3")
@@ -152,6 +169,10 @@ def add_sample(args):
     }
     if stored_report is not None:
         entry["report"] = _without_usage(stored_report)
+        pdf_path.write_bytes(
+            report_pdf.report_pdf(args.title, result, stored_report, _frames(s3, bucket, result))
+        )
+        entry["pdf_file"] = pdf_path.relative_to(DATA).as_posix()
 
     document = _document()
     samples = document.get("samples", [])
@@ -168,7 +189,7 @@ def add_sample(args):
 def add_comparison(args):
     import boto3
 
-    from neurolens import storage
+    from neurolens import report_pdf, storage
     from neurolens.lambdas import report
 
     document = _document()
@@ -200,6 +221,25 @@ def add_comparison(args):
         "b": sample_by_job[job_b],
         "report": _without_usage(answer),
     }
+    sample_a, sample_b = by_id[entry["a"]], by_id[entry["b"]]
+    pdf_path = DATA / "output" / "compare" / f"{entry['a']}__{entry['b']}.pdf"
+    pdf_path.parent.mkdir(parents=True, exist_ok=True)
+    pdf_path.write_bytes(
+        report_pdf.comparison_pdf(
+            (
+                sample_a["title"],
+                sample_a["result"],
+                _frames(s3, bucket, sample_a["result"]),
+            ),
+            (
+                sample_b["title"],
+                sample_b["result"],
+                _frames(s3, bucket, sample_b["result"]),
+            ),
+            answer,
+        )
+    )
+    entry["pdf_file"] = pdf_path.relative_to(DATA).as_posix()
     pair = {entry["a"], entry["b"]}
     comparisons = [
         comparison
@@ -211,8 +251,65 @@ def add_comparison(args):
     print(f"Wrote comparison {entry['a']} / {entry['b']} to {SAMPLES}")
 
 
+def re_render_pdfs():
+    """Render every stored sample report and comparison again (M3h §18d)."""
+    import boto3
+
+    from neurolens import report_pdf
+
+    document = _document()
+    samples = document.get("samples", [])
+    comparisons = document.get("comparisons", [])
+    by_id = {sample["id"]: sample for sample in samples}
+    s3 = boto3.client("s3")
+    bucket = bucket_name()
+
+    for sample in samples:
+        report = sample.get("report")
+        if not report:
+            continue
+        output = DATA / "output" / sample["id"]
+        output.mkdir(parents=True, exist_ok=True)
+        path = output / "report.pdf"
+        path.write_bytes(
+            report_pdf.report_pdf(
+                sample["title"], sample["result"], report, _frames(s3, bucket, sample["result"])
+            )
+        )
+        sample["pdf_file"] = path.relative_to(DATA).as_posix()
+
+    for comparison in comparisons:
+        sample_a, sample_b = by_id.get(comparison.get("a")), by_id.get(comparison.get("b"))
+        if not sample_a or not sample_b or not comparison.get("report"):
+            continue
+        path = DATA / "output" / "compare" / f"{sample_a['id']}__{sample_b['id']}.pdf"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(
+            report_pdf.comparison_pdf(
+                (
+                    sample_a["title"],
+                    sample_a["result"],
+                    _frames(s3, bucket, sample_a["result"]),
+                ),
+                (
+                    sample_b["title"],
+                    sample_b["result"],
+                    _frames(s3, bucket, sample_b["result"]),
+                ),
+                comparison["report"],
+            )
+        )
+        comparison["pdf_file"] = path.relative_to(DATA).as_posix()
+
+    _write_document(samples, comparisons)
+    print(f"Re-rendered {len(samples)} samples and {len(comparisons)} comparisons in {DATA}")
+
+
 def main():
     values = sys.argv[1:]
+    if values and values[0] == "pdfs":
+        re_render_pdfs()
+        return
     if values and values[0] == "compare":
         parser = argparse.ArgumentParser(
             prog="make_sample.py compare",

@@ -13,11 +13,13 @@ TF="terraform -chdir=infra/terraform"
 BUCKET=$($TF output -raw bucket_name)
 DISTRIBUTION=$($TF output -raw cloudfront_distribution_id)
 
-# 1. Code. Wait until the update is live.
+# 1. Code. The zip goes through the bucket's deploy/ prefix (M3h §18e), then Lambda reads it
+# from there; wait until the update is live.
 infra/build_web_lambda.sh
+aws s3 cp build/web_lambda.zip "s3://$BUCKET/deploy/web_lambda.zip" --only-show-errors
 for fn in neurolens-web; do
-  aws lambda update-function-code --function-name "$fn" --zip-file fileb://build/web_lambda.zip \
-    --query LastUpdateStatus --output text >/dev/null
+  aws lambda update-function-code --function-name "$fn" --s3-bucket "$BUCKET" \
+    --s3-key deploy/web_lambda.zip --query LastUpdateStatus --output text >/dev/null
   aws lambda wait function-updated --function-name "$fn"
   echo "Updated $fn."
 done
@@ -30,7 +32,7 @@ git archive HEAD static | tar -x -C "$STAGE"
 cp static/index.html "$STAGE/index.html"
 cp static/app.html "$STAGE/app"
 # Only samples whose clip is listed in data/videos/SOURCES.md are public; their video, thumbnail,
-# brain and CSV files go with them. A listed clip can be a third-party one the owner has cleared
+# brain, CSV and PDF files go with them. A listed clip can be a third-party one the owner has cleared
 # for this project (the CeraVe cuts, by Josh's decision); comparisons are public only when both
 # samples are.
 python3 -I - "$STAGE" <<'PY'
@@ -48,11 +50,19 @@ comparisons = [
     if c.get("a") in public_ids and c.get("b") in public_ids
 ]
 for s in public:
-    for name in (s["video_file"], s.get("thumbnail"), s.get("brain_file"), s.get("csv_file")):
+    for name in (
+        s["video_file"], s.get("thumbnail"), s.get("brain_file"), s.get("csv_file"),
+        s.get("pdf_file"),
+    ):
         if name:
             target = stage / "data" / name
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy(data / name, target)
+for c in comparisons:
+    if c.get("pdf_file"):
+        target = stage / "data" / c["pdf_file"]
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy(data / c["pdf_file"], target)
 (stage / "data/samples.json").write_text(
     json.dumps({"samples": public, "comparisons": comparisons})
 )
