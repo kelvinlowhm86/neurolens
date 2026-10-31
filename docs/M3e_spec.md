@@ -198,7 +198,7 @@ waiting and progress texts, the consent box and its version, the retention curve
 Stop sharing, the CSV name, the landing samples and the phone layout. Only the web tier's technical
 behaviour remains below.
 
-- **Pause check:** `scaling.endpoint_paused(appscaling, endpoint)` (also used by the dispatcher, §3) reads `DescribeScalableTargets` for the variant. Max 0, or no target → paused. It replaces `_worker_group_paused`, with the same 503 and the same "could not read" → 500.
+- **Pause check:** `scaling.endpoint_paused(appscaling, endpoint)` (also used by the dispatcher, §3) reads `DescribeScalableTargets` for the variant. Max 0, or no target → paused. Paused → 503 `processing_paused`; a failed read → 500.
 - **Settings:** `NEUROLENS_WORKER_GROUP`/`aws.worker_group` becomes `NEUROLENS_GPU_ENDPOINT`/`aws.gpu_endpoint`, required in Cognito mode. `NEUROLENS_SQS_QUEUE_URL`/`aws.sqs_queue_url` is removed (nothing read it: the queue triggers the dispatcher directly), with its `.env.example` line and the `queue_url`, `queue_arn` and `dlq_url` outputs. The unused `llama_repo_id` and `pre_download_llama` leave `config.json`.
 - **Status and result come from the database alone.** `/status` reports the job's own status, and `/result` (and `/result.csv`) serve only a `done` job; an unfinished job answers `result_not_ready` even if its result object exists. The old crash window (result written, job not yet settled) now closes by itself: nothing refunds after the result is published, and the error handler or the reaper settles such a job (§5). The user waits a few minutes longer in that rare case, the page never shows a result before it is charged, and each status poll makes no S3 call.
 - **Page:**
@@ -375,6 +375,7 @@ Measured figures replace these in the build log.
 - **Replaying the presigned POST while the job runs** can make the research copy differ from the analysed video (the replay must land within the POST's 5 minutes, by the uploader themself).
 - **The image build assumes `us-east-1`** (the base image's registry).
 - **The scale-in alarm reads missing backlog data as empty.** If AWS ever stopped publishing it during a running job for 7 minutes, the job would be cut off and refunded. Day B checks the data is continuous during a job (§12 step 6).
+- **A pause in the same second as a dispatch can still start the GPU.** If `stop_work.sh` sets 0/0 after the dispatcher's pause check but before `start_gpu_if_off`, that one job runs and is charged, and the GPU stops 7 idle minutes later (about $1, an estimate). The window is under a second.
 
 ## 13. Acceptance criteria
 1. The full suite passes with PostgreSQL, and `ruff` is clean.
