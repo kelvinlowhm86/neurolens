@@ -1776,7 +1776,7 @@ async function loadLimits() {
     const res = await fetch('/api/limits');
     if (!res.ok) return null;
     limits = await res.json();
-    const from = limits.price ? ` · from ${dollars(limits.price.cents_per_block)}` : '';
+    const from = estimateCostCents(1) != null ? ` · from ${dollars(estimateCostCents(1))}` : '';
     $('limitsText').textContent = `MP4, MOV or WebM · up to ${limits.max_video_duration_seconds} seconds${from}`;
     if (signedIn && me) updateNoCreditPanel();
     return limits;
@@ -1787,7 +1787,7 @@ const EXTENSION_TYPES = { mp4: 'video/mp4', mov: 'video/quicktime', webm: 'video
 function estimateCostCents(d) {
   if (!limits || !limits.price) return null;
   const { cents_per_block, block_seconds, allowance_seconds } = limits.price;
-  if (![cents_per_block, block_seconds, allowance_seconds].every(Number.isFinite)) return null;
+  if (![cents_per_block, block_seconds, allowance_seconds].every(Number.isFinite) || block_seconds <= 0) return null;
   return cents_per_block * Math.max(1, Math.ceil((d - allowance_seconds) / block_seconds));
 }
 
@@ -1939,6 +1939,7 @@ async function checkBatchItem(item) {
   item.type = type;
   item.duration = duration;
   item.price = estimateCostCents(duration);
+  if (item.price == null) return finishBatchItem(item, 'invalid', "Couldn't check the upload limits. Try again.");
   finishBatchItem(item, 'valid', '');
   captureItemThumb(item);
 }

@@ -89,9 +89,11 @@ def test_success_estimated_cost_uses_the_pricing_formula(client):
 
 
 def test_estimated_cost_follows_the_pricing_constant(client, monkeypatch):
-    monkeypatch.setattr(pricing, "CENTS_PER_BLOCK", 100)
+    monkeypatch.setattr(
+        pricing, "CENTS_PER_BLOCK", 137
+    )  # not the real price, so a typed-in copy fails
     data = client.post("/api/uploads/presign", json=body(client_duration_seconds=45)).get_json()
-    assert data["estimated_cost_usd"] == 2.0  # 45 s is two blocks at 100 cents
+    assert data["estimated_cost_usd"] == 2.74  # 45 s is two blocks at 137 cents
 
 
 def test_each_request_gets_its_own_job_id(client):

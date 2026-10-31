@@ -87,7 +87,9 @@ def test_needs_no_aws_block(get_limits, make_cfg):
 
 
 def test_the_price_follows_the_pricing_constant(get_limits, make_cfg, monkeypatch):
-    monkeypatch.setattr(pricing, "CENTS_PER_BLOCK", 100)
+    monkeypatch.setattr(
+        pricing, "CENTS_PER_BLOCK", 137
+    )  # not the real price, so a typed-in copy fails
     resp = get_limits(cfg=make_cfg())
     assert resp.status_code == 200
-    assert resp.get_json()["price"]["cents_per_block"] == 100
+    assert resp.get_json()["price"]["cents_per_block"] == 137

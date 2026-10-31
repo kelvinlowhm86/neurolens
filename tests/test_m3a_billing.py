@@ -138,10 +138,12 @@ def test_reserve_prices_with_estimate_cost_cents(db, client_ms, price):
 
 
 def test_reserve_follows_the_pricing_constant(db, pg, monkeypatch):
-    monkeypatch.setattr(pricing, "CENTS_PER_BLOCK", 100)
+    monkeypatch.setattr(
+        pricing, "CENTS_PER_BLOCK", 137
+    )  # not the real price, so a typed-in copy fails
     make_user(db, starter_cents=1000)
-    assert reserve(db, 45000)[1] == 200  # 45 s is two blocks
-    assert money(pg) == (800, 200)
+    assert reserve(db, 45000)[1] == 274  # 45 s is two blocks
+    assert money(pg) == (726, 274)
 
 
 def test_reserve_with_too_little_credit_raises_and_changes_nothing(db, pg):

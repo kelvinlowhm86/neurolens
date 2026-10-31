@@ -47,9 +47,11 @@ def test_todays_constants_are_100_cents_per_30_second_block_with_a_half_second_a
 
 
 def test_the_constants_are_read_at_call_time(monkeypatch):
-    monkeypatch.setattr(pricing, "CENTS_PER_BLOCK", 100)
-    assert estimate_cost_cents(60) == 200
-    assert estimate_cost_usd(60) == 2.0
+    monkeypatch.setattr(
+        pricing, "CENTS_PER_BLOCK", 137
+    )  # not the real price, so a typed-in copy fails
+    assert estimate_cost_cents(60) == 274
+    assert estimate_cost_usd(60) == 2.74
 
 
 def test_estimate_cost_cents_returns_an_int():

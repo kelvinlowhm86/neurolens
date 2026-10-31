@@ -143,10 +143,12 @@ def test_an_unknown_job_is_not_queued(db, pg):
 
 def test_verify_queued_follows_the_pricing_constant(db, pg, new_job, monkeypatch):
     job_id, _ = queued(new_job)  # 90 reserved at the current price
-    monkeypatch.setattr(pricing, "CENTS_PER_BLOCK", 100)
+    monkeypatch.setattr(
+        pricing, "CENTS_PER_BLOCK", 137
+    )  # not the real price, so a typed-in copy fails
     assert billing.verify_queued(db, job_id, 45000, MAX_S) == "ok"  # 45 s is two blocks
-    assert pg.balance() == (300, 200)
-    assert pg.job(job_id)["reserved_cents"] == 200
+    assert pg.balance() == (STARTER_CENTS - 274, 274)
+    assert pg.job(job_id)["reserved_cents"] == 274
 
 
 def test_a_second_verify_with_the_same_duration_moves_no_more_money(db, pg, new_job):
