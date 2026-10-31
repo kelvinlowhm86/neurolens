@@ -1164,11 +1164,17 @@ function setViewName(name) {
   $('appShell').classList.toggle('view-chooser', !player);
 }
 
+function updateNoCreditPanel() {
+  const price = estimateCostCents(1);
+  if (price == null) { $('noCreditPanel').classList.remove('active'); return; }
+  $('noCreditPanel').classList.toggle('active', me.balance.available_cents < price);
+}
+
 function showBalance() {
   const b = me.balance;
   const held = b.reserved_cents ? `<span class="credit-held"> (${dollars(b.reserved_cents)} held)</span>` : '';
   $('balance').innerHTML = `<span class="credit-label">Credit: </span><span class="credit-amt">${dollars(b.available_cents)}</span>${held}`;
-  $('noCreditPanel').classList.toggle('active', b.available_cents < estimateCostCents(1));
+  updateNoCreditPanel();
 }
 
 async function loadBalance() {
@@ -1770,13 +1776,20 @@ async function loadLimits() {
     const res = await fetch('/api/limits');
     if (!res.ok) return null;
     limits = await res.json();
-    $('limitsText').textContent = `MP4, MOV or WebM · up to ${limits.max_video_duration_seconds} seconds · from ${dollars(90)}`;
+    const from = limits.price ? ` · from ${dollars(limits.price.cents_per_block)}` : '';
+    $('limitsText').textContent = `MP4, MOV or WebM · up to ${limits.max_video_duration_seconds} seconds${from}`;
+    if (signedIn && me) updateNoCreditPanel();
     return limits;
   } catch (e) { return null; }
 }
 const ACCEPTED_TYPES = ['video/mp4', 'video/quicktime', 'video/webm'];
 const EXTENSION_TYPES = { mp4: 'video/mp4', mov: 'video/quicktime', webm: 'video/webm' };
-function estimateCostCents(d) { return 90 * Math.max(1, Math.ceil((d - 0.5) / 30)); }
+function estimateCostCents(d) {
+  if (!limits || !limits.price) return null;
+  const { cents_per_block, block_seconds, allowance_seconds } = limits.price;
+  if (![cents_per_block, block_seconds, allowance_seconds].every(Number.isFinite)) return null;
+  return cents_per_block * Math.max(1, Math.ceil((d - allowance_seconds) / block_seconds));
+}
 
 const uploadZone = $('uploadZone');
 ['dragenter','dragover'].forEach(e => uploadZone.addEventListener(e, ev => { ev.preventDefault(); uploadZone.classList.add('dragover'); }));

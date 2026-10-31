@@ -325,11 +325,17 @@ def create_app(
 
     @app.route("/api/limits")
     def get_limits():
-        """The upload limits, so the page holds no copy of them (config.json is the one place)."""
+        """The upload limits and the price, so the page holds no copy of either (config.json and
+        neurolens.pricing are the one place)."""
         limits = {
             "max_video_duration_seconds": max_seconds,
             "max_upload_bytes": max_bytes,
             "colour_range": (response_cfg or {}).get("colour_range"),
+            "price": {
+                "cents_per_block": pricing.CENTS_PER_BLOCK,
+                "block_seconds": pricing.BLOCK_SECONDS,
+                "allowance_seconds": pricing.ALLOWANCE_SECONDS,
+            },
         }
         if max_batch_files is not None:
             limits["max_batch_files"] = max_batch_files

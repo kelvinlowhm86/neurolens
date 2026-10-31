@@ -14,7 +14,7 @@ import pytest
 from botocore.client import BaseClient
 from botocore.exceptions import ClientError
 from conftest import STARTER_CENTS, USER_ID, WEB_USER_ID, sign_in
-from neurolens import billing, inference, response, settings, storage, worker
+from neurolens import billing, inference, pricing, response, settings, storage, worker
 from neurolens.web.app import create_app
 
 MODULES = ("neurolens.inference", "neurolens.worker")
@@ -192,7 +192,7 @@ def test_a_failed_thumbnail_does_not_fail_the_job(
 
     assert not object_exists(aws, f"results/{job_id}.jpg")
     assert pg.job(job_id)["status"] == "done"
-    assert pg.balance() == (STARTER_CENTS - 90, 0)
+    assert pg.balance() == (STARTER_CENTS - pricing.estimate_cost_cents(27.4), 0)
 
 
 # ---------------------------------------------------------------- deletion

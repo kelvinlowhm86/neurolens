@@ -2,8 +2,8 @@
 docs/M3a_spec.md §3b, §4 and §10. The four ledger invariants are checked after every test by the
 `db_dsn` fixture in conftest.py.
 
-Prices: $0.90 per started 30 s block with a half-second allowance (neurolens.pricing), so 3 s and
-27.4 s cost 90 cents, 61 s costs 270 and 120 s costs 360.
+Prices: CENTS_PER_BLOCK per started 30 s block with a half-second allowance (neurolens.pricing),
+so 3 s and 27.4 s cost one block, 61 s costs three and 120 s costs four.
 """
 
 import threading
@@ -105,25 +105,32 @@ def test_reserve_moves_the_exact_price_and_writes_the_job_and_one_reserve_row(db
     job_id = str(uuid.uuid4())
     key = f"uploads/{USER_ID}/{job_id}.mp4"
     price = billing.reserve(db, USER_ID, job_id, key, "ad_variant_1.mp4", 27400)
-    assert price == 90
-    assert money(pg) == (410, 90)
+    assert price == pricing.estimate_cost_cents(27.4)
+    assert money(pg) == (STARTER_CENTS - price, price)
     job = pg.job(job_id)
     assert job["user_id"] == USER_ID
     assert job["object_key"] == key
     assert job["filename"] == "ad_variant_1.mp4"
     assert job["status"] == "queued"
     assert job["client_duration_ms"] == 27400
-    assert job["reserved_cents"] == 90
+    assert job["reserved_cents"] == price
     assert job["attempt"] == 0
     assert job["captured_cents"] is None and job["error_code"] is None
     row = pg.ledger()[-1]
     assert row["kind"] == "reserve"
     assert row["job_id"] == job_id
-    assert (row["available_delta_cents"], row["reserved_delta_cents"]) == (-90, 90)
+    assert (row["available_delta_cents"], row["reserved_delta_cents"]) == (-price, price)
 
 
 @pytest.mark.parametrize(
-    "client_ms, price", [(1000, 90), (30500, 90), (30600, 180), (61000, 270), (120000, 360)]
+    "client_ms, price",
+    [
+        (1000, pricing.estimate_cost_cents(1)),
+        (30500, pricing.estimate_cost_cents(30.5)),
+        (30600, pricing.estimate_cost_cents(30.6)),
+        (61000, pricing.estimate_cost_cents(61)),
+        (120000, pricing.estimate_cost_cents(120)),
+    ],
 )
 def test_reserve_prices_with_estimate_cost_cents(db, client_ms, price):
     make_user(db, starter_cents=1000)
@@ -139,7 +146,7 @@ def test_reserve_follows_the_pricing_constant(db, pg, monkeypatch):
 
 def test_reserve_with_too_little_credit_raises_and_changes_nothing(db, pg):
     make_user(db, starter_cents=100)
-    reserve(db, 27400)  # 90 of 100: 10 left
+    reserve(db, 27400)  # leaves too little for a second block
     before = pg.snapshot()
     job_id = str(uuid.uuid4())
     with pytest.raises(billing.InsufficientCredit):
@@ -149,9 +156,10 @@ def test_reserve_with_too_little_credit_raises_and_changes_nothing(db, pg):
 
 
 def test_reserve_of_exactly_the_available_credit_succeeds(db, pg):
-    make_user(db, starter_cents=90)
+    price = pricing.estimate_cost_cents(27.4)
+    make_user(db, starter_cents=price)
     reserve(db, 27400)
-    assert money(pg) == (0, 90)
+    assert money(pg) == (0, price)
 
 
 # ---------------------------------------------------------------- claim / job_state / touch
@@ -256,18 +264,19 @@ def test_set_stage_without_now_uses_the_current_time(db, pg):
 
 def test_settle_success_captures_exactly_the_verified_price(db, pg):
     make_user(db)
-    job_id, _ = reserve(db)  # 90 reserved
-    assert billing.verify_queued(db, job_id, 61000, MAX_S) == "ok"  # 270
+    job_id, _ = reserve(db)
+    actual = pricing.estimate_cost_cents(61)
+    assert billing.verify_queued(db, job_id, 61000, MAX_S) == "ok"
     assert billing.claim(db, job_id) == 1
     billing.set_stage(db, job_id, 1, "transcribing")
     assert billing.settle_success(db, job_id) is True
-    assert money(pg) == (230, 0)
+    assert money(pg) == (STARTER_CENTS - actual, 0)
     capture = pg.ledger()[-1]
     assert capture["kind"] == "capture" and capture["job_id"] == job_id
-    assert (capture["available_delta_cents"], capture["reserved_delta_cents"]) == (0, -270)
+    assert (capture["available_delta_cents"], capture["reserved_delta_cents"]) == (0, -actual)
     job = pg.job(job_id)
     assert job["status"] == "done"
-    assert job["captured_cents"] == 270
+    assert job["captured_cents"] == actual
     assert job["error_code"] is None and job["error_message"] is None
 
 
@@ -277,7 +286,7 @@ def test_settle_success_needs_no_attempt_and_works_on_a_queued_job(db, pg):
     job_id, _ = reserve(db)
     assert billing.settle_success(db, job_id) is True
     assert pg.job(job_id)["status"] == "done"
-    assert money(pg) == (410, 0)
+    assert money(pg) == (STARTER_CENTS - pricing.estimate_cost_cents(27.4), 0)
 
 
 # ---------------------------------------------------------------- exclusivity
@@ -326,12 +335,13 @@ def test_issue_refund_without_a_condition_raises_value_error_and_changes_nothing
 
 
 def test_issue_refund_returns_the_reservation_and_records_reason_and_message(db, pg):
-    job_id = claimed(db, 61000)  # 270
+    price = pricing.estimate_cost_cents(61)
+    job_id = claimed(db, 61000)
     assert billing.issue_refund(db, job_id, "upload_missing", "The upload is gone.", attempt=1)
-    assert money(pg) == (500, 0)
+    assert money(pg) == (STARTER_CENTS, 0)
     refund = pg.ledger()[-1]
     assert refund["kind"] == "refund" and refund["job_id"] == job_id
-    assert (refund["available_delta_cents"], refund["reserved_delta_cents"]) == (270, -270)
+    assert (refund["available_delta_cents"], refund["reserved_delta_cents"]) == (price, -price)
     job = pg.job(job_id)
     assert job["status"] == "failed"
     assert (job["error_code"], job["error_message"]) == ("upload_missing", "The upload is gone.")
@@ -468,6 +478,7 @@ def run_blocked(row_lock, job_id, *calls):
 
 def test_concurrent_settle_and_refund_end_in_exactly_one_outcome(db, db_dsn, pg, row_lock):
     job_id = claimed(db)
+    price = pricing.estimate_cost_cents(27.4)
     results = run_blocked(
         row_lock,
         job_id,
@@ -477,7 +488,7 @@ def test_concurrent_settle_and_refund_end_in_exactly_one_outcome(db, db_dsn, pg,
     assert sorted(results) == [False, True]
     status = pg.job(job_id)["status"]
     assert status == ("done" if results[0] else "failed")
-    assert money(pg) == ((410, 0) if results[0] else (500, 0))
+    assert money(pg) == ((STARTER_CENTS - price, 0) if results[0] else (STARTER_CENTS, 0))
 
 
 def test_concurrent_claims_give_exactly_one_attempt(db, db_dsn, pg, row_lock):

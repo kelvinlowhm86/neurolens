@@ -10,6 +10,7 @@ import subprocess
 
 import pytest
 from conftest import STARTER_CENTS
+from neurolens import pricing
 
 
 def media():
@@ -165,7 +166,8 @@ def test_probe_failed_propagates_and_leaves_the_job_queued(aws, db, pg, new_job,
     job = pg.job(job_id)
     assert job["status"] == "queued" and job["verified_duration_ms"] is None
     assert job["error_code"] is None
-    assert pg.balance() == (STARTER_CENTS - 90, 90)
+    price = pricing.estimate_cost_cents(3)
+    assert pg.balance() == (STARTER_CENTS - price, price)
     assert storage.object_exists(aws.s3, aws.bucket, key)
     assert sagemaker.calls == []
 

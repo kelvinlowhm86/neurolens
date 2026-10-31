@@ -19,7 +19,7 @@ from pathlib import Path
 
 import pytest
 from conftest import REPO_ROOT, STARTER_CENTS, WEB_USER_ID
-from neurolens import billing, storage
+from neurolens import billing, pricing, storage
 from neurolens.web.app import create_app
 
 SERIES = [
@@ -35,7 +35,7 @@ SERIES = [
     "understand",
     "overall",
 ]
-PRICE_CENTS = 90
+PRICE_CENTS = pricing.estimate_cost_cents(27.4)
 REFUSAL = (
     "python app.py runs only against the local fake stack: python infra/local_stack.py. "
     "The real .env is for the admin scripts."

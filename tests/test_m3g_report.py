@@ -18,7 +18,7 @@ from pathlib import Path
 import pytest
 from botocore.exceptions import ClientError
 from conftest import STARTER_CENTS, USER_ID, WEB_USER_ID
-from neurolens import billing, inference, results, storage, worker
+from neurolens import billing, inference, pricing, results, storage, worker
 from neurolens.web.app import create_app
 
 MODULES = ("neurolens.inference", "neurolens.worker")
@@ -488,7 +488,7 @@ def test_a_frames_failure_still_finishes_and_charges_the_job(
     assert "frames" not in stored
     assert not object_exists(aws, FRAMES_KEY.format(job_id=job_id))
     assert pg.job(job_id)["status"] == "done"
-    assert pg.balance() == (STARTER_CENTS - 90, 0)
+    assert pg.balance() == (STARTER_CENTS - pricing.estimate_cost_cents(3), 0)
 
 
 def test_a_frames_s3_failure_still_finishes_and_charges_the_job(
@@ -509,7 +509,7 @@ def test_a_frames_s3_failure_still_finishes_and_charges_the_job(
     assert "frames" not in stored
     assert not object_exists(aws, FRAMES_KEY.format(job_id=job_id))
     assert pg.job(job_id)["status"] == "done"
-    assert pg.balance() == (STARTER_CENTS - 90, 0)
+    assert pg.balance() == (STARTER_CENTS - pricing.estimate_cost_cents(3), 0)
 
 
 # ---------------------------------------------------------------- web routes

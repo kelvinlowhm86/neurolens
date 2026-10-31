@@ -14,7 +14,7 @@ import uuid
 
 import pytest
 from conftest import STARTER_CENTS
-from neurolens import billing, storage
+from neurolens import billing, pricing, storage
 
 ENDPOINT = "neurolens-gpu"
 MAX_UPLOAD_BYTES = 300_000_000
@@ -149,7 +149,8 @@ def test_a_job_claimed_while_the_file_is_probed_is_skipped(aws, db, pg, new_job,
     assert sagemaker.calls == []
     job = pg.job(job_id)
     assert job["status"] == "processing" and job["attempt"] == 1
-    assert pg.balance() == (410, 90)
+    price = pricing.estimate_cost_cents(3)
+    assert pg.balance() == (STARTER_CENTS - price, price)
     assert exists(aws, key)
 
 
@@ -213,12 +214,13 @@ def test_a_too_long_video_refunds_and_deletes(aws, db, pg, new_job, probe):
 
 
 def test_short_credit_for_the_real_length_refunds_and_deletes(aws, db, pg, new_job, probe):
-    job_id, key = new_job(client_seconds=1, starter_cents=90)
+    price = pricing.estimate_cost_cents(1)
+    job_id, key = new_job(client_seconds=1, starter_cents=price)
     upload(aws, key)
-    probe(seconds=61.0)  # 270 cents; the user has none left
+    probe(seconds=61.0)  # the user has none left for the actual price
     sagemaker = RecordingSageMaker()
     assert dispatch(aws, db, key, sagemaker=sagemaker) == "refunded"
-    assert_refunded(pg, job_id, "insufficient_credit_for_actual_duration", balance=(90, 0))
+    assert_refunded(pg, job_id, "insufficient_credit_for_actual_duration", balance=(price, 0))
     assert sagemaker.calls == []
     assert not exists(aws, key)
 
@@ -246,7 +248,8 @@ def test_a_good_job_is_invoked_with_the_specs_arguments(aws, db, pg, new_job, pr
     assert probed["url"].startswith("https://")
     assert probed["timeout_s"] == 90
     assert pg.job(job_id)["status"] == "queued"
-    assert pg.balance() == (410, 90)
+    price = pricing.estimate_cost_cents(3)
+    assert pg.balance() == (STARTER_CENTS - price, price)
     assert exists(aws, key)
 
 
@@ -259,7 +262,8 @@ def test_a_second_dispatch_reserves_no_more_credit(aws, db, pg, new_job, probe):
     assert dispatch(aws, db, key, sagemaker=sagemaker) == "invoked"
     assert dispatch(aws, db, key, sagemaker=sagemaker) == "invoked"
 
-    assert pg.balance() == (410, 90)
+    price = pricing.estimate_cost_cents(3)
+    assert pg.balance() == (STARTER_CENTS - price, price)
     assert pg.kinds() == ["starter", "reserve"]
     assert pg.job(job_id)["status"] == "queued"
     assert {call["InferenceId"] for call in sagemaker.calls} == {job_id}
@@ -309,7 +313,8 @@ def test_an_exception_before_the_invoke_leaves_the_job_queued_and_reserved(
 
     job = pg.job(job_id)
     assert job["status"] == "queued" and job["verified_duration_ms"] is None
-    assert pg.balance() == (410, 90)
+    price = pricing.estimate_cost_cents(3)
+    assert pg.balance() == (STARTER_CENTS - price, price)
     assert sagemaker.calls == []
     assert exists(aws, key)
 
@@ -375,6 +380,7 @@ def test_a_handler_exception_propagates_so_sqs_redelivers(aws, db, pg, new_job, 
         run_handler(aws, db, monkeypatch, key, sagemaker)
 
     assert pg.job(job_id)["status"] == "queued"
-    assert pg.balance() == (410, 90)
+    price = pricing.estimate_cost_cents(3)
+    assert pg.balance() == (STARTER_CENTS - price, price)
     assert sagemaker.calls == []
     assert exists(aws, key)

@@ -20,7 +20,7 @@ from pathlib import Path
 
 import pytest
 from conftest import STARTER_CENTS
-from neurolens import billing, settings, storage, worker
+from neurolens import billing, pricing, settings, storage, worker
 
 JOB_HEADER = "X-Amzn-SageMaker-Custom-Attributes"
 
@@ -91,7 +91,8 @@ def test_settle_that_raises_before_committing_keeps_files_and_finish_job_charges
     assert outcome is worker.Outcome.FAILED
     job = pg.job(job_id)
     assert job["status"] == "processing" and job["captured_cents"] is None
-    assert pg.balance() == (STARTER_CENTS - 90, 90)
+    price = pricing.estimate_cost_cents(3)
+    assert pg.balance() == (STARTER_CENTS - price, price)
     assert "refund" not in pg.kinds()
     for kept in (
         key,
@@ -106,8 +107,8 @@ def test_settle_that_raises_before_committing_keeps_files_and_finish_job_charges
     assert finish_job(db, aws.s3, aws.bucket, job_id) is True
 
     job = pg.job(job_id)
-    assert job["status"] == "done" and job["captured_cents"] == 90
-    assert pg.balance() == (STARTER_CENTS - 90, 0)
+    assert job["status"] == "done" and job["captured_cents"] == price
+    assert pg.balance() == (STARTER_CENTS - price, 0)
     assert pg.kinds().count("capture") == 1 and "refund" not in pg.kinds()
 
 

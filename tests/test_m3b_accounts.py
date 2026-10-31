@@ -13,7 +13,7 @@ import uuid
 
 import pytest
 from conftest import ISSUER, STARTER_CENTS
-from neurolens import billing, storage
+from neurolens import billing, pricing, storage
 
 GOOGLE = "https://accounts.google.example"  # a second issuer, for identities across providers
 
@@ -136,7 +136,8 @@ def test_a_linked_account_keeps_its_balance(db, pg):
     reserve_job(db, first)
     second = billing.sign_in(db, ISSUER, "cognito-1", "ann@example.com", STARTER_CENTS)
     assert second == first
-    assert pg.balance(first) == (STARTER_CENTS - 90, 90)
+    price = pricing.estimate_cost_cents(27.4)
+    assert pg.balance(first) == (STARTER_CENTS - price, price)
 
 
 def test_a_different_email_creates_a_different_user(db, pg):
@@ -225,7 +226,8 @@ def test_grant_credit_adds_to_an_existing_balance_and_reservation(db, pg):
     reserve_job(db, "u-1")
     billing.grant_credit(db, "u1@example.com", 100)
     billing.grant_credit(db, "u1@example.com", 1)
-    assert pg.balance("u-1") == (STARTER_CENTS - 90 + 101, 90)
+    price = pricing.estimate_cost_cents(27.4)
+    assert pg.balance("u-1") == (STARTER_CENTS - price + 101, price)
     assert pg.kinds("u-1") == ["starter", "reserve", "grant", "grant"]
 
 

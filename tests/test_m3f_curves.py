@@ -17,11 +17,11 @@ import uuid
 
 import pytest
 from conftest import WEB_USER_ID
-from neurolens import billing, results, storage
+from neurolens import billing, pricing, results, storage
 from neurolens.web.app import create_app
 
 STARTER_CENTS = 10_000
-PRICE_CENTS = 90  # 27.4 s, one started 30 s block
+PRICE_CENTS = pricing.estimate_cost_cents(27.4)  # one started 30 s block
 OTHER_USER = "other-user"
 VIEWS = "lt_1k"
 PUBLISHED = "week"

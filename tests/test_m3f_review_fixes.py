@@ -12,11 +12,11 @@ import uuid
 
 import pytest
 from conftest import WEB_USER_ID
-from neurolens import billing, storage
+from neurolens import billing, pricing, storage
 from neurolens.lambdas import reaper
 
 STARTER_CENTS = 10_000
-PRICE_CENTS = 90
+PRICE_CENTS = pricing.estimate_cost_cents(27.4)
 DAY = 24 * 60 * 60
 
 _DAYS_INTERVAL = re.compile(

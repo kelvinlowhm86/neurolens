@@ -16,7 +16,7 @@ import uuid
 import pytest
 import boto3
 from conftest import GPU_ENDPOINT, STARTER_CENTS, WEB_USER_EMAIL, WEB_USER_ID, sign_in
-from neurolens import billing, storage
+from neurolens import billing, pricing, storage
 from neurolens.web.app import create_app
 
 SERIES = [
@@ -181,9 +181,10 @@ def test_me_shows_a_reservation(client):
         "/api/uploads/presign",
         json={"content_type": "video/mp4", "client_duration_seconds": 27.4, "filename": "a.mp4"},
     )
+    price = pricing.estimate_cost_cents(27.4)
     assert client.get("/api/me").get_json()["balance"] == {
-        "available_cents": STARTER_CENTS - 90,
-        "reserved_cents": 90,
+        "available_cents": STARTER_CENTS - price,
+        "reserved_cents": price,
     }
 
 
@@ -225,7 +226,7 @@ def test_history_rows_carry_the_jobs_values(aws, client, db):
     assert done["status"] == "done"
     assert done["filename"] == f"ad-{done_id[:8]}.mp4"
     assert done["verified_duration_ms"] == 27_400
-    assert done["captured_cents"] == 90
+    assert done["captured_cents"] == pricing.estimate_cost_cents(27.4)
     assert done["error_code"] is None
     assert done["created_at"]
     assert failed["status"] == "failed"

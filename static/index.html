@@ -295,7 +295,13 @@ async function loadLimit() {
   const seconds = limits && Number(limits.max_video_duration_seconds);
   if (!Number.isFinite(seconds) || seconds <= 0) return;
   const minutes = Math.max(1, Math.round(seconds / 60));
-  $('uploadLimit').textContent = `Any video up to ${minutes} ${minutes === 1 ? 'minute' : 'minutes'}, and sample videos are free without an account.`;
+  const price = limits && limits.price;
+  if (price && Number.isFinite(price.cents_per_block) && Number.isFinite(price.block_seconds) && price.block_seconds > 0) {
+    const perBlock = `$${(price.cents_per_block / 100).toFixed(2)}`;
+    $('uploadLimit').textContent = `Any video up to ${minutes} ${minutes === 1 ? 'minute' : 'minutes'}, ${perBlock} per ${price.block_seconds} seconds. Sample videos are free without an account.`;
+  } else {
+    $('uploadLimit').textContent = `Any video up to ${minutes} ${minutes === 1 ? 'minute' : 'minutes'}, and sample videos are free without an account.`;
+  }
 }
 
 function showComingSoon() {

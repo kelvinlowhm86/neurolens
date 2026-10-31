@@ -9,6 +9,7 @@ import boto3
 import pytest
 from botocore.exceptions import ClientError
 from conftest import sign_in
+from neurolens import pricing
 
 ENDPOINT = "neurolens-gpu-test"
 PRESIGN = {
@@ -74,7 +75,7 @@ def test_presign_proceeds_when_the_target_max_is_one(signed_in_with, pg):
 
     assert resp.status_code == 200
     data = resp.get_json()
-    assert data["reserved_cents"] == 90
+    assert data["reserved_cents"] == pricing.estimate_cost_cents(PRESIGN["client_duration_seconds"])
     assert pg.job(data["job_id"])["status"] == "queued"
 
 

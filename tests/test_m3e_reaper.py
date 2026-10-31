@@ -11,7 +11,7 @@ import json
 import pytest
 from botocore.exceptions import ClientError
 from conftest import STARTER_CENTS, USER_ID
-from neurolens import billing, storage
+from neurolens import billing, pricing, storage
 
 DAY = 24 * 60 * 60
 DEADLINE_S = 4 * 60 * 60
@@ -207,7 +207,7 @@ def test_a_done_jobs_files_are_never_deleted(aws, db, pg, lambda_env, new_job):
     run_reaper()
 
     job = pg.job(job_id)
-    assert job["status"] == "done" and job["captured_cents"] == 90
+    assert job["status"] == "done" and job["captured_cents"] == pricing.estimate_cost_cents(3)
     assert object_exists(aws, key)
     assert object_exists(aws, f"results/{job_id}.json")
 

@@ -23,7 +23,7 @@ from conftest import (
     WEB_PARAMETERS,
     sign_in,
 )
-from neurolens import billing, settings
+from neurolens import billing, pricing, settings
 from neurolens.web.app import create_app
 
 SESSION_KEYS = {"session"}
@@ -318,6 +318,11 @@ def test_limits_answer_signed_out_and_signed_in(cognito_client, idp):
         "max_video_duration_seconds": 120,
         "max_upload_bytes": 300000000,
         "colour_range": 0.5,
+        "price": {
+            "cents_per_block": pricing.CENTS_PER_BLOCK,
+            "block_seconds": pricing.BLOCK_SECONDS,
+            "allowance_seconds": pricing.ALLOWANCE_SECONDS,
+        },
     }
     resp = cognito_client.get("/api/limits")
     assert resp.status_code == 200

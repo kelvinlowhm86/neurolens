@@ -83,9 +83,9 @@ def test_success_fields_hold_a_signed_policy_with_the_size_cap(client_for):
 
 def test_success_estimated_cost_uses_the_pricing_formula(client):
     data = client.post("/api/uploads/presign", json=body(client_duration_seconds=27.4)).get_json()
-    assert data["estimated_cost_usd"] == 0.9
+    assert data["estimated_cost_usd"] == pricing.estimate_cost_usd(27.4)
     data = client.post("/api/uploads/presign", json=body(client_duration_seconds=61)).get_json()
-    assert data["estimated_cost_usd"] == 2.7  # ceil(60.5 / 30) = 3 blocks
+    assert data["estimated_cost_usd"] == pricing.estimate_cost_usd(61)
 
 
 def test_estimated_cost_follows_the_pricing_constant(client, monkeypatch):
@@ -104,7 +104,7 @@ def test_each_request_gets_its_own_job_id(client):
 def test_duration_equal_to_the_maximum_is_accepted(client):
     resp = client.post("/api/uploads/presign", json=body(client_duration_seconds=120))
     assert resp.status_code == 200
-    assert resp.get_json()["estimated_cost_usd"] == 3.6
+    assert resp.get_json()["estimated_cost_usd"] == pricing.estimate_cost_usd(120)
 
 
 def test_declared_bytes_equal_to_the_cap_is_accepted(client_for):

@@ -155,9 +155,13 @@ Error 500 (S3/boto3 failure): { "error": "presign_failed", "message": "..." }
 ### Limits endpoint
 ```
 GET /api/limits
-200: { "max_video_duration_seconds": 120, "max_upload_bytes": 300000000 }
+200: {
+  "max_video_duration_seconds": 120,
+  "max_upload_bytes": 300000000,
+  "price": { "cents_per_block": 90, "block_seconds": 30, "allowance_seconds": 0.5 }
+}
 ```
-Returns `settings.max_duration(cfg)` and `cfg["max_upload_bytes"]` (`null` when the config has none). The numbers are public and need no sign-in. **The page reads them when it loads, so `config.json` is the only place these two limits are set** and `static/` holds no copy of them. (The price formula is still mirrored in `static/` and `neurolens/pricing.py`, §6.)
+Returns `settings.max_duration(cfg)`, `cfg["max_upload_bytes"]` (`null` when the config has none) and the `price` from `neurolens.pricing`. The numbers are public and need no sign-in. **The page reads them when it loads, so `config.json` is the only place these two limits are set and `neurolens.pricing` is the only place the price is set**; `static/` holds no copy of any of them.
 
 ## 4a. Upload size limit via presigned POST
 `/api/uploads/presign` generates a **presigned POST** (`s3_client.generate_presigned_post(...)`), never a presigned PUT: S3's server-enforced byte-size cap (`content-length-range`) exists only as a condition in a POST policy. Reference: AWS's presigned-POST policy documentation.
@@ -187,8 +191,8 @@ Add `max_upload_bytes` to `config.json` as a top-level field alongside `max_vide
 
 ## 6. Frontend (`static/`)
 - Add duration read via the browser's `<video>` element `loadedmetadata` event (client-side only, not authoritative — see §4)
-- Show estimated cost using the same formula as `estimate_cost_cents` (90 cents × `max(1, ceil((duration − 0.5) / 30))`), before calling `/api/uploads/presign`
-- On load, `GET /api/limits` for `max_video_duration_seconds` and `max_upload_bytes`; if the page cannot get them it refuses uploads with a message.
+- Show estimated cost using the same formula as `estimate_cost_cents` (`price.cents_per_block` × `max(1, ceil((duration − price.allowance_seconds) / price.block_seconds))`), taking the price from `GET /api/limits` and never holding a copy of it in `static/`
+- On load, `GET /api/limits` for `max_video_duration_seconds`, `max_upload_bytes` and `price`; if the page cannot get the limits it refuses uploads with a message.
 - Reject client-side (UI message only) if duration > `max_video_duration_seconds`, `file.size > max_upload_bytes`, or file type is not in the accepted set; send `file.size` as `client_declared_bytes` in the presign request body alongside `client_duration_seconds`.
 - On confirm: `POST /api/uploads/presign` → construct a `FormData` object from the returned `url` and `fields`, appending every signed field before appending the file under the `file` key, then POST it to `url`.
 - Show upload progress via `XMLHttpRequest.upload.onprogress` (fetch doesn't expose upload progress in most browsers)
@@ -204,7 +208,7 @@ Add `max_upload_bytes` to `config.json` as a top-level field alongside `max_vide
 **Automated tests** in `tests/`, run with `FAKE_INFERENCE=1 pytest` (CI sets the variable). `moto` fakes S3 and SQS in memory, so tests make no real AWS calls and cost nothing. Only the manual end-to-end check (§9) touches the real bucket and queue, using the `neurolens` profile. Tests that need a video generate a few-second clip with `ffmpeg -f lavfi` in a fixture (no binary files in git), so CI gains an `apt-get install ffmpeg` step. Worker tests pass tiny hand-made ROI masks to `handle_record`; nothing downloads the atlas.
 
 Required tests:
-- **Cost formula:** `estimate_cost_cents` for 0.2 s, 1 s, 30 s, 30.4 s (all 90), 30.6 s, 60 s (180) and 120 s (360). Note in a comment that `static/` mirrors this formula and must be changed together.
+- **Cost formula:** `estimate_cost_cents` for 0.2 s, 1 s, 30 s, 30.4 s (all 90), 30.6 s, 60 s (180) and 120 s (360). The pages take the price from `/api/limits`; `static/` holds no copy of it.
 - **Presign endpoint** (Flask test client + moto): rejects a bad content type, an over-long duration and an oversize file with the documented error codes; on success returns `job_id`, `url`, `fields`, and a key under `uploads/placeholder-user/` that contains the `job_id`.
 - **S3 event parsing:** a message with several `Records` is handled record by record; records outside `uploads/` are ignored; the `s3:TestEvent` body returns `[]` and its message is deleted.
 - **Presign key:** the object key's extension follows `content_type`, even when the filename says otherwise.

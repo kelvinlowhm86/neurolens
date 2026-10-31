@@ -9,7 +9,7 @@ import uuid
 
 import pytest
 from conftest import STARTER_CENTS, WEB_USER_EMAIL, WEB_USER_ID
-from neurolens import billing, settings, storage
+from neurolens import billing, pricing, settings, storage
 from neurolens.web.app import create_app
 
 TIME_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
@@ -121,16 +121,17 @@ def test_presign_reserves_before_handing_out_the_form(client, pg):
     data = resp.get_json()
     for name in ("job_id", "url", "fields", "object_key", "expires_in", "estimated_cost_usd"):
         assert name in data, name
-    assert data["reserved_cents"] == 90
-    assert data["estimated_cost_usd"] == 0.9
-    assert pg.balance(WEB_USER_ID) == (410, 90)
+    price = pricing.estimate_cost_cents(27.4)
+    assert data["reserved_cents"] == price
+    assert data["estimated_cost_usd"] == pricing.estimate_cost_usd(27.4)
+    assert pg.balance(WEB_USER_ID) == (STARTER_CENTS - price, price)
     job = pg.job(data["job_id"])
     assert job["user_id"] == WEB_USER_ID
     assert job["status"] == "queued"
     assert job["object_key"] == data["object_key"]
     assert job["client_duration_ms"] == 27400
     assert job["filename"] == "ad_variant_1.mp4"
-    assert job["reserved_cents"] == 90
+    assert job["reserved_cents"] == price
 
 
 def test_presign_key_contains_the_users_id(client):
@@ -148,7 +149,7 @@ def test_presign_without_enough_credit_is_402_and_reserves_nothing(app_for, pg):
     assert data["error"] == "insufficient_credit"
     assert isinstance(data["message"], str) and data["message"]
     assert data["available_cents"] == 50
-    assert data["required_cents"] == 90
+    assert data["required_cents"] == pricing.estimate_cost_cents(27.4)
     assert "fields" not in data and "url" not in data
     assert pg.balance(WEB_USER_ID) == (50, 0)
     assert pg.rows("SELECT job_id FROM jobs") == []
@@ -204,7 +205,9 @@ def test_me_returns_email_and_balance(client):
 
 def test_me_shows_a_reservation(client):
     client.post("/api/uploads/presign", json=body())
-    assert client.get("/api/me").get_json()["balance"]["reserved_cents"] == 90
+    assert client.get("/api/me").get_json()["balance"]["reserved_cents"] == (
+        pricing.estimate_cost_cents(27.4)
+    )
 
 
 def test_me_uses_create_apps_built_in_dev_user_without_a_cfg(aws, db, tmp_path):
