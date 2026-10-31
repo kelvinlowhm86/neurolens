@@ -87,6 +87,7 @@ build/
 .terraform/
 terraform.tfvars
 *.tfplan
+tfplan
 backend.hcl
 # Lambda zips and the ffprobe layer Terraform uploads
 infra/terraform/.build/
