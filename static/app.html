@@ -66,6 +66,8 @@
   .D.page-scroll .report { overflow: visible; }
   .D.page-scroll .report-body, .D.page-scroll .result-panel { flex: none; overflow: visible; }
   body:has(.D.page-scroll) { overflow: auto; }
+  /* Room for the scrollbar up front, so opening "More" never narrows the page and re-wraps text. */
+  html:has(.D.page-scroll) { scrollbar-gutter: stable; }
   @media (min-width: 861px) and (min-height: 621px) {
     .D.page-scroll .side { height: calc(100vh - 56px); position: sticky; top: 0; }
   }
