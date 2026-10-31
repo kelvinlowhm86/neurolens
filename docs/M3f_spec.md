@@ -216,10 +216,12 @@ place in line among other users, waking the database from the landing page.
 
 ### 5d. Adding a curve
 - Offered on a done, shared, not-removed job: the quiet "Add audience retention" link on its History
-  row, and always in its "⋯" menu (a newer snapshot). On the results page, until its first snapshot,
-  a bordered thank-you card: "Thanks for sharing. This analysis can be free." when a reward is
-  possible (the job's `curve_reward_cents` > 0), otherwise "Thanks for sharing.", with a quiet
-  "Add audience retention" button. The card shows only once the History list has the job (shared, no
+  row, and always in its "⋯" menu (a newer snapshot). When a reward is possible (the job's
+  `curve_reward_cents` > 0) the entry points name it, so people see why to click: the row link reads
+  "Get $X back" and the menu item "Add audience retention ($X back)", X being `curve_reward_cents`.
+  On the results page, until its first snapshot, a bordered thank-you card: "Thanks for sharing.
+  Add its YouTube retention curve to get your $X back." when a reward is possible, otherwise
+  "Thanks for sharing.", with a quiet "Add audience retention" button. The card shows only once the History list has the job (shared, no
   curve); a job not yet listed gets it when the list arrives. In the upload dialog, per row (§2a).
 - The form (a small pop-up): the video name, the guide link, "Choose file", and three required choice
   rows: views ("Under 1k", "1k–10k", "10k–100k", "Over 100k"), published ("This week", "This month",

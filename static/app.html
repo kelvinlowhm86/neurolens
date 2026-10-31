@@ -1076,7 +1076,7 @@ function historyMenuItems(job) {
   const items = [];
   if (job.cancellable) items.push({ label: 'Cancel', run: () => cancelJob(job.job_id) });
   if (job.sharing) items.push({ label: 'Stop sharing', run: () => openStopShare(job) });
-  if (job.status === 'done' && job.sharing) items.push({ label: 'Add audience retention', run: () => openCurve(jobCurveTarget(job)) });
+  if (job.status === 'done' && job.sharing) items.push({ label: retentionLabel(job, true), run: () => openCurve(jobCurveTarget(job)) });
   if (job.status === 'done' || job.status === 'failed') items.push({ label: 'Delete', run: () => openDeleteJob(job) });
   return items;
 }
@@ -1582,7 +1582,7 @@ function historyRow(job) {
     const add = document.createElement('button');
     add.type = 'button';
     add.className = 'history-link';
-    add.textContent = 'Add audience retention';
+    add.textContent = retentionLabel(job, false);
     add.addEventListener('click', e => { e.stopPropagation(); openCurve(jobCurveTarget(job)); });
     actions.append(add);
   }
@@ -3262,7 +3262,7 @@ function showRetention(jobId, title) {
   if (resultCurve) {
     const reward = jobCurveTarget(cached).rewardCents;
     $('retentionCardText').textContent = reward > 0
-      ? 'Thanks for sharing. This analysis can be free.'
+      ? `Thanks for sharing. Add its YouTube retention curve to get your ${dollars(reward)} back.`
       : 'Thanks for sharing.';
   }
 }
@@ -3282,6 +3282,13 @@ $('retentionCardBtn').addEventListener('click', () => {
   const cached = jobsCache.find(j => j.job_id === resultCurve.jobId);
   openCurve(jobCurveTarget(cached || { job_id: resultCurve.jobId, filename: resultCurve.title }));
 });
+
+// Name the refund where people decide to click; the plain name when none is due.
+function retentionLabel(job, inMenu) {
+  const reward = job.curve_reward_cents || 0;
+  if (reward <= 0) return 'Add audience retention';
+  return inMenu ? `Add audience retention (${dollars(reward)} back)` : `Get ${dollars(reward)} back`;
+}
 
 function jobCurveTarget(job) {
   return { kind: 'job', job, jobId: job.job_id, title: job.filename || `Job ${job.job_id.slice(0, 8)}`, rewardCents: job.curve_reward_cents || 0 };
