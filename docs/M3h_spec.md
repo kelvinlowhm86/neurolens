@@ -475,9 +475,10 @@ reviewed by an independent Opus pass; its fixes are part of this section.
   the Lambda return the bytes base64-encoded.
 
 ### 18c. Page (`static/app.html`)
-- The Download menu (step 3d) gains "PDF" when the open job's report is ready, and "Comparison
-  PDF" in the Compare tab when the pair's comparison is ready. Samples: "PDF" from the sample's
-  `pdf_file`, "Comparison PDF" from the comparison entry's `pdf_file`, with the download name
+- The Download menu (step 3d) offers "Data (CSV)", gains "Report (PDF)" when the open job's
+  report is ready, and "Comparison (PDF)" in the Compare tab when the pair's comparison is ready.
+  Samples: "Report (PDF)" from the sample's `pdf_file`, "Comparison (PDF)" from the comparison
+  entry's `pdf_file`, with the download name
   built like the sample CSV's. No item when there is no written report.
 
 ### 18d. Samples (`infra/make_sample.py`, `infra/deploy_web.sh`)

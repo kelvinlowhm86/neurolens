@@ -1034,7 +1034,7 @@ function historyMenuItems(job) {
   const items = [];
   if (job.cancellable) items.push({ label: 'Cancel', run: () => cancelJob(job.job_id) });
   if (job.sharing) items.push({ label: 'Stop sharing', run: () => openStopShare(job) });
-  if (job.result_available) items.push({ label: 'Download CSV', href: `/api/jobs/${job.job_id}/result.csv` });
+  if (job.result_available) items.push({ label: 'Download data (CSV)', href: `/api/jobs/${job.job_id}/result.csv` });
   if (job.status === 'done' && job.sharing) items.push({ label: 'Add audience retention', run: () => openCurve(jobCurveTarget(job)) });
   if (job.status === 'done' || job.status === 'failed') items.push({ label: 'Delete', run: () => openDeleteJob(job) });
   return items;
@@ -1093,13 +1093,13 @@ function resultDownloadItems() {
   const ctx = currentContext;
   const items = [];
   if (ctx.jobId) {
-    items.push({ label: 'CSV', href: `/api/jobs/${ctx.jobId}/result.csv` });
-    if (currentReportReady) items.push({ label: 'PDF', href: `/api/jobs/${ctx.jobId}/report.pdf` });
+    items.push({ label: 'Data (CSV)', href: `/api/jobs/${ctx.jobId}/result.csv` });
+    if (currentReportReady) items.push({ label: 'Report (PDF)', href: `/api/jobs/${ctx.jobId}/report.pdf` });
   } else if (ctx.csvFile) {
-    items.push({ label: 'CSV', href: `/data/${ctx.csvFile}`, download: `${ctx.title || 'Sample'} – NeuroLens.csv` });
+    items.push({ label: 'Data (CSV)', href: `/data/${ctx.csvFile}`, download: `${ctx.title || 'Sample'} – NeuroLens.csv` });
     const sample = sampleById(ctx.sampleId);
     if (sample && sample.report && sample.pdf_file) {
-      items.push({ label: 'PDF', href: `/data/${sample.pdf_file}`, download: `${sample.title || 'Sample'} – NeuroLens report.pdf` });
+      items.push({ label: 'Report (PDF)', href: `/data/${sample.pdf_file}`, download: `${sample.title || 'Sample'} – NeuroLens report.pdf` });
     }
   }
   if (currentTab === 'compare' && comparison && comparisonReport) {
@@ -1108,14 +1108,14 @@ function resultDownloadItems() {
       if (entry && entry.pdf_file) {
         const a = sampleById(entry.a), b = sampleById(entry.b);
         items.push({
-          label: 'Comparison PDF',
+          label: 'Comparison (PDF)',
           href: `/data/${entry.pdf_file}`,
           download: `${(a && (a.title || a.id)) || entry.a} vs ${(b && (b.title || b.id)) || entry.b} – NeuroLens comparison.pdf`,
         });
       }
     } else if (ctx.jobId && comparison.jobId) {
       items.push({
-        label: 'Comparison PDF',
+        label: 'Comparison (PDF)',
         href: `/api/compare/${ctx.jobId}/${comparison.jobId}/report.pdf`,
       });
     }
