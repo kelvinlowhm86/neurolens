@@ -156,8 +156,8 @@ The same rules as the old `verify` (length limit first, then record the duration
 - **`stop_work.sh`** (emergency pause):
   - deletes any keep-warm scheduled action first, so it cannot fire after the pause; none existing (`ObjectNotFoundException`, the normal case) is not a problem;
   - sets the scalable target's max and min to 0, reads the target back and fails loudly unless both are 0;
-  - calls `UpdateEndpointWeightsAndCapacities(DesiredInstanceCount=0)`;
-  - waits until `DescribeEndpoint` shows 0 instances and prints `ALL STOPPED`.
+  - then polls `DescribeEndpoint` (every 10 s, up to 15 min). AWS refuses a capacity change while the endpoint is updating, and setting the target to 0/0 often starts such an update itself, so the script waits while the status is `Creating`, `Updating` or `SystemUpdating`; once `InService`, it calls `UpdateEndpointWeightsAndCapacities(DesiredInstanceCount=0)` only if the desired count is not already 0 (a refusal that names an in-progress update just means waiting again; any other failure is a problem). Any other status (`Failed`, `RollingBack`, `OutOfService`, `Deleting`) is a problem;
+  - prints `ALL STOPPED` only when the endpoint is `InService` with desired and current count 0. Still updating or above 0 after 15 min is a problem that names the last status and count.
 
   A running job dies and is refunded (§5). Uploads are refused while paused (§8).
 - **`start_work.sh`** sets max 1 (the normal state; also what Terraform applies).

@@ -1036,7 +1036,6 @@ function historyMenuItems(job) {
   const items = [];
   if (job.cancellable) items.push({ label: 'Cancel', run: () => cancelJob(job.job_id) });
   if (job.sharing) items.push({ label: 'Stop sharing', run: () => openStopShare(job) });
-  if (job.result_available) items.push({ label: 'Download data (CSV)', href: `/api/jobs/${job.job_id}/result.csv` });
   if (job.status === 'done' && job.sharing) items.push({ label: 'Add audience retention', run: () => openCurve(jobCurveTarget(job)) });
   if (job.status === 'done' || job.status === 'failed') items.push({ label: 'Delete', run: () => openDeleteJob(job) });
   return items;
