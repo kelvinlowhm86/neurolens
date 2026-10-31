@@ -116,8 +116,11 @@ is never treated as stale.
   judge every level against 0, so the lowest stretch of a video above 0 is an opportunity, not a
   failure; read the three groups, not only overall, and name them seeing, hearing and
   understanding as the page does, never writing a table column name (`muted_overall` becomes
-  "with the sound off"); the response trails the screen by about
-  1-3 s and is smoothed; the curves say where and how strongly, the pictures and words say why:
+  "with the sound off"); the curves are smoothed, hear follows the
+  sound almost at once and see trails the pictures by about 1-3 s; the writer cannot hear the
+  soundtrack, so it never claims music, silence or loudness; a short transcript phrase over music
+  may be false (speech only when the pictures show someone talking); it describes only what the
+  pictures show; every level claim is checked against the table in every field; the curves say where and how strongly, the pictures and words say why:
   every rise or fall written about is tied to the scene that plausibly causes it (up to 3 s
   before) and left out when no scene does; judge the opening by its level and rise (vision needs a few seconds to
   build), and treat a drop over a final logo card as expected; overall above `muted.overall`
