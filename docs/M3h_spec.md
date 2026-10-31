@@ -21,7 +21,8 @@ match (§17).
 - Samples (public, for signed-out visitors) may carry a stored single report, and a pair of
   samples may carry a stored comparison. Both are made once by the operator through the real
   live path in Josh's account and copied into `data/samples.json` by `infra/make_sample.py`.
-  Visitors can never start a Bedrock call. Sintel and Big Buck Bunny stay without reports.
+  Visitors can never start a Bedrock call. All four samples carry a report, and two pairs carry a
+  stored comparison (Big Buck Bunny / Sintel, CeraVe 30 s / 76 s).
 - On the page the comparison shows in the Report tab while comparing, in the single report's
   style, with the videos named by their names.
 
@@ -388,8 +389,8 @@ comparison row and object are gone. Bedrock line in Cost Explorer the next day.
 - Compare on two of the user's videos writes one comparison within ~2 min; opening the pair the
   other way round shows the same report and a POST answers `report_ready`.
 - Deleting either video removes the comparison row and object.
-- A sample with a stored report shows it; Sintel and Big Buck Bunny show "No report for this
-  sample."; two samples with a stored comparison show it when compared, signed out.
+- A sample with a stored report shows it (a sample without one shows "No report for this
+  sample."); two samples with a stored comparison show it when compared, signed out.
 - `pytest` and `ruff check .` pass; the three break-it checks go red.
 
 ## 17. Older specs updated with this build

@@ -96,7 +96,7 @@
             0.687,
             0.765,
             0.856,
-            0.894,
+            0.893,
             0.884,
             0.894,
             0.771,
@@ -262,7 +262,7 @@
             0.376,
             0.352,
             0.264,
-            0.18,
+            0.181,
             0.068,
             -0.042,
             -0.115,
@@ -368,7 +368,7 @@
             0.19,
             0.143,
             0.166,
-            0.159,
+            0.158,
             0.165,
             0.162,
             0.153,
@@ -482,7 +482,7 @@
             0.376,
             0.352,
             0.264,
-            0.18,
+            0.181,
             0.068,
             -0.042,
             -0.115,
@@ -1225,15 +1225,74 @@
             -0.112
           ]
         },
-        "job_id": "10351ca2-4a1d-475f-b4fc-0fa1a443c692",
-        "processing_time_seconds": 673.0,
+        "frames": 52,
+        "job_id": "52d3354d-7ad0-41bc-80cf-d03e7d89a2be",
+        "processing_time_seconds": 259.2,
         "gpu": {
-          "device": "NVIDIA L4",
+          "device": "NVIDIA L40S",
           "peak_vram_gb": 18.62
         }
       },
       "summary": {
         "audio_dependence": 0.33
+      },
+      "report": {
+        "headline": "Sintel trailer peaks strongly in its middle with voice and face, but dark bookends hold back overall engagement",
+        "summary": "The trailer opens below typical on dark frames but builds from second 10 as hearing and character faces drive a well-above-typical peak. Sound lifts overall clearly above pictures-only through this stretch. Seeing peaks at the creature attack while hearing drops away, blunting the climax. A long logo and credits tail closes well below typical.",
+        "moments": [
+          {
+            "start": 0,
+            "end": 4,
+            "what_happens": "The trailer opens on a black screen that fades into a barely visible dark snowy landscape.",
+            "brain_response": "Overall sits below typical throughout, with understanding well below 0 and seeing near 0, leaving no group above typical.",
+            "suggestion": "Opening immediately on the warrior character in the snowstorm rather than the black fade-in would bring engagement above typical sooner."
+          },
+          {
+            "start": 10,
+            "end": 13,
+            "what_happens": "A production title card gives way to a tight close-up of the elder character asking about the land of the gatekeepers.",
+            "brain_response": "Hearing reaches the highest point in the entire trailer, well above typical, and lifts overall well above what the pictures alone would deliver.",
+            "suggestion": null
+          },
+          {
+            "start": 17,
+            "end": 26,
+            "what_happens": "A snow fight gives way to the protagonist running through a ruined city, then an epic golden-hour aerial shot of crumbling towers with creatures in flight.",
+            "brain_response": "Seeing climbs steadily while hearing remains well above typical, sustaining the trailer's highest and most consistent overall engagement.",
+            "suggestion": null
+          },
+          {
+            "start": 28,
+            "end": 35,
+            "what_happens": "A creature swoops at the protagonist in open sky and a close-up of its snapping jaws fills the frame.",
+            "brain_response": "Seeing reaches its peak for the whole video, but hearing falls below typical, pulling overall down sharply from the sustained high of the previous stretch.",
+            "suggestion": "A strong music hit or sound design accent at the moment of attack would align the audio and visual peaks and maintain overall engagement."
+          },
+          {
+            "start": 37,
+            "end": 41,
+            "what_happens": "A lone figure crosses vast empty desert dunes as the title Sintel fades onto the frame.",
+            "brain_response": "This is the weakest stretch in the main content, with seeing below typical; hearing rises with the music but only holds overall near typical.",
+            "suggestion": "A brief cut to a character face before the title appears would lift seeing and give the title reveal a stronger emotional base."
+          },
+          {
+            "start": 42,
+            "end": 52,
+            "what_happens": "The Sintel logo holds on a black screen for several seconds, followed by a full credits card.",
+            "brain_response": "Overall falls well below typical and continues falling to the last second, driven by seeing going strongly negative on the near-empty frames.",
+            "suggestion": "Trimming the logo and credits to around five seconds total would prevent the prolonged slide below typical."
+          }
+        ],
+        "strengths": [
+          "The sustained run of close-up character faces from seconds 12 through 27 keeps seeing well above typical for an extended stretch, giving the trailer strong visual anchoring.",
+          "Sound and speech work together from seconds 10 through 28, keeping overall consistently and measurably higher than the pictures-only level throughout the trailer's core."
+        ],
+        "improvements": [
+          "The two dark black-screen passages in the first twelve seconds rely entirely on audio; a visual backdrop behind the production title card would avoid dipping below typical before the story even begins.",
+          "Seeing and hearing reach their individual highs at different points in the trailer; timing a strong music swell to coincide with the creature-attack visual peak around seconds 28 to 30 could produce a single unified climax."
+        ],
+        "model": "us.anthropic.claude-sonnet-4-6",
+        "created_at": "2026-10-31T00:23:51Z"
       }
     },
     {
@@ -1315,7 +1374,7 @@
             0.177,
             0.194,
             0.268,
-            0.333,
+            0.334,
             0.429,
             0.517,
             0.511,
@@ -2505,15 +2564,60 @@
             0.116
           ]
         },
-        "job_id": "43108456-3fcb-4428-8dad-d676ed18e0d9",
-        "processing_time_seconds": 725.8,
+        "frames": 55,
+        "job_id": "1420bbfc-a881-499a-ba06-c22735b50108",
+        "processing_time_seconds": 279.5,
         "gpu": {
-          "device": "NVIDIA L4",
+          "device": "NVIDIA L40S",
           "peak_vram_gb": 19.07
         }
       },
       "summary": {
         "audio_dependence": 0.0
+      },
+      "report": {
+        "headline": "Charming animated short with strong visual peaks \u2014 a quiet middle stretch is the main opportunity",
+        "summary": "This short runs above typical for much of its runtime, with seeing leading throughout and hearing joining strongly in the finale. The opening sits just below typical for the first seven seconds before climbing as the bunny's face fills the frame. A quiet apple-holding passage around seconds 29 to 39 pulls overall to the video's lowest point and is the clearest opportunity to improve.",
+        "moments": [
+          {
+            "start": 0,
+            "end": 7,
+            "what_happens": "The bunny sprints from its burrow and the camera tilts up to show it looking contentedly at the sky.",
+            "brain_response": "Overall stays just below typical throughout, with hearing and understanding both below 0 while seeing is only slightly above.",
+            "suggestion": "Moving to a close-up of the bunny's expressive face a few seconds sooner, or adding a stronger musical hook from the first frame, could push overall above typical earlier."
+          },
+          {
+            "start": 18,
+            "end": 23,
+            "what_happens": "The bunny presses its face deep into the daisies, then a large butterfly lands on it as it lies in the grass.",
+            "brain_response": "Overall climbs to one of the two highest points of the video, with seeing well above typical and hearing also clearly above typical.",
+            "suggestion": null
+          },
+          {
+            "start": 29,
+            "end": 39,
+            "what_happens": "The bunny stands alone in the open meadow, quietly examining the apple it has picked up, with little movement.",
+            "brain_response": "Overall sinks to the lowest point of the video and stays below typical, driven by hearing falling well below typical while seeing drops near and below 0.",
+            "suggestion": "More dynamic musical energy during this reflective pause, or cutting to a closer reaction shot of the bunny's face sooner, could recover engagement."
+          },
+          {
+            "start": 48,
+            "end": 54,
+            "what_happens": "A butterfly lands on the bunny's head and then its nose; the bunny reacts with wide-eyed surprise and says thank you.",
+            "brain_response": "Overall matches the first peak and is clearly above typical, with hearing reaching the highest point in the video and understanding also rising well above typical, both lifting overall noticeably above what the pictures alone would achieve.",
+            "suggestion": null
+          }
+        ],
+        "strengths": [
+          "Close-up shots of the bunny's expressive face drive seeing well above typical across multiple stretches, forming the visual backbone of the film.",
+          "The final sequence brings all three groups above typical at once, giving the short a strong and engaged close."
+        ],
+        "improvements": [
+          "The middle stretch around seconds 29 to 39 is the weakest part of the video; the hearing response falls well below typical during the quiet apple-holding pause, suggesting a more dynamic score or shorter pause would help.",
+          "The opening sits just below typical for its first seven seconds; cutting to a tight face shot of the bunny sooner could push overall above typical from the start."
+        ],
+        "model": "us.anthropic.claude-sonnet-4-6",
+        "created_at": "2026-10-31T00:22:59Z"
       }
     },
     {
@@ -3258,10 +3362,10 @@
           ]
         },
         "frames": 30,
-        "job_id": "e02913be-0082-46b5-a624-8d54244be032",
-        "processing_time_seconds": 454.2,
+        "job_id": "370f37c3-109f-4307-b3e4-25077d62798e",
+        "processing_time_seconds": 199.3,
         "gpu": {
-          "device": "NVIDIA L4",
+          "device": "NVIDIA L40S",
           "peak_vram_gb": 15.83
         }
       },
@@ -3269,66 +3373,62 @@
         "audio_dependence": 0.46
       },
       "report": {
-        "headline": "Strong seeing-led engagement peaks in the middle; the product end-card lands below typical",
-        "summary": "This CeraVe ad opens well above typical viewing and climbs quickly, driven almost entirely by seeing \u2014 faces and bodies carry the response throughout. Hearing contributes a clear boost in the opening seconds as Michael Cera introduces himself, but fades to near-zero by mid-video. Understanding stays modest all the way through. The peak runs from roughly seconds 8 to 14, where the spa parody and rock-climbing visuals combine with high face and body responses to produce the strongest engagement in the video. The second half gradually softens as the boardroom scene reduces visual intensity. The final product card with on-screen text and no people is the weakest stretch and dips below typical \u2014 an expected end-card drop but one worth noting because it arrives before the very last second.",
+        "headline": "Sound-led opening, strong visual peak in the middle; understanding lands the joke late",
+        "summary": "The ad runs well above typical viewing through its midsection, with seeing as the dominant group and hearing carrying the first few seconds before visuals take over. Understanding rises in the final third as the comedy payoff and brand message land. The boardroom sequence is the weakest stretch before the close, where hearing dips below typical and overall falls to its lowest point in the main body of the ad.",
         "moments": [
           {
             "start": 0,
-            "end": 4,
-            "what_happens": "Michael Cera speaks directly to camera, holds up the CeraVe jar, introduces himself and the product.",
-            "brain_response": "Opens above typical and rises steadily. Hearing is the strongest signal early, boosted by the opening speech. Seeing builds as the face and body become more prominent.",
-            "suggestion": "The opening is strong. The direct-to-camera address with the jar held up works well \u2014 keep the face large and the speech crisp in any re-edit."
+            "end": 5,
+            "what_happens": "Michael Cera speaks directly to camera, holding nothing yet, with dramatic lighting and music.",
+            "brain_response": "Hearing is well above typical from the first frame and carries engagement while seeing builds gradually \u2014 a sound-led opening that works.",
+            "suggestion": null
           },
           {
-            "start": 7,
+            "start": 6,
+            "end": 8,
+            "what_happens": "He turns back to camera holding the CeraVe jar with a knowing smile, saying 'you didn't know?'",
+            "brain_response": "Seeing joins hearing well above typical, producing the first clear combined peak and the strongest hearing moment of the video.",
+            "suggestion": null
+          },
+          {
+            "start": 10,
             "end": 14,
-            "what_happens": "Cut to close-up hands on skin, then a wide spa tent shot with Cera giving a massage, then two faces peering up from a massage table, then a rock climber scaling a cliff face.",
-            "brain_response": "The video's peak engagement. Seeing reaches its highest values (bodies above 0.8, faces above 0.5), well above typical. Hearing has faded but the pictures alone sustain the response. Overall is at its strongest here.",
-            "suggestion": "The absurdist spa-to-rock-climbing sequence is the most engaging passage. If you extend or tighten this ad, protect this stretch \u2014 the physical, body-forward imagery is doing the most work."
+            "what_happens": "Two faces appear in the spa headrest comedy shot, followed by a climber scaling a rock face in a sweeping landscape.",
+            "brain_response": "Seeing reaches its highest level of the entire video, sustaining the peak across both scenes; overall is at its strongest here.",
+            "suggestion": "These are your two best visual moments \u2014 the abrupt cut between them works; consider whether the climber shot could be slightly longer to hold the peak."
           },
           {
-            "start": 16,
-            "end": 18,
-            "what_happens": "Three men pose together holding CeraVe jars in a fashion-shoot style.",
-            "brain_response": "Seeing remains clearly above typical (faces around 0.45, bodies around 0.4), but is declining from the peak. Overall holds above typical. Understanding edges up slightly as speech continues.",
-            "suggestion": "The trio shot sustains good engagement. The product is visible and the faces are prominent \u2014 no change needed, though cutting it shorter would lose little."
-          },
-          {
-            "start": 19,
+            "start": 21,
             "end": 23,
-            "what_happens": "Boardroom scene: a crowd watches a presentation screen showing the earlier footage, with 'CeraVe Offices / Dermatologist Review' text on screen.",
-            "brain_response": "A gradual softening. Seeing (faces, bodies) continues to decline. Hearing drops to near zero or below. Understanding is the relatively strongest signal here, though still modest. Overall is the weakest passage before the end card.",
-            "suggestion": "The wide boardroom shot reduces face size and body prominence, which softens engagement. Cutting to a closer reaction shot of the dermatologists watching the screen could help maintain seeing through this reveal."
+            "what_happens": "The boardroom scene continues with the presentation footage playing on the screen behind the presenter.",
+            "brain_response": "Hearing falls below typical for the first time, dragging overall to its lowest point in the main body of the ad.",
+            "suggestion": "A stronger music cue or a sound design beat here could support the comedic reveal and lift the weakest stretch."
+          },
+          {
+            "start": 24,
+            "end": 26,
+            "what_happens": "The camera cuts to a close-up of three dermatologists in front of the CeraVe logo, then to Michael Cera smiling and gesturing.",
+            "brain_response": "Understanding rises to its highest level of the video as the name-connection joke and brand credentials land together.",
+            "suggestion": null
           },
           {
             "start": 27,
-            "end": 29,
-            "what_happens": "Product card: CeraVe jar on a table beside on-screen text reading 'Developed with dermatologists. Not Michael Cera.'",
-            "brain_response": "Seeing drops sharply below typical; hearing and understanding near zero. Overall falls to just below typical \u2014 the lowest stretch of the video outside the final second.",
-            "suggestion": "The punchline lands in text rather than on a face, which costs engagement. Keeping Michael Cera briefly in frame alongside the text \u2014 even as a small inset \u2014 before cutting fully to the product could soften the drop without losing the joke."
-          },
-          {
-            "start": 30,
             "end": 30,
-            "what_happens": "Final frame of the product card.",
-            "brain_response": "Overall drops sharply below typical. All seeing signals fall steeply. This is the lowest point in the video.",
+            "what_happens": "A product card reads 'Developed with Dermatologists. Not Michael Cera.' alongside the CeraVe jar.",
+            "brain_response": "Seeing falls below typical and overall drops below 0 by the final seconds \u2014 a normal close for a product card of this length.",
             "suggestion": null
           }
         ],
         "strengths": [
-          "Seeing dominates from the first second and stays well above typical through the middle of the video, driven by strong face and body signals.",
-          "The opening \u2014 Michael Cera addressing camera and holding up the jar \u2014 builds quickly and combines hearing and seeing effectively.",
-          "The spa parody and rock-climbing sequence (seconds 7\u201314) is the peak of the video, with the highest body and face responses, showing the absurdist visual comedy is working hard.",
-          "The three-person fashion pose with product visible (seconds 16\u201318) sustains above-typical seeing even as the video winds down."
+          "Hearing builds engagement from the very first frame, giving the ad a confident start before the visuals are fully established.",
+          "The spa comedy shot and the rock-climbing sequence form a sustained visual peak that is the strongest engagement stretch in the ad."
         ],
         "improvements": [
-          "The boardroom scene (seconds 19\u201323) is the weakest passage before the end card; wider shots reduce face size and body presence, softening engagement at a key narrative moment.",
-          "Hearing fades to near zero or below from around second 19 onward \u2014 the back half of the ad is carried almost entirely by pictures, and a stronger audio element could support the final reveal.",
-          "Understanding remains modest throughout; the spoken punchline and on-screen text could be made more prominent or delivered face-to-camera to lift the social and speech response during the payoff.",
-          "The product card (seconds 27\u201329) drops below typical as soon as people leave the frame; even a brief return to a face alongside the product text would ease the dip at the moment the brand message lands."
+          "Hearing fades across the second half and drops below typical through the boardroom sequence \u2014 a more distinctive audio layer there would support the comedy payoff at the moment it most needs it.",
+          "Seeing declines steadily from the three-person shot at around 16 seconds onward, so the brand message arrives on a falling visual curve; a brief return to a face alongside the product card could maintain engagement through the close."
         ],
         "model": "us.anthropic.claude-sonnet-4-6",
-        "created_at": "2026-10-30T15:38:47Z"
+        "created_at": "2026-10-31T00:22:47Z"
       }
     },
     {
@@ -5096,125 +5196,180 @@
         "audio_dependence": 0.41
       },
       "report": {
-        "headline": "Strong, picture-led engagement throughout \u2014 seeing and hearing both carry this ad well above typical",
-        "summary": "This CeraVe ad performs solidly above 0 for most of its 77 seconds, with seeing leading from around second 7 onward and hearing adding a strong second layer during the dialogue-heavy middle section. Understanding contributes positively too, particularly when speech is most active between seconds 10 and 22. The opening four seconds start below 0 \u2014 curtains with no face visible \u2014 but the response climbs quickly once a figure and then Michael Cera's face appear, reaching typical levels by second 5 and above typical by second 8. The strongest stretch runs from roughly seconds 10 to 30, where all three groups are above 0 together. The section from seconds 32 to 50 is the weakest part of the video: seeing holds up but hearing and understanding dip, and overall softens \u2014 an opportunity to add a stronger audio or speech element. The final logo card from second 74 onward produces the expected drop and is not a concern.",
+        "headline": "A well-above-typical ad led by hearing and understanding: the comedy dialogue is where it peaks",
+        "summary": "The video runs well above typical for most of its length, with hearing the dominant driver whenever Michael Cera speaks directly to camera and understanding rising during the comedy lines. Seeing holds above typical through the long middle section. A below-typical opening and two quieter stretches with little speech are the clearest opportunities.",
         "moments": [
           {
             "start": 0,
-            "end": 4,
-            "what_happens": "Dark curtains part; a silhouetted figure is barely visible. No face is shown clearly.",
-            "brain_response": "All groups start below 0. Seeing, hearing and understanding are all in negative territory, making this the lowest point of the video.",
-            "suggestion": "The opening could be pulled forward \u2014 showing Michael Cera's face or the product jar even a second or two earlier would help the response reach 0 faster."
+            "end": 5,
+            "what_happens": "The video opens on dark curtains parting to reveal a silhouetted figure, with no face or product on screen.",
+            "brain_response": "All three groups sit below typical, making this the only stretch before the main content where overall engagement is clearly below zero.",
+            "suggestion": "Showing the product or a face even a second or two earlier would bring this opening up to at least typical from the start."
           },
           {
             "start": 10,
-            "end": 22,
-            "what_happens": "Michael Cera steps into full light, faces camera, and holds up the CeraVe jar while speaking directly to the viewer. Hearing peaks around second 10 at its highest level in the video.",
-            "brain_response": "This is the strongest stretch overall. Seeing is well above 0, hearing reaches its peak, and understanding climbs above 0 for the first time. All three groups are positive together.",
+            "end": 13,
+            "what_happens": "Michael Cera faces the camera, introduces himself by name, and holds up the CeraVe cream.",
+            "brain_response": "Hearing jumps to the highest point in the entire video as music and speech combine; overall rises sharply to well above typical.",
             "suggestion": null
           },
           {
-            "start": 28,
-            "end": 36,
-            "what_happens": "Cut to a spa scene: a man receiving a back massage in a white tent, with the CeraVe jar on a nearby stand. Michael Cera then appears as the masseur. Hearing and speech drop toward or below 0.",
-            "brain_response": "Seeing stays clearly above 0, driven by faces and bodies, but hearing falls to near 0 and understanding weakens. Overall softens compared to the previous peak. Pictures carry the moment; sound does not add much.",
-            "suggestion": "Adding a voiceover or keeping dialogue audible during this sequence would let hearing and understanding support the strong visual response rather than leaving it to carry the scene alone."
-          },
-          {
-            "start": 44,
-            "end": 51,
-            "what_happens": "A surreal sequence: a group of men in white coats surrounds Cera, followed by a glowing curtain shot with the word SKIN on screen, then a lush fantasy garden and a CGI narwhal.",
-            "brain_response": "Seeing holds above 0, but hearing drops below 0 and understanding goes negative. This is the weakest stretch for hearing and understanding in the video, and overall is at its softest outside the opening.",
-            "suggestion": "This is the clearest opportunity in the ad. The visuals are inventive but the audio drops away. Even a brief line of dialogue or a stronger music cue here would lift hearing and understanding back above 0."
-          },
-          {
-            "start": 56,
-            "end": 60,
-            "what_happens": "A split-screen of three different versions of the face, then Cera in a garden, then two men facing each other.",
-            "brain_response": "Hearing recovers to above 0, understanding edges positive, and overall stabilises. The picture carries more than the sound here \u2014 overall and the silent prediction are fairly close.",
+            "start": 17,
+            "end": 21,
+            "what_happens": "Michael Cera peers through a sheer curtain with 'GENEROSITY' on screen, then steps forward and declares 'I am CeraVe.'",
+            "brain_response": "The video's highest and most sustained overall peak, with hearing and understanding both clearly above typical at the same time.",
             "suggestion": null
           },
           {
-            "start": 67,
-            "end": 70,
-            "what_happens": "Cera stands flanked by two men in open lab coats, all holding CeraVe jars, staring into camera.",
-            "brain_response": "Seeing is above 0, hearing and understanding are close to 0 but positive. Overall is modest but above 0 \u2014 a stable close before the final curtain shot.",
-            "suggestion": null
+            "start": 32,
+            "end": 35,
+            "what_happens": "A wordless wide-angle rock-climbing sequence plays with no dialogue and no close-up of Michael Cera.",
+            "brain_response": "Hearing drops to its lowest level in the video, falling below typical; overall weakens to just above typical, the weakest stretch in the middle section.",
+            "suggestion": "A short line of voiceover from Michael Cera here would keep hearing above typical through this action sequence."
+          },
+          {
+            "start": 48,
+            "end": 52,
+            "what_happens": "A CGI narwhal in a fantasy lagoon exchanges compliments with Michael Cera, with the dialogue carried only by on-screen subtitles.",
+            "brain_response": "Hearing and understanding both fall below typical as audible sound design recedes; seeing alone keeps overall barely above typical.",
+            "suggestion": "Having Michael Cera speak his reply aloud rather than relying solely on subtitles would bring hearing and understanding back above typical here."
+          },
+          {
+            "start": 62,
+            "end": 65,
+            "what_happens": "Michael Cera stands alone in close-up, gazing quietly at the CeraVe cream.",
+            "brain_response": "Seeing and hearing both slip below typical and overall briefly falls below zero, the lowest point in the main content.",
+            "suggestion": "Cutting to the wider three-person group shot a second or two sooner could prevent this brief dip below typical."
           }
         ],
         "strengths": [
-          "Seeing is above 0 for almost the entire video once Michael Cera's face appears at second 7, and faces and bodies stay strongly positive through to second 70.",
-          "The speech-heavy section from seconds 10 to 22 is the single strongest moment: hearing peaks at its highest level and understanding is clearly positive, giving all three groups a rare joint peak.",
-          "The product jar appears on screen alongside the face throughout most of the ad, keeping the brand visible during the highest-engagement stretches.",
-          "The overall level stays above 0 from second 8 to second 72, a long run of above-typical brain engagement relative to the model's baseline."
+          "The video sustains above-typical overall engagement across most of its length, with hearing well above typical in every stretch where Michael Cera speaks directly to camera.",
+          "The visual variety across settings\u2014curtained studio, spa, rock face, fantasy lagoon\u2014keeps seeing above typical throughout the long middle section even when hearing dips."
         ],
         "improvements": [
-          "The first four seconds open below 0 across all groups. Moving a recognisable face or the product into the very first shot would close that gap faster.",
-          "Hearing and understanding both drop below or near 0 between seconds 44 and 51 \u2014 the narwhal and fantasy garden sequence \u2014 leaving seeing to carry the video alone. A voiceover or audible dialogue would strengthen this section.",
-          "Understanding stays negative for the first 11 seconds and dips again from seconds 32 to 36 and 46 to 50. Earlier and more sustained speech would keep this group contributing alongside seeing.",
-          "The spa and rock-climbing sequences from seconds 27 to 41 are visually strong but hearing is near 0 for much of that stretch. A music lift or spoken line during those cuts would better match the visual energy."
+          "The video's strongest engagement is concentrated in the first third; placing a larger comedy beat or surprising visual reveal after the 50-second mark would rebuild the peak that gradually fades in the second half.",
+          "With the sound off, the response stays close to typical throughout, meaning the pictures alone do not distinguish the ad strongly\u2014more visually unexpected shots could strengthen engagement for viewers who cannot hear it."
         ],
         "model": "us.anthropic.claude-sonnet-4-6",
-        "created_at": "2026-10-30T15:38:49Z"
+        "created_at": "2026-10-31T00:26:31Z"
       }
     }
   ],
   "comparisons": [
     {
-      "a": "cerave_76s",
-      "b": "cerave_30s",
+      "a": "bbb_720p_55s",
+      "b": "sintel_trailer_720p",
       "report": {
-        "headline": "B opens stronger and peaks higher in seeing; A sustains more over its longer second half",
-        "summary": "These are two cuts of the same CeraVe campaign. B starts immediately with a face and speech, driving seeing and hearing above typical from second 0, and reaches its highest seeing response (faces +0.55, bodies +0.86) during the spa and comedy beats at 8\u201314 s. A spends its first 7 seconds on curtains and a product shot before engagement builds. Where they share material, B's tighter edit keeps seeing higher throughout; A's extended second half adds unique scenes that sustain a moderate response B never reaches.",
+        "headline": "Video B peaks higher in its active middle but A holds up far better at both ends",
+        "summary": "These are two different Blender Foundation animations \u2014 the cheerful rabbit short (A) and the fantasy adventure Sintel (B). B draws stronger peak engagement through its active middle, lifted by powerful sound design and spoken dialogue, but its long title-card ending drags the response deeply below typical viewing. A is more consistent throughout and never falls far below typical.",
         "differences": [
           {
             "a": {
               "start": 0,
-              "end": 6
+              "end": 4
             },
             "b": {
               "start": 0,
-              "end": 2
+              "end": 4
             },
-            "what_differs": "A opens on dark curtains with no face for several seconds before cutting to the product jar and a hand; B cuts immediately to a face delivering speech. By A 6 s, faces are only +0.13 and overall is only +0.09, while B already has faces at +0.19 and overall at +0.14 with hearing above +0.28 from frame one.",
-            "brain_response": "B's immediate face-plus-speech opening engages seeing and hearing from the first second, whereas A's curtain-and-product cold open keeps all signals below typical for the first four seconds, a real gap in early engagement."
+            "what_differs": "A opens on a bright, colourful rabbit emerging from a mossy burrow, keeping seeing above typical from the first second; B opens on a completely black screen fading to dark, featureless snowscapes, holding all groups well below typical for the first several seconds.",
+            "brain_response": "A's seeing starts positive and hearing stays close to typical, giving A a clear early advantage, while B's opening is below typical across all groups."
           },
           {
             "a": {
-              "start": 27,
-              "end": 51
+              "start": 10,
+              "end": 20
             },
             "b": {
-              "start": 7,
-              "end": 15
+              "start": 10,
+              "end": 20
             },
-            "what_differs": "Both cuts share the spa massage scene, the massage-table comedy moment, and the rock-climbing sequence, but in A these run from about 27 s to 51 s while in B they are compressed into 7\u201315 s. In B, bodies peak at +0.86 and seeing at +0.50 during this block; in A the same material yields bodies peaking at +0.63 and seeing at +0.31.",
-            "brain_response": "B's earlier and faster presentation of the shared action and comedy material produces a markedly stronger seeing response, roughly double the body-area signal, suggesting the punchier pacing raises engagement above what A achieves with the same shots."
+            "what_differs": "B cuts to close-up dialogue between a weathered elder and the red-haired protagonist, accompanied by a strong musical score; A continues with the rabbit sniffing flowers in a sunny meadow with no speech.",
+            "brain_response": "B's hearing response spikes far above typical during this stretch and understanding climbs clearly positive as well, driving B's overall well above A's; A's understanding stays below typical throughout and hearing remains low, so A falls noticeably behind."
           },
           {
             "a": {
-              "start": 44,
-              "end": 72
+              "start": 42,
+              "end": 54
             },
-            "b": null,
-            "what_differs": "A contains an extended sequence unique to this cut: a mirror-room scene with multiple figures, a fantasy jungle environment with a narwhal, a split-screen of three faces, and a closing trio tableau with dermatologist-styled companions, running from roughly 44 s to 72 s. B has no equivalent material.",
-            "brain_response": "This stretch keeps A's overall response consistently above 0 (ranging from about +0.04 to +0.17) and seeing above 0 throughout, giving A a prolonged moderate engagement that B, ending at 30 s, never needs to sustain \u2014 an advantage in total coverage of the brand story even if individual peaks are lower than B's."
+            "b": {
+              "start": 42,
+              "end": 52
+            },
+            "what_differs": "A continues with the rabbit's comedic encounters \u2014 butterflies landing on its head, expressions of surprise \u2014 keeping the character on screen; B transitions to a title card ('SINTEL') on a black background that holds for roughly ten seconds, then cuts to a credits screen.",
+            "brain_response": "A's seeing, hearing, and overall all rise and stay clearly above typical through to the end; B's seeing falls sharply below typical and stays deeply negative, pulling B's overall well below typical for the final stretch."
           }
         ],
         "a_does_better": [
-          "A's longer runtime lets it develop the brand narrative through more varied scenes \u2014 fantasy jungle, split-screen faces, and the extended dermatologist trio \u2014 keeping seeing and understanding signals above typical for nearly a minute.",
-          "The hearing signal in A rises to +0.50 around 10 s and stays elevated through the spoken comedy lines, matching or exceeding B's hearing level during shared material."
+          "A's opening is above typical from the first second because the main character is visible and the scene is bright, giving it an immediate advantage over B's dark, empty start.",
+          "A maintains a consistently positive response through its final ten seconds, while B's long title card causes a sustained drop far below typical viewing."
         ],
         "b_does_better": [
-          "B's immediate face-and-speech opening means all three groups \u2014 seeing, hearing, and understanding \u2014 are above typical from the very first second, while A takes roughly 7 seconds to reach that point.",
-          "B achieves its peak seeing response (bodies +0.86, overall +0.25) during the shared spa and comedy material, roughly double A's seeing level at the equivalent moment, suggesting the compressed pacing is more arresting for that sequence."
+          "B's sound design and orchestral score drive hearing to exceptionally high levels through the middle of the video \u2014 well above anything A achieves \u2014 and this carries B's overall to its strongest peaks.",
+          "B's action sequences from the ruined city to the desert, combined with spoken dialogue, lift understanding clearly above typical, a group that stays flat or below typical in A throughout."
         ],
         "suggestions": [
-          "Consider moving A's opening so a face and the product appear within the first two seconds, matching B's cold-open structure, to close the early engagement gap before the curtain reveal pays off.",
-          "The fantasy jungle and narwhal sequence in A (around 48\u201355 s) shows seeing well above 0 but hearing dips below typical; adding music or a brief spoken line there could lift the overall response closer to the levels achieved during the earlier speech-driven stretch."
+          "Trim B's title card to no more than three or four seconds, or replace the final black screens with a held frame from the desert scene, to prevent the steep fall that currently ends the video well below typical.",
+          "A could benefit from a richer music track or sound design that builds through the middle section, as the sound contributes little lift compared to the pictures; closing that gap would raise A's overall closer to B's peaks."
         ],
         "model": "us.anthropic.claude-sonnet-4-6",
-        "created_at": "2026-10-30T15:38:46Z"
+        "created_at": "2026-10-31T00:22:46Z"
+      }
+    },
+    {
+      "a": "cerave_30s",
+      "b": "cerave_76s",
+      "report": {
+        "headline": "Video B sustains stronger engagement across most of its runtime; Video A's immediate opening is its clearest advantage",
+        "summary": "These are two cuts of the same CeraVe campaign featuring Michael Cera. B, the extended cut, runs above typical overall from about second 10 onward and reaches higher peaks, carried mainly by hearing and understanding in its middle third. A opens stronger \u2014 above typical from the first second \u2014 but ends well below typical while B stays comfortably above it through nearly all of its remaining runtime.",
+        "differences": [
+          {
+            "a": {
+              "start": 0,
+              "end": 5
+            },
+            "b": {
+              "start": 0,
+              "end": 7
+            },
+            "what_differs": "A opens immediately with Michael Cera speaking to camera, so seeing and hearing are both above typical from the first second. B opens on dark, empty curtains with no speech, and all three groups stay below typical until his face appears around second 7.",
+            "brain_response": "A's overall is clearly above typical throughout this stretch; B's overall stays clearly below typical for the same period, a meaningful early gap that costs B engagement it never fully recovers against A's opening."
+          },
+          {
+            "a": {
+              "start": 19,
+              "end": 26
+            },
+            "b": {
+              "start": 17,
+              "end": 26
+            },
+            "what_differs": "By the time A reaches the boardroom scene with dermatologists reviewing footage, its overall is declining toward typical. In B's equivalent stretch, Michael Cera is speaking directly to camera holding the product, and hearing and understanding are both well above typical.",
+            "brain_response": "B's overall in this stretch is roughly double A's, driven by hearing and understanding while seeing stays at a similar level in both; this is where B clearly pulls ahead."
+          },
+          {
+            "a": null,
+            "b": {
+              "start": 46,
+              "end": 52
+            },
+            "what_differs": "B contains a unique narwhal and fantasy-forest sequence absent from A, where a CGI narwhal speaks on screen. Seeing stays above typical, but hearing and understanding fall to near or below typical.",
+            "brain_response": "Overall in B dips to its lowest point since the opening during this stretch, with sound and speech no longer contributing; the pictures carry it alone, making this the weakest section in an otherwise well-sustained video."
+          }
+        ],
+        "a_does_better": [
+          "A opens with above-typical engagement across seeing and hearing from the very first second, giving it an immediate head-start that B's dark-curtain opening cannot match."
+        ],
+        "b_does_better": [
+          "B sustains above-typical overall engagement from roughly second 10 through second 72, including several scenes with no equivalent in A, where hearing and understanding together lift engagement well above typical.",
+          "B's peak overall level, reached during the mid-section speech-to-camera passages, is higher than A's peak, showing the extended material adds genuine engagement when Michael Cera is on screen with the product."
+        ],
+        "suggestions": [
+          "Replace or shorten B's dark, silent curtain opening \u2014 cutting to Michael Cera's face by second 2 or 3 would bring hearing and understanding above typical from the start, as A already does.",
+          "Add voiceover or music to B's narwhal and fantasy-forest sequence (roughly B 46\u201352) to lift hearing and understanding back toward typical and close the dip in overall engagement during that stretch."
+        ],
+        "model": "us.anthropic.claude-sonnet-4-6",
+        "created_at": "2026-10-31T00:23:37Z"
       }
     }
   ]
