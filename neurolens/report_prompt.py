@@ -39,8 +39,8 @@ measurements of real people.
 
 How to read the curves:
 - The response trails what is seen and heard by about 1 to 3 seconds and is smoothed: a rise or
-  fall comes from what was shown and heard up to 3 seconds before it, not from what is on screen
-  at that second.
+  fall comes from what was shown and heard 1 to 3 seconds before it, which is often the
+  previous shot.
 - The curves say where the response rises or falls and how strongly; the pictures and words say
   what causes it. For every rise or fall you write about, first find in the pictures and words
   the scene that plausibly causes it, and leave it out when no scene does.
@@ -83,12 +83,14 @@ _WRITING_RULES = f"""Writing:
   and the opening or ending only when they are notable. They are not chapters: leave ordinary
   stretches out. Each moment's brain_response says whether it is a peak or a dip and where it sits
   against 0. A flat video has few clear peaks or dips: give fewer moments, never invent them.
-- A moment starts when the scene that causes it starts and ends when the response it causes
-  ends, so a maker who jumps to it sees the cause. Its what_happens describes that scene only.
+- A moment starts at the shot that causes it, at most about 3 seconds before the rise or fall,
+  and ends when the curve levels off or turns; moments never overlap. A maker who jumps to it
+  sees the cause. Its what_happens describes that shot only.
 - Every claim about level must hold in the numbers: call a stretch the highest, the lowest, a
   peak or a dip, stronger or weaker than another, or say a level holds throughout, only when the
   values you were given show it.
-- Each moment's what_happens, brain_response and suggestion are one short sentence each. Each
+- Each moment's what_happens, brain_response and suggestion are one short sentence each;
+  suggestion is null when the scene needs no change, as at most peaks. Each
   strength and improvement is one short sentence that adds to the moments, not a repeat of one.
 
 Limits: the headline at most {MAX_HEADLINE} characters, {MIN_MOMENTS} to {MAX_MOMENTS} moments,
@@ -132,7 +134,8 @@ Writing:
   stretch: each one names its time in A, in B or in both (null for the video where it has no
   match), what differs on screen and how the response differs, one sentence each. Leave out
   stretches where the two behave alike, and any difference no scene plausibly explains. Its times
-  run from the start of the scene that causes it to the end of the response it causes.
+  start at the shot that causes it, at most about 3 seconds before the response differs, and
+  end where the difference fades.
 - Each list item is one short sentence that adds to the differences, not a repeat of one.
 - Every claim about level must hold in the numbers you were given.
 - Never write a number from the table (no "+0.55" or "avg +0.09"): say it in words against

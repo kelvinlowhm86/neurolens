@@ -182,7 +182,8 @@ Writing:
   stretch: each one names its time in A, in B or in both (null for the video where it has no
   match), what differs on screen and how the response differs, one sentence each. Leave out
   stretches where the two behave alike, and any difference no scene plausibly explains. Its times
-  run from the start of the scene that causes it to the end of the response it causes.
+  start at the shot that causes it, at most about 3 seconds before the response differs, and
+  end where the difference fades.
 - Each list item is one short sentence that adds to the differences, not a repeat of one.
 - Every claim about level must hold in the numbers you were given.
 

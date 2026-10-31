@@ -128,9 +128,10 @@ is never treated as stale.
   (or call-to-action screen) is never a dip or an improvement unless the fall starts before it.
   Moments are the stretches worth the maker's attention (clear peaks and dips, the opening or
   ending only when notable), not chapters covering the video, and carry no strong/weak label:
-  each says in words whether it is a peak or a dip. A moment runs from the start of the scene
-  that causes it to the end of the response, so jumping to it shows the cause; its suggestion
-  must make sense for that scene (never what the video already does around it). Every claim about level (highest, lowest,
+  each says in words whether it is a peak or a dip. A moment starts at the shot that causes it
+  (at most ~3 s before the rise or fall) and ends when the curve levels off; moments never
+  overlap, so jumping to one shows the cause; its suggestion must make sense for that shot (never
+  what the video already does around it) and is null when nothing needs changing. Every claim about level (highest, lowest,
   throughout) must hold in the numbers. Fair means accurate: a video mostly
   below 0 is said so plainly; values within about 0.05 of 0 are typical (whole-video means of
   our 7 real results run +0.03 to +0.23). Suggestions fit the video's purpose (not "add faces"
