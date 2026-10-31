@@ -185,14 +185,15 @@ Writing:
 - Each list item is one short sentence that adds to the differences, not a repeat of one.
 - Every claim about level must hold in the numbers you were given.
 
-Limits: the headline at most {MAX_HEADLINE} characters, the summary at most {MAX_VERDICT}
-characters, 1 to {MAX_DIFFERENCES} differences, at most {MAX_COMPARISON_LISTS} items in each
-list. Times are whole seconds from 0 to that video's last_second, both included, start <= end.
+Limits: the headline at most {MAX_HEADLINE} characters, 1 to {MAX_DIFFERENCES} differences, at most
+{MAX_COMPARISON_LISTS} items in each list. Times are whole seconds from 0 to that video's
+last_second, both included, start <= end.
 ```
 The text never quotes a table value (levels are words against typical viewing or the other
-video). `MAX_VERDICT = 400`, `MAX_DIFFERENCES = 3` and `MAX_COMPARISON_LISTS = 2` join the existing
-length constants; like them they are guidance only. They keep the comparison short (about 300
-words): the verdict sits beside the chart, the differences under it.
+video). `MAX_DIFFERENCES = 3` and `MAX_COMPARISON_LISTS = 2` join the existing length constants; like
+them they are guidance only. The verdict's length is set in sentences, not characters (the model
+cannot count characters and stopped a summary mid-sentence to fit one). They keep the comparison
+short: the verdict sits beside the chart, the differences under it.
 Size: at most 240 images (two 120 s videos), within the 600-image limit of Sonnet 4.6's 1M
 window; the request size against Bedrock's 20 MB limit is measured on the real run (§14).
 
@@ -212,7 +213,8 @@ SPAN = { "start": int, "end": int } | null
 After parsing, `_comparison_problem(answer, duration_a, duration_b)` checks only what the page
 relies on, like M3g §5d: every field present with its type; each difference's `a` and `b` is
 null or a span with `0 <= start <= end < duration` of that video; `a` and `b` are not both null;
-the three lists hold only text. Never lengths or counts. Failure codes as M3g §5d.
+the three lists hold only text; the summary ends a sentence as M3g §5d. Never lengths or counts.
+Failure codes as M3g §5d.
 
 ## 6. Deletion
 Comparisons exist only between done jobs. A done job's own files leave in exactly two ways, and

@@ -251,6 +251,8 @@ def bad_answer(kind):
     if kind == "out_of_range":
         report["moments"][0]["start"] = 0
         report["moments"][0]["end"] = 3
+    elif kind == "unfinished_summary":
+        report["summary"] = "Sound carries it,"
     return answer(report)
 
 
@@ -259,7 +261,7 @@ def test_a_long_answer_is_still_stored(aws, db, pg, make_cfg):
     job_id = writing_job(aws, db, pg)
     report = valid_report()
     report["headline"] = "h" * 500
-    report["summary"] = "s" * 5000
+    report["summary"] = "s" * 4999 + "."
     report["moments"] = [valid_report()["moments"][0] for _ in range(12)]
     report["strengths"] = ["a strength"] * 9
     client = FakeClient(answer(report))
@@ -271,12 +273,33 @@ def test_a_long_answer_is_still_stored(aws, db, pg, make_cfg):
 
 
 @pytest.mark.parametrize(
+    "text,expected",
+    [
+        ("Strong opening.", True),
+        ("It peaks at 0:12!", True),
+        ("saying 'you didn't know?'", True),
+        ("declares 'I am CeraVe.'", True),
+        ("(mostly typical.)", True),
+        ("Done.  ", True),
+        ("The response then", False),
+        ("", False),
+        ("Sound carries it,", False),
+    ],
+)
+def test_ends_a_sentence(text, expected):
+    from neurolens.lambdas.report import _ends_a_sentence
+
+    assert _ends_a_sentence(text) is expected
+
+
+@pytest.mark.parametrize(
     "kind,expected",
     [
         ("refusal", "refused"),
         ("truncated", "truncated"),
         ("bad_json", "bad_answer"),
         ("out_of_range", "bad_answer"),
+        ("unfinished_summary", "bad_answer"),
     ],
 )
 def test_a_bad_answer_fails_with_its_code_and_stores_nothing(aws, db, pg, make_cfg, kind, expected):

@@ -105,6 +105,14 @@ def _is_text(value):
     return isinstance(value, str)
 
 
+_CLOSERS = "'\"’”)]"
+
+
+def _ends_a_sentence(text):
+    text = text.rstrip().rstrip(_CLOSERS)
+    return bool(text) and text[-1] in ".!?…"
+
+
 def _report_problem(answer, duration):
     """Why the answer cannot be shown as a report, or None (M3g §5d). Only what the page relies
     on is checked, never lengths or counts: a long report is still a report."""
@@ -113,6 +121,8 @@ def _report_problem(answer, duration):
     for name in ("headline", "summary"):
         if not _is_text(answer.get(name)):
             return f"{name} is not text"
+    if not _ends_a_sentence(answer["summary"]):
+        return f"summary stops mid-sentence (ends {answer['summary'][-1:]!r})"
     for name in ("strengths", "improvements", "moments"):
         if not isinstance(answer.get(name), list):
             return f"{name} is not a list"
@@ -151,6 +161,8 @@ def _comparison_problem(answer, duration_a, duration_b):
     for name in ("headline", "summary"):
         if not _is_text(answer.get(name)):
             return f"{name} is not text"
+    if not _ends_a_sentence(answer["summary"]):
+        return f"summary stops mid-sentence (ends {answer['summary'][-1:]!r})"
     for name in ("differences", "a_does_better", "b_does_better", "suggestions"):
         if not isinstance(answer.get(name), list):
             return f"{name} is not a list"

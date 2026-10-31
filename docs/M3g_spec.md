@@ -172,13 +172,16 @@ Schema:
                   "brain_response": str, "suggestion": str | null } ],
   "strengths": [str], "improvements": [str] }
 ```
-The prompt asks for a headline of at most 120 characters, a summary of at most 350 (3 to 4 short sentences), 1-8 moments
+The prompt asks for a headline of at most 120 characters, a summary of 3 to 4 short sentences (sentences,
+not characters: the model cannot count characters), 1-8 moments
 and at most 2 strengths and 2 improvements. The text never quotes a table value: levels are
 words against typical viewing, times are whole seconds. That is guidance only. After parsing, the code checks
-only what the page relies on: every field present with its type, and
-`0 <= start <= end < duration_seconds` (each moment's time moves the video). It never rejects an
-answer for its length or counts: a long report is still a report, and `max_tokens` already stops a
-runaway answer (`truncated`). A `bad_answer` log line names the failed check.
+only what the page relies on: every field present with its type, `0 <= start <= end <
+duration_seconds` (each moment's time moves the video), and the summary ends a sentence (. ! ? or
+…, before any closing quote or bracket), because a summary cut mid-sentence once passed every
+other check. It never rejects an answer for its length or counts: a long report is still a report,
+and `max_tokens` already stops a runaway answer (`truncated`). A `bad_answer` log line names the
+failed check.
 Failure codes: `refused` (`stop_reason == "refusal"`), `truncated` (`max_tokens`), `bad_answer` (not JSON or fails the checks), `bedrock_error`
 (SDK error after its retries). The stored file adds `model`, `created_at` (UTC text) and the
 `usage` token counts, for cost tracking.

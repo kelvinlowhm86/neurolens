@@ -8,9 +8,7 @@ from neurolens import results
 # How long the prompt asks the answer to be (M3g §5d, M3h §5d). Guidance only: the report
 # Lambda checks that the answer makes sense, never its length or counts.
 MAX_HEADLINE = 120
-MAX_SUMMARY = 350
 MIN_MOMENTS, MAX_MOMENTS = 1, 8
-MAX_VERDICT = 400
 MAX_DIFFERENCES = 3
 MAX_COMPARISON_LISTS = 2
 MAX_LISTS = 2
@@ -86,9 +84,8 @@ _WRITING_RULES = f"""Writing:
 - Each moment's what_happens, brain_response and suggestion are one short sentence each. Each
   strength and improvement is one short sentence that adds to the moments, not a repeat of one.
 
-Limits: the headline at most {MAX_HEADLINE} characters, the summary at most
-{MAX_SUMMARY} characters, {MIN_MOMENTS} to {MAX_MOMENTS} moments, at most {MAX_LISTS}
-strengths and {MAX_LISTS} improvements.
+Limits: the headline at most {MAX_HEADLINE} characters, {MIN_MOMENTS} to {MAX_MOMENTS} moments,
+at most {MAX_LISTS} strengths and {MAX_LISTS} improvements.
 Each moment's start and end are whole seconds from 0 to last_second (given with the numbers),
 both included, start <= end."""
 
@@ -133,9 +130,9 @@ Writing:
 - Never write a number from the table (no "+0.55" or "avg +0.09"): say it in words against
   typical viewing or against the other video. Times in whole seconds are fine.
 
-Limits: the headline at most {MAX_HEADLINE} characters, the summary at most {MAX_VERDICT}
-characters, 1 to {MAX_DIFFERENCES} differences, at most {MAX_COMPARISON_LISTS} items in each
-list. Times are whole seconds from 0 to that video's last_second, both included, start <= end."""
+Limits: the headline at most {MAX_HEADLINE} characters, 1 to {MAX_DIFFERENCES} differences, at most
+{MAX_COMPARISON_LISTS} items in each list. Times are whole seconds from 0 to that video's
+last_second, both included, start <= end."""
 
 
 def _cell(values, second):

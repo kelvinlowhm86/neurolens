@@ -240,6 +240,7 @@ def test_either_missing_input_fails_without_calling_bedrock(aws, db, pg, make_cf
         ("b_out_of_range", "bad_answer"),
         ("both_null", "bad_answer"),
         ("past_the_shorter_end", "bad_answer"),
+        ("unfinished_summary", "bad_answer"),
     ],
 )
 def test_a_bad_answer_fails_with_its_code_and_stores_nothing(aws, db, pg, make_cfg, kind, expected):
@@ -252,6 +253,9 @@ def test_a_bad_answer_fails_with_its_code_and_stores_nothing(aws, db, pg, make_c
         response = answer(value, stop_reason="max_tokens")
     elif kind == "bad_json":
         response = text_response("this is not JSON")
+    elif kind == "unfinished_summary":
+        value["summary"] = "Sound carries it,"
+        response = answer(value)
     else:
         difference = value["differences"][0]
         if kind == "a_out_of_range":
