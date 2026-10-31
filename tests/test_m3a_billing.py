@@ -12,7 +12,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 from conftest import STARTER_CENTS, USER_ID
-from neurolens import billing
+from neurolens import billing, pricing
 from neurolens.db import PostgresDatabase
 
 MAX_S = 120  # max_video_duration_seconds
@@ -128,6 +128,13 @@ def test_reserve_moves_the_exact_price_and_writes_the_job_and_one_reserve_row(db
 def test_reserve_prices_with_estimate_cost_cents(db, client_ms, price):
     make_user(db, starter_cents=1000)
     assert reserve(db, client_ms)[1] == price
+
+
+def test_reserve_follows_the_pricing_constant(db, pg, monkeypatch):
+    monkeypatch.setattr(pricing, "CENTS_PER_BLOCK", 100)
+    make_user(db, starter_cents=1000)
+    assert reserve(db, 45000)[1] == 200  # 45 s is two blocks
+    assert money(pg) == (800, 200)
 
 
 def test_reserve_with_too_little_credit_raises_and_changes_nothing(db, pg):

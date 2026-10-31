@@ -13,6 +13,7 @@ import uuid
 
 import pytest
 from conftest import STARTER_CENTS, WEB_USER_ID
+from neurolens import pricing
 from neurolens.web.app import create_app
 
 KEY_RE = re.compile(rf"^uploads/{WEB_USER_ID}/([0-9a-f-]{{36}})(\.[a-z0-9]+)$")
@@ -85,6 +86,12 @@ def test_success_estimated_cost_uses_the_pricing_formula(client):
     assert data["estimated_cost_usd"] == 0.9
     data = client.post("/api/uploads/presign", json=body(client_duration_seconds=61)).get_json()
     assert data["estimated_cost_usd"] == 2.7  # ceil(60.5 / 30) = 3 blocks
+
+
+def test_estimated_cost_follows_the_pricing_constant(client, monkeypatch):
+    monkeypatch.setattr(pricing, "CENTS_PER_BLOCK", 100)
+    data = client.post("/api/uploads/presign", json=body(client_duration_seconds=45)).get_json()
+    assert data["estimated_cost_usd"] == 2.0  # 45 s is two blocks at 100 cents
 
 
 def test_each_request_gets_its_own_job_id(client):
