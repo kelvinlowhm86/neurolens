@@ -545,7 +545,7 @@
 <body>
 <div class="vt-scan" aria-hidden="true"></div>
 <header class="bar">
-  <a class="brand" href="/">NeuroLens</a>
+  <a class="brand" id="brand" href="/">NeuroLens</a>
   <span class="header-meta" id="headerMeta"></span>
   <div class="spacer"></div>
   <span class="credit" id="balance"></span>
@@ -1289,6 +1289,7 @@ $('startupRetry').addEventListener('click', () => start());
 
 function showSignedOut() {
   signedIn = false;
+  $('brand').href = '/';
   clearTimeout(historyPollTimer);
   openJobIds = new Set();
   closeAccountMenu();
@@ -1310,6 +1311,7 @@ function showSignedOut() {
 
 function showApp(meJson) {
   me = meJson; signedIn = true;
+  $('brand').href = '/app';
   $('startupPanel').classList.remove('active');
   $('signInPanel').classList.remove('active');
   applyChooser();
@@ -4294,19 +4296,29 @@ const ICON = {
 function updateTransport() {
   const T = totalSeconds();
   const t = currentTime();
+  // Runs every frame while playing: swap an icon only when its state changes,
+  // or a click that lands on the icon is lost (its target is replaced mid-click).
   const play = $('tlPlay');
   if (play) {
     const playing = hasLocalVideo() ? !video.paused : virtualPlaying;
-    play.innerHTML = playing ? ICON.pause : ICON.play;
-    play.setAttribute('aria-label', playing ? 'Pause' : 'Play');
+    const state = playing ? 'pause' : 'play';
+    if (play.dataset.state !== state) {
+      play.dataset.state = state;
+      play.innerHTML = ICON[state];
+      play.setAttribute('aria-label', playing ? 'Pause' : 'Play');
+    }
   }
   const time = $('tlTime');
   if (time) time.textContent = `${fmt(t)} / ${fmt(T)}`;
   const snd = $('tlSound');
   if (snd) snd.hidden = !hasLocalVideo();
   if (snd && hasLocalVideo()) {
-    snd.innerHTML = video.muted ? ICON.mute : ICON.sound;
-    snd.setAttribute('aria-label', video.muted ? 'Sound on' : 'Sound off');
+    const state = video.muted ? 'mute' : 'sound';
+    if (snd.dataset.state !== state) {
+      snd.dataset.state = state;
+      snd.innerHTML = ICON[state];
+      snd.setAttribute('aria-label', video.muted ? 'Sound on' : 'Sound off');
+    }
   }
   const second = $('brainSecond');
   if (second) second.textContent = currentResult ? fmt(t) : '';
