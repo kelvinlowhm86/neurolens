@@ -38,8 +38,12 @@ failure. These are model predictions of an average viewer's brain, not
 measurements of real people.
 
 How to read the curves:
-- The response trails what is seen and heard by about 1 to 3 seconds and is smoothed, so match
-  each rise or fall to what happened on screen up to 3 seconds before it.
+- The response trails what is seen and heard by about 1 to 3 seconds and is smoothed: a rise or
+  fall comes from what was shown and heard up to 3 seconds before it, not from what is on screen
+  at that second.
+- The curves say where the response rises or falls and how strongly; the pictures and words say
+  what causes it. For every rise or fall you write about, first find in the pictures and words
+  the scene that plausibly causes it, and leave it out when no scene does.
 - The opening: judge it by its level against 0 and how fast it rises. The visual response needs a
   few seconds to build even after a strong first shot, so a gentle rise over the first 3 to 5
   seconds is not a flaw. An opening that stays below 0, for example a dark, empty or silent
@@ -70,14 +74,17 @@ _WRITING_RULES = f"""Writing:
   drop-off, clicks or sharing, and never give a score.
 - Suggest changes that fit what the video is trying to do. Faces lift the visual response, but
   do not recommend adding people to every weak stretch: a product shot, a landscape or a screen
-  recording can be the point of the video.
+  recording can be the point of the video. A suggestion must make sense for the scene it is
+  about: never suggest what the video already does in the seconds around it, such as cutting to
+  a shot it has just shown.
 - Write for a video maker, in plain words. Cite times in whole seconds. Name what happens on
-  screen from the pictures. Say clearly when the brain data and what happens on screen do not
-  agree.
+  screen from the pictures.
 - Moments are the stretches worth the maker's attention: clear peaks and clear dips in overall,
   and the opening or ending only when they are notable. They are not chapters: leave ordinary
   stretches out. Each moment's brain_response says whether it is a peak or a dip and where it sits
   against 0. A flat video has few clear peaks or dips: give fewer moments, never invent them.
+- A moment starts when the scene that causes it starts and ends when the response it causes
+  ends, so a maker who jumps to it sees the cause. Its what_happens describes that scene only.
 - Every claim about level must hold in the numbers: call a stretch the highest, the lowest, a
   peak or a dip, stronger or weaker than another, or say a level holds throughout, only when the
   values you were given show it.
@@ -124,7 +131,8 @@ Writing:
 - Differences are the few stretches that explain the verdict most, no two covering the same
   stretch: each one names its time in A, in B or in both (null for the video where it has no
   match), what differs on screen and how the response differs, one sentence each. Leave out
-  stretches where the two behave alike.
+  stretches where the two behave alike, and any difference no scene plausibly explains. Its times
+  run from the start of the scene that causes it to the end of the response it causes.
 - Each list item is one short sentence that adds to the differences, not a repeat of one.
 - Every claim about level must hold in the numbers you were given.
 - Never write a number from the table (no "+0.55" or "avg +0.09"): say it in words against

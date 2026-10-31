@@ -117,7 +117,9 @@ is never treated as stale.
   failure; read the three groups, not only overall, and name them seeing, hearing and
   understanding as the page does, never writing a table column name (`muted_overall` becomes
   "with the sound off"); the response trails the screen by about
-  1-3 s and is smoothed; judge the opening by its level and rise (vision needs a few seconds to
+  1-3 s and is smoothed; the curves say where and how strongly, the pictures and words say why:
+  every rise or fall written about is tied to the scene that plausibly causes it (up to 3 s
+  before) and left out when no scene does; judge the opening by its level and rise (vision needs a few seconds to
   build), and treat a drop over a final logo card as expected; overall above `muted.overall`
   means sound carries that stretch; the transcript can misspell names (take them from on-screen
   text). Writing: verdict first, strengths before weaknesses; "suggests attention" is allowed,
@@ -126,7 +128,9 @@ is never treated as stale.
   (or call-to-action screen) is never a dip or an improvement unless the fall starts before it.
   Moments are the stretches worth the maker's attention (clear peaks and dips, the opening or
   ending only when notable), not chapters covering the video, and carry no strong/weak label:
-  each says in words whether it is a peak or a dip. Every claim about level (highest, lowest,
+  each says in words whether it is a peak or a dip. A moment runs from the start of the scene
+  that causes it to the end of the response, so jumping to it shows the cause; its suggestion
+  must make sense for that scene (never what the video already does around it). Every claim about level (highest, lowest,
   throughout) must hold in the numbers. Fair means accurate: a video mostly
   below 0 is said so plainly; values within about 0.05 of 0 are typical (whole-video means of
   our 7 real results run +0.03 to +0.23). Suggestions fit the video's purpose (not "add faces"
