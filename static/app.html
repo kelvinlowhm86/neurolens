@@ -840,8 +840,8 @@ const NS = 'http://www.w3.org/2000/svg';
 let samplesData = null, jobsCache = [];
 let currentResult = null, currentSummary = null, currentContext = null;
 let comparison = null, mutedOn = false, resultSeq = 0, compareRequest = 0;
-let reportSeq = 0, reportPollTimer = null, reportJob = null, reportWritingSince = 0;
-let comparisonReportSeq = 0, comparisonPollTimer = null, comparisonWritingSince = 0;
+let reportSeq = 0, reportPollTimer = null, reportJob = null;
+let comparisonReportSeq = 0, comparisonPollTimer = null;
 let signedIn = false, me = null, limits = null;
 let virtualTime = 0, virtualPlaying = false, virtualAnchor = 0, virtualRaf = 0, videoRaf = 0;
 let videoJob = null, videoRetried = false, videoRequest = 0, videoPlaying = false;
@@ -2503,7 +2503,6 @@ function stopReportPolling() {
 function stopComparisonPolling() {
   clearTimeout(comparisonPollTimer);
   comparisonPollTimer = null;
-  comparisonWritingSince = 0;
 }
 
 function fillReportList(host, wrap, heading, items, max) {
@@ -2538,7 +2537,6 @@ function resetReportPanel() {
   stopComparisonPolling();
   stopProgress();
   comparisonReportSeq += 1;
-  reportWritingSince = 0;
   comparisonReport = null;
   comparisonState = '';
   comparisonStateText = '';
@@ -2660,18 +2658,11 @@ function applyComparisonState(data) {
     comparisonStateText = 'Writing your comparison…';
     comparisonCanRetry = false;
     refreshComparePanel();
-    if (!comparisonWritingSince) comparisonWritingSince = Date.now();
-    if (Date.now() - comparisonWritingSince <= 10 * 60 * 1000) {
-      clearTimeout(comparisonPollTimer);
-      const target = comparison;
-      const seq = comparisonReportSeq;
-      comparisonPollTimer = setTimeout(() => refreshComparison(target, seq), 5000);
-    } else {
-      comparisonState = 'failed';
-      comparisonStateText = 'The comparison is taking too long. Try again later.';
-      comparisonCanRetry = false;
-      refreshComparePanel();
-    }
+    // The server answers a stale run as failed, so polling always ends.
+    clearTimeout(comparisonPollTimer);
+    const target = comparison;
+    const seq = comparisonReportSeq;
+    comparisonPollTimer = setTimeout(() => refreshComparison(target, seq), 5000);
     return;
   }
   if (state === 'failed') {
@@ -2723,7 +2714,6 @@ async function refreshComparison(target, seq) {
 function setupComparisonReport() {
   comparisonReportSeq += 1;
   stopComparisonPolling();
-  comparisonWritingSince = 0;
   comparisonCanRetry = false;
   if (!comparison) return;
   comparisonReport = null;
@@ -2765,13 +2755,9 @@ function applyReportState(jobId, seq, data) {
     hideReportAnswer();
     $('reportSkeleton').hidden = false;
     setChartMoments([]);
-    if (!reportWritingSince) reportWritingSince = Date.now();
-    if (Date.now() - reportWritingSince <= 10 * 60 * 1000) {
-      clearTimeout(reportPollTimer);
-      reportPollTimer = setTimeout(() => refreshReport(jobId, seq), 5000);
-    } else {
-      $('reportStateText').textContent = 'The report is taking too long. Try again later.';
-    }
+    // The server answers a stale run as failed, so polling always ends.
+    clearTimeout(reportPollTimer);
+    reportPollTimer = setTimeout(() => refreshReport(jobId, seq), 5000);
     return;
   }
   if (state === 'failed') {
@@ -2844,7 +2830,6 @@ async function requestReport() {
     if (seq !== reportSeq || reportJob !== jobId) return;
     if (res.status === 401) return window.location.reload();
     if (res.status === 202) {
-      reportWritingSince = Date.now();
       $('reportStateText').textContent = 'Writing your report…';
       $('reportActions').hidden = true;
       $('reportSkeleton').hidden = false;
@@ -2902,7 +2887,6 @@ async function requestComparison() {
     if (seq !== comparisonReportSeq || comparison !== target) return;
     if (res.status === 401) return window.location.reload();
     if (res.status === 202) {
-      comparisonWritingSince = Date.now();
       applyComparisonState({ report_state: 'writing' });
       return;
     }

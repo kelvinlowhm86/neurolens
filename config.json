@@ -29,7 +29,7 @@
     "model": "us.anthropic.claude-sonnet-4-6",
     "max_tokens": 16000,
     "max_tries": 3,
-    "stale_minutes": 10
+    "stale_minutes": 16
   },
   "db": {
     "backend": "data_api"

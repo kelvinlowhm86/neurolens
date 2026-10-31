@@ -280,8 +280,8 @@ Modest changes; the redesign comes later.
   the open video's own report (or its states). The comparison stays selected while visiting
   Analysis or Report, and clearing it (None) returns to Analysis. There is no "Full report" link.
   - Jobs: `GET /api/compare/<main>/<other>/report`, then the same states and wording pattern as
-    M3g §6: "Write comparison" with "Free"; "Writing your comparison…" (checks every 5 s, stops
-    after 10 min; the verdict shows the same shimmering placeholder as a report); "Couldn't
+    M3g §6: "Write comparison" with "Free"; "Writing your comparison…" (checks every 5 s until
+    `ready` or `failed`; the verdict shows the same shimmering placeholder as a report); "Couldn't
     write the comparison." with "Try again" while tries are left. Either result without
     `frames`: no report and no write offer. The POST uses `postJSON`.
   - Samples: the stored comparison for the pair; without one, no report and no write offer.
@@ -316,7 +316,7 @@ deleted when either video is deleted, and expires after 30 days.
 No change. The report Lambda's role already reads `results/*` and puts and deletes
 `results/*.report.json`, which covers the comparison key; its Data API access covers the new
 table. The web role and the reaper already delete `results/*`. Reserved concurrency 5 and the
-300 s timeout stay (one comparison is one Bedrock call, like a report).
+900 s timeout stay (one comparison is one Bedrock call, like a report).
 
 ## 11. Laptop (`infra/local_stack.py`)
 `_report_starter` takes the event. For `{"pair": …}` it runs `write_comparison` in a thread with

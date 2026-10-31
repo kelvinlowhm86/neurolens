@@ -507,7 +507,8 @@ resource "aws_lambda_function" "report" {
   filename                       = data.archive_file.m3a_lambdas.output_path
   source_code_hash               = data.archive_file.m3a_lambdas.output_base64sha256
   layers                         = [aws_lambda_layer_version.report.arn]
-  timeout                        = 300
+  # Three SDK attempts of up to 240 s each fit (M3g §5a); stale_minutes stays above it.
+  timeout                        = 900
   memory_size                    = 512
   reserved_concurrent_executions = 5
 

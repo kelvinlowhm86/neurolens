@@ -100,8 +100,9 @@ cfg)`, or `{"pair": [x, y]}` → `write_comparison(job_a, job_b, …)` (M3h §5a
 5. Put `results/<job_id>.report.json`, then `finish_report(ready)`. If that changes no row (the
    job was deleted meanwhile), delete the object just written.
 Any unexpected exception: log with the job id, `finish_report(failed, "error")`, return
-normally (no Lambda retry). The Lambda's async retries are set to 0 and its timeout to 300 s;
-`stale_minutes` (10) is above that, so a live run is never treated as stale.
+normally (no Lambda retry). The Lambda's async retries are set to 0 and its timeout to 900 s, so the SDK's three attempts of
+up to 240 s fit and a slow call fails loudly; `stale_minutes` (16) is above that, so a live run
+is never treated as stale.
 
 ### 5b. Request (`neurolens/report_prompt.py`, pure, numpy-free)
 `build_request(result, frames, words)` returns `(system, content)`:
@@ -189,7 +190,8 @@ A Report tab beside the charts of a finished job. States, few words:
   the POST answers.
 - writing: "Writing your report…" in an `aria-live="polite"` element, with a shimmering
   placeholder shaped like the finished report (headline bar, text lines, two moment blocks);
-  the page checks `GET …/report` every 5 s, stops after 10 min. The placeholder is static under
+  the page checks `GET …/report` every 5 s until the server answers `ready` or `failed` (a stale
+  run is answered `failed`). The placeholder is static under
   `prefers-reduced-motion: reduce`.
 - ready: headline, summary, then strengths and improvements (side by side on desktop, stacked
   when narrow; at most the first two of each), then the moments; the note "Written by Claude
