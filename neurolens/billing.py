@@ -31,7 +31,7 @@ OK = "ok"
 STALE_AFTER_S = 90
 # The wording of the research-consent box (M3f §5a). A wording change needs a new value here and
 # the new text on the page together; old jobs keep the version they agreed to.
-CONSENT_VERSION = "2026-10-25"
+CONSENT_VERSION = "2026-10-31"
 # A session row older than this (by its last use) no longer signs anybody in (M3f §6b).
 SESSION_DAYS = 30
 # The reward preview's defaults when a caller does not supply config.json's research limits.

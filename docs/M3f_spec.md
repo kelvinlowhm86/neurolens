@@ -123,8 +123,7 @@ place in line among other users, waking the database from the landing page.
    reason.
 9. **Phone results:** the moments sit as two rows of two pictures under their label; the scrubber
    has its own full-width line above the buttons.
-10. **Retention on a result:** one quiet link "Add audience retention" (§5d), no box, title or
-    sentence.
+10. **Retention on a result:** the thank-you card (§5d), no box or title.
 11. **Privacy page and retention guide** use the app's dark look and font, plain words ("up to 31
     days", not S3 rule wording) and the contact address joshualumzy@gmail.com as a mailto link.
 12. **Landing:** "How it works" step 2 ends "A result takes about 10 minutes."; a gap between "How it
@@ -146,10 +145,11 @@ place in line among other users, waking the database from the landing page.
 ### 5a. Consent
 - One box per batch, unticked, never required:
   "Share for research and to train NeuroLens's own models ([details](/static/privacy.html#research)).
-  I own the rights to it."
+  I own the rights to it." Under it, aligned with the label, a quiet line: "Add its YouTube
+  retention curve later and this analysis can be free."
 - The page sends `consent_version`, the version of the wording it showed, with each presign that
   has `research_consent`. The server accepts only its current `billing.CONSENT_VERSION`
-  (`"2026-10-25"`); any other value → 409 `consent_outdated` ("Please refresh the page."), nothing
+  (`"2026-10-31"`); any other value → 409 `consent_outdated` ("Please refresh the page."), nothing
   reserved. It stores `consent_version` and `consented_at = now()` per consented job (migration 006).
   A wording change means a new constant and the new text on the page together; old jobs keep the
   version they agreed to.
@@ -163,8 +163,10 @@ place in line among other users, waking the database from the landing page.
   deleted 90 days after upload if no curve was added; "Stop sharing", Delete or deleting the account
   removes the copy at once (a model trained before is not retrained, but the data is not used again);
   the uploader confirms rights and that identifiable people agreed to appear, keeps all rights and
-  gives a free, non-exclusive licence for these purposes; a valid curve makes that video's analysis
-  free.
+  gives a free, non-exclusive licence for these purposes; as a thank-you, a valid audience-retention
+  curve can make that video's analysis free: its price comes back as credit (not cash), once per
+  video (the same file uploaded twice counts once), up to 5 videos every 30 days, only on accounts
+  that have had credit added; valid means at least 20 points, not flat and not rising overall.
 
 ### 5b. What is stored where
 - `dataset/<job_id>/`: the video (`video<ext>`) and retention snapshots
@@ -213,8 +215,10 @@ place in line among other users, waking the database from the landing page.
 
 ### 5d. Adding a curve
 - Offered on a done, shared, not-removed job: the quiet "Add audience retention" link on its History
-  row and results page until its first snapshot, and always in its "⋯" menu (a newer snapshot). In the
-  upload dialog, per row (§2a).
+  row, and always in its "⋯" menu (a newer snapshot). On the results page, until its first snapshot,
+  a bordered thank-you card: "Thanks for sharing. This analysis can be free." when a reward is
+  possible (the job's `curve_reward_cents` > 0), otherwise "Thanks for sharing.", with a quiet
+  "Add audience retention" button. In the upload dialog, per row (§2a).
 - The form (a small pop-up): the video name, the guide link, "Choose file", and three required choice
   rows: views ("Under 1k", "1k–10k", "10k–100k", "Over 100k"), published ("This week", "This month",
   "Earlier"), promoted with ads ("Yes", "No"). When a reward is possible (below) the form says "Add a

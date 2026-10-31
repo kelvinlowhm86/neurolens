@@ -118,6 +118,8 @@
   .consent-row { display: flex; align-items: flex-start; gap: 8px; font-size: 12px; line-height: 1.45; color: var(--muted); }
   .consent-row input { margin-top: 3px; flex-shrink: 0; accent-color: var(--accent); }
   .consent-row a { color: var(--ink); }
+  .consent-copy { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+  .consent-note { margin: 0; font-size: 12px; line-height: 1.45; color: var(--muted); }
   .upload-progress { display: none; height: 3px; background: var(--line); border-radius: 2px; overflow: hidden; }
   .upload-progress.active { display: block; }
   .upload-bar { height: 100%; width: 0; background: var(--accent); transition: width .15s; }
@@ -161,6 +163,10 @@
   .history-row .history-more, .history-row [data-cancel-id] { grid-row: 1; grid-column: 3; }
   .history-link { background: none; border: 0; padding: 0; color: var(--muted); font-size: 11.5px; text-decoration: underline; text-underline-offset: 2px; }
   .history-link:hover { color: var(--ink); }
+  .retention-card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px; display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; font-size: 12px; line-height: 1.45; color: var(--muted); }
+  .retention-card[hidden] { display: none; }
+  .retention-card p { flex: 1 1 180px; min-width: 0; margin: 0; }
+  .retention-card .btn-ghost { flex: none; padding: 5px 10px; min-height: 0; font-size: 12px; }
   .history-more { width: 26px; height: 24px; border: 1px solid var(--line); border-radius: var(--radius); background: none; color: var(--muted); display: grid; place-items: center; font-size: 15px; line-height: 1; }
   .history-more:hover, .history-more[aria-expanded="true"] { color: var(--ink); border-color: var(--muted); }
   .row-menu { position: fixed; min-width: 170px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 5px; display: flex; flex-direction: column; gap: 2px; z-index: 40; box-shadow: 0 12px 30px rgba(0,0,0,.4); }
@@ -582,7 +588,10 @@
         </div>
       </section>
       <div class="timeline" id="timeline"></div>
-      <button class="history-link" id="retentionLink" type="button" hidden>Add audience retention</button>
+      <div class="retention-card" id="retentionCard" hidden>
+        <p id="retentionCardText">Thanks for sharing.</p>
+        <button class="btn-ghost" id="retentionCardBtn" type="button">Add audience retention</button>
+      </div>
     </div>
   </aside>
 
@@ -792,7 +801,10 @@
     <div class="batch-total" id="batchTotal" hidden></div>
     <div class="consent-row">
       <input type="checkbox" id="consentBox">
-      <label for="consentBox">Share for research and to train NeuroLens's own models (<a href="/static/privacy.html#research" target="_blank" rel="noopener">details</a>). I own the rights to it.</label>
+      <div class="consent-copy">
+        <label for="consentBox">Share for research and to train NeuroLens's own models (<a href="/static/privacy.html#research" target="_blank" rel="noopener">details</a>). I own the rights to it.</label>
+        <p class="consent-note">Add its YouTube retention curve later and this analysis can be free.</p>
+      </div>
     </div>
     <div class="actions">
       <button class="btn-white" id="batchUpload" disabled>Upload</button>
@@ -2078,7 +2090,7 @@ const UPLOAD_STALL_MS = 60000;
 
 // The version of the consent wording shown in the upload dialog; the server records it per job and
 // refuses an outdated one (M3f §5a). Change it together with the wording and billing.CONSENT_VERSION.
-const CONSENT_VERSION = '2026-10-25';
+const CONSENT_VERSION = '2026-10-31';
 
 async function uploadEntry(entry) {
   const item = entry.item;
@@ -3069,21 +3081,28 @@ function openResult(jobId, result) {
   return true;
 }
 
-// The results page shows the quiet link for a shared job until its first snapshot;
+// The results page shows the thank-you card for a shared job until its first snapshot;
 // it and the History row's link and "⋯" item open the same curve form (§5d).
 let resultCurve = null;
 function showRetention(jobId, title) {
+  let cached = null;
   if (jobId) {
-    const cached = jobsCache.find(j => j.job_id === jobId);
+    cached = jobsCache.find(j => j.job_id === jobId);
     const sharing = cached ? !!cached.sharing : true;
     const noCurve = cached ? cached.curve_count === 0 : true;
     resultCurve = sharing && noCurve ? { jobId, title } : null;
   } else {
     resultCurve = null;
   }
-  $('retentionLink').hidden = !resultCurve;
+  $('retentionCard').hidden = !resultCurve;
+  if (resultCurve) {
+    const reward = jobCurveTarget(cached || { job_id: jobId, filename: title }).rewardCents;
+    $('retentionCardText').textContent = reward > 0
+      ? 'Thanks for sharing. This analysis can be free.'
+      : 'Thanks for sharing.';
+  }
 }
-$('retentionLink').addEventListener('click', () => {
+$('retentionCardBtn').addEventListener('click', () => {
   if (resultCurve) {
     const cached = jobsCache.find(j => j.job_id === resultCurve.jobId);
     openCurve(jobCurveTarget(cached || { job_id: resultCurve.jobId, filename: resultCurve.title }));
