@@ -307,6 +307,18 @@
   .skel-block { background: var(--well); border: 1px solid var(--line); padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
   .skel-shimmer { background: linear-gradient(90deg, var(--line) 0%, rgba(255,255,255,.09) 42%, var(--line) 84%); background-size: 220% 100%; animation: shimmer 1.8s linear infinite; }
   @keyframes shimmer { from { background-position: 220% 0; } to { background-position: -220% 0; } }
+  /* The writing skeleton: lines appear one after another, like text being written,
+     and each one's shimmer starts as it appears. */
+  @keyframes skel-in { from { opacity: 0; } }
+  .report-skeleton > *, .compare-skeleton > * { animation: skel-in var(--t-enter) var(--ease-out) backwards; }
+  .report-skeleton > .skel-shimmer, .compare-skeleton > .skel-shimmer {
+    animation: skel-in var(--t-enter) var(--ease-out) backwards, shimmer 1.8s linear infinite;
+  }
+  .report-skeleton > *:nth-child(2), .compare-skeleton > *:nth-child(2) { animation-delay: 150ms; }
+  .report-skeleton > *:nth-child(3), .compare-skeleton > *:nth-child(3) { animation-delay: 300ms; }
+  .report-skeleton > *:nth-child(4), .compare-skeleton > *:nth-child(4) { animation-delay: 450ms; }
+  .report-skeleton > *:nth-child(n+5), .compare-skeleton > *:nth-child(n+5) { animation-delay: 600ms; }
+  .skel-note { font-size: 12px; color: var(--muted); }
 
   .chart-head { display: flex; align-items: flex-start; gap: 8px 16px; flex-wrap: wrap; }
   .chart-title { min-width: 0; }
@@ -348,6 +360,10 @@
   .xaxis span.end { transform: translateX(-100%); }
   .chart-label { position: absolute; left: 4px; font: 500 11px var(--display); color: var(--muted); pointer-events: none; }
   .reveal-edge { position: absolute; top: 8px; bottom: 18px; width: 2px; margin-left: -1px; background: var(--accent); box-shadow: 0 0 8px rgba(255,138,42,.85); pointer-events: none; z-index: 4; }
+  .chart-hover-line { position: absolute; top: 0; width: 1px; margin-left: -.5px; background: rgba(236,237,239,.5); opacity: 0; transition: opacity 100ms var(--ease-out); pointer-events: none; z-index: 3; }
+  .chart-hover-line.hover-on { opacity: 1; }
+  .chart-hover-tip { position: absolute; top: 0; font: 500 11px/1.7 var(--mono); color: var(--ink-2); background: rgba(11,12,14,.92); padding: 0 5px; border-radius: 2px; white-space: nowrap; opacity: 0; transition: opacity 100ms var(--ease-out); pointer-events: none; z-index: 6; }
+  .chart-hover-tip.hover-on { opacity: 1; }
 
   .strips-wrap { flex: 1 1 0; min-height: 180px; display: flex; flex-direction: column; gap: 10px; }
   #stripsCard .panel-head { margin-bottom: 0; }
@@ -424,16 +440,16 @@
   .stage-list { list-style: none; margin: 0; padding: 0; width: 380px; flex: none; overflow-y: auto; scrollbar-width: thin; }
   .stage-item { display: flex; gap: 14px; min-height: 56px; }
   .stage-rail { width: 18px; flex: none; display: flex; flex-direction: column; align-items: center; }
-  .stage-dot { width: 12px; height: 12px; margin-top: 4px; border-radius: 50%; box-sizing: border-box; border: 2px solid var(--line); background: transparent; flex: none; }
-  .stage-line { width: 2px; flex: 1; background: var(--line); margin: 4px 0; }
+  .stage-dot { width: 12px; height: 12px; margin-top: 4px; border-radius: 50%; box-sizing: border-box; border: 2px solid var(--line); background: transparent; flex: none; transition: border-color 250ms var(--ease-out), background-color 250ms var(--ease-out), box-shadow 250ms var(--ease-out); }
+  .stage-line { width: 2px; flex: 1; background: var(--line); margin: 4px 0; transition: background-color 250ms var(--ease-out); }
   .stage-content { flex: 1; display: flex; flex-direction: column; gap: 5px; padding-bottom: 12px; min-width: 0; }
   .stage-top { display: flex; align-items: baseline; gap: 8px; }
-  .stage-label { font-size: 15px; color: var(--muted); }
+  .stage-label { font-size: 15px; color: var(--muted); transition: color 250ms var(--ease-out); }
   .stage-time { margin-left: auto; font: 12px var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
   .stage-progress { height: 3px; background: var(--line); border-radius: 2px; overflow: hidden; }
-  .stage-progress span { display: block; height: 3px; width: 0; background: var(--accent); }
-  .stage-item.active .stage-progress span { animation: stagepulse 1.4s ease-in-out infinite alternate; }
-  @keyframes stagepulse { from { width: 16%; opacity: .55; } to { width: 58%; opacity: 1; } }
+  .stage-progress span { display: block; height: 3px; width: 100%; }
+  .stage-item.active .stage-dot { animation: stage-breathe 2.4s var(--ease-io) infinite; }
+  @keyframes stage-breathe { 0%, 100% { opacity: 1; } 50% { opacity: .55; } }
   .stage-item.done .stage-dot { border-color: var(--accent); background: var(--accent); }
   .stage-item.done .stage-line { background: var(--accent); }
   .stage-item.done .stage-label, .stage-item.active .stage-label { color: var(--ink); }
@@ -704,6 +720,7 @@
             <span class="skel-line skel-shimmer" style="width:73%"></span>
             <div class="skel-block"><span class="skel-line skel-shimmer" style="width:18%"></span><span class="skel-line skel-shimmer"></span><span class="skel-line skel-shimmer" style="width:84%"></span></div>
             <div class="skel-block"><span class="skel-line skel-shimmer" style="width:24%"></span><span class="skel-line skel-shimmer"></span><span class="skel-line skel-shimmer" style="width:69%"></span></div>
+            <p class="skel-note">Usually about a minute.</p>
           </div>
           <div class="report-answer" id="reportAnswer" hidden>
             <p class="report-key" id="reportKey" hidden></p>
@@ -757,6 +774,7 @@
               <span class="skel-line skel-shimmer" style="width:78%"></span>
               <div class="skel-block"><span class="skel-line skel-shimmer" style="width:22%"></span><span class="skel-line skel-shimmer"></span><span class="skel-line skel-shimmer" style="width:81%"></span></div>
               <div class="skel-block"><span class="skel-line skel-shimmer" style="width:26%"></span><span class="skel-line skel-shimmer"></span><span class="skel-line skel-shimmer" style="width:66%"></span></div>
+              <p class="skel-note">Usually about a minute.</p>
             </div>
             <div class="compare-actions" id="compareActions" hidden>
               <button class="btn-white" id="compareWrite" type="button">Write comparison</button>
@@ -893,7 +911,9 @@ let signedIn = false, me = null, limits = null;
 let virtualTime = 0, virtualPlaying = false, virtualAnchor = 0, virtualRaf = 0, videoRaf = 0;
 let videoJob = null, videoRetried = false, videoRequest = 0, videoPlaying = false;
 let playheads = [];
+let hoverMarks = [], chartHoverT = null, chartHoverRaf = 0, chartHoverHideTimer = 0;
 let firstReveal = null;
+let mainChartRecord = null, compareChartRecord = null, compareMorphRaf = 0;
 let currentTab = 'charts';
 let chartMoments = [];
 let comparisonReport = null, comparisonState = '', comparisonStateText = '', comparisonCanRetry = false;
@@ -2439,10 +2459,20 @@ function stageTimes(stages) {
   return parsed.sort((a, b) => a.at - b.at);
 }
 
-function stageRow(key, label, state, atMs, durationMs) {
+function stageBar() {
+  const bar = document.createElement('span');
+  bar.className = 'stage-progress';
+  const fill = document.createElement('span');
+  fill.className = 'skel-shimmer';
+  bar.append(fill);
+  return bar;
+}
+
+function stageRow(spec) {
   const li = document.createElement('li');
-  li.className = `stage-item ${state}`;
-  li.dataset.stageKey = key;
+  li.className = `stage-item ${spec.state}`;
+  li.dataset.stageKey = spec.key;
+  if (Number.isFinite(spec.at)) li.dataset.stageStart = String(spec.at);
   const rail = document.createElement('span');
   rail.className = 'stage-rail';
   const dot = document.createElement('span');
@@ -2456,20 +2486,38 @@ function stageRow(key, label, state, atMs, durationMs) {
   top.className = 'stage-top';
   const name = document.createElement('span');
   name.className = 'stage-label';
-  name.textContent = label;
+  name.textContent = spec.label;
   const time = document.createElement('span');
   time.className = 'stage-time';
-  time.textContent = Number.isFinite(durationMs) && durationMs >= 0 ? fmt(durationMs / 1000) : '';
+  time.textContent = Number.isFinite(spec.duration) && spec.duration >= 0 ? fmt(spec.duration / 1000) : '';
   top.append(name, time);
   content.append(top);
-  if (state === 'active') {
-    const bar = document.createElement('span');
-    bar.className = 'stage-progress';
-    bar.append(document.createElement('span'));
-    content.append(bar);
-  }
+  if (spec.state === 'active') content.append(stageBar());
   li.append(rail, content);
   return li;
+}
+
+// Update the rows this poll changed in place, so colours change over 250ms instead of resetting.
+function updateStageRow(li, spec) {
+  li.className = `stage-item ${spec.state}`;
+  if (Number.isFinite(spec.at)) li.dataset.stageStart = String(spec.at);
+  else delete li.dataset.stageStart;
+  const time = li.querySelector('.stage-time');
+  if (time) time.textContent = Number.isFinite(spec.duration) && spec.duration >= 0 ? fmt(spec.duration / 1000) : '';
+  const content = li.querySelector('.stage-content');
+  if (!content) return;
+  const bar = content.querySelector('.stage-progress');
+  if (spec.state === 'active' && !bar) content.append(stageBar());
+  else if (spec.state !== 'active' && bar) bar.remove();
+}
+
+function renderProgressStages(specs) {
+  const host = $('progressStages');
+  const rows = [...host.children];
+  const match = rows.length === specs.length
+    && rows.every((li, i) => li.dataset.stageKey === specs[i].key);
+  if (match) rows.forEach((li, i) => updateStageRow(li, specs[i]));
+  else host.replaceChildren(...specs.map(stageRow));
 }
 
 function stopProgress() {
@@ -2479,6 +2527,10 @@ function stopProgress() {
   progressStatus = '';
   progressStartedAt = 0;
   progressStages = [];
+  if (progressTabTitle) {
+    progressTabTitle = false;
+    if (tabTotal === 0 && !tabTitleDone) document.title = 'NeuroLens';
+  }
   $('progressPanel').hidden = true;
 }
 
@@ -2541,15 +2593,21 @@ function showProgress(job) {
   $('compareTab').hidden = true;
   $('progressPanel').hidden = false;
   $('progressTitle').textContent = shortName(title, 64);
+  if (!progressTabTitle) {
+    progressTabTitle = true;
+    if (tabTotal === 0 && !tabTitleDone) document.title = 'Analysing · NeuroLens';
+  }
 
   const atByName = new Map(stages.map(entry => [entry.stage, entry.at]));
   const firstWork = stages.length ? stages[0].at : null;
   const lastStage = stages.length ? stages[stages.length - 1].stage : null;
-  const rows = [];
-  rows.push(stageRow('uploaded', 'Uploaded', 'done', created, 0));
-  rows.push(stageRow('queued', 'Waiting for the GPU', status === 'queued' ? 'active' : 'done', created,
-    status === 'queued' ? null : (firstWork != null ? firstWork - created : (claimed > 0 ? claimed - created : null))));
-
+  const specs = [];
+  // at stays null for the fixed rows: updateProgressClock ticks only a work stage's own time.
+  specs.push({ key: 'uploaded', label: 'Uploaded', state: 'done', at: null, duration: 0 });
+  specs.push({
+    key: 'queued', label: 'Waiting for the GPU', state: status === 'queued' ? 'active' : 'done', at: null,
+    duration: status === 'queued' ? null : (firstWork != null ? firstWork - created : (claimed > 0 ? claimed - created : null)),
+  });
   WORK_STAGE_ORDER.forEach((key, i) => {
     const at = atByName.get(key);
     const laterStarted = WORK_STAGE_ORDER.slice(i + 1).some(next => atByName.has(next));
@@ -2561,11 +2619,9 @@ function showProgress(job) {
       const next = stages.find(entry => entry.at > at);
       duration = next ? next.at - at : (status === 'processing' && key === lastStage ? now - at : null);
     }
-    const li = stageRow(key, WORK_STAGE_LABELS[key], state, at, duration);
-    if (at != null) li.dataset.stageStart = String(at);
-    rows.push(li);
+    specs.push({ key, label: WORK_STAGE_LABELS[key], state, at, duration });
   });
-  $('progressStages').replaceChildren(...rows);
+  renderProgressStages(specs);
 
   $('progressStatus').textContent = status === 'queued' ? 'waiting for the GPU' : 'running';
   $('progressNote').textContent = status === 'queued'
@@ -3516,6 +3572,9 @@ $('stopShareBtn').addEventListener('click', async () => {
 // tabJobs holds a job's id once it exists, with whether it has appeared in the list yet.
 let tabTotal = 0, tabTitleDone = false, tabTitleVisHandler = null;
 const tabJobs = new Map();
+// A single job analysed from this page also names the tab ("Analysing · NeuroLens"); a
+// batch's own title wins while one runs, and the tab returns to "NeuroLens" afterwards.
+let progressTabTitle = false;
 // A job the page cancels itself leaves the count at once (§4.18); the list path then never sees it.
 function forgetTabJob(jobId) {
   if (!tabJobs.delete(jobId)) return;
@@ -3530,7 +3589,7 @@ function updateTabTitle(jobs) {
   }
   if (tabTotal === 0) {
     resetTabTitle();
-    document.title = 'NeuroLens';
+    document.title = progressTabTitle ? 'Analysing · NeuroLens' : 'NeuroLens';
     return;
   }
   const tracked = jobs.filter(job => tabJobs.has(job.job_id));
@@ -3551,7 +3610,7 @@ function resetTabTitle() {
   tabTitleDone = false;
   tabJobs.clear();
   tabTotal = 0;
-  document.title = 'NeuroLens';
+  document.title = progressTabTitle ? 'Analysing · NeuroLens' : 'NeuroLens';
   window.removeEventListener('click', resetTabTitle);
   window.removeEventListener('keydown', resetTabTitle);
   if (tabTitleVisHandler) {
@@ -3631,6 +3690,7 @@ function updateSoundLine() {
 function renderResult(result, summary, ctx) {
   resultSeq += 1;
   clearFirstReveal();
+  clearChartHover();
   stopProgress();
   currentResult = result;
   currentSummary = summary || {};
@@ -3686,10 +3746,24 @@ function svgEl(tag, attrs, parent) {
   return e;
 }
 
-function clearScope(scope) { playheads = playheads.filter(p => p.scope !== scope); }
+function clearScope(scope) {
+  playheads = playheads.filter(p => p.scope !== scope);
+  hoverMarks = hoverMarks.filter(m => m.scope !== scope);
+}
+
+function clearChartHover() {
+  clearTimeout(chartHoverHideTimer);
+  if (chartHoverRaf) cancelAnimationFrame(chartHoverRaf);
+  chartHoverRaf = 0;
+  chartHoverT = null;
+}
 
 function clearAllCharts() {
   playheads = [];
+  hoverMarks = [];
+  clearChartHover();
+  mainChartRecord = null;
+  compareChartRecord = null;
   $('mainChartBox').replaceChildren();
   $('stripsHost').replaceChildren();
   $('timeline').replaceChildren();
@@ -3702,7 +3776,7 @@ function axisStep(T) {
   return [5, 10, 15, 20, 30, 60, 120, 300].find(s => T / s <= 5) || Math.ceil(T / 5);
 }
 
-function drawChart(host, { lines, range, height = 200, axisLabels = false, dark = false, fill = false, span = null, scope, yLabels = false, playhead = null, moments = null, bands = null }) {
+function drawChart(host, { lines, range, height = 200, axisLabels = false, dark = false, fill = false, span = null, scope, yLabels = false, playhead = null, moments = null, bands = null, record = null }) {
   host.replaceChildren();
   const T = span || totalSeconds();
   if (!T) return;
@@ -3753,13 +3827,14 @@ function drawChart(host, { lines, range, height = 200, axisLabels = false, dark 
 
   lines.forEach(line => {
     const points = line.values.slice(0, T).map((v, i) => `${x(i)},${y(Math.max(-range, Math.min(range, Number.isFinite(v) ? v : 0)))}`).join(' ');
-    svgEl('polyline', {
+    const pl = svgEl('polyline', {
       points, fill: 'none', stroke: line.colour,
       'stroke-width': line.width || 2,
       'stroke-dasharray': line.dash ? '7 5' : 'none',
       'stroke-linejoin': 'round', 'stroke-linecap': 'round',
       'vector-effect': 'non-scaling-stroke',
     }, svg);
+    if (line.key) pl.setAttribute('data-line-key', line.key);
     if (line.endLabel && line.values.length > 0 && line.values.length < T) {
       const i = line.values.length - 1;
       const raw = line.values[i];
@@ -3841,7 +3916,7 @@ function drawChart(host, { lines, range, height = 200, axisLabels = false, dark 
     });
   }
 
-  const ph = svgEl('line', { y1: padT, y2: H - padB, stroke: playhead || (dark ? '#ECEDEF' : '#161B26'), 'stroke-width': 1.5, 'vector-effect': 'non-scaling-stroke' }, svg);
+  const ph = svgEl('line', { y1: padT, y2: H - padB, stroke: playhead || (dark ? '#ECEDEF' : '#161B26'), 'stroke-width': 1.5, 'vector-effect': 'non-scaling-stroke', 'data-playhead': '1' }, svg);
   playheads.push({ scope, fn: t => {
     const px = x(Math.min(Math.max(0, t), Math.max(0, T - 1)));
     ph.setAttribute('x1', px); ph.setAttribute('x2', px);
@@ -3852,6 +3927,52 @@ function drawChart(host, { lines, range, height = 200, axisLabels = false, dark 
     if (!rect.width) return;
     seek(((e.clientX - rect.left) / rect.width) * (T - 1));
   });
+
+  if (scope === 'main' || scope === 'strips' || scope === 'strips-parts') {
+    // Linked hover (Chunk 3 C): the same time on the main chart, the strips and the brain.
+    const hoverLine = document.createElement('div');
+    hoverLine.className = 'chart-hover-line';
+    hoverLine.style.bottom = scope === 'main' ? '16px' : '0';
+    host.append(hoverLine);
+    const clamped = t => Math.max(0, Math.min(T - 1, t));
+    const mark = { scope, fn: (t, on) => {
+      hoverLine.classList.toggle('hover-on', !!on);
+      if (t == null) return;
+      hoverLine.style.left = `${(x(clamped(t)) / W) * 100}%`;
+    } };
+    if (scope === 'main') {
+      const tip = document.createElement('div');
+      tip.className = 'chart-hover-tip';
+      host.append(tip);
+      mark.fn = (t, on) => {
+        hoverLine.classList.toggle('hover-on', !!on);
+        tip.classList.toggle('hover-on', !!on);
+        if (t == null) return;
+        const tt = clamped(t);
+        hoverLine.style.left = `${(x(tt) / W) * 100}%`;
+        const v = seriesAt(currentResult && currentResult.signals ? currentResult.signals.overall : null, tt);
+        tip.textContent = `${fmt(tt)} · ${levelWord(v)}`;
+        const pct = (x(tt) / W) * 100;
+        tip.style.left = `${pct}%`;
+        tip.style.transform = pct > 62 ? 'translateX(-100%)' : (pct < 8 ? 'none' : 'translateX(-50%)');
+      };
+      svg.addEventListener('pointermove', e => {
+        if (e.pointerType === 'touch' || firstReveal) return;
+        const rect = svg.getBoundingClientRect();
+        if (!rect.width) return;
+        clearTimeout(chartHoverHideTimer);
+        setChartHover(((e.clientX - rect.left) / rect.width) * (T - 1));
+      });
+      svg.addEventListener('pointerleave', () => {
+        if (chartHoverT == null) return;
+        clearTimeout(chartHoverHideTimer);
+        chartHoverHideTimer = setTimeout(() => setChartHover(null), 160);
+      });
+    }
+    hoverMarks.push(mark);
+  }
+
+  if (record) Object.assign(record, { span: T, range, W, H, padT, padB, svg });
 
   if (axisLabels) {
     const axis = document.createElement('div');
@@ -3990,6 +4111,13 @@ function startFirstReveal(ctx) {
   firstReveal.raf = requestAnimationFrame(stepFirstReveal);
 }
 
+function updateMainChartKeys(secondLabel) {
+  const name = currentVideoName();
+  const currentKey = `<span class="legend-key" title="${escapeHtml(name)}"><i></i>${escapeHtml(shortName(name))}</span>`;
+  const secondKey = secondLabel ? `<span class="legend-key" title="${escapeHtml(secondLabel)}"><i class="dash"></i>${escapeHtml(shortName(secondLabel))}</span>` : '';
+  $('chartKeys').innerHTML = secondLabel ? currentKey + secondKey : '';
+}
+
 function buildMainChart() {
   if (!currentResult) return;
   clearScope('main');
@@ -3999,7 +4127,7 @@ function buildMainChart() {
   const lines = [{ values: currentResult.signals.overall, colour: 'var(--heat)', width: 2.5, name }];
   let secondLabel = '';
   if (mutedOn && currentResult.muted && currentResult.muted.overall) {
-    lines.push({ values: currentResult.muted.overall, colour: 'var(--cool)', dash: true, width: 1.8 });
+    lines.push({ values: currentResult.muted.overall, colour: 'var(--cool)', dash: true, width: 1.8, key: 'muted' });
     secondLabel = 'muted';
   }
   lines.forEach(line => {
@@ -4007,10 +4135,48 @@ function buildMainChart() {
   });
   let range = 0;
   lines.forEach(line => { range = Math.max(range, niceRange(line.values)); });
-  drawChart(box, { lines, range, height: 220, axisLabels: true, dark: true, fill: true, span, scope: 'main', yLabels: true, moments: chartMoments });
-  const currentKey = `<span class="legend-key" title="${escapeHtml(name)}"><i></i>${escapeHtml(shortName(name))}</span>`;
-  const secondKey = secondLabel ? `<span class="legend-key" title="${escapeHtml(secondLabel)}"><i class="dash"></i>${escapeHtml(shortName(secondLabel))}</span>` : '';
-  $('chartKeys').innerHTML = secondLabel ? currentKey + secondKey : '';
+  mainChartRecord = {};
+  drawChart(box, { lines, range, height: 220, axisLabels: true, dark: true, fill: true, span, scope: 'main', yLabels: true, moments: chartMoments, record: mainChartRecord });
+  updateMainChartKeys(secondLabel);
+}
+
+// Chunk 3 E: show/hide the muted curve by fading the existing line in or out over 250ms;
+// if the axis range would change, fall back to a full rebuild (returns false).
+function morphMutedToggle() {
+  const rec = mainChartRecord;
+  if (REDUCED_MOTION || !rec || !rec.svg || !rec.svg.isConnected || rec.span !== chartSpan()) return false;
+  const existing = rec.svg.querySelector('[data-line-key="muted"]');
+  const mutedValues = mutedOn && currentResult.muted && currentResult.muted.overall
+    ? currentResult.muted.overall : null;
+  if (mutedOn === !!existing) return false;
+  if (mutedOn && !mutedValues) return false;
+  const values = [currentResult.signals.overall];
+  if (mutedValues) values.push(mutedValues);
+  if (niceRange(values) !== rec.range) return false;
+  const T = rec.span, W = rec.W, H = rec.H;
+  const x = i => (T === 1 ? 0 : (i / (T - 1)) * W);
+  const y = v => rec.padT + (1 - (v + rec.range) / (2 * rec.range)) * (H - rec.padT - rec.padB);
+  const clamped = v => Math.max(-rec.range, Math.min(rec.range, Number.isFinite(v) ? v : 0));
+  if (mutedValues) {
+    const points = mutedValues.slice(0, T).map((v, i) => `${x(i)},${y(clamped(v))}`).join(' ');
+    const pl = svgEl('polyline', {
+      points, fill: 'none', stroke: 'var(--cool)', 'stroke-width': 1.8,
+      'stroke-dasharray': '7 5', 'stroke-linejoin': 'round', 'stroke-linecap': 'round',
+      'vector-effect': 'non-scaling-stroke', 'data-line-key': 'muted',
+    });
+    pl.style.opacity = '0';
+    pl.style.transition = 'opacity 250ms var(--ease-out)';
+    const ph = rec.svg.querySelector('[data-playhead]');
+    if (ph) rec.svg.insertBefore(pl, ph); else rec.svg.append(pl);
+    requestAnimationFrame(() => { pl.style.opacity = '1'; });
+  } else {
+    existing.removeAttribute('data-line-key');
+    existing.style.transition = 'opacity 250ms var(--ease-out)';
+    requestAnimationFrame(() => { existing.style.opacity = '0'; });
+    setTimeout(() => existing.remove(), 260);
+  }
+  updateMainChartKeys(mutedOn ? 'muted' : '');
+  return true;
 }
 
 function stripRange() {
@@ -4203,6 +4369,22 @@ function updateBrainValues(t) {
   });
 }
 
+function setChartHover(t) {
+  chartHoverT = Number.isFinite(t) ? t : null;
+  if (chartHoverRaf) return;
+  chartHoverRaf = requestAnimationFrame(applyChartHover);
+}
+
+// One update per animation frame: the marks, the label and the brain preview move together.
+function applyChartHover() {
+  chartHoverRaf = 0;
+  const on = chartHoverT != null;
+  hoverMarks.forEach(m => m.fn(chartHoverT, on));
+  if (currentResult && !firstReveal) {
+    window.brainMap.setSecond(on ? Math.max(0, Math.min(totalSeconds() - 1, chartHoverT)) : currentTime());
+  }
+}
+
 function tick() {
   const t = currentTime();
   playheads.forEach(p => p.fn(t));
@@ -4211,7 +4393,7 @@ function tick() {
   updateBrainValues(t);
   updateMomentActive(t);
   updateCompareTransport(t);
-  if (currentResult && !firstReveal) window.brainMap.setSecond(t);
+  if (currentResult && !firstReveal && chartHoverT == null) window.brainMap.setSecond(t);
 }
 
 function buildAllCharts() {
@@ -4230,13 +4412,62 @@ function compareNames() {
 
 function clearCompareChart() {
   clearScope('compare');
+  if (compareMorphRaf) { cancelAnimationFrame(compareMorphRaf); compareMorphRaf = 0; }
+  compareChartRecord = null;
   $('compareChartBox').replaceChildren();
   $('compareDiffs').replaceChildren();
 }
 
+// Chunk 3 E: move the two curves to their new values over 250ms instead of rebuilding,
+// when the layout is unchanged (same span, no diff bands). Any change in structure rebuilds.
+function morphCompareChart(lines, toRange, span, hasBands) {
+  const rec = compareChartRecord;
+  if (REDUCED_MOTION || !rec || !rec.svg || !rec.svg.isConnected || rec.bands || hasBands) return false;
+  if (rec.span !== span || rec.values.length !== lines.length || lines.length !== 2) return false;
+  if (rec.values.some((values, i) => values.length !== lines[i].values.length)) return false;
+  const to = lines.map(line => line.values.slice());
+  const unchanged = rec.range === toRange
+    && to.every((values, i) => values.every((v, j) => v === rec.values[i][j]));
+  const from = rec.values;
+  const fromRange = rec.range;
+  const T = span, W = rec.W, H = rec.H, padT = rec.padT, padB = rec.padB;
+  const points = (values, r) => values.slice(0, T).map((v, i) => {
+    const c = Math.max(-r, Math.min(r, Number.isFinite(v) ? v : 0));
+    const xx = T === 1 ? 0 : (i / (T - 1)) * W;
+    const yy = padT + (1 - (c + r) / (2 * r)) * (H - padT - padB);
+    return `${xx},${yy}`;
+  }).join(' ');
+  const polys = [...rec.svg.querySelectorAll('polyline')];
+  if (polys.length !== lines.length) return false;
+  // The colours (and widths) can swap when the comparison side changes; keep them current.
+  polys.forEach((pl, i) => {
+    pl.setAttribute('stroke', lines[i].colour);
+    pl.setAttribute('stroke-width', lines[i].width || 2);
+  });
+  compareChartRecord = { ...rec, range: toRange, values: to, bands: hasBands };
+  if (unchanged) return true;
+  if (compareMorphRaf) cancelAnimationFrame(compareMorphRaf);
+  const started = performance.now();
+  const step = now => {
+    const k = Math.min(1, (now - started) / 250);
+    const r = fromRange + (toRange - fromRange) * k;
+    polys.forEach((pl, i) => {
+      const values = from[i].map((v, j) => v + (to[i][j] - v) * k);
+      pl.setAttribute('points', points(values, r));
+    });
+    if (k < 1) {
+      compareMorphRaf = requestAnimationFrame(step);
+    } else {
+      compareMorphRaf = 0;
+      polys.forEach((pl, i) => pl.setAttribute('points', points(to[i], toRange)));
+    }
+  };
+  compareMorphRaf = requestAnimationFrame(step);
+  return true;
+}
+
 function buildCompareChart() {
   if (!currentResult || !comparison || !comparison.result || !comparison.result.signals) return;
-  clearScope('compare');
   const span = compareSpan();
   const currentColour = comparisonCurrentSide === 'b' ? 'var(--blue)' : 'var(--accent)';
   const otherColour = comparisonCurrentSide === 'b' ? 'var(--accent)' : 'var(--blue)';
@@ -4252,7 +4483,10 @@ function buildCompareChart() {
     if (diff.a) bands.push({ start: diff.a.start, end: diff.a.end, colour: 'var(--accent)' });
     if (diff.b) bands.push({ start: diff.b.start, end: diff.b.end, colour: 'var(--blue)' });
   }
-  drawChart($('compareChartBox'), { lines, range, height: 160, axisLabels: true, dark: true, span, scope: 'compare', bands });
+  if (morphCompareChart(lines, range, span, bands.length > 0)) return;
+  clearScope('compare');
+  compareChartRecord = { values: lines.map(line => line.values.slice()), bands: bands.length > 0 };
+  drawChart($('compareChartBox'), { lines, range, height: 160, axisLabels: true, dark: true, span, scope: 'compare', bands, record: compareChartRecord });
 }
 
 function renderCompareDiffs() {
@@ -4676,7 +4910,9 @@ $('progressCancel').addEventListener('click', async () => {
 
 $('mutedToggle').addEventListener('change', () => {
   mutedOn = $('mutedToggle').checked;
-  buildMainChart(); buildStrips(); tick();
+  // The strips never show the muted pass; the main chart fades the line in place when it can.
+  if (!morphMutedToggle()) buildMainChart();
+  tick();
 });
 
 $('reportBody').addEventListener('click', e => {
