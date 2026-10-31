@@ -154,8 +154,13 @@ def add_sample(args):
         entry["report"] = _without_usage(stored_report)
 
     document = _document()
-    samples = [sample for sample in document.get("samples", []) if sample.get("id") != sample_id]
-    samples.append(entry)
+    samples = document.get("samples", [])
+    for index, sample in enumerate(samples):
+        if sample.get("id") == sample_id:
+            samples[index] = entry
+            break
+    else:
+        samples.append(entry)
     _write_document(samples, document.get("comparisons", []))
     print(f"Wrote sample {sample_id} to {SAMPLES} ({len(samples)} samples)")
 

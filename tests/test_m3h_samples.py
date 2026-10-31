@@ -215,6 +215,48 @@ def test_make_sample_refuses_a_report_that_fails_the_check(script, monkeypatch):
     assert json.loads(module.SAMPLES.read_text()) == {"samples": []}
 
 
+def test_make_sample_replaces_in_place_and_appends_only_a_new_id(script, monkeypatch):
+    module, data = script
+    existing = [sample_entry("a", 3), sample_entry("clip", 3), sample_entry("z", 3)]
+    module.SAMPLES.write_text(json.dumps({"samples": existing}))
+    job_id = str(uuid.uuid4())
+    fake = FakeS3(
+        {
+            f"results/{job_id}.json": json.dumps(make_result(3)).encode(),
+            f"results/{job_id}.brain": b"brain",
+        }
+    )
+
+    run(
+        module,
+        monkeypatch,
+        fake,
+        [job_id, str(data / "videos" / "clip.mp4"), "A title", "An attribution"],
+    )
+
+    samples = json.loads(module.SAMPLES.read_text())["samples"]
+    assert [sample["id"] for sample in samples] == ["a", "clip", "z"]
+    assert samples[1]["title"] == "A title"
+
+    (data / "videos" / "clip2.mp4").write_bytes(b"video")
+    second_job = str(uuid.uuid4())
+    fake = FakeS3(
+        {
+            f"results/{second_job}.json": json.dumps(make_result(3)).encode(),
+            f"results/{second_job}.brain": b"brain",
+        }
+    )
+    run(
+        module,
+        monkeypatch,
+        fake,
+        [second_job, str(data / "videos" / "clip2.mp4"), "Another title", "An attribution"],
+    )
+
+    samples = json.loads(module.SAMPLES.read_text())["samples"]
+    assert [sample["id"] for sample in samples] == ["a", "clip", "z", "clip2"]
+
+
 def test_compare_writes_the_canonical_a_and_b_and_replaces_either_order(script, monkeypatch):
     module, data = script
     job_one, job_two = str(uuid.uuid4()), str(uuid.uuid4())

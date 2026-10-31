@@ -142,17 +142,23 @@
   .sample-spark { display: block; width: 100%; height: 46px; background: var(--well); }
   .sample-info { padding: 10px 14px 13px; display: flex; flex-direction: column; gap: 4px; }
   .sample-title { font-size: 15px; font-weight: 600; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .sample-desc { font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .sample-dur { display: none; }
 
-  .history-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 8px; border: 1px solid transparent; border-top: 1px solid var(--line); font-size: 12px; border-radius: 2px; }
+  .history-row { display: grid; grid-template-columns: 64px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 9px 8px; border: 1px solid transparent; border-top: 1px solid var(--line); font-size: 12px; border-radius: 2px; }
   .history-row:first-child { border-top-color: transparent; }
   .history-row.openable { cursor: pointer; }
   .history-row.openable:hover { background: rgba(255,255,255,.035); border-color: var(--line); }
-  .history-main { min-width: 0; flex: 1; }
-  .history-name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .history-sub { color: var(--muted); font: 11px var(--mono); margin-top: 2px; }
+  .history-main { display: contents; }
+  .history-name { grid-row: 1; grid-column: 2; align-self: end; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .history-row > .history-thumb { grid-row: 1 / span 2; grid-column: 1; }
+  .history-sub { align-self: start; grid-row: 2; grid-column: 2 / -1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--muted); font: 11px var(--mono); margin-top: 2px; }
   .history-sub.error { color: var(--danger); }
-  .history-actions { display: flex; gap: 6px; flex-shrink: 0; align-items: center; }
+  .history-row .upload-progress { grid-row: 2; grid-column: 2 / -1; }
+  .history-row .upload-progress + .history-sub { grid-row: 3; }
+  .history-actions { display: contents; }
+  .history-row .history-link:not([data-cancel-id]) { grid-row: 3; grid-column: 2 / -1; justify-self: start; margin-top: 2px; }
+  .history-row .history-more, .history-row [data-cancel-id] { grid-row: 1; grid-column: 3; }
   .history-link { background: none; border: 0; padding: 0; color: var(--muted); font-size: 11.5px; text-decoration: underline; text-underline-offset: 2px; }
   .history-link:hover { color: var(--ink); }
   .history-more { width: 26px; height: 24px; border: 1px solid var(--line); border-radius: var(--radius); background: none; color: var(--muted); display: grid; place-items: center; font-size: 15px; line-height: 1; }
@@ -441,6 +447,11 @@
     /* While a video is analysing, its progress comes before the upload box and the list. */
     .D:has(#progressPanel:not([hidden])) { display: flex; flex-direction: column; }
     .D:has(#progressPanel:not([hidden])) .side { order: 1; border-bottom: 0; border-top: 1px solid var(--line); }
+    /* No finished video yet: samples come before the upload box and the list. */
+    .D.samples-first:not(:has(.report-body.active)) { display: flex; flex-direction: column; }
+    .D.samples-first:not(:has(.report-body.active)) .report { order: 1; }
+    .D.samples-first:not(:has(.report-body.active)) .side { order: 2; }
+    .D.samples-first:not(:has(.report-body.active)) .privacy-note.page-end { order: 3; }
   }
   @media (max-width: 860px) {
     .bar { padding: 0 14px; gap: 10px; }
@@ -455,10 +466,7 @@
     .account::after { content: none; }
     .account-icon { display: block; }
     .bar-hide-sm { display: none; }
-    .history-row { display: grid; grid-template-columns: 64px minmax(0, 1fr) auto; align-items: center; }
-    .history-actions { display: contents; }
-    .history-row .history-link:not([data-cancel-id]) { grid-row: 2; grid-column: 2 / -1; justify-self: start; margin-top: 2px; }
-    .history-row .history-more, .history-row [data-cancel-id] { grid-row: 1; grid-column: 3; }
+    body:has(#appShell.view-chooser) #topUpload { display: none; }
     .samples-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px 14px; }
     .timeline { grid-template-columns: auto auto auto 1fr; }
     .tl-track { grid-column: 1 / -1; grid-row: 1; }
@@ -511,7 +519,7 @@
   <button class="btn-white" id="topUpload" hidden>Upload <span class="bar-hide-sm">a video</span></button>
 </header>
 
-<div class="D" id="appShell">
+<div class="D view-chooser" id="appShell">
   <aside class="side">
     <div class="chooser" id="chooser">
       <div class="box active" id="startupPanel">
@@ -903,6 +911,18 @@ function shortName(name, max = 32) {
   const tail = room - head;
   return text.slice(0, head) + '…' + text.slice(-(tail + ext.length));
 }
+// A repeated history name keeps its " (n)" and extension visible when the stem is shortened.
+function shortNumbered(name, number, max = 32) {
+  const suffix = ` (${number})`;
+  const dot = name.lastIndexOf('.');
+  const ext = dot > 0 && dot > name.length - 12 ? name.slice(dot) : '';
+  const stem = ext ? name.slice(0, dot) : name;
+  if (stem.length + suffix.length + ext.length <= max) return `${stem}${suffix}${ext}`;
+  const room = Math.max(1, max - 1 - suffix.length - ext.length);
+  const head = Math.ceil(room / 2);
+  const tail = room - head;
+  return `${stem.slice(0, head)}…${tail ? stem.slice(-tail) : ''}${suffix}${ext}`;
+}
 // The player names a video without its file extension.
 function videoBaseName(name) { return String(name || '').replace(/\.(mp4|mov|webm|m4v|avi|mkv)$/i, ''); }
 function hasLocalVideo() { return !!video.getAttribute('src'); }
@@ -1128,6 +1148,8 @@ function setViewName(name) {
   $('chooser').hidden = player;
   $('player').hidden = !player;
   $('player').classList.toggle('active', player);
+  $('appShell').classList.toggle('view-player', player);
+  $('appShell').classList.toggle('view-chooser', !player);
 }
 
 function showBalance() {
@@ -1190,6 +1212,7 @@ function showSignedOut() {
   $('topUpload').textContent = 'Sign in';
   $('topUpload').hidden = false;
   $('headerMeta').textContent = '';
+  updateSamplesFirst([]);
   loadLimits();
   loadSamples();
 }
@@ -1280,8 +1303,14 @@ function reconcileRows(list, entries) {
   rows.forEach((row, i) => { if (list.children[i] !== row) list.insertBefore(row, list.children[i] || null); });
 }
 
+function updateSamplesFirst(jobs) {
+  const hasFinished = jobs.some(job => job.status === 'done' && job.result_available);
+  $('appShell').classList.toggle('samples-first', !hasFinished);
+}
+
 function renderHistory(jobs) {
   jobsCache = jobs;
+  updateSamplesFirst(jobs);
   // A result opened from a ?job= link predates this list, so re-check its title and link (§4.17).
   const shown = currentContext && currentContext.jobId
     ? jobs.find(job => job.job_id === currentContext.jobId) : null;
@@ -1299,7 +1328,7 @@ function renderHistory(jobs) {
   const list = $('historyList');
   reconcileRows(list, [
     ...uploadQueue.map(entry => [`queue:${entry.item.id}`, JSON.stringify([entry.state, entry.reason, entry.signedOut, entry.item.thumb]), () => queueRow(entry)]),
-    ...jobs.map(job => [`job:${job.job_id}`, JSON.stringify([job, historyDetail(job), curveFailures.get(job.job_id), cancelWindows.has(job.job_id), localFrames.has(job.job_id)]), () => historyRow(job)]),
+    ...jobs.map(job => [`job:${job.job_id}`, JSON.stringify([job, historyDetail(job), historyNumber(job), curveFailures.get(job.job_id), cancelWindows.has(job.job_id), localFrames.has(job.job_id)]), () => historyRow(job)]),
   ]);
   $('historyPanel').classList.add('active');
   $('historyCount').textContent = jobs.length + uploadQueue.length ? String(jobs.length + uploadQueue.length) : '';
@@ -1418,6 +1447,14 @@ function queueRow(entry) {
   return row;
 }
 
+// A repeated file name is numbered by upload order, oldest first (the list is newest first).
+function historyNumber(job) {
+  if (!job.filename) return 0;
+  const ordered = jobsCache.filter(other => other.filename === job.filename).reverse();
+  if (ordered.length < 2) return 0;
+  return ordered.findIndex(other => other.job_id === job.job_id) + 1;
+}
+
 function historyRow(job) {
   const canOpen = !!job.result_available || job.status === 'queued' || job.status === 'processing';
   const row = document.createElement('div');
@@ -1433,10 +1470,11 @@ function historyRow(job) {
     };
   }
   const label = job.filename || `Job ${job.job_id.slice(0, 8)}`;
+  const number = historyNumber(job);
   const main = document.createElement('div'); main.className = 'history-main';
   const name = document.createElement('div'); name.className = 'history-name';
-  name.textContent = shortName(label);
-  name.title = label;
+  name.textContent = number > 1 ? shortNumbered(label, number) : shortName(label);
+  name.title = number > 1 ? `${label} (${number})` : label;
   const sub = document.createElement('div'); sub.className = 'history-sub';
   const failure = curveFailures.get(job.job_id);
   sub.textContent = failure ? `${historyDetail(job)} · ${failure}` : historyDetail(job);
@@ -1522,19 +1560,32 @@ async function deleteJob(job) {
 
 // "21 Nov 2026": a numeric date reads differently in different countries.
 const longDate = d => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+const historyTime = d => d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
+// "30 Oct 23:23"; the year shows only when it is not this year.
+const historyDate = d => `${d.toLocaleDateString('en-GB', d.getFullYear() === new Date().getFullYear()
+  ? { day: 'numeric', month: 'short' } : { day: 'numeric', month: 'short', year: 'numeric' })} ${historyTime(d)}`;
+
+function historyLength(job) {
+  const ms = job.verified_duration_ms;
+  return ms != null && Number.isFinite(ms) ? fmt(Math.ceil(ms / 1000)) : '';
+}
 
 function historyDetail(job) {
   const created = new Date(job.created_at);
-  const day = longDate(created);
+  const day = historyDate(created);
   if (job.status === 'done') {
-    const cost = job.captured_cents != null ? ` · ${dollars(job.captured_cents)}` : '';
-    if (!job.result_available) return `${day}${cost} · result expired`;
+    const parts = [day];
+    const length = historyLength(job);
+    if (length) parts.push(length);
+    if (job.captured_cents != null) parts.push(dollars(job.captured_cents));
+    const line = parts.join(' · ');
+    if (!job.result_available) return `${line} · result expired`;
     const msLeft = created.getTime() + RESULT_DAYS * 86400000 - Date.now();
     if (msLeft <= 7 * 86400000) {
       const days = Math.max(1, Math.ceil(msLeft / 86400000));
-      return `${day}${cost} · Deleted in ${days} day${days === 1 ? '' : 's'}`;
+      return `${line} · Deleted in ${days} day${days === 1 ? '' : 's'}`;
     }
-    return `${day}${cost}`;
+    return line;
   }
   if (job.status === 'failed') return `${day} · ${failureText(job.error_code)} · not charged`;
   if (job.status === 'queued') {
@@ -1658,8 +1709,16 @@ function renderSamples() {
     info.className = 'sample-info';
     const title = document.createElement('div');
     title.className = 'sample-title';
-    title.textContent = s.title || 'Sample';
+    const titleText = s.title || 'Sample';
+    title.textContent = titleText;
     info.append(title);
+    const description = String(s.description || '').trim();
+    if (description && description !== titleText) {
+      const line = document.createElement('div');
+      line.className = 'sample-desc';
+      line.textContent = description;
+      info.append(line);
+    }
     card.append(thumb);
     if (Array.isArray(overall) && overall.length) card.append(sampleSparkline(overall));
     card.append(info);
@@ -1773,7 +1832,7 @@ function captureFrame(file, duration) {
 
 const uploadDialog = $('uploadDialog'), dialogZone = $('dialogZone'), batchInput = $('batchInput');
 const COARSE_POINTER = matchMedia('(pointer: coarse)').matches;
-$('uploadZoneTitle').textContent = COARSE_POINTER ? 'Choose a video' : 'Drop videos or click to choose';
+$('uploadZoneTitle').textContent = COARSE_POINTER ? 'Tap to choose a video' : 'Drop videos or click to choose';
 $('dialogZoneTitle').textContent = COARSE_POINTER ? 'Choose videos' : 'Drop videos or click to choose';
 
 let batchItems = [], batchSeq = 0;
