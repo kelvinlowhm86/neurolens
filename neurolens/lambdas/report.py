@@ -210,7 +210,13 @@ def _call_model(client, cfg, system, content, schema):
             max_tokens=report_cfg["max_tokens"],
             system=system,
             messages=[{"role": "user", "content": content}],
-            output_config={"format": {"type": "json_schema", "schema": schema}},
+            # Lets the model work through the table before the JSON fixes its verdict (M3g §5c).
+            thinking={"type": "adaptive"},
+            output_config={
+                "format": {"type": "json_schema", "schema": schema},
+                # The default (high) thinks past max_tokens and the Lambda's time limit.
+                "effort": "medium",
+            },
             # The SDK's default API version is refused by InvokeModel models (M3g §5c).
             extra_body={"anthropic_version": BEDROCK_API_VERSION},
         )

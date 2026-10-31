@@ -147,8 +147,8 @@ normally (no Lambda retry). The Lambda's async retries are set to 0 and its time
 Anthropic Python SDK, `AnthropicBedrock(aws_region=cfg aws.region)` (Bedrock InvokeModel), model
 from `config.json` `report.model` (`us.anthropic.claude-sonnet-4-6`, the US inference profile:
 requests stay in AWS's US regions, 10% above global routing), `max_tokens` `report.max_tokens`
-(16000), `output_config` with a JSON-schema `format` (§5d), effort and thinking left at their
-defaults, `anthropic_version` `bedrock-2023-05-31` in the body (the SDK's default API version is
+(16000), `output_config` with a JSON-schema `format` (§5d) and effort `medium`, adaptive
+thinking on, `anthropic_version` `bedrock-2023-05-31` in the body (the SDK's default API version is
 refused by models served through InvokeModel), SDK timeout 240 s, `max_retries` 2. The SDK
 (`anthropic[bedrock]`, pinned) ships as a Lambda layer built by `infra/build_report_layer.sh`
 (manylinux wheels, like the ffprobe layer), so the other Lambdas' zip stays dependency-free.
@@ -157,6 +157,11 @@ Why Sonnet 4.6 (28 Oct): this account is refused every model on Bedrock's Messag
 answer through InvokeModel; Sonnet 4.6 is the cheaper of the two ($3/$15 per million tokens before
 the 10% US premium). The server-side `fallbacks` option does not exist on Bedrock; a refusal is
 simply `refused` (§5d).
+Why thinking (31 Oct): without it the JSON opens with the verdict before the model has read the
+table, so the winner and near-typical claims were snap judgements (Sintel vs Bunny named the
+wrong video). With thinking on, a trial on four saved cases got the winner and every peak right,
+with one near-tie slip on a lowest stretch left. Effort `medium` because the default (`high`) used all 16000 tokens and up to
+190 s on three of the four; at `medium` each took 60-70 s and about 5-6k output tokens.
 
 ### 5d. Answer
 Schema:
