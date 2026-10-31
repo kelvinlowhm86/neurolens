@@ -101,7 +101,7 @@ cfg)`, or `{"pair": [x, y]}` → `write_comparison(job_a, job_b, …)` (M3h §5a
    job was deleted meanwhile), delete the object just written.
 Any unexpected exception: log with the job id, `finish_report(failed, "error")`, return
 normally (no Lambda retry). The Lambda's async retries are set to 0 and its timeout to 900 s, so the SDK's three attempts of
-up to 240 s fit and a slow call fails loudly; `stale_minutes` (16) is above that, so a live run
+up to 280 s fit and a slow call fails loudly; `stale_minutes` (16) is above that, so a live run
 is never treated as stale.
 
 ### 5b. Request (`neurolens/report_prompt.py`, pure, numpy-free)
@@ -148,9 +148,9 @@ is never treated as stale.
 Anthropic Python SDK, `AnthropicBedrock(aws_region=cfg aws.region)` (Bedrock InvokeModel), model
 from `config.json` `report.model` (`us.anthropic.claude-sonnet-4-6`, the US inference profile:
 requests stay in AWS's US regions, 10% above global routing), `max_tokens` `report.max_tokens`
-(16000), `output_config` with a JSON-schema `format` (§5d) and effort `medium`, adaptive
+(20000), `output_config` with a JSON-schema `format` (§5d) and effort `medium`, adaptive
 thinking on, `anthropic_version` `bedrock-2023-05-31` in the body (the SDK's default API version is
-refused by models served through InvokeModel), SDK timeout 240 s, `max_retries` 2. The SDK
+refused by models served through InvokeModel), SDK timeout 280 s, `max_retries` 2. The SDK
 (`anthropic[bedrock]`, pinned) ships as a Lambda layer built by `infra/build_report_layer.sh`
 (manylinux wheels, like the ffprobe layer), so the other Lambdas' zip stays dependency-free.
 Why Sonnet 4.6 (28 Oct): this account is refused every model on Bedrock's Messages-API endpoint

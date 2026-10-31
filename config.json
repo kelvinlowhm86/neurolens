@@ -27,7 +27,7 @@
   },
   "report": {
     "model": "us.anthropic.claude-sonnet-4-6",
-    "max_tokens": 16000,
+    "max_tokens": 20000,
     "max_tries": 3,
     "stale_minutes": 16
   },

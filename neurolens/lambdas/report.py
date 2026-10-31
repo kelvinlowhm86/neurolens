@@ -195,7 +195,7 @@ def _bedrock_client(region):
     """The Anthropic SDK's Bedrock client; imported here so importers need no SDK (M3g §5c)."""
     from anthropic import AnthropicBedrock
 
-    return AnthropicBedrock(aws_region=region, timeout=240, max_retries=2)
+    return AnthropicBedrock(aws_region=region, timeout=280, max_retries=2)
 
 
 def _call_model(client, cfg, system, content, schema):
