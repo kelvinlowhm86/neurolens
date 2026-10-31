@@ -13,6 +13,9 @@ MAX_DIFFERENCES = 3
 MAX_COMPARISON_LISTS = 2
 MAX_LISTS = 2
 
+# Values within this of 0 are "near typical", as READING_RULES says.
+NEAR = 0.05
+
 # The table's value columns: the three groups and overall (the sub-signals stay out of it).
 _SHOWN = [*results.GROUPS, "overall"]
 
@@ -36,6 +39,11 @@ every group, or every second, in that stretch shows it. A stretch that is the lo
 but still above 0 is above typical viewing: call it the weakest part and an opportunity, never a
 failure. These are model predictions of an average viewer's brain, not
 measurements of real people.
+
+The first line above the table counts, for each group and overall, the seconds above, near
+and below typical (near = within 0.05 of 0). Use these counts for whole-video claims: which
+group leads, and whether a group is above or below typical in most of the video. Take moments
+from the rows and the pictures, never from the counts, and never quote the counts.
 
 How to read the curves:
 - The curves are smoothed. hear follows the sound almost at once. see trails the pictures by
@@ -129,11 +137,11 @@ Writing:
 - The headline and summary are the verdict, shown beside the chart: which video draws the
   stronger response overall, the main reason, and where the other one does better, in two or
   three sentences. The headline names the video with the stronger response, or says they are
-  close. Judge which is stronger by overall: higher in more of the seconds and at the peaks,
-  never by one group alone. They are close when neither is higher in clearly more of the shared
-  seconds (fewer than 6 in 10) and neither peak stands clearly above the other; then the
-  headline says so. Leave the stretch-by-stretch story to the differences. Be accurate
-  rather than kind.
+  close. Judge which is stronger by overall: higher in more of the shared seconds (the first
+  line counts them) and at the peaks, never by one group alone. They are close when neither is
+  higher in clearly more of the shared seconds (fewer than 6 in 10) and neither peak stands
+  clearly above the other; then the headline says so. Leave the stretch-by-stretch story to the
+  differences. Be accurate rather than kind.
 - A stronger response may be called stronger brain engagement, or said to suggest more
   attention. Never claim anything about what real viewers do: views, watch time, retention,
   drop-off, clicks or sharing, and never give a score.
@@ -163,13 +171,60 @@ def _cell(values, second):
     )
 
 
+def _tallies(values):
+    """(above, near, below) seconds for a series as the table shows it: each value rounded to
+    2 decimals, with None and seconds past the end skipped."""
+    above = near = below = 0
+    for value in values:
+        if value is None:
+            continue
+        value = round(float(value), 2)
+        if value > NEAR:
+            above += 1
+        elif value < -NEAR:
+            below += 1
+        else:
+            near += 1
+    return above, near, below
+
+
+def _series_counts(result):
+    counts = []
+    for name in _SHOWN:
+        above, near, below = _tallies(result["signals"][name])
+        counts.append(f"{name} {above}/{near}/{below}")
+    return ", ".join(counts)
+
+
+def _shared_comparison(a, b):
+    """(shared seconds, A higher, B higher, within) over the seconds both videos share,
+    comparing overall as the table shows it."""
+    shared = min(a["duration_seconds"], b["duration_seconds"])
+    overall_a, overall_b = a["signals"]["overall"], b["signals"]["overall"]
+    a_higher = b_higher = within = 0
+    for second in range(shared):
+        value_a = overall_a[second] if second < len(overall_a) else None
+        value_b = overall_b[second] if second < len(overall_b) else None
+        if value_a is None or value_b is None:
+            continue
+        difference = round(round(float(value_a), 2) - round(float(value_b), 2), 2)
+        if difference > NEAR:
+            a_higher += 1
+        elif difference < -NEAR:
+            b_higher += 1
+        else:
+            within += 1
+    return shared, a_higher, b_higher, within
+
+
 def series_table(result):
     """One row per second: t, the three groups, overall and overall with the sound off. The
     sub-signals and the duplicate sound column are left out so the writer reads one clear
     column per group (M3g §5b)."""
     duration = result["duration_seconds"]
     lines = [
-        f"duration_seconds {duration}, last_second {duration - 1}. One row per second.",
+        f"duration_seconds {duration}, last_second {duration - 1}. One row per second. "
+        f"Seconds above / near / below typical: {_series_counts(result)}.",
         " ".join(["t", *_SHOWN, "muted_overall"]),
     ]
     signals, muted = result["signals"], result["muted"]["overall"]
@@ -185,10 +240,16 @@ def comparison_table(a, b):
     second can be compared with the same second of the other video (M3h §5b)."""
     names = [(label, name) for name in [*_SHOWN, "muted_overall"] for label in "AB"]
     seconds = max(a["duration_seconds"], b["duration_seconds"])
+    a_above, a_near, a_below = _tallies(a["signals"]["overall"])
+    b_above, b_near, b_below = _tallies(b["signals"]["overall"])
+    shared, a_higher, b_higher, within = _shared_comparison(a, b)
     lines = [
         f"Video A: duration_seconds {a['duration_seconds']}, last_second "
         f"{a['duration_seconds'] - 1}. Video B: duration_seconds {b['duration_seconds']}, "
-        f"last_second {b['duration_seconds'] - 1}. One row per second.",
+        f"last_second {b['duration_seconds'] - 1}. One row per second. "
+        f"Seconds above / near / below typical: A overall {a_above}/{a_near}/{a_below}, "
+        f"B overall {b_above}/{b_near}/{b_below}. Over the shared seconds 0-{shared - 1}: "
+        f"A higher in {a_higher}, B higher in {b_higher}, within 0.05 in {within}.",
         " ".join(["t", *(f"{label}_{name}" for label, name in names)]),
     ]
     for second in range(seconds):

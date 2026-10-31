@@ -129,13 +129,17 @@ Shared builders, used by both requests:
   `SYSTEM_PROMPT` from "The table has three groups" up to the line before "Writing:". `SYSTEM_PROMPT` is
   rebuilt from intro + `READING_RULES` + its writing rules, with unchanged text.
 - `series_table(result)`: one text block, sent after the pictures. First line
-  `duration_seconds <n>, last_second <n-1>. One row per second.`, then a header
+  `duration_seconds <n>, last_second <n-1>. One row per second. Seconds above / near / below
+  typical: see A/N/B, hear A/N/B, understand A/N/B, overall A/N/B.`, the counts of seconds judged
+  as the table shows each value (rounded to 2 dp; near is within 0.05 of 0, above and below are
+  beyond it; None and seconds past a series' end are skipped), then a header
   row `t` see hear understand overall `muted_overall` (the seven sub-signals and the duplicate
   `sound` column are left out: with them the writer drifted to a big sub-signal and called it
   seeing), then one row per second `t = 0 .. n-1`: `t`
   right-aligned to 3, then each value formatted `+0.00`, space-separated. A missing value is left
   blank (only `muted_overall` can be shorter, as the muted pass is cut to the shared length, and
-  it is the last column).
+  it is the last column). The counts serve whole-video claims in headlines (which group leads),
+  which the writer miscounted by hand (audit 31 Oct).
 - `words_block(words, label=None)`: `[Video <label> ]spoken words:` then `<start 2 dp> s: <word>`
   lines; omitted when there are no words.
 - `frame_blocks(frames, seconds, label=None)`: for `t < seconds`, a text block `[<label> ]t = <t>
@@ -143,7 +147,13 @@ Shared builders, used by both requests:
 
 - `comparison_table(a, b)`: one block, one row per second up to the longer video:
   `t` then `A_x B_x` pairs for see, hear, understand, overall, muted_overall; cells past the
-  shorter video are blank, so a second sits beside the same second of the other video.
+  shorter video are blank, so a second sits beside the same second of the other video. Its first
+  line ends with the seconds above / near / below typical for each video's overall, then
+  `Over the shared seconds 0-<m-1>: A higher in <x>, B higher in <y>, within 0.05 in <z>.`,
+  where `m = min(duration_a, duration_b)` and each shared second counts once: A higher when
+  rounded A - B exceeds 0.05, B higher when rounded B - A exceeds 0.05, else within, skipping a
+  second where either value is None. These counts serve the verdict's whole-video claims (which
+  video is higher in more shared seconds), which the writer miscounted by hand (audit 31 Oct).
 
 `build_request(result, frames, words)` (single, M3g §5b) = words + frames + table, no label.
 `build_comparison_request(a, b)`, each a `(result, frames, words)`, returns
@@ -172,11 +182,11 @@ Writing:
 - The headline and summary are the verdict, shown beside the chart: which video draws the
   stronger response overall, the main reason, and where the other one does better, in two or
   three sentences. The headline names the video with the stronger response, or says they are
-  close. Judge which is stronger by overall: higher in more of the seconds and at the peaks,
-  never by one group alone. They are close when neither is higher in clearly more of the shared
-  seconds (fewer than 6 in 10) and neither peak stands clearly above the other; then the
-  headline says so. Leave the stretch-by-stretch story to the differences. Be accurate
-  rather than kind.
+  close. Judge which is stronger by overall: higher in more of the shared seconds (the first
+  line counts them) and at the peaks, never by one group alone. They are close when neither is
+  higher in clearly more of the shared seconds (fewer than 6 in 10) and neither peak stands
+  clearly above the other; then the headline says so. Leave the stretch-by-stretch story to the
+  differences. Be accurate rather than kind.
 - A stronger response may be called stronger brain engagement, or said to suggest more
   attention. Never claim anything about what real viewers do: views, watch time, retention,
   drop-off, clicks or sharing, and never give a score.

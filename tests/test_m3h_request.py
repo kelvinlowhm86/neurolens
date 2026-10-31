@@ -107,3 +107,43 @@ def test_the_table_comes_after_the_pictures():
 
     assert content[-1]["text"].startswith("duration_seconds 2")
     assert all(block["type"] == "image" or "t = " in block["text"] for block in content[:-1])
+
+
+def test_series_table_first_line_counts_seconds_against_typical():
+    duration = 6
+    signals = {name: [0.0] * duration for name in results.SERIES}
+    signals["see"] = [0.05, 0.051, -0.06, None, -0.05, 0.2]
+    signals["hear"] = [0.2, -0.2, 0.0, 0.0, 0.0, 0.0]
+    signals["overall"] = [0.2] * duration
+    result = {
+        "format": 2,
+        "duration_seconds": duration,
+        "signals": signals,
+        "muted": {name: [0.0] * duration for name in results.SERIES},
+    }
+
+    lines = report_prompt.series_table(result).splitlines()
+
+    assert lines[0].endswith(
+        "Seconds above / near / below typical: see 1/3/1, hear 1/4/1, "
+        "understand 0/6/0, overall 6/0/0."
+    )
+    assert lines[1].split() == ["t", *SHOWN, "muted_overall"]
+
+
+def test_comparison_table_counts_over_the_shared_seconds_only():
+    a = make_result(5)
+    b = make_result(3)
+    a["signals"]["overall"] = [0.2, -0.2, 0.0, 0.2, -0.2]
+    b["signals"]["overall"] = [0.0, 0.0, 0.0]
+
+    _, content = report_prompt.build_comparison_request(
+        (a, [b"\xff\xd8a"] * 5, []), (b, [b"\xff\xd8b"] * 3, [])
+    )
+
+    lines = content[-1]["text"].splitlines()
+    assert lines[0].endswith(
+        "Seconds above / near / below typical: A overall 2/1/2, B overall 0/3/0. "
+        "Over the shared seconds 0-2: A higher in 1, B higher in 1, within 0.05 in 1."
+    )
+    assert lines[1].split()[:3] == ["t", "A_see", "B_see"]
