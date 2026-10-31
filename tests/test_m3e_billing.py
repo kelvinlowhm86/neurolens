@@ -142,7 +142,7 @@ def test_an_unknown_job_is_not_queued(db, pg):
 
 
 def test_verify_queued_follows_the_pricing_constant(db, pg, new_job, monkeypatch):
-    job_id, _ = queued(new_job)  # 90 reserved at the current price
+    job_id, _ = queued(new_job)  # one block reserved at the real price
     monkeypatch.setattr(
         pricing, "CENTS_PER_BLOCK", 137
     )  # not the real price, so a typed-in copy fails

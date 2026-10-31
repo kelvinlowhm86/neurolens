@@ -1787,6 +1787,7 @@ const EXTENSION_TYPES = { mp4: 'video/mp4', mov: 'video/quicktime', webm: 'video
 function estimateCostCents(d) {
   if (!limits || !limits.price) return null;
   const { cents_per_block, block_seconds, allowance_seconds } = limits.price;
+  d = Math.round(d * 1000) / 1000; // the server prices the length in whole milliseconds
   if (![cents_per_block, block_seconds, allowance_seconds].every(Number.isFinite) || block_seconds <= 0) return null;
   return cents_per_block * Math.max(1, Math.ceil((d - allowance_seconds) / block_seconds));
 }

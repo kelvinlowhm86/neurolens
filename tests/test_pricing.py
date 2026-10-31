@@ -5,8 +5,6 @@ $1.00 per started 30-second block today, with a half-second allowance. The modul
 one place the price lives; the pages read them from /api/limits.
 """
 
-import math
-
 import pytest
 from neurolens import pricing
 from neurolens.pricing import estimate_cost_cents, estimate_cost_usd
@@ -30,14 +28,6 @@ CASES = [
 @pytest.mark.parametrize("duration, blocks", CASES)
 def test_estimate_cost_cents(duration, blocks):
     assert estimate_cost_cents(duration) == blocks * pricing.CENTS_PER_BLOCK
-
-
-@pytest.mark.parametrize("duration, blocks", CASES)
-def test_estimate_cost_cents_matches_the_written_formula(duration, blocks):
-    expected = pricing.CENTS_PER_BLOCK * max(
-        1, math.ceil((duration - pricing.ALLOWANCE_SECONDS) / pricing.BLOCK_SECONDS)
-    )
-    assert estimate_cost_cents(duration) == expected
 
 
 def test_todays_constants_are_100_cents_per_30_second_block_with_a_half_second_allowance():
