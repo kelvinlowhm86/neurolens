@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Emergency pause (docs/M3e_spec.md §6b): no GPU may start or stay on, and no keep-warm survives.
 # It deletes the keep-warm action before scaling down, then reads the target back.
+# AWS refuses a capacity change while the endpoint is updating, so it then waits for the
+# endpoint to settle before setting its desired count to 0.
 # Prints ALL STOPPED only when every step succeeded; otherwise NOT CONFIRMED and exit 1.
 set -uo pipefail
 
@@ -53,25 +55,56 @@ else
   fi
 fi
 
-aws sagemaker update-endpoint-weights-and-capacities \
-  --endpoint-name "$ENDPOINT" \
-  --desired-weights-and-capacities "VariantName=$VARIANT_MAIN,DesiredInstanceCount=0" \
-  || problem "could not set the endpoint's desired instance count to 0"
-
-STOPPED=0
-for _ in $(seq 1 60); do
-  if ! COUNT=$(aws sagemaker describe-endpoint --endpoint-name "$ENDPOINT" \
-      --query 'ProductionVariants[0].CurrentInstanceCount' --output text); then
-    problem "could not read the endpoint's instance count"
+LEFT_LOOP=0
+STATUS=""
+DESIRED=""
+CURRENT=""
+for _ in $(seq 1 90); do
+  if ! READ=$(aws sagemaker describe-endpoint --endpoint-name "$ENDPOINT" \
+      --query '[EndpointStatus,ProductionVariants[0].DesiredInstanceCount,ProductionVariants[0].CurrentInstanceCount]' \
+      --output text); then
+    problem "could not read the endpoint's status and instance count"
+    LEFT_LOOP=1
     break
   fi
-  if [ "$COUNT" = "0" ] || [ "$COUNT" = "None" ]; then
-    STOPPED=1
-    break
-  fi
-  sleep 10
+  read -r STATUS DESIRED CURRENT <<< "$READ" || true
+  [ "${DESIRED:-}" = "None" ] && DESIRED=0
+  [ "${CURRENT:-}" = "None" ] && CURRENT=0
+  case "$STATUS" in
+    Creating|Updating|SystemUpdating)
+      sleep 10
+      ;;
+    InService)
+      if [ "$DESIRED" = "0" ] && [ "$CURRENT" = "0" ]; then
+        LEFT_LOOP=1
+        break
+      fi
+      if [ "$DESIRED" != "0" ]; then
+        if ! UPDATE_ERR=$(aws sagemaker update-endpoint-weights-and-capacities \
+            --endpoint-name "$ENDPOINT" \
+            --desired-weights-and-capacities "VariantName=$VARIANT_MAIN,DesiredInstanceCount=0" 2>&1 1>/dev/null); then
+          case "$UPDATE_ERR" in
+            *in-progress*) ;;
+            *)
+              problem "could not set the endpoint's desired instance count to 0: $UPDATE_ERR"
+              LEFT_LOOP=1
+              break
+              ;;
+          esac
+        fi
+      fi
+      sleep 10
+      ;;
+    *)
+      problem "the endpoint is in status ${STATUS:-unknown}; it must reach InService with 0 instances"
+      LEFT_LOOP=1
+      break
+      ;;
+  esac
 done
-[ "$STOPPED" = 1 ] || problem "the endpoint still shows $COUNT instance(s); it did not reach 0"
+if [ "$LEFT_LOOP" != 1 ]; then
+  problem "the endpoint is still ${STATUS:-unknown} with ${CURRENT:-?} instance(s) after 15 min"
+fi
 
 if [ -n "$PROBLEMS" ]; then
   printf 'NOT CONFIRMED in %s:\n%s' "${AWS_REGION:-unknown region}" "$PROBLEMS" >&2
