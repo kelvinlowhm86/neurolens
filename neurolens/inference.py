@@ -198,61 +198,68 @@ class PlayCopy:
 
     def _start(self):
         # `nice` rather than preexec_fn: the worker runs a heartbeat thread, and preexec_fn is
-        # unsafe in a process with threads.
-        self.process = subprocess.Popen(
-            [
-                "nice",
-                "-n",
-                "10",
-                "ffmpeg",
-                "-v",
-                "error",
-                "-y",
-                "-i",
-                str(self.src_path),
-                "-map",
-                "0:v:0",
-                "-map",
-                "0:a:0?",
-                "-vf",
-                "scale='min(iw,1920)':'min(ih,1920)':"
-                "force_original_aspect_ratio=decrease:force_divisible_by=2",
-                "-c:v",
-                "libx264",
-                "-preset",
-                "veryfast",
-                "-crf",
-                "23",
-                "-pix_fmt",
-                "yuv420p",
-                "-profile:v",
-                "high",
-                "-movflags",
-                "+faststart",
-                "-c:a",
-                "aac",
-                "-b:a",
-                "128k",
-                str(self.dst_path),
-            ],
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.PIPE,
-        )
+        # unsafe in a process with threads. stderr goes to a file, not a pipe nobody reads until
+        # the end: a corrupt stream can print an error per frame, fill a pipe and stall the encode.
+        self.log_path = self.dst_path.with_suffix(".log")
+        with open(self.log_path, "wb") as log:
+            self.process = subprocess.Popen(
+                [
+                    "nice",
+                    "-n",
+                    "10",
+                    "ffmpeg",
+                    "-v",
+                    "error",
+                    "-y",
+                    "-i",
+                    str(self.src_path),
+                    "-map",
+                    "0:v:0",
+                    "-map",
+                    "0:a:0?",
+                    "-vf",
+                    "scale='min(iw,1920)':'min(ih,1920)':"
+                    "force_original_aspect_ratio=decrease:force_divisible_by=2",
+                    "-c:v",
+                    "libx264",
+                    "-preset",
+                    "veryfast",
+                    "-crf",
+                    "23",
+                    "-pix_fmt",
+                    "yuv420p",
+                    "-profile:v",
+                    "high",
+                    "-movflags",
+                    "+faststart",
+                    "-c:a",
+                    "aac",
+                    "-b:a",
+                    "128k",
+                    str(self.dst_path),
+                ],
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=log,
+            )
 
     def wait(self, timeout_s=None):
         """True only if ffmpeg finished cleanly and wrote a non-empty file; never raises."""
         if self.process is None:
             return False
         try:
-            _, stderr = self.process.communicate(timeout=timeout_s)
+            self.process.wait(timeout=timeout_s)
         except subprocess.TimeoutExpired:
             self.process.kill()
-            self.process.communicate()
+            self.process.wait()
             logger.error(f"PLAY_COPY_FAILED {self.src_path}: timed out after {timeout_s}s")
             return False
         if self.process.returncode != 0 or not self._written():
-            detail = stderr.decode(errors="replace").strip().splitlines()[-5:]
+            try:
+                text = self.log_path.read_text(errors="replace")
+            except OSError:
+                text = ""
+            detail = text.strip().splitlines()[-5:]
             logger.error(f"PLAY_COPY_FAILED {self.src_path}: {' | '.join(detail)}")
             return False
         return True

@@ -409,9 +409,11 @@ def _analyse(
             billing.record_video_hash(db, job_id, _sha256_file(video_path))
             storage.put_dataset(s3, bucket, job_id, object_key, result, brain=brain)
 
+        # The phone copy is only for playback, so it never fails the paid job. Waited for before
+        # the stage, so the claim is checked again after a long wait and before any result write.
+        play_copied = play_copy.wait(inference.PLAY_COPY_WAIT_SECONDS)
         stage("saving_result")
-        # The phone copy is only for playback, so it never fails the paid job.
-        if play_copy.wait(inference.PLAY_COPY_WAIT_SECONDS):
+        if play_copied:
             try:
                 storage.put_play_copy(s3, bucket, job_id, play_path)
             except Exception:
