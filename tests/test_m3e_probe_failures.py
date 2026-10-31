@@ -138,6 +138,11 @@ class RecordingSageMaker:
         return {"InferenceId": kwargs["InferenceId"]}
 
 
+class NotPausedAppScaling:
+    def describe_scalable_targets(self, **kwargs):
+        return {"ScalableTargets": [{"MinCapacity": 0, "MaxCapacity": 1}]}
+
+
 def test_probe_failed_propagates_and_leaves_the_job_queued(aws, db, pg, new_job, monkeypatch):
     from neurolens import storage
     from neurolens.lambdas import dispatcher
@@ -157,6 +162,7 @@ def test_probe_failed_propagates_and_leaves_the_job_queued(aws, db, pg, new_job,
             key,
             s3=aws.s3,
             sagemaker=sagemaker,
+            appscaling=NotPausedAppScaling(),
             db=db,
             endpoint="neurolens-gpu",
             max_upload_bytes=300_000_000,

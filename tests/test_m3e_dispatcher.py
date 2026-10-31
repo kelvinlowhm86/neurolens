@@ -35,6 +35,24 @@ class RecordingSageMaker:
         return {"InferenceId": kwargs["InferenceId"]}
 
 
+class FakeAppScaling:
+    """Application Auto Scaling: a target maximum, no target, or a read failure."""
+
+    def __init__(self, max_capacity=1, *, targets=None, error=None):
+        self.max_capacity = max_capacity
+        self.targets = targets
+        self.error = error
+        self.calls = []
+
+    def describe_scalable_targets(self, **kwargs):
+        self.calls.append(kwargs)
+        if self.error is not None:
+            raise self.error
+        if self.targets is not None:
+            return {"ScalableTargets": self.targets}
+        return {"ScalableTargets": [{"MinCapacity": 0, "MaxCapacity": self.max_capacity}]}
+
+
 @pytest.fixture
 def probe(monkeypatch):
     """Replace dispatcher.probe_duration, returning the recorded (url, timeout_s) calls."""
@@ -64,6 +82,7 @@ def dispatch(
     *,
     s3=None,
     sagemaker=None,
+    appscaling=None,
     max_upload_bytes=MAX_UPLOAD_BYTES,
     max_duration_s=MAX_S,
 ):
@@ -74,6 +93,7 @@ def dispatch(
         key,
         s3=s3 or aws.s3,
         sagemaker=sagemaker or RecordingSageMaker(),
+        appscaling=appscaling or FakeAppScaling(),
         db=db,
         endpoint=ENDPOINT,
         max_upload_bytes=max_upload_bytes,
@@ -225,6 +245,136 @@ def test_short_credit_for_the_real_length_refunds_and_deletes(aws, db, pg, new_j
     assert not exists(aws, key)
 
 
+# ---------------------------------------------------------------- the pause check
+
+
+def test_a_paused_endpoint_refunds_processing_paused_and_never_invokes(
+    aws, db, pg, new_job, probe
+):
+    job_id, key = new_job()
+    upload(aws, key)
+    probe(seconds=3.0)
+    sagemaker = RecordingSageMaker()
+
+    assert dispatch(aws, db, key, sagemaker=sagemaker, appscaling=FakeAppScaling(0)) == "refunded"
+
+    assert_refunded(pg, job_id, "processing_paused")
+    assert sagemaker.calls == []
+    assert not exists(aws, key)
+
+
+def test_no_scalable_target_refunds_processing_paused_and_never_invokes(
+    aws, db, pg, new_job, probe
+):
+    job_id, key = new_job()
+    upload(aws, key)
+    probe(seconds=3.0)
+    sagemaker = RecordingSageMaker()
+
+    assert (
+        dispatch(aws, db, key, sagemaker=sagemaker, appscaling=FakeAppScaling(targets=[]))
+        == "refunded"
+    )
+
+    assert_refunded(pg, job_id, "processing_paused")
+    assert sagemaker.calls == []
+    assert not exists(aws, key)
+
+
+def test_a_target_max_of_one_is_invoked_as_before(aws, db, pg, new_job, probe):
+    job_id, key = new_job()
+    upload(aws, key)
+    probe(seconds=3.0)
+    sagemaker = RecordingSageMaker()
+
+    assert dispatch(aws, db, key, sagemaker=sagemaker, appscaling=FakeAppScaling(1)) == "invoked"
+
+    assert len(sagemaker.calls) == 1
+    assert pg.job(job_id)["status"] == "queued"
+
+
+def test_the_pause_check_reads_the_configured_endpoints_variant(aws, db, new_job, probe):
+    _, key = new_job()
+    upload(aws, key)
+    probe(seconds=3.0)
+    appscaling = FakeAppScaling(1)
+
+    assert dispatch(aws, db, key, appscaling=appscaling) == "invoked"
+
+    [call] = appscaling.calls
+    assert call["ServiceNamespace"] == "sagemaker"
+    assert call["ResourceIds"] == [f"endpoint/{ENDPOINT}/variant/main"]
+    assert call["ScalableDimension"] == "sagemaker:variant:DesiredInstanceCount"
+
+
+def test_a_failed_pause_check_propagates_and_changes_nothing(aws, db, pg, new_job, probe):
+    job_id, key = new_job()
+    upload(aws, key)
+    probe(seconds=3.0)
+    sagemaker = RecordingSageMaker()
+
+    with pytest.raises(RuntimeError, match="autoscaling unavailable"):
+        dispatch(
+            aws,
+            db,
+            key,
+            sagemaker=sagemaker,
+            appscaling=FakeAppScaling(error=RuntimeError("autoscaling unavailable")),
+        )
+
+    job = pg.job(job_id)
+    assert job["status"] == "queued" and job["error_code"] is None
+    price = pricing.estimate_cost_cents(3)
+    assert pg.balance() == (STARTER_CENTS - price, price)
+    assert sagemaker.calls == []
+    assert exists(aws, key)
+
+
+def test_an_earlier_refusal_keeps_its_reason_and_skips_the_pause_check(
+    aws, db, pg, new_job, probe
+):
+    job_id, key = new_job()
+    upload(aws, key, b"0123456789A")
+    probe(seconds=3.0)
+    sagemaker = RecordingSageMaker()
+    appscaling = FakeAppScaling(0)
+
+    assert (
+        dispatch(
+            aws,
+            db,
+            key,
+            sagemaker=sagemaker,
+            appscaling=appscaling,
+            max_upload_bytes=10,
+        )
+        == "refunded"
+    )
+
+    assert_refunded(pg, job_id, "file_too_large")
+    assert sagemaker.calls == []
+    assert appscaling.calls == []
+    assert not exists(aws, key)
+
+
+def test_endpoint_paused_is_true_when_the_target_max_is_zero():
+    from neurolens import scaling
+
+    assert scaling.endpoint_paused(FakeAppScaling(0), ENDPOINT) is True
+
+
+def test_endpoint_paused_is_true_without_a_scalable_target():
+    from neurolens import scaling
+
+    assert scaling.endpoint_paused(FakeAppScaling(targets=[]), ENDPOINT) is True
+
+
+def test_endpoint_paused_is_false_when_the_target_max_is_one():
+    from neurolens import scaling
+
+    assert scaling.endpoint_paused(FakeAppScaling(1), ENDPOINT) is False
+
+
 # ---------------------------------------------------------------- the invoke
 
 
@@ -339,12 +489,24 @@ def sqs_event(key, bucket):
     }
 
 
-def run_handler(aws, db, monkeypatch, key, sagemaker, *, max_upload_bytes=MAX_UPLOAD_BYTES):
+def run_handler(
+    aws,
+    db,
+    monkeypatch,
+    key,
+    sagemaker,
+    *,
+    max_upload_bytes=MAX_UPLOAD_BYTES,
+    appscaling=None,
+):
     import neurolens.lambdas as lambdas
 
     monkeypatch.setattr(lambdas, "database", lambda: db)
     monkeypatch.setattr(lambdas, "s3_client", lambda: aws.s3)
     monkeypatch.setattr(lambdas, "sagemaker_runtime_client", lambda: sagemaker)
+    monkeypatch.setattr(
+        lambdas, "appscaling_client", lambda: appscaling or FakeAppScaling(), raising=False
+    )
     monkeypatch.setenv("NEUROLENS_S3_BUCKET", aws.bucket)
     monkeypatch.setenv("NEUROLENS_GPU_ENDPOINT", ENDPOINT)
     monkeypatch.setenv("NEUROLENS_MAX_UPLOAD_BYTES", str(max_upload_bytes))
@@ -368,6 +530,32 @@ def test_the_handler_builds_the_clients_and_invokes_the_job(
     [call] = sagemaker.calls
     assert call["EndpointName"] == ENDPOINT and call["InferenceId"] == job_id
     assert pg.job(job_id)["status"] == "queued"
+
+
+def test_a_paused_handler_refunds_and_never_starts_the_gpu(
+    aws, db, pg, new_job, probe, monkeypatch
+):
+    from neurolens.lambdas import dispatcher
+
+    job_id, key = new_job()
+    upload(aws, key)
+    probe(seconds=3.0)
+    sagemaker = RecordingSageMaker()
+    starts = []
+    monkeypatch.setattr(
+        dispatcher, "start_gpu_if_off", lambda *args, **kwargs: starts.append(args) or "started"
+    )
+
+    assert (
+        run_handler(
+            aws, db, monkeypatch, key, sagemaker, appscaling=FakeAppScaling(max_capacity=0)
+        )
+        == ["refunded"]
+    )
+
+    assert_refunded(pg, job_id, "processing_paused")
+    assert sagemaker.calls == [] and starts == []
+    assert not exists(aws, key)
 
 
 def test_a_handler_exception_propagates_so_sqs_redelivers(aws, db, pg, new_job, probe, monkeypatch):

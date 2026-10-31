@@ -77,6 +77,11 @@ class RecordingSageMaker:
         return {"InferenceId": kwargs["InferenceId"]}
 
 
+class NotPausedAppScaling:
+    def describe_scalable_targets(self, **kwargs):
+        return {"ScalableTargets": [{"MinCapacity": 0, "MaxCapacity": 1}]}
+
+
 def client_error(code, operation="UpdateEndpointWeightsAndCapacities"):
     return ClientError({"Error": {"Code": code, "Message": code}}, operation)
 
@@ -236,6 +241,7 @@ def run_handler(aws, db, monkeypatch, key, runtime, control):
     monkeypatch.setattr(lambdas, "s3_client", lambda: aws.s3)
     monkeypatch.setattr(lambdas, "sagemaker_runtime_client", lambda: runtime)
     monkeypatch.setattr(lambdas, "sagemaker_client", lambda: control)
+    monkeypatch.setattr(lambdas, "appscaling_client", lambda: NotPausedAppScaling(), raising=False)
     monkeypatch.setenv("NEUROLENS_S3_BUCKET", aws.bucket)
     monkeypatch.setenv("NEUROLENS_GPU_ENDPOINT", ENDPOINT)
     monkeypatch.setenv("NEUROLENS_MAX_UPLOAD_BYTES", str(MAX_UPLOAD_BYTES))
