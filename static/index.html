@@ -20,6 +20,8 @@
     --accent: #FF8A2A; --accent-2: #FFC24A; --cool: #6F7E99;
     --display: 'Space Grotesk', system-ui, sans-serif;
     --mono: 'JetBrains Mono', ui-monospace, monospace;
+    --t-press: 80ms; --t-quick: 160ms; --t-enter: 240ms; --t-signature: 900ms; --t-page: 350ms;
+    --ease-out: cubic-bezier(.2, .7, .2, 1); --ease-io: cubic-bezier(.65, 0, .35, 1);
     --grid: linear-gradient(rgba(255, 255, 255, .035) 1px, transparent 1px),
             linear-gradient(90deg, rgba(255, 255, 255, .035) 1px, transparent 1px);
   }
@@ -28,6 +30,9 @@
   html { background: var(--bg); }
   body { min-height: 100vh; background-color: var(--bg); background-image: var(--grid); background-size: 24px 24px; color: var(--text); font: 14px/1.55 var(--display); letter-spacing: -0.003em; }
   a { color: inherit; }
+  a, button { transition: color var(--t-quick) var(--ease-out), background-color var(--t-quick) var(--ease-out), border-color var(--t-quick) var(--ease-out), transform var(--t-press) var(--ease-out); }
+  button:not(.moment-mark):active, a:active { transform: scale(.98); }
+  button:disabled, [aria-disabled="true"] { opacity: .5; cursor: default; }
   :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
   .bar { background: var(--bar); color: var(--text); display: flex; align-items: center; gap: 12px; padding: 0 24px; height: 56px; border-bottom: 1px solid var(--line); }
@@ -61,23 +66,23 @@
   .brain-time { position: absolute; right: 14px; top: 12px; font: 500 13px var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
   .brain-hint { position: absolute; right: 14px; bottom: 12px; font-size: 11px; color: var(--muted); pointer-events: none; }
 
-  .curve-box { position: relative; flex: none; height: 84px; background: var(--well); border: 1px solid var(--line); border-radius: 3px; overflow: hidden; }
-  .curve-box svg { display: block; width: 100%; height: 100%; }
+  .curve-box { position: relative; flex: none; height: 118px; background: var(--well); border: 1px solid var(--line); border-radius: 3px; overflow: hidden; display: flex; flex-direction: column; }
+  .curve-box svg { display: block; width: 100%; height: 84px; flex: none; }
   .curve-zero { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 2 4; opacity: .55; }
   .curve-ghost { fill: none; stroke: var(--muted); stroke-width: 1; opacity: .28; }
   .curve-drawn { fill: none; stroke: var(--accent); stroke-width: 1.5; stroke-linejoin: round; stroke-linecap: round; }
   .curve-play { stroke: var(--text); stroke-width: 1; opacity: .45; }
   .curve-dot { fill: var(--bg); stroke: var(--accent-2); stroke-width: 2; }
   .curve-label { font: 10.5px var(--display); fill: var(--muted); text-anchor: end; paint-order: stroke; stroke: var(--well); stroke-width: 4px; stroke-linejoin: round; }
-  .curve-callout { position: absolute; left: 10px; top: 8px; max-width: min(74%, 340px); display: flex; align-items: baseline; gap: 8px; padding: 4px 9px; background: rgba(11, 12, 14, .84); border: 1px solid var(--line); border-radius: 3px; font-size: 11.5px; color: var(--text); opacity: 0; transform: translateY(3px); transition: opacity .35s ease, transform .35s ease; pointer-events: none; }
-  .curve-callout.on { opacity: 1; transform: none; }
-  .curve-callout .when { font: 500 10.5px var(--mono); color: var(--accent-2); font-variant-numeric: tabular-nums; }
-  .curve-callout .what { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .curve-callout { flex: none; height: 32px; display: flex; align-items: center; gap: 8px; padding: 0 10px; border-top: 1px solid var(--line); font-size: 11.5px; line-height: 1.3; color: var(--text); opacity: 0; transition: opacity var(--t-quick) var(--ease-out); pointer-events: none; }
+  .curve-callout.on { opacity: 1; }
+  .curve-callout .when { flex: none; font: 500 10.5px var(--mono); color: var(--accent-2); font-variant-numeric: tabular-nums; }
+  .curve-callout .what { min-width: 0; max-height: 2.6em; overflow: hidden; }
   .coming-soon { background: var(--well); border: 1px solid var(--line); border-radius: 3px; display: flex; align-items: center; justify-content: center; flex: 1; min-height: 300px; padding: 28px; text-align: center; color: var(--muted); font-size: 15px; }
 
   .how { max-width: 1120px; margin: 96px auto 32px; padding: 72px 64px; background: var(--panel); border: 1px solid var(--line); border-radius: 3px; display: grid; grid-template-columns: 260px 1fr; gap: 64px; }
   .steps { list-style: none; }
-  .step { display: grid; grid-template-columns: 44px 1fr; gap: 18px; padding: 28px 0; border-top: 1px solid var(--line); transition: opacity .55s ease, transform .55s ease; }
+  .step { display: grid; grid-template-columns: 44px 1fr; gap: 18px; padding: 28px 0; border-top: 1px solid var(--line); transition: opacity var(--t-enter) var(--ease-out), transform var(--t-enter) var(--ease-out); }
   .step:first-child { border-top: 0; padding-top: 0; }
   .step:last-child { padding-bottom: 0; }
   html.has-reveal .step:not(.is-visible) { opacity: 0; transform: translateY(16px); }
@@ -106,17 +111,17 @@
   }
 
   /* Page-to-page change (landing <-> app): the header stays put, the old page dims away
-     and a scan line sweeps down revealing the new one. */
+     and a thin vertical line moves left to right revealing the new one. */
   @view-transition { navigation: auto; }
   .bar { view-transition-name: bar; }
-  ::view-transition-old(root) { animation: vt-out .6s cubic-bezier(.65, 0, .35, 1) both; }
-  ::view-transition-new(root) { animation: vt-reveal .6s cubic-bezier(.65, 0, .35, 1) both; }
-  .vt-scan { position: fixed; left: 0; right: 0; top: 0; height: 2px; z-index: 1000; pointer-events: none; opacity: 0; background: linear-gradient(90deg, transparent, #FF8A2A 20%, #FFC24A 50%, #FF8A2A 80%, transparent); box-shadow: 0 0 14px 2px rgba(255, 138, 42, .5), 0 -28px 44px rgba(255, 138, 42, .1); }
-  html.vt-in .vt-scan { animation: vt-scan .6s cubic-bezier(.65, 0, .35, 1) both; }
-  @keyframes vt-out { to { opacity: 0; filter: blur(8px); transform: scale(.98); } }
-  @keyframes vt-reveal { from { clip-path: inset(0 0 100% 0); } to { clip-path: inset(0); } }
-  @keyframes vt-scan { from { transform: translateY(-2px); opacity: 1; } 85% { opacity: 1; } to { transform: translateY(calc(100vh - 2px)); opacity: 0; } }
-  @media (prefers-reduced-motion: reduce) { @view-transition { navigation: none; } }
+  ::view-transition-old(root) { animation: vt-out var(--t-page) var(--ease-out) both; }
+  ::view-transition-new(root) { animation: vt-reveal var(--t-page) var(--ease-out) both; }
+  .vt-scan { position: fixed; left: 0; top: 0; bottom: 0; width: 2px; z-index: 1000; pointer-events: none; opacity: 0; background: linear-gradient(180deg, transparent, #FF8A2A 20%, #FFC24A 50%, #FF8A2A 80%, transparent); box-shadow: 0 0 14px 2px rgba(255, 138, 42, .5), 28px 0 44px rgba(255, 138, 42, .1); }
+  html.vt-in .vt-scan { animation: vt-scan var(--t-page) var(--ease-out) both; }
+  @keyframes vt-out { to { opacity: 0; transform: scale(.99); } }
+  @keyframes vt-reveal { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0); } }
+  @keyframes vt-scan { from { transform: translateX(-2px); opacity: 1; } 85% { opacity: 1; } to { transform: translateX(calc(100vw - 2px)); opacity: 0; } }
+  @media (prefers-reduced-motion: reduce) { @view-transition { navigation: none; } .vt-scan { display: none; } }
 </style>
 <script>
   // The scan line runs only while a page-to-page transition reveals this page.
@@ -474,7 +479,8 @@ async function loadHero() {
     const res = await fetch('/data/samples.json', { cache: 'no-store' });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
-    sample = Array.isArray(data.samples) ? data.samples[0] : null;
+    const samples = Array.isArray(data.samples) ? data.samples : [];
+    sample = samples.find(entry => entry && entry.landing === true) || samples[0] || null;
   } catch (error) { /* an empty list or a failed request both get the quiet panel */ }
   if (!sample || !sample.video_file) {
     showComingSoon();

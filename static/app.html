@@ -16,6 +16,8 @@
     --rule: #262A31; --surface: rgba(17,19,22,.92);
     --display: 'Space Grotesk', system-ui, sans-serif; --mono: 'JetBrains Mono', ui-monospace, monospace;
     --text: 'Space Grotesk', system-ui, sans-serif; --radius: 3px;
+    --t-press: 80ms; --t-quick: 160ms; --t-enter: 240ms; --t-signature: 900ms; --t-page: 350ms;
+    --ease-out: cubic-bezier(.2, .7, .2, 1); --ease-io: cubic-bezier(.65, 0, .35, 1);
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
@@ -28,6 +30,9 @@
   }
   button, input, select { font: inherit; }
   button { cursor: pointer; }
+  a, button { transition: color var(--t-quick) var(--ease-out), background-color var(--t-quick) var(--ease-out), border-color var(--t-quick) var(--ease-out), transform var(--t-press) var(--ease-out); }
+  button:not(.moment-mark):active, a:active { transform: scale(.98); }
+  button:disabled, [aria-disabled="true"] { opacity: .5; cursor: default; }
   :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   [hidden] { display: none !important; }
   .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
@@ -43,6 +48,8 @@
   .account:hover, .account[aria-expanded="true"] { color: var(--ink); border-color: var(--line); background: var(--panel); }
   .account::after { content: "▾"; font-size: 9px; margin-left: 4px; }
   .account-menu { position: absolute; right: 0; top: calc(100% + 6px); min-width: 170px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 5px; display: flex; flex-direction: column; gap: 2px; z-index: 30; box-shadow: 0 12px 30px rgba(0,0,0,.4); }
+  .account-menu:not([hidden]), .row-menu, .modal[open] { animation: menu-in var(--t-quick) var(--ease-out); }
+  @keyframes menu-in { from { opacity: 0; transform: scale(.98); } }
   .account-menu button { background: none; border: 0; color: var(--ink); text-align: left; padding: 8px 10px; border-radius: 2px; font-size: 13px; }
   .account-menu button:hover, .account-menu button:focus-visible { background: rgba(255,255,255,.06); }
   .btn-white { background: var(--ink); color: var(--bg); border: 1px solid var(--ink); border-radius: var(--radius); padding: 9px 16px; min-height: 40px; font-weight: 600; }
@@ -54,7 +61,7 @@
   .btn-danger { background: none; border: 1px solid var(--line); color: var(--danger); border-radius: var(--radius); padding: 6px 12px; min-height: 34px; }
   .btn-danger:hover { border-color: var(--danger); }
   .btn-danger:disabled { opacity: .5; cursor: default; }
-  .btn-ghost, .btn-white, .btn-danger, .result-tab, .history-link, .batch-curve { transition: color .15s, background .15s, border-color .15s; }
+  .btn-ghost, .btn-white, .btn-danger, .result-tab, .history-link, .batch-curve { transition: color var(--t-quick) var(--ease-out), background var(--t-quick) var(--ease-out), border-color var(--t-quick) var(--ease-out), transform var(--t-press) var(--ease-out); }
 
   .D { display: grid; grid-template-columns: minmax(340px, 420px) minmax(0, 1fr); height: calc(100vh - 56px); overflow: hidden; }
   body:has(.D) { overflow: hidden; }
@@ -79,6 +86,12 @@
   .box h2 { font: 600 16px/1.25 var(--display); }
   .box p { font-size: 12.5px; color: var(--muted); line-height: 1.5; }
   .box p.error { color: var(--danger); }
+  #startupPanel.active { animation: wake-in var(--t-enter) var(--ease-out) 500ms both; }
+  @keyframes wake-in { from { opacity: 0; } }
+  .startup-trace { width: 168px; height: 26px; margin-top: 4px; color: var(--muted); }
+  .startup-trace path { fill: none; stroke: currentColor; stroke-width: 1.2; vector-effect: non-scaling-stroke; }
+  #startupPanel.active .startup-trace { animation: wake-breathe 2.4s var(--ease-io) infinite; }
+  @keyframes wake-breathe { from, to { opacity: .35; } 50% { opacity: .85; } }
   .box .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 2px; align-items: center; }
   .box a:not(.btn-white) { color: var(--ink); }
   #signedOutNote:empty { display: none; }
@@ -86,11 +99,11 @@
   #historyList { min-height: 0; overflow-y: auto; scrollbar-width: thin; }
   #historyNote:empty { display: none; }
 
-  .upload-zone { position: relative; min-height: 150px; border: 0; border-radius: var(--radius); background: rgba(17,19,22,.6); color: var(--ink); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px; cursor: pointer; padding: 22px 18px; text-align: center; overflow: hidden; transition: background .2s; }
+  .upload-zone { position: relative; min-height: 150px; border: 0; border-radius: var(--radius); background: rgba(17,19,22,.6); color: var(--ink); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px; cursor: pointer; padding: 22px 18px; text-align: center; overflow: hidden; transition: background var(--t-quick) var(--ease-out); }
   .upload-zone:hover { background: rgba(255,138,42,.05); }
   .upload-zone.hidden { display: none; }
   .upload-dash { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
-  .upload-dash rect { fill: none; stroke: var(--muted); stroke-width: 1.5; stroke-dasharray: 6 6; opacity: .55; animation: dashmove 22s linear infinite; vector-effect: non-scaling-stroke; transition: stroke .2s, opacity .2s; }
+  .upload-dash rect { fill: none; stroke: var(--muted); stroke-width: 1.5; stroke-dasharray: 6 6; opacity: .55; animation: dashmove 22s linear infinite; vector-effect: non-scaling-stroke; transition: stroke var(--t-quick) var(--ease-out), opacity var(--t-quick) var(--ease-out); }
   .upload-zone:hover .upload-dash rect, .upload-zone.dragover .upload-dash rect { stroke: var(--accent); opacity: 1; }
   @keyframes dashmove { to { stroke-dashoffset: -240; } }
   .up-icon { color: var(--muted); display: block; }
@@ -125,23 +138,23 @@
   .consent-note { margin: 0; font-size: 12px; line-height: 1.45; color: var(--muted); }
   .upload-progress { display: none; height: 3px; background: var(--line); border-radius: 2px; overflow: hidden; }
   .upload-progress.active { display: block; }
-  .upload-bar { height: 100%; width: 0; background: var(--accent); transition: width .15s; }
+  .upload-bar { height: 100%; width: 0; background: var(--accent); transition: width var(--t-quick) var(--ease-out); }
   .report-empty { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: thin; padding-right: 4px; }
 
   .samples-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 18px; }
   .samples-head .label { font: 600 26px/1.1 var(--display); letter-spacing: -0.02em; color: var(--ink); text-transform: none; }
   .samples-free { font-size: 12px; color: var(--muted); }
   .samples-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 20px; }
-  .sample-card { border: 1px solid var(--line); border-radius: var(--radius); cursor: pointer; background: var(--panel); text-align: left; color: var(--ink); padding: 0; overflow: hidden; transition: transform .25s ease, border-color .25s ease, box-shadow .25s ease; }
+  .sample-card { border: 1px solid var(--line); border-radius: var(--radius); cursor: pointer; background: var(--panel); text-align: left; color: var(--ink); padding: 0; overflow: hidden; transition: transform var(--t-quick) var(--ease-out), border-color var(--t-quick) var(--ease-out), box-shadow var(--t-quick) var(--ease-out); }
   .sample-card:hover, .sample-card:focus-visible { transform: translateY(-4px); border-color: var(--accent); box-shadow: 0 0 0 1px rgba(255,138,42,.22); }
   .sample-card.active { border-color: var(--accent); }
   /* Cards rise in one after another; 'backwards' so the hover lift still works afterwards. */
-  .sample-card { animation: card-in .5s cubic-bezier(.2, .7, .2, 1) backwards; animation-delay: calc(var(--i, 0) * 70ms + 150ms); }
-  @keyframes card-in { from { opacity: 0; transform: translateY(14px); filter: blur(4px); } }
+  .sample-card { animation: card-in var(--t-enter) var(--ease-out) backwards; animation-delay: calc(var(--i, 0) * 40ms + 150ms); }
+  @keyframes card-in { from { opacity: 0; transform: translateY(6px); } }
   .sample-thumb { position: relative; width: 100%; aspect-ratio: 16 / 9; overflow: hidden; background: var(--well); display: flex; align-items: center; justify-content: center; color: var(--muted); }
-  .sample-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform .6s ease, filter .3s ease; }
+  .sample-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform var(--t-enter) var(--ease-out), filter var(--t-quick) var(--ease-out); }
   .sample-card:hover .sample-thumb img { transform: scale(1.04); }
-  .sample-preview { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity .3s; pointer-events: none; z-index: 1; }
+  .sample-preview { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity var(--t-quick) var(--ease-out); pointer-events: none; z-index: 1; }
   .sample-preview.on { opacity: 1; }
   .sample-dur-badge { position: absolute; right: 8px; bottom: 8px; z-index: 2; font: 11px var(--mono); padding: 3px 7px; border-radius: var(--radius); background: rgba(0,0,0,.65); color: #fff; }
   .sample-spark { display: block; width: 100%; height: 46px; background: var(--well); }
@@ -150,14 +163,15 @@
   .sample-desc { font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .sample-dur { display: none; }
 
-  .history-row { display: grid; grid-template-columns: 64px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 9px 8px; border: 1px solid transparent; border-top: 1px solid var(--line); font-size: 12px; border-radius: 2px; }
+  .history-row { display: grid; grid-template-columns: 64px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 9px 8px; border: 1px solid transparent; border-top: 1px solid var(--line); font-size: 12px; border-radius: 2px; animation: row-in var(--t-enter) var(--ease-out); }
+  @keyframes row-in { from { opacity: 0; transform: translateY(6px); } }
   .history-row:first-child { border-top-color: transparent; }
   .history-row.openable { cursor: pointer; }
   .history-row.openable:hover { background: rgba(255,255,255,.035); border-color: var(--line); }
   .history-main { display: contents; }
   .history-name { grid-row: 1; grid-column: 2; align-self: end; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .history-row > .history-thumb { grid-row: 1 / span 2; grid-column: 1; }
-  .history-sub { align-self: start; grid-row: 2; grid-column: 2 / -1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--muted); font: 11px var(--mono); margin-top: 2px; }
+  .history-sub { align-self: start; grid-row: 2; grid-column: 2 / -1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--muted); font: 11px var(--mono); margin-top: 2px; transition: color var(--t-quick) var(--ease-out); }
   .history-sub.error { color: var(--danger); }
   .history-row .upload-progress { grid-row: 2; grid-column: 2 / -1; }
   .history-row .upload-progress + .history-sub { grid-row: 3; }
@@ -179,7 +193,8 @@
   .field-row { display: flex; gap: 8px; }
   .field-row input { flex: 1; min-width: 0; border: 1px solid var(--line); border-radius: var(--radius); padding: 8px 10px; font-size: 12px; background: var(--well); color: var(--ink); }
   .modal { margin: auto; background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px 22px; width: min(440px, calc(100vw - 32px)); }
-  .modal::backdrop { background: rgba(7, 8, 10, .78); }
+  .modal::backdrop { background: rgba(7, 8, 10, .78); animation: backdrop-in var(--t-quick) var(--ease-out); }
+  @keyframes backdrop-in { from { opacity: 0; } }
   .modal h2 { font: 600 17px/1.25 var(--display); margin-bottom: 8px; }
   .modal p { font-size: 13px; color: var(--muted); line-height: 1.5; }
   .modal p.error { color: var(--danger); }
@@ -236,7 +251,7 @@
   .sample-meta { font-size: 11.5px; color: var(--muted); line-height: 1.45; }
   .sample-meta:empty { display: none; }
 
-  .timeline { display: grid; grid-template-columns: auto auto 1fr auto auto; gap: 10px; align-items: center; flex: none; }
+  .timeline { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center; flex: none; }
   .tl-btn { width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--line); background: var(--panel); color: var(--ink); display: grid; place-items: center; padding: 0; }
   .tl-btn:hover { border-color: var(--muted); }
   .tl-btn.play { width: 42px; height: 42px; background: var(--accent); color: #1B0E03; border: 0; }
@@ -257,7 +272,8 @@
   .result-tab.active { color: var(--ink); border-bottom-color: var(--accent); font-weight: 600; }
   .result-download { margin-left: auto; margin-right: 4px; align-self: center; min-height: 26px; padding: 2px 9px; font-size: 13px; color: var(--ink-2); white-space: nowrap; flex: none; }
   .result-panel { display: none; flex: 1; min-height: 0; flex-direction: column; gap: 16px; overflow-y: auto; scrollbar-width: thin; }
-  .result-panel.active { display: flex; }
+  .result-panel.active { display: flex; animation: panel-in var(--t-enter) var(--ease-out); }
+  @keyframes panel-in { from { opacity: 0; transform: translateY(4px); } }
   .report-panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px 22px; display: flex; flex-direction: column; gap: 14px; }
   .report-state { font-size: 13px; color: var(--ink-2); }
   .report-state:empty { display: none; }
@@ -272,7 +288,7 @@
   .report-moment:focus-visible { border-color: var(--accent); }
   .moment-head { display: flex; align-items: center; gap: 8px; }
   .moment-icon { width: 0; height: 0; border-left: 7px solid var(--accent); border-top: 5px solid transparent; border-bottom: 5px solid transparent; flex: none; }
-  .report-moment .when { font: 500 13px var(--mono); color: var(--accent); font-variant-numeric: tabular-nums; text-decoration: underline; text-decoration-color: transparent; text-underline-offset: 3px; transition: color .15s, text-decoration-color .15s; }
+  .report-moment .when { font: 500 13px var(--mono); color: var(--accent); font-variant-numeric: tabular-nums; text-decoration: underline; text-decoration-color: transparent; text-underline-offset: 3px; transition: color var(--t-quick) var(--ease-out), text-decoration-color var(--t-quick) var(--ease-out); }
   .report-moment:hover .when, .report-moment:focus-visible .when { color: var(--accent2); text-decoration-color: currentColor; }
   .report-moment .m-line { display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 10px; align-items: baseline; font-size: 13px; color: var(--ink-2); }
   .report-moment .m-label { font: 500 10.5px var(--display); color: var(--muted); }
@@ -477,27 +493,29 @@
     .bar-hide-sm { display: none; }
     body:has(#appShell.view-chooser) #topUpload { display: none; }
     .samples-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px 14px; }
-    .timeline { grid-template-columns: auto auto auto 1fr; }
+    .timeline { grid-template-columns: auto 1fr auto; }
     .tl-track { grid-column: 1 / -1; grid-row: 1; }
-    .tl-right { justify-self: end; }
+    .tl-right { grid-column: 3; justify-self: end; }
     .brain-values { width: 82px; }
   }
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; scroll-behavior: auto !important; }
     .skel-shimmer { animation: none !important; background: var(--line); }
+    .sample-card, .history-row { animation: none !important; }
+    #startupPanel.active { animation: none !important; }
   }
   /* Page-to-page change (landing <-> app): the header stays put, the old page dims away
-     and a scan line sweeps down revealing the new one. */
+     and a thin vertical line moves left to right revealing the new one. */
   @view-transition { navigation: auto; }
   .bar { view-transition-name: bar; }
-  ::view-transition-old(root) { animation: vt-out .6s cubic-bezier(.65, 0, .35, 1) both; }
-  ::view-transition-new(root) { animation: vt-reveal .6s cubic-bezier(.65, 0, .35, 1) both; }
-  .vt-scan { position: fixed; left: 0; right: 0; top: 0; height: 2px; z-index: 1000; pointer-events: none; opacity: 0; background: linear-gradient(90deg, transparent, #FF8A2A 20%, #FFC24A 50%, #FF8A2A 80%, transparent); box-shadow: 0 0 14px 2px rgba(255, 138, 42, .5), 0 -28px 44px rgba(255, 138, 42, .1); }
-  html.vt-in .vt-scan { animation: vt-scan .6s cubic-bezier(.65, 0, .35, 1) both; }
-  @keyframes vt-out { to { opacity: 0; filter: blur(8px); transform: scale(.98); } }
-  @keyframes vt-reveal { from { clip-path: inset(0 0 100% 0); } to { clip-path: inset(0); } }
-  @keyframes vt-scan { from { transform: translateY(-2px); opacity: 1; } 85% { opacity: 1; } to { transform: translateY(calc(100vh - 2px)); opacity: 0; } }
-  @media (prefers-reduced-motion: reduce) { @view-transition { navigation: none; } }
+  ::view-transition-old(root) { animation: vt-out var(--t-page) var(--ease-out) both; }
+  ::view-transition-new(root) { animation: vt-reveal var(--t-page) var(--ease-out) both; }
+  .vt-scan { position: fixed; left: 0; top: 0; bottom: 0; width: 2px; z-index: 1000; pointer-events: none; opacity: 0; background: linear-gradient(180deg, transparent, #FF8A2A 20%, #FFC24A 50%, #FF8A2A 80%, transparent); box-shadow: 0 0 14px 2px rgba(255, 138, 42, .5), 28px 0 44px rgba(255, 138, 42, .1); }
+  html.vt-in .vt-scan { animation: vt-scan var(--t-page) var(--ease-out) both; }
+  @keyframes vt-out { to { opacity: 0; transform: scale(.99); } }
+  @keyframes vt-reveal { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0); } }
+  @keyframes vt-scan { from { transform: translateX(-2px); opacity: 1; } 85% { opacity: 1; } to { transform: translateX(calc(100vw - 2px)); opacity: 0; } }
+  @media (prefers-reduced-motion: reduce) { @view-transition { navigation: none; } .vt-scan { display: none; } }
 </style>
 <script>
   // The scan line runs only while a page-to-page transition reveals this page.
@@ -532,8 +550,9 @@
   <aside class="side">
     <div class="chooser" id="chooser">
       <div class="box active" id="startupPanel">
-        <h2 id="startupTitle">Starting up…</h2>
-        <p id="startupText"></p>
+        <h2 id="startupTitle">Waking up</h2>
+        <p id="startupText">Usually under a minute.</p>
+        <svg class="startup-trace" id="startupTrace" viewBox="0 0 168 26" aria-hidden="true"><path d="M2 13 H166"></path></svg>
         <div class="actions"><button class="btn-ghost" id="startupRetry" hidden>Try again</button></div>
       </div>
 
@@ -1175,6 +1194,7 @@ function openDeleteJob(job) {
   $('deleteJobMsg').textContent = '';
   $('deleteJobMsg').classList.remove('error');
   $('deleteJobBtn').disabled = false;
+  $('deleteJobBtn').textContent = 'Delete';
   if (!deleteJobDialog.open) deleteJobDialog.showModal();
   $('deleteJobBtn').focus();
 }
@@ -1226,12 +1246,14 @@ const STARTUP_RETRIES = 3, STARTUP_RETRY_MS = 5000;
 function startupFailed() {
   $('startupTitle').textContent = 'Something went wrong';
   $('startupText').textContent = 'Please try again in a minute.';
+  $('startupTrace').hidden = true;
   $('startupRetry').hidden = false;
 }
 async function start(attempt = 0) {
   $('startupPanel').classList.add('active');
-  $('startupTitle').textContent = 'Starting up; this can take up to a minute.';
-  $('startupText').textContent = '';
+  $('startupTitle').textContent = 'Waking up';
+  $('startupText').textContent = 'Usually under a minute.';
+  $('startupTrace').hidden = false;
   $('startupRetry').hidden = true;
   let res;
   try { res = await fetch('/api/me'); } catch (e) { return startupFailed(); }
@@ -1548,7 +1570,12 @@ function historyRow(job) {
     cancel.className = 'history-link';
     cancel.dataset.cancelId = job.job_id;
     cancel.textContent = `Cancel ${Math.max(1, Math.ceil((cancelUntil - Date.now()) / 1000))}`;
-    cancel.addEventListener('click', e => { e.stopPropagation(); cancelNewJob(job.job_id); });
+    cancel.addEventListener('click', e => {
+      e.stopPropagation();
+      cancel.disabled = true;
+      cancel.textContent = 'Cancelling…';
+      cancelNewJob(job.job_id, cancel);
+    });
     actions.append(cancel);
   } else if (job.status !== 'processing' && historyMenuItems(job).length) {
     const more = document.createElement('button');
@@ -1589,6 +1616,7 @@ function openJob(job) {
 
 async function deleteJob(job) {
   $('deleteJobBtn').disabled = true;
+  $('deleteJobBtn').textContent = 'Deleting…';
   try {
     const res = await fetch(`/api/jobs/${job.job_id}`, { method: 'DELETE' });
     const data = await res.json().catch(() => ({}));
@@ -1597,6 +1625,7 @@ async function deleteJob(job) {
       $('deleteJobMsg').textContent = data.message || `Couldn't delete this video (HTTP ${res.status}).`;
       $('deleteJobMsg').classList.add('error');
       $('deleteJobBtn').disabled = false;
+      $('deleteJobBtn').textContent = 'Delete';
       return;
     }
     deleteTarget = null;
@@ -1607,6 +1636,7 @@ async function deleteJob(job) {
     $('deleteJobMsg').textContent = "Couldn't reach the server. Please try again.";
     $('deleteJobMsg').classList.add('error');
     $('deleteJobBtn').disabled = false;
+    $('deleteJobBtn').textContent = 'Delete';
   }
 }
 
@@ -2277,7 +2307,7 @@ setInterval(() => {
   if (changed) renderHistory(jobsCache);
 }, 1000);
 
-async function cancelNewJob(jobId) {
+async function cancelNewJob(jobId, button) {
   try {
     const res = await postJSON(`/api/jobs/${jobId}/cancel`, {});
     if (res.status === 401) return window.location.reload();
@@ -2285,6 +2315,12 @@ async function cancelNewJob(jobId) {
     if (res.status === 409) { renderHistory(jobsCache); return; }  // already dispatched: just loses the button
     if (res.ok) { forgetTabJob(jobId); loadBalance(); loadHistory(); }
   } catch (e) { /* the window keeps counting; the job can still be cancelled from the menu */ }
+  finally {
+    if (button && button.isConnected) {
+      button.disabled = false;
+      button.textContent = 'Cancel';
+    }
+  }
 }
 
 const POLL_MS = 5000;
@@ -3437,6 +3473,7 @@ function openStopShare(job) {
   $('stopShareMsg').textContent = '';
   $('stopShareMsg').classList.remove('error');
   $('stopShareBtn').disabled = false;
+  $('stopShareBtn').textContent = 'Stop sharing';
   if (!stopShareDialog.open) stopShareDialog.showModal();
 }
 $('stopShareCancel').addEventListener('click', () => stopShareDialog.close());
@@ -3445,6 +3482,7 @@ $('stopShareBtn').addEventListener('click', async () => {
   const job = stopShareTarget;
   if (!job) return;
   $('stopShareBtn').disabled = true;
+  $('stopShareBtn').textContent = 'Stopping…';
   try {
     const res = await postJSON(`/api/jobs/${job.job_id}/stop-sharing`, {});
     const data = await res.json().catch(() => ({}));
@@ -3453,6 +3491,7 @@ $('stopShareBtn').addEventListener('click', async () => {
       $('stopShareMsg').textContent = data.message || `Couldn't stop sharing (HTTP ${res.status}).`;
       $('stopShareMsg').classList.add('error');
       $('stopShareBtn').disabled = false;
+      $('stopShareBtn').textContent = 'Stop sharing';
       return;
     }
     stopShareTarget = null;
@@ -3462,6 +3501,7 @@ $('stopShareBtn').addEventListener('click', async () => {
     $('stopShareMsg').textContent = "Couldn't reach the server. Please try again.";
     $('stopShareMsg').classList.add('error');
     $('stopShareBtn').disabled = false;
+    $('stopShareBtn').textContent = 'Stop sharing';
   }
 });
 
@@ -3961,15 +4001,11 @@ function buildTimeline() {
   if (!currentResult) return;
   host.innerHTML = `
     <button class="tl-btn play" id="tlPlay" aria-label="Play"></button>
-    <button class="tl-btn" id="tlBack" aria-label="One second back"></button>
     <div class="tl-track" id="tlTrack" aria-label="Timeline"></div>
-    <button class="tl-btn" id="tlFwd" aria-label="One second forward"></button>
     <div class="tl-right"><span class="tl-time" id="tlTime"></span><button class="tl-btn" id="tlSound" aria-label="Sound on"></button></div>`;
   const track = $('tlTrack');
   drawChart(track, { lines: [{ values: currentResult.signals.overall, colour: 'var(--heat)', width: 2 }], range: niceRange(currentResult.signals.overall), height: 50, dark: true, scope: 'timeline' });
   $('tlPlay').addEventListener('click', togglePlay);
-  $('tlBack').addEventListener('click', () => seek(Math.floor(currentTime()) - 1));
-  $('tlFwd').addEventListener('click', () => seek(Math.floor(currentTime()) + 1));
   const snd = $('tlSound');
   snd.hidden = !hasLocalVideo();
   snd.addEventListener('click', () => {
@@ -3991,8 +4027,6 @@ function buildTimeline() {
 const ICON = {
   play: '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5v11l9-5.5z"/></svg>',
   pause: '<svg viewBox="0 0 16 16" fill="currentColor"><rect x="3.5" y="2.5" width="3" height="11" rx="1"/><rect x="9.5" y="2.5" width="3" height="11" rx="1"/></svg>',
-  back: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10 3 5 8l5 5"/></svg>',
-  fwd: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m6 3 5 5-5 5"/></svg>',
   sound: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2.5 6h2.5l3.5-3v10L5 10H2.5z"/><path d="M11 5.5a3.5 3.5 0 0 1 0 5M12.8 3.8a6 6 0 0 1 0 8.4"/></svg>',
   mute: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2.5 6h2.5l3.5-3v10L5 10H2.5z"/><path d="m11 6 4 4m0-4-4 4"/></svg>',
 };
@@ -4006,9 +4040,6 @@ function updateTransport() {
     play.innerHTML = playing ? ICON.pause : ICON.play;
     play.setAttribute('aria-label', playing ? 'Pause' : 'Play');
   }
-  const back = $('tlBack'), fwd = $('tlFwd');
-  if (back) back.innerHTML = ICON.back;
-  if (fwd) fwd.innerHTML = ICON.fwd;
   const time = $('tlTime');
   if (time) time.textContent = `${fmt(t)} / ${fmt(T)}`;
   const snd = $('tlSound');
@@ -4335,9 +4366,14 @@ async function openCompareTab() {
     const first = comparisonCandidates[0];
     if (!first) return;
     $('compareSelect').value = first.value;
+    // Feedback on the click while a job's result loads; setResultTab settles the tabs either way.
+    $('compareTabBtn').classList.add('active');
+    $('chartsTabBtn').classList.remove('active');
+    $('reportTabBtn').classList.remove('active');
     await loadComparison();
   }
   if (comparison) setResultTab('compare');
+  else setResultTab(currentTab);
 }
 
 function showCompareRow() {
@@ -4529,8 +4565,10 @@ $('progressCancel').addEventListener('click', async () => {
   const jobId = progressJobId;
   if (!jobId) return;
   $('progressCancel').disabled = true;
+  $('progressCancel').textContent = 'Cancelling…';
   await cancelJob(jobId);
   $('progressCancel').disabled = false;
+  $('progressCancel').textContent = 'Cancel';
   if (trackedJob === jobId) pollJob(jobId);
 });
 

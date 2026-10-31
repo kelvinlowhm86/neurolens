@@ -3912,7 +3912,8 @@
         "model": "us.anthropic.claude-sonnet-4-6",
         "created_at": "2026-10-31T10:24:52Z"
       },
-      "pdf_file": "output/sintel_trailer_720p/report.pdf"
+      "pdf_file": "output/sintel_trailer_720p/report.pdf",
+      "landing": true
     },
     {
       "id": "bbb_720p_55s",

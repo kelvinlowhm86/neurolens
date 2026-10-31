@@ -248,9 +248,7 @@ def test_short_credit_for_the_real_length_refunds_and_deletes(aws, db, pg, new_j
 # ---------------------------------------------------------------- the pause check
 
 
-def test_a_paused_endpoint_refunds_processing_paused_and_never_invokes(
-    aws, db, pg, new_job, probe
-):
+def test_a_paused_endpoint_refunds_processing_paused_and_never_invokes(aws, db, pg, new_job, probe):
     job_id, key = new_job()
     upload(aws, key)
     probe(seconds=3.0)
@@ -330,9 +328,7 @@ def test_a_failed_pause_check_propagates_and_changes_nothing(aws, db, pg, new_jo
     assert exists(aws, key)
 
 
-def test_an_earlier_refusal_keeps_its_reason_and_skips_the_pause_check(
-    aws, db, pg, new_job, probe
-):
+def test_an_earlier_refusal_keeps_its_reason_and_skips_the_pause_check(aws, db, pg, new_job, probe):
     job_id, key = new_job()
     upload(aws, key, b"0123456789A")
     probe(seconds=3.0)
@@ -546,12 +542,9 @@ def test_a_paused_handler_refunds_and_never_starts_the_gpu(
         dispatcher, "start_gpu_if_off", lambda *args, **kwargs: starts.append(args) or "started"
     )
 
-    assert (
-        run_handler(
-            aws, db, monkeypatch, key, sagemaker, appscaling=FakeAppScaling(max_capacity=0)
-        )
-        == ["refunded"]
-    )
+    assert run_handler(
+        aws, db, monkeypatch, key, sagemaker, appscaling=FakeAppScaling(max_capacity=0)
+    ) == ["refunded"]
 
     assert_refunded(pg, job_id, "processing_paused")
     assert sagemaker.calls == [] and starts == []

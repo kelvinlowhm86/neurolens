@@ -262,17 +262,23 @@ deletes its object (§5a).
 ## 7. Samples
 ### 7a. `data/samples.json`
 ```
-{ "samples": [ { …as M3d §9…, "report": <stored single report minus usage> (optional) } ],
+{ "samples": [ { …as M3d §9…, "report": <stored single report minus usage> (optional),
+                "pdf_file": <path> (optional), "sharing_example": true (optional),
+                "landing": true (optional) } ],
   "comparisons": [ { "a": <sample id>, "b": <sample id>, "report": <stored comparison minus usage> } ] }
 ```
-In a comparison entry, `a` is the sample made from the report's `job_a` and `b` the one from
-`job_b`, so the report's A and B need no relabelling. A pair appears at most once, in either
-order; the page matches it either way round. `comparisons` may be missing or empty.
+At most one sample carries `sharing_example` and at most one carries `landing` (the hero the
+landing page plays; without it the first sample is used). In a comparison entry, `a` is the sample
+made from the report's `job_a` and `b` the one from `job_b`, so the report's A and B need no
+relabelling. A pair appears at most once, in either order; the page matches it either way round.
+`comparisons` may be missing or empty.
 
 ### 7b. `infra/make_sample.py` (operator script, `AWS_PROFILE=neurolens`)
 - The existing form also downloads `results/<job_id>.report.json` when present and stores it as
   `report` without `usage`, after checking it with `report._report_problem` against the result's
   duration (fails loudly if it does not pass). No report object: the entry has no `report`.
+- `--sharing-example` and `--landing` mark this sample for that role and clear the flag from every
+  other sample; replacing a sample without the flag keeps the one it had.
 - New form: `make_sample.py compare <sample_id_1> <job_id_1> <sample_id_2> <job_id_2>`. Both
   samples must already be in `samples.json`. It reads `comparison_key(comparison_pair(job_1,
   job_2))`, checks it with `_comparison_problem` against the two samples' durations, maps

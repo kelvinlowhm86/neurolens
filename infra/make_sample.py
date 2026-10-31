@@ -184,6 +184,13 @@ def add_sample(args):
                 sample.pop("sharing_example", None)
     elif existing and existing.get("sharing_example"):
         entry["sharing_example"] = True
+    if args.landing:
+        entry["landing"] = True
+        for sample in samples:
+            if sample.get("id") != sample_id:
+                sample.pop("landing", None)
+    elif existing and existing.get("landing"):
+        entry["landing"] = True
     for index, sample in enumerate(samples):
         if sample.get("id") == sample_id:
             samples[index] = entry
@@ -343,6 +350,11 @@ def main():
         "--sharing-example",
         action="store_true",
         help="mark this sample as the example of a shared video",
+    )
+    parser.add_argument(
+        "--landing",
+        action="store_true",
+        help="mark this sample as the one the landing page plays",
     )
     add_sample(parser.parse_args(values))
 
