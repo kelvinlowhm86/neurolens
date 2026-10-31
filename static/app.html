@@ -239,6 +239,8 @@
   .brain-box { position: relative; flex: 1; min-height: 140px; background: var(--well); border: 1px solid var(--line); border-radius: 2px; overflow: hidden; }
   .brain-box canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
   .brain-message { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 20px; text-align: center; font-size: 13px; color: var(--muted); }
+  .brain-skeleton { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 18px; pointer-events: none; }
+  .brain-skeleton svg { width: min(72%, 260px); height: auto; }
   .brain-values { width: 98px; flex: none; display: flex; flex-direction: column; gap: 8px; justify-content: center; }
   .brain-value { display: flex; flex-direction: column; gap: 2px; padding-top: 6px; border-top: 1px solid var(--line); }
   .brain-value-label { font-size: 11.5px; color: var(--muted); }
@@ -345,6 +347,7 @@
   .xaxis span:first-child { transform: none; }
   .xaxis span.end { transform: translateX(-100%); }
   .chart-label { position: absolute; left: 4px; font: 500 11px var(--display); color: var(--muted); pointer-events: none; }
+  .reveal-edge { position: absolute; top: 8px; bottom: 18px; width: 2px; margin-left: -1px; background: var(--accent); box-shadow: 0 0 8px rgba(255,138,42,.85); pointer-events: none; z-index: 4; }
 
   .strips-wrap { flex: 1 1 0; min-height: 180px; display: flex; flex-direction: column; gap: 10px; }
   #stripsCard .panel-head { margin-bottom: 0; }
@@ -890,6 +893,7 @@ let signedIn = false, me = null, limits = null;
 let virtualTime = 0, virtualPlaying = false, virtualAnchor = 0, virtualRaf = 0, videoRaf = 0;
 let videoJob = null, videoRetried = false, videoRequest = 0, videoPlaying = false;
 let playheads = [];
+let firstReveal = null;
 let currentTab = 'charts';
 let chartMoments = [];
 let comparisonReport = null, comparisonState = '', comparisonStateText = '', comparisonCanRetry = false;
@@ -2623,6 +2627,7 @@ async function loadJobVideo(jobId, seq, resume) {
 
 function showResultUnavailable(message) {
   resultSeq += 1;
+  clearFirstReveal();
   stopVirtual();
   resetReportPanel();
   currentResult = null; currentSummary = null; currentContext = null; currentReportReady = false; comparison = null;
@@ -3625,6 +3630,7 @@ function updateSoundLine() {
 
 function renderResult(result, summary, ctx) {
   resultSeq += 1;
+  clearFirstReveal();
   stopProgress();
   currentResult = result;
   currentSummary = summary || {};
@@ -3664,6 +3670,7 @@ function renderResult(result, summary, ctx) {
   buildAllCharts();
   showCompareRow();
   loadBrain();
+  startFirstReveal(ctx);
 }
 
 function niceRange(values) {
@@ -3888,6 +3895,101 @@ function updateMomentActive(t) {
   });
 }
 
+function revealKey(ctx) {
+  if (!ctx) return null;
+  if (ctx.sampleId) return `sample:${ctx.sampleId}`;
+  if (ctx.jobId) return `job:${ctx.jobId}`;
+  return null;
+}
+
+function revealSeen(key) {
+  try { return sessionStorage.getItem(`nl:revealed:${key}`) === '1'; } catch (e) { return false; }
+}
+
+function markRevealSeen(key) {
+  try { sessionStorage.setItem(`nl:revealed:${key}`, '1'); } catch (e) { /* no storage: reveal every time */ }
+}
+
+function revealLayers() {
+  return document.querySelectorAll('#mainChartBox > svg, #stripsHost svg');
+}
+
+function clearFirstReveal() {
+  if (!firstReveal) return;
+  cancelAnimationFrame(firstReveal.raf);
+  firstReveal.off.forEach(([target, type, fn, opts]) => target.removeEventListener(type, fn, opts));
+  if (firstReveal.edge.parentNode) firstReveal.edge.remove();
+  revealLayers().forEach(svg => { svg.style.clipPath = ''; svg.style.webkitClipPath = ''; });
+  document.querySelectorAll('#mainChartBox .moment-mark').forEach(mark => {
+    mark.removeAttribute('data-nl-reveal');
+    mark.style.opacity = '';
+    mark.style.transform = '';
+    mark.style.transition = '';
+  });
+  firstReveal = null;
+}
+
+function endFirstReveal() {
+  if (!firstReveal) return;
+  clearFirstReveal();
+  tick();
+}
+
+function stepFirstReveal(now) {
+  if (!firstReveal) return;
+  const progress = Math.min(1, (now - firstReveal.started) / firstReveal.duration);
+  const box = $('mainChartBox');
+  if (!firstReveal.edge.isConnected && box) box.append(firstReveal.edge);
+  const mainSvg = box ? box.querySelector('svg') : null;
+  if (mainSvg) {
+    const svgRect = mainSvg.getBoundingClientRect();
+    const boxRect = box.getBoundingClientRect();
+    const scale = svgRect.height / 220;
+    firstReveal.edge.style.top = `${8 * scale}px`;
+    firstReveal.edge.style.bottom = `${boxRect.bottom - svgRect.bottom + 18 * scale}px`;
+  }
+  const clip = `inset(0 ${(1 - progress) * 100}% 0 0)`;
+  revealLayers().forEach(svg => { svg.style.clipPath = clip; svg.style.webkitClipPath = clip; });
+  firstReveal.edge.style.left = `${progress * 100}%`;
+  document.querySelectorAll('#mainChartBox .moment-mark').forEach(mark => {
+    if (!mark.dataset.nlReveal) {
+      mark.dataset.nlReveal = '1';
+      mark.style.transition = 'opacity 120ms var(--ease-out), transform 120ms var(--ease-out)';
+    }
+    const at = Number.parseFloat(mark.style.left);
+    const shown = !Number.isFinite(at) || progress * 100 >= at;
+    mark.style.opacity = shown ? '1' : '0';
+    mark.style.transform = shown ? 'translate(-50%, -50%) scale(1)' : 'translate(-50%, -50%) scale(.4)';
+  });
+  window.brainMap.setSecond(progress * Math.max(0, firstReveal.span - 1));
+  if (progress < 1) firstReveal.raf = requestAnimationFrame(stepFirstReveal);
+  else endFirstReveal();
+}
+
+function startFirstReveal(ctx) {
+  clearFirstReveal();
+  if (REDUCED_MOTION || !currentResult) return;
+  const key = revealKey(ctx);
+  const box = $('mainChartBox');
+  if (!key || revealSeen(key) || !box || !box.querySelector('svg')) return;
+  markRevealSeen(key);
+  const edge = document.createElement('div');
+  edge.className = 'reveal-edge';
+  box.append(edge);
+  const stop = () => endFirstReveal();
+  const off = [];
+  const listen = (target, type, opts) => {
+    target.addEventListener(type, stop, opts);
+    off.push([target, type, stop, opts]);
+  };
+  listen(window, 'pointerdown', true);
+  listen(window, 'keydown', true);
+  // Not the video's play/seeking events: a sample autoplays on open, which would end it at once.
+  // A person's play, pause or seek always starts with a pointerdown or keydown (seek() ends it too).
+  firstReveal = { raf: 0, edge, off, started: performance.now(), duration: 900, span: Math.max(1, chartSpan()) };
+  firstReveal.raf = requestAnimationFrame(stepFirstReveal);
+}
+
 function buildMainChart() {
   if (!currentResult) return;
   clearScope('main');
@@ -4109,7 +4211,7 @@ function tick() {
   updateBrainValues(t);
   updateMomentActive(t);
   updateCompareTransport(t);
-  if (currentResult) window.brainMap.setSecond(t);
+  if (currentResult && !firstReveal) window.brainMap.setSecond(t);
 }
 
 function buildAllCharts() {
@@ -4583,6 +4685,7 @@ $('reportBody').addEventListener('click', e => {
 });
 
 function seek(t) {
+  endFirstReveal();
   const T = totalSeconds();
   if (!T) return;
   const value = Math.max(0, Math.min(T - 0.01, Number.isFinite(t) ? t : 0));
@@ -4741,6 +4844,7 @@ async function loadBrain() {
 
 function resetUI() {
   resultSeq += 1;
+  clearFirstReveal();
   stopVirtual();
   stopProgress();
   resetReportPanel();

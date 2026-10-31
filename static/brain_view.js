@@ -6,6 +6,28 @@ const MESH_URL = '/static/brain/fsaverage6_pial.bin';
 const HEAD_URL = '/static/brain/head.bin';
 export const UNAVAILABLE = 'The 3D view is not available for this video.';
 const HEAT = [[0, [0.50, 0.0, 0.0]], [0.35, [0.90, 0.10, 0.04]], [0.65, [1, 0.50, 0.04]], [0.88, [1, 0.85, 0.15]], [1, [1, 1, 0.85]]];
+const SWEEP_MS = 700;
+
+function cubicBezierEase(x1, y1, x2, y2) {
+  const cx = 3 * x1, bx = 3 * (x2 - x1) - cx, ax = 1 - cx - bx;
+  const cy = 3 * y1, by = 3 * (y2 - y1) - cy, ay = 1 - cy - by;
+  const sampleX = t => ((ax * t + bx) * t + cx) * t;
+  const sampleY = t => ((ay * t + by) * t + cy) * t;
+  return x => {
+    if (x <= 0) return 0;
+    if (x >= 1) return 1;
+    let lo = 0, hi = 1, t = x;
+    for (let i = 0; i < 24; i++) {
+      const at = sampleX(t);
+      if (Math.abs(at - x) < 1e-5) break;
+      if (at < x) lo = t; else hi = t;
+      t = (lo + hi) / 2;
+    }
+    return sampleY(t);
+  };
+}
+
+const SWEEP_EASE = cubicBezierEase(0.2, 0.7, 0.2, 1);
 
 function heat(t, out) {
   for (let i = 1; i < HEAT.length; i++) {
@@ -80,7 +102,28 @@ export function createBrainView(host, message) {
   let rows = null, rowCount = 0, second = 0, range = null;
   let ready = false, meshFailed = false, meshPromise = null;
   let renderer, scene, camera, controls, geometry, colourAttr, baseColour, parents, cortexMask;
+  let skeleton = null;
+  let sweep = null, swept = false;
   let lastPaint = -1;
+  const reducedMotion = (() => {
+    try { return matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { return false; }
+  })();
+  const sweepPlane = reducedMotion ? null : new THREE.Plane(new THREE.Vector3(0, 0, 1), 1e6);
+
+  function showSkeleton() {
+    if (skeleton || !host) return;
+    skeleton = document.createElement('div');
+    skeleton.className = 'brain-skeleton';
+    skeleton.setAttribute('aria-hidden', 'true');
+    skeleton.innerHTML = '<svg viewBox="0 0 400 250" fill="none" stroke="rgba(232,234,237,.20)" stroke-width="1.2"><path d="M70,140 C52,96 82,52 140,40 C186,22 250,24 300,46 C346,66 368,104 362,140 C358,170 336,186 310,190 C300,206 280,214 258,210 C236,224 196,226 172,212 C140,214 112,204 96,186 C78,176 72,160 70,140 Z"/><path d="M120,70 C150,90 160,120 150,150 M190,46 C200,80 210,110 200,150 M250,44 C252,80 262,110 280,130 M110,172 C150,160 200,162 250,180 M300,70 C310,100 330,120 350,130" stroke="rgba(232,234,237,.12)" stroke-dasharray="3 5"/></svg>';
+    host.append(skeleton);
+  }
+
+  function hideSkeleton() {
+    if (!skeleton) return;
+    skeleton.remove();
+    skeleton = null;
+  }
 
   function setMessage(text) {
     message.textContent = text;
@@ -110,6 +153,35 @@ export function createBrainView(host, message) {
     camera.position.copy(sphere.center).addScaledVector(dir, distance);
     controls.target.copy(sphere.center);
     controls.update();
+  }
+
+  function startSweep() {
+    if (swept) return;
+    swept = true;
+    if (!sweepPlane || !geometry) return;
+    const sphere = geometry.boundingSphere;
+    if (!sphere) return;
+    // Front to back as seen from the camera: the plane keeps the part behind the moving cut.
+    const normal = new THREE.Vector3();
+    camera.getWorldDirection(normal);
+    normal.negate();
+    const centre = normal.dot(sphere.center);
+    sweep = { normal, from: centre + sphere.radius, to: centre - sphere.radius, started: performance.now() };
+    sweepPlane.normal.copy(normal);
+    sweepPlane.constant = -sweep.from;
+  }
+
+  function updateSweep(now) {
+    if (!sweep) return;
+    const progress = Math.min(1, (now - sweep.started) / SWEEP_MS);
+    sweepPlane.constant = -(sweep.from + (sweep.to - sweep.from) * SWEEP_EASE(progress));
+    if (progress >= 1) endSweep();
+  }
+
+  function endSweep() {
+    if (!sweep) return;
+    sweepPlane.constant = 1e6;
+    sweep = null;
   }
 
   function paint(time) {
@@ -152,6 +224,7 @@ export function createBrainView(host, message) {
   }
 
   async function build() {
+    showSkeleton();
     const [meshBuffer, headBuffer] = await Promise.all([
       fetch(MESH_URL).then(res => {
         if (!res.ok) throw new Error(`mesh HTTP ${res.status}`);
@@ -166,6 +239,7 @@ export function createBrainView(host, message) {
     renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     renderer.setClearColor(0x000000, 0);
+    renderer.localClippingEnabled = !!sweepPlane;
     if ('outputColorSpace' in renderer) renderer.outputColorSpace = THREE.SRGBColorSpace;
     host.prepend(renderer.domElement);
 
@@ -188,8 +262,9 @@ export function createBrainView(host, message) {
     geometry.setAttribute('vcol', colourAttr);
 
     const material = new THREE.ShaderMaterial({
-      vertexShader: 'attribute vec3 vcol; varying vec3 vColor; varying vec3 vNormal; void main(){ vColor = vcol; vNormal = normalize(normalMatrix * normal); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
-      fragmentShader: 'varying vec3 vColor; varying vec3 vNormal; void main(){ float d = max(0.0, dot(normalize(vNormal), normalize(vec3(0.35, 0.45, 0.9)))); gl_FragColor = vec4(vColor * (0.65 + 0.35 * d), 1.0); }',
+      clippingPlanes: sweepPlane ? [sweepPlane] : [],
+      vertexShader: '#include <clipping_planes_pars_vertex>\nattribute vec3 vcol; varying vec3 vColor; varying vec3 vNormal; void main(){ vColor = vcol; vNormal = normalize(normalMatrix * normal); vec4 mvPosition = modelViewMatrix * vec4(position, 1.0); gl_Position = projectionMatrix * mvPosition;\n#include <clipping_planes_vertex>\n}',
+      fragmentShader: '#include <clipping_planes_pars_fragment>\nvarying vec3 vColor; varying vec3 vNormal; void main(){\n#include <clipping_planes_fragment>\nfloat d = max(0.0, dot(normalize(vNormal), normalize(vec3(0.35, 0.45, 0.9)))); gl_FragColor = vec4(vColor * (0.65 + 0.35 * d), 1.0); }',
     });
     scene.add(new THREE.Mesh(geometry, material));
 
@@ -212,8 +287,9 @@ export function createBrainView(host, message) {
         hg.computeVertexNormals();
         const hm = new THREE.Mesh(hg, new THREE.ShaderMaterial({
           transparent: true, depthWrite: false, side: THREE.DoubleSide,
-          vertexShader: 'varying vec3 n; varying vec3 v; void main(){ vec4 mv = modelViewMatrix*vec4(position,1.); n = normalize(normalMatrix*normal); v = normalize(-mv.xyz); gl_Position = projectionMatrix*mv; }',
-          fragmentShader: 'varying vec3 n; varying vec3 v; void main(){ float f = pow(1.0-abs(dot(normalize(n),normalize(v))), 3.0); gl_FragColor = vec4(0.42,0.55,0.78, f*0.35); }',
+          clippingPlanes: sweepPlane ? [sweepPlane] : [],
+          vertexShader: '#include <clipping_planes_pars_vertex>\nvarying vec3 n; varying vec3 v; void main(){ vec4 mvPosition = modelViewMatrix*vec4(position,1.); n = normalize(normalMatrix*normal); v = normalize(-mvPosition.xyz); gl_Position = projectionMatrix*mvPosition;\n#include <clipping_planes_vertex>\n}',
+          fragmentShader: '#include <clipping_planes_pars_fragment>\nvarying vec3 n; varying vec3 v; void main(){\n#include <clipping_planes_fragment>\nfloat f = pow(1.0-abs(dot(normalize(n),normalize(v))), 3.0); gl_FragColor = vec4(0.42,0.55,0.78, f*0.35); }',
         }));
         hm.renderOrder = 2;
         scene.add(hm);
@@ -221,14 +297,17 @@ export function createBrainView(host, message) {
     }
 
     ready = true;
+    hideSkeleton();
     camera.aspect = Math.max(1, host.clientWidth) / Math.max(1, host.clientHeight);
     camera.updateProjectionMatrix();
     fitCamera();
     new ResizeObserver(resize).observe(host);
     resize();
+    startSweep();
     applyState();
     renderer.setAnimationLoop(() => {
       if (!host.clientWidth) return;  // the player is hidden; stop drawing until it shows again
+      updateSweep(performance.now());
       controls.update();
       renderer.render(scene, camera);
     });
@@ -239,6 +318,7 @@ export function createBrainView(host, message) {
       meshPromise = build().catch(error => {
         meshFailed = true;
         ready = false;
+        hideSkeleton();
         setMessage(UNAVAILABLE);
         console.warn('3D view:', error);
       });
