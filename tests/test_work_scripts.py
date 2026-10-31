@@ -101,12 +101,48 @@ if key == "application-autoscaling delete-scheduled-action":
 if key == "application-autoscaling describe-scheduled-actions":
     out("\t".join(a["name"] for a in w["scheduled"]))
 if key == "sagemaker update-endpoint-weights-and-capacities":
+    if w.get("updating_for", 0) > 0 or w.get("status") in (
+        "Creating",
+        "Updating",
+        "SystemUpdating",
+    ):
+        print(
+            "An error occurred (ValidationException) when calling the "
+            "UpdateEndpointWeightsAndCapacities operation: Cannot update "
+            'in-progress endpoint "neurolens".',
+            file=sys.stderr,
+        )
+        sys.exit(254)
+    if w.get("refuse_update_once"):
+        w["refuse_update_once"] = False
+        json.dump(w, open(world_path, "w"))
+        print(
+            "An error occurred (ValidationException) when calling the "
+            "UpdateEndpointWeightsAndCapacities operation: Cannot update "
+            'in-progress endpoint "neurolens".',
+            file=sys.stderr,
+        )
+        sys.exit(254)
     desired = opt("--desired-weights-and-capacities", "")
-    if "DesiredInstanceCount=0" in desired and not w.get("stuck"):
-        w["instances"] = 0
+    match = re.search(r"DesiredInstanceCount=(\d+)", desired)
+    if match:
+        w["desired"] = int(match.group(1))
+        if w["desired"] == 0 and not w.get("stuck"):
+            w["instances"] = 0
     out()
 if key == "sagemaker describe-endpoint":
-    out(str(w["instances"]))
+    if "endpointstatus" in query.lower():
+        if w.get("updating_for", 0) > 0:
+            w["updating_for"] -= 1
+            if w["updating_for"] == 0 and "settles_to" in w:
+                w["instances"] = w["settles_to"]
+                w["desired"] = w["settles_to"]
+            status = "Updating"
+        else:
+            status = w.get("status", "InService")
+        out(f"{status}\t{w.get('desired', w['instances'])}\t{w['instances']}")
+    elif query == "ProductionVariants[0].CurrentInstanceCount":
+        out(str(w["instances"]))
 print("fake aws: unexpected call: " + " ".join(args), file=sys.stderr)
 sys.exit(99)
 """
@@ -355,16 +391,81 @@ def test_stop_endpoint_that_never_reaches_zero_is_not_confirmed(sandbox):
 
 
 @pytest.mark.parametrize(
-    "failing",
+    "failing, overrides",
     [
-        "application-autoscaling register-scalable-target",
-        "application-autoscaling delete-scheduled-action",
-        "sagemaker update-endpoint-weights-and-capacities",
-        "sagemaker describe-endpoint",
+        ("application-autoscaling register-scalable-target", {}),
+        ("application-autoscaling delete-scheduled-action", {}),
+        # The new script skips the update call when desired is already 0, so this case
+        # needs an endpoint above 0 for the injected failure to be reached.
+        ("sagemaker update-endpoint-weights-and-capacities", {"instances": 1}),
+        ("sagemaker describe-endpoint", {}),
     ],
 )
-def test_stop_failing_call_is_never_all_stopped(sandbox, failing):
-    r = sandbox("stop_work.sh", healthy_world(fail=[failing]))
+def test_stop_failing_call_is_never_all_stopped(sandbox, failing, overrides):
+    r = sandbox("stop_work.sh", healthy_world(fail=[failing], **overrides))
     assert r.code != 0
     assert "ALL STOPPED" not in r.out
     assert "NOT CONFIRMED" in r.err
+
+
+def test_stop_waits_for_an_updating_endpoint_that_settles_to_zero(sandbox):
+    # Tonight's case: setting the target to 0/0 started an update that scales itself to 0.
+    r = sandbox(
+        "stop_work.sh",
+        healthy_world(instances=1, desired=0, updating_for=3, settles_to=0),
+    )
+    assert r.code == 0, r.err
+    assert "ALL STOPPED" in r.out
+    assert "NOT CONFIRMED" not in r.err
+    assert "PROBLEM" not in r.err
+    assert r.sleeps >= 1
+    assert "in-progress" not in r.err
+    assert r.find("sagemaker", "update-endpoint-weights-and-capacities") == []
+
+
+def test_stop_updates_only_after_an_updating_endpoint_becomes_inservice(sandbox):
+    updating_for = 2
+    r = sandbox("stop_work.sh", healthy_world(instances=1, updating_for=updating_for))
+    assert r.code == 0, r.err
+    assert "ALL STOPPED" in r.out
+    updates = r.find("sagemaker", "update-endpoint-weights-and-capacities")
+    assert len(updates) == 1
+    describes = r.find("sagemaker", "describe-endpoint")
+    assert len([d for d in describes if d < updates[0]]) >= updating_for + 1
+
+
+def test_stop_endpoint_stuck_updating_is_not_confirmed(sandbox):
+    r = sandbox("stop_work.sh", healthy_world(instances=1, updating_for=1000))
+    assert r.code != 0
+    assert "ALL STOPPED" not in r.out
+    assert "NOT CONFIRMED" in r.err
+    assert "Updating" in r.err
+    assert r.sleeps <= 100
+
+
+@pytest.mark.parametrize("status", ["Failed", "RollingBack", "OutOfService"])
+def test_stop_endpoint_in_a_bad_status_is_not_confirmed(sandbox, status):
+    r = sandbox("stop_work.sh", healthy_world(instances=1, status=status))
+    assert r.code != 0
+    assert "ALL STOPPED" not in r.out
+    assert "NOT CONFIRMED" in r.err
+    assert status in r.err
+    assert r.find("sagemaker", "update-endpoint-weights-and-capacities") == []
+
+
+def test_stop_retries_an_update_refused_as_in_progress(sandbox):
+    r = sandbox("stop_work.sh", healthy_world(instances=1, refuse_update_once=True))
+    assert r.code == 0, r.err
+    assert "ALL STOPPED" in r.out
+    assert "NOT CONFIRMED" not in r.err
+    assert "PROBLEM" not in r.err
+    assert len(r.find("sagemaker", "update-endpoint-weights-and-capacities")) >= 2
+    assert r.sleeps >= 1
+
+
+def test_stop_endpoint_already_at_zero_needs_no_update(sandbox):
+    r = sandbox("stop_work.sh", healthy_world(instances=0, desired=0))
+    assert r.code == 0, r.err
+    assert "ALL STOPPED" in r.out
+    assert "NOT CONFIRMED" not in r.err
+    assert r.find("sagemaker", "update-endpoint-weights-and-capacities") == []
