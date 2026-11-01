@@ -47,6 +47,7 @@ def app_for(aws, db, make_cfg, tmp_path, s3_client=None):
         research={
             "curve_rewards_per_window": 5,
             "curve_reward_window_days": 30,
+            "curve_reward_min_days": 7,
             "no_curve_days": 90,
         }
     )
@@ -122,6 +123,10 @@ def add_curve(db, job_id, *, sha="curve-sha"):
         promoted=False,
         reward_cap=5,
         reward_window_days=30,
+        video_ref=f"youtube:{job_id.replace('-', '')[:11]}",
+        same_cut="same",
+        source="youtube_api",
+        reward_min_days=7,
     )
 
 
@@ -156,6 +161,7 @@ def test_list_jobs_returns_claimed_at_as_utc_text(db, pg):
 
 def test_list_jobs_returns_the_sharing_and_curve_fields(db, pg):
     job_id, _ = make_job(db, consent=True, sha="a-video")
+    pg.age(job_id, created_s=8 * 24 * 60 * 60)
     billing.grant_credit(db, f"{WEB_USER_ID}@example.com", 100)
     [row] = billing.list_jobs(db, WEB_USER_ID, 50)
     assert row["sharing"] is True

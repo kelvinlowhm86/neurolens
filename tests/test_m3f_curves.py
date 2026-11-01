@@ -25,6 +25,9 @@ PRICE_CENTS = pricing.estimate_cost_cents(27.4)  # one started 30 s block
 OTHER_USER = "other-user"
 VIEWS = "lt_1k"
 PUBLISHED = "week"
+REWARD_MIN_DAYS = 7
+DAY_S = 24 * 60 * 60
+YOUTUBE_LINK = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
 
 
 def report_text(points):
@@ -59,6 +62,10 @@ def curve_args(job_id, *, sha="a" * 64, points=None, flags=None, **overrides):
         "promoted": False,
         "reward_cap": 5,
         "reward_window_days": 30,
+        "video_ref": f"youtube:{job_id.replace('-', '')[:11]}",
+        "same_cut": "same",
+        "source": "youtube_api",
+        "reward_min_days": REWARD_MIN_DAYS,
     }
     args.update(overrides)
     return args
@@ -102,6 +109,7 @@ def app_for(aws, db, make_cfg, tmp_path, s3_client=None):
         research={
             "curve_rewards_per_window": 5,
             "curve_reward_window_days": 30,
+            "curve_reward_min_days": REWARD_MIN_DAYS,
             "no_curve_days": 90,
         }
     )
@@ -171,6 +179,7 @@ def test_a_watch_ratio_of_exactly_10_is_allowed_and_above_is_refused():
 
 def test_a_valid_curve_rewards_the_captured_price_once(db, pg):
     job_id, _ = make_job(db)
+    pg.age(job_id, created_s=8 * DAY_S)
     billing.grant_credit(db, f"{WEB_USER_ID}@example.com", 100)
     assert pg.balance(WEB_USER_ID) == (STARTER_CENTS + 100 - PRICE_CENTS, 0)
 
@@ -213,6 +222,7 @@ def test_an_account_with_only_starter_credit_is_not_rewarded(db, pg):
 
 def test_a_curve_is_rewarded_once_the_account_has_a_grant(db, pg):
     job_id, _ = make_job(db)
+    pg.age(job_id, created_s=8 * DAY_S)
     billing.grant_credit(db, f"{WEB_USER_ID}@example.com", 100)
 
     result = billing.add_curve(db, WEB_USER_ID, job_id, **curve_args(job_id))
@@ -224,6 +234,7 @@ def test_a_curve_is_rewarded_once_the_account_has_a_grant(db, pg):
 
 def test_a_second_curve_on_the_same_job_is_stored_without_another_reward(db, pg):
     job_id, _ = make_job(db)
+    pg.age(job_id, created_s=8 * DAY_S)
     billing.grant_credit(db, f"{WEB_USER_ID}@example.com", 100)
     billing.add_curve(db, WEB_USER_ID, job_id, **curve_args(job_id))
     after_first = pg.snapshot()
@@ -244,6 +255,7 @@ def test_the_unique_index_refuses_a_second_curve_reward_row(db, pg):
     from psycopg.errors import UniqueViolation
 
     job_id, _ = make_job(db)
+    pg.age(job_id, created_s=8 * DAY_S)
     billing.grant_credit(db, f"{WEB_USER_ID}@example.com", 100)
     billing.add_curve(db, WEB_USER_ID, job_id, **curve_args(job_id))
     balance = pg.balance(WEB_USER_ID)
@@ -294,6 +306,8 @@ def test_a_zero_price_job_is_not_rewarded(db, pg):
 def test_a_video_already_rewarded_on_another_account_is_not_rewarded_again(db, pg):
     first, _ = make_job(db, sha="same-video")
     second, _ = make_job(db, user_id=OTHER_USER, sha="same-video")
+    for job_id in (first, second):
+        pg.age(job_id, created_s=8 * DAY_S)
     billing.grant_credit(db, f"{WEB_USER_ID}@example.com", 100)
     billing.grant_credit(db, f"{OTHER_USER}@example.com", 100)
     billing.add_curve(db, WEB_USER_ID, first, **curve_args(first))
@@ -311,6 +325,8 @@ def test_a_video_already_rewarded_on_another_account_is_not_rewarded_again(db, p
 def test_a_user_at_the_cap_is_not_rewarded_until_the_window_passes(db, pg):
     cap = 2
     jobs = [make_job(db, sha=f"video-{number}")[0] for number in range(4)]
+    for job_id in jobs:
+        pg.age(job_id, created_s=8 * DAY_S)
     billing.grant_credit(db, f"{WEB_USER_ID}@example.com", 100)
     for job_id in jobs[:cap]:
         result = billing.add_curve(
@@ -355,6 +371,8 @@ def test_a_user_at_the_cap_is_not_rewarded_until_the_window_passes(db, pg):
 def test_two_concurrent_curves_for_one_user_never_exceed_the_reward_cap(db, pg):
     cap = 1
     jobs = [make_job(db, sha=f"video-{number}")[0] for number in range(2)]
+    for job_id in jobs:
+        pg.age(job_id, created_s=8 * DAY_S)
     billing.grant_credit(db, f"{WEB_USER_ID}@example.com", 100)
     barrier = threading.Barrier(2)
     outcomes = []
@@ -453,13 +471,21 @@ def test_add_curve_refuses_a_job_that_is_not_eligible(db, pg, case):
 def test_the_route_stores_the_raw_report_and_the_parsed_curve(db, aws, make_cfg, tmp_path, pg):
     client = app_for(aws, db, make_cfg, tmp_path)
     job_id, _ = make_job(db)
+    pg.age(job_id, created_s=8 * DAY_S)
     billing.grant_credit(db, f"{WEB_USER_ID}@example.com", 100)
     points = curve()
     report = report_text(points)
 
     resp = client.post(
         f"/api/jobs/{job_id}/retention",
-        json={"report": report, "views": VIEWS, "published": PUBLISHED, "promoted": False},
+        json={
+            "report": report,
+            "video_url": YOUTUBE_LINK,
+            "same_cut": "same",
+            "views": VIEWS,
+            "published": PUBLISHED,
+            "promoted": False,
+        },
     )
 
     assert 200 <= resp.status_code < 300
@@ -502,6 +528,8 @@ def test_the_route_refuses_bad_fields_and_writes_nothing(db, aws, make_cfg, tmp_
     job_id, _ = make_job(db)
     body = {
         "report": report_text(curve()),
+        "video_url": YOUTUBE_LINK,
+        "same_cut": "same",
         "views": VIEWS,
         "published": PUBLISHED,
         "promoted": False,
@@ -528,6 +556,8 @@ def test_an_s3_failure_records_nothing(db, aws, make_cfg, tmp_path, pg):
         f"/api/jobs/{job_id}/retention",
         json={
             "report": report_text(curve()),
+            "video_url": YOUTUBE_LINK,
+            "same_cut": "same",
             "views": VIEWS,
             "published": PUBLISHED,
             "promoted": False,
@@ -561,6 +591,8 @@ def test_a_removed_copy_says_why(db, aws, make_cfg, tmp_path, pg, reason, messag
         f"/api/jobs/{job_id}/retention",
         json={
             "report": report_text(curve()),
+            "video_url": YOUTUBE_LINK,
+            "same_cut": "same",
             "views": VIEWS,
             "published": PUBLISHED,
             "promoted": False,
@@ -585,6 +617,8 @@ def test_the_route_writes_no_s3_object_for_a_duplicate_curve(db, aws, make_cfg, 
         f"/api/jobs/{second}/retention",
         json={
             "report": report_text(points),
+            "video_url": YOUTUBE_LINK,
+            "same_cut": "same",
             "views": VIEWS,
             "published": PUBLISHED,
             "promoted": False,
@@ -617,6 +651,8 @@ def test_any_refused_curve_deletes_the_files_the_route_wrote(
         f"/api/jobs/{job_id}/retention",
         json={
             "report": report_text(curve()),
+            "video_url": YOUTUBE_LINK,
+            "same_cut": "same",
             "views": VIEWS,
             "published": PUBLISHED,
             "promoted": False,
