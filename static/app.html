@@ -332,7 +332,7 @@
   .toggle input { accent-color: var(--accent); }
   .toggle i.dash { width: 14px; height: 0; border-top: 2px dashed var(--cool); }
   .readout { margin-left: auto; text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
-  .readout-value { font: 500 20px/1 var(--display); color: var(--accent2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .readout-value { font: 500 20px/1 var(--display); color: var(--accent2); font-variant-numeric: tabular-nums; white-space: nowrap; min-width: 9em; text-align: right; } /* width of the longest word ('Well above typical'), so the layout never shifts as the word changes */
   .readout-value.neg { color: var(--cool); }
   .readout-value.flat, .brain-value.flat .brain-value-num { color: var(--ink); }
   .readout-sub { font-size: 12px; color: var(--muted); white-space: nowrap; }
