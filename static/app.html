@@ -258,8 +258,9 @@
   .tl-btn svg { width: 15px; height: 15px; }
   .tl-right { display: flex; gap: 8px; align-items: center; }
   .tl-time { font: 500 13px var(--mono); font-variant-numeric: tabular-nums; color: var(--muted); min-width: 92px; text-align: right; }
-  .tl-track { position: relative; height: 50px; cursor: pointer; touch-action: none; }
-  .tl-track svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+  .tl-track { position: relative; height: 24px; cursor: pointer; touch-action: none; }
+  .tl-track::before, .tl-track i { content: ''; position: absolute; left: 0; right: 0; top: 50%; height: 4px; margin-top: -2px; border-radius: 2px; background: var(--line); }
+  .tl-track i { background: var(--accent); transform-origin: left; transform: scaleX(0); }
 
   .report-body { flex: 1; min-height: 0; display: none; flex-direction: column; gap: 16px; }
   .report-body.active { display: flex; }
@@ -341,7 +342,7 @@
   .compare-msg { font-size: 12px; color: var(--ink-2); min-height: 0; }
   .compare-msg:empty { display: none; }
   .compare-msg.error { color: var(--danger); }
-  .main-chart { flex: 1.25 1 0; min-height: 250px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 20px 12px; display: flex; flex-direction: column; gap: 6px; }
+  .main-chart { flex: 1.45 1 0; min-height: 290px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 20px 12px; display: flex; flex-direction: column; gap: 6px; }
   .main-chart .note { font-size: 12px; color: var(--muted); }
   .moment-mark { position: absolute; width: 16px; height: 16px; padding: 0; border: 0; border-radius: 50%; background: transparent; transform: translate(-50%, -50%); }
   .moment-mark::after { content: ""; position: absolute; inset: 5px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 2px var(--bg); }
@@ -354,6 +355,9 @@
   .xaxis span { position: absolute; top: 0; transform: translateX(-50%); white-space: nowrap; }
   .xaxis span:first-child { transform: none; }
   .xaxis span.end { transform: translateX(-100%); }
+  .filmstrip { position: relative; flex: none; height: 40px; margin-top: 2px; border-radius: 2px; overflow: hidden; background: var(--well); cursor: pointer; }
+  .filmstrip[hidden] { display: none; }
+  .filmstrip canvas { display: block; width: 100%; height: 100%; }
   .chart-label { position: absolute; left: 4px; font: 500 11px var(--display); color: var(--muted); pointer-events: none; }
   .reveal-edge { position: absolute; top: 8px; bottom: 18px; width: 2px; margin-left: -1px; background: var(--accent); box-shadow: 0 0 8px rgba(255,138,42,.85); pointer-events: none; z-index: 4; }
   .chart-hover-line { position: absolute; top: 0; width: 1px; margin-left: -.5px; background: rgba(236,237,239,.5); opacity: 0; transition: opacity 100ms var(--ease-out); pointer-events: none; z-index: 3; }
@@ -701,6 +705,7 @@
           <p class="note">Predicted for an average viewer, compared with typical viewing.</p>
           <p class="compare-msg" id="compareMsg"></p>
           <div class="chart" id="mainChartBox"></div>
+          <div class="filmstrip" id="filmStrip" aria-hidden="true" hidden></div>
         </section>
         <section class="strips-wrap" id="stripsCard">
           <div class="panel-head"><h2>What the brain is doing</h2><span class="spacer"></span><span class="note">Same scale on all three</span></div>
@@ -912,6 +917,8 @@ let playheads = [];
 let hoverMarks = [], chartHoverT = null, chartHoverRaf = 0, chartHoverHideTimer = 0;
 let firstReveal = null;
 let mainChartRecord = null, compareChartRecord = null, compareMorphRaf = 0;
+let chartUid = 0;
+let filmStripSeq = 0, filmStripLoadedKey = '', filmStripFailedKey = '';
 let currentTab = 'charts';
 let chartMoments = [];
 let comparisonReport = null, comparisonState = '', comparisonStateText = '', comparisonCanRetry = false;
@@ -926,6 +933,11 @@ compareVideoB.id = 'compareVideoB';
 compareVideoB.playsInline = true;
 compareVideoB.muted = true;
 compareVideoB.preload = 'auto'; // the whole clip, so jumps on the chart respond at once
+const filmStripVideo = document.createElement('video');
+filmStripVideo.muted = true;
+filmStripVideo.playsInline = true;
+filmStripVideo.preload = 'auto';
+filmStripVideo.removeAttribute('crossorigin');
 
 function fmt(s) {
   const n = Math.max(0, Math.floor(Number.isFinite(s) ? s : 0));
@@ -2753,6 +2765,7 @@ function setResultTab(name) {
   } else {
     leaveCompareVideos();
   }
+  if (currentTab === 'charts') scheduleFilmStrip();
   updateDownloadButton();
 }
 
@@ -3770,6 +3783,7 @@ function clearAllCharts() {
   playheads = [];
   hoverMarks = [];
   clearChartHover();
+  resetFilmStrip();
   mainChartRecord = null;
   compareChartRecord = null;
   $('mainChartBox').replaceChildren();
@@ -3830,9 +3844,28 @@ function drawChart(host, { lines, range, height = 200, axisLabels = false, dark 
       const used = line.values.slice(0, T);
       const points = used.map((v, i) => `${x(i)},${y(Math.max(-range, Math.min(range, Number.isFinite(v) ? v : 0)))}`).join(' ');
       const last = used.length - 1;
-      svgEl('polygon', { points: `0,${y(0)} ${points} ${x(last)},${y(0)}`, fill: line.colour, opacity: '.10' }, svg);
+      const area = `0,${y(0)} ${points} ${x(last)},${y(0)}`;
+      if (scope === 'main' && line === lines[0]) {
+        const uid = `nl${++chartUid}`;
+        const defs = svgEl('defs', {}, svg);
+        const up = svgEl('linearGradient', { id: `${uid}-up`, gradientUnits: 'userSpaceOnUse', x1: 0, y1: y(0), x2: 0, y2: padT }, defs);
+        [[0, '#800000', '.05'], [0.35, '#E61A0A', '.12'], [0.7, '#FF800A', '.20'], [1, '#FFFFD9', '.34']]
+          .forEach(([offset, colour, opacity]) => svgEl('stop', { offset, 'stop-color': colour, 'stop-opacity': opacity }, up));
+        const down = svgEl('linearGradient', { id: `${uid}-down`, gradientUnits: 'userSpaceOnUse', x1: 0, y1: y(0), x2: 0, y2: H - padB }, defs);
+        [[0, '.14'], [1, '0']].forEach(([offset, opacity]) => svgEl('stop', { offset, 'stop-color': '#6F7E99', 'stop-opacity': opacity }, down));
+        const topClip = svgEl('clipPath', { id: `${uid}-top`, clipPathUnits: 'userSpaceOnUse' }, defs);
+        svgEl('rect', { x: 0, y: 0, width: W, height: Math.max(0, y(0)) }, topClip);
+        const bottomClip = svgEl('clipPath', { id: `${uid}-bottom`, clipPathUnits: 'userSpaceOnUse' }, defs);
+        svgEl('rect', { x: 0, y: y(0), width: W, height: Math.max(0, H - y(0)) }, bottomClip);
+        svgEl('polygon', { points: area, fill: `url(#${uid}-up)`, 'clip-path': `url(#${uid}-top)` }, svg);
+        svgEl('polygon', { points: area, fill: `url(#${uid}-down)`, 'clip-path': `url(#${uid}-bottom)` }, svg);
+      } else {
+        svgEl('polygon', { points: area, fill: line.colour, opacity: '.10' }, svg);
+      }
     });
   }
+
+  let mainLine = null;
 
   lines.forEach(line => {
     const points = line.values.slice(0, T).map((v, i) => `${x(i)},${y(Math.max(-range, Math.min(range, Number.isFinite(v) ? v : 0)))}`).join(' ');
@@ -3844,6 +3877,7 @@ function drawChart(host, { lines, range, height = 200, axisLabels = false, dark 
       'vector-effect': 'non-scaling-stroke',
     }, svg);
     if (line.key) pl.setAttribute('data-line-key', line.key);
+    if (scope === 'main' && !line.dash && !mainLine) mainLine = pl;
     if (line.endLabel && line.values.length > 0 && line.values.length < T) {
       const i = line.values.length - 1;
       const raw = line.values[i];
@@ -3869,6 +3903,23 @@ function drawChart(host, { lines, range, height = 200, axisLabels = false, dark 
       host.append(drop, dot, label);
     }
   });
+
+  let trace = null;
+  if (scope === 'main' && mainLine) {
+    const uid = `nlt${++chartUid}`;
+    const defs = svgEl('defs', {}, svg);
+    const clip = svgEl('clipPath', { id: uid, clipPathUnits: 'userSpaceOnUse' }, defs);
+    const clipRect = svgEl('rect', { x: 0, y: 0, width: W, height: H }, clip);
+    const dim = mainLine.cloneNode(false);
+    dim.removeAttribute('data-line-key');
+    dim.setAttribute('opacity', '0.35');
+    mainLine.parentNode.insertBefore(dim, mainLine);
+    mainLine.setAttribute('clip-path', `url(#${uid})`);
+    trace = { update(t) {
+      const ct = Math.max(0, Math.min(Math.max(0, T - 1), Number.isFinite(t) ? t : 0));
+      clipRect.setAttribute('width', Math.max(0, Math.min(W, x(ct))));
+    } };
+  }
 
   if (moments && lines[0]) {
     const topFor = py => axisLabels ? `calc(${(py / H) * 100}% - ${(py / H) * 16}px)` : `${(py / H) * 100}%`;
@@ -3929,7 +3980,12 @@ function drawChart(host, { lines, range, height = 200, axisLabels = false, dark 
   playheads.push({ scope, fn: t => {
     const px = x(Math.min(Math.max(0, t), Math.max(0, T - 1)));
     ph.setAttribute('x1', px); ph.setAttribute('x2', px);
+    if (trace) {
+      const revealT = firstReveal ? (firstReveal.progress || 0) * Math.max(0, firstReveal.span - 1) : null;
+      trace.update(revealT == null ? t : revealT);
+    }
   } });
+  if (record) record.trace = trace;
 
   svg.addEventListener('pointerdown', e => {
     const rect = svg.getBoundingClientRect();
@@ -4068,6 +4124,7 @@ function endFirstReveal() {
 function stepFirstReveal(now) {
   if (!firstReveal) return;
   const progress = Math.min(1, (now - firstReveal.started) / firstReveal.duration);
+  firstReveal.progress = progress;
   const box = $('mainChartBox');
   if (!firstReveal.edge.isConnected && box) box.append(firstReveal.edge);
   const mainSvg = box ? box.querySelector('svg') : null;
@@ -4092,6 +4149,7 @@ function stepFirstReveal(now) {
     mark.style.transform = shown ? 'translate(-50%, -50%) scale(1)' : 'translate(-50%, -50%) scale(.4)';
   });
   window.brainMap.setSecond(progress * Math.max(0, firstReveal.span - 1));
+  if (mainChartRecord && mainChartRecord.trace) mainChartRecord.trace.update(progress * Math.max(0, firstReveal.span - 1));
   if (progress < 1) firstReveal.raf = requestAnimationFrame(stepFirstReveal);
   else endFirstReveal();
 }
@@ -4116,7 +4174,7 @@ function startFirstReveal(ctx) {
   listen(window, 'keydown', true);
   // Not the video's play/seeking events: a sample autoplays on open, which would end it at once.
   // A person's play, pause or seek always starts with a pointerdown or keydown (seek() ends it too).
-  firstReveal = { raf: 0, edge, off, started: performance.now(), duration: 900, span: Math.max(1, chartSpan()) };
+  firstReveal = { raf: 0, edge, off, started: performance.now(), duration: 900, span: Math.max(1, chartSpan()), progress: 0 };
   firstReveal.raf = requestAnimationFrame(stepFirstReveal);
 }
 
@@ -4142,6 +4200,193 @@ function buildMainChart() {
   mainChartRecord = {};
   drawChart(box, { lines, range, height: 220, axisLabels: true, dark: true, fill: true, span, scope: 'main', yLabels: true, moments: chartMoments, record: mainChartRecord });
   updateMomentsKey();
+  scheduleFilmStrip();
+}
+
+function resetFilmStrip() {
+  filmStripSeq += 1;
+  filmStripLoadedKey = '';
+  filmStripFailedKey = '';
+  filmStripVideo.pause();
+  filmStripVideo.removeAttribute('src');
+  try { filmStripVideo.load(); } catch (e) {}
+  const strip = $('filmStrip');
+  if (!strip) return;
+  strip.hidden = true;
+  strip.replaceChildren();
+  strip.onclick = null;
+}
+
+function filmStripKey() {
+  const box = $('mainChartBox');
+  return `${video.currentSrc || video.getAttribute('src') || ''}|${box ? box.clientWidth : 0}|${totalSeconds()}`;
+}
+
+function waitForMainVideo() {
+  return new Promise(resolve => {
+    const hasSrc = () => !!(video.currentSrc || video.getAttribute('src'));
+    if (hasSrc() && video.readyState >= 1) return resolve(true);
+    let done = false;
+    const finish = ok => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      video.removeEventListener('loadedmetadata', onMeta);
+      video.removeEventListener('error', onError);
+      resolve(ok);
+    };
+    const onMeta = () => finish(true);
+    const onError = () => finish(false);
+    const timer = setTimeout(() => finish(hasSrc() && video.readyState >= 1), 8000);
+    video.addEventListener('loadedmetadata', onMeta);
+    video.addEventListener('error', onError);
+  });
+}
+
+function filmStripDelay() {
+  return new Promise(resolve => {
+    if (video.readyState >= 4) return resolve();
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      video.removeEventListener('canplaythrough', finish);
+      resolve();
+    };
+    const timer = setTimeout(finish, 1000);
+    video.addEventListener('canplaythrough', finish);
+  });
+}
+
+function loadStripVideo(src) {
+  return new Promise((resolve, reject) => {
+    if (filmStripVideo.getAttribute('src') === src && filmStripVideo.readyState >= 1) return resolve();
+    let done = false;
+    const finish = ok => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      filmStripVideo.removeEventListener('loadedmetadata', onMeta);
+      filmStripVideo.removeEventListener('error', onError);
+      if (ok) resolve(); else reject(new Error('still frame'));
+    };
+    const onMeta = () => finish(true);
+    const onError = () => finish(false);
+    const timer = setTimeout(() => finish(false), 8000);
+    filmStripVideo.addEventListener('loadedmetadata', onMeta);
+    filmStripVideo.addEventListener('error', onError);
+    filmStripVideo.src = src;
+    filmStripVideo.load();
+  });
+}
+
+function seekFilmStripVideo(t) {
+  const v = filmStripVideo;
+  const max = Number.isFinite(v.duration) && v.duration > 0 ? v.duration : t;
+  const target = Math.max(0, Math.min(t, Math.max(0, max - 0.04)));
+  if (Math.abs((v.currentTime || 0) - target) < 0.02) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    let done = false;
+    const finish = ok => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      v.removeEventListener('seeked', onSeeked);
+      v.removeEventListener('error', onError);
+      if (ok) resolve(); else reject(new Error('still seek'));
+    };
+    const onSeeked = () => finish(true);
+    const onError = () => finish(false);
+    const timer = setTimeout(() => finish(false), 4000);
+    v.addEventListener('seeked', onSeeked);
+    v.addEventListener('error', onError);
+    try { v.currentTime = target; } catch (e) { finish(false); }
+  });
+}
+
+function drawFilmFrame(ctx, v, i, n, width, height, dpr) {
+  const segW = width / n;
+  const dx = i * segW;
+  const dw = Math.max(1, segW - (i < n - 1 ? 1 : 0));
+  const vw = v.videoWidth || 16, vh = v.videoHeight || 9;
+  const want = dw / height;
+  let sx = 0, sy = 0, sw = vw, sh = vh;
+  if (vw / vh > want) { sw = vh * want; sx = (vw - sw) / 2; }
+  else { sh = vw / want; sy = (vh - sh) / 2; }
+  ctx.drawImage(v, sx, sy, sw, sh, dx * dpr, 0, dw * dpr, height * dpr);
+  if (i < n - 1) {
+    ctx.fillStyle = '#0E1013';
+    ctx.fillRect((dx + dw) * dpr, 0, (segW - dw) * dpr, height * dpr);
+  }
+}
+
+async function loadFilmStrip(seq, key) {
+  const strip = $('filmStrip');
+  if (!strip || !currentResult) return;
+  const T = totalSeconds();
+  if (!T) return;
+  if (!(await waitForMainVideo()) || seq !== filmStripSeq) return;
+  await filmStripDelay();
+  if (seq !== filmStripSeq) return;
+  const src = video.currentSrc || video.getAttribute('src');
+  if (!src) throw new Error('no video');
+  const width = $('mainChartBox').clientWidth;
+  const n = Math.max(1, Math.floor(width / 70));
+  const segW = width / n;
+  if (!width || segW < 30) { strip.hidden = true; return; }
+  const height = 40;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  let canvas = strip.querySelector('canvas');
+  if (!canvas) {
+    canvas = document.createElement('canvas');
+    strip.append(canvas);
+  }
+  canvas.width = Math.max(1, Math.round(width * dpr));
+  canvas.height = Math.max(1, Math.round(height * dpr));
+  canvas.style.width = `${width}px`;
+  canvas.style.height = `${height}px`;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('no canvas');
+  await loadStripVideo(src);
+  if (seq !== filmStripSeq) return;
+  for (let i = 0; i < n; i += 1) {
+    if (seq !== filmStripSeq) return;
+    const t = ((i + 0.5) / n) * Math.max(0, T - 1);
+    await seekFilmStripVideo(t);
+    if (seq !== filmStripSeq) return;
+    drawFilmFrame(ctx, filmStripVideo, i, n, width, height, dpr);
+    strip.hidden = false;
+  }
+  if (seq !== filmStripSeq) return;
+  filmStripLoadedKey = key;
+  strip.hidden = false;
+}
+
+function scheduleFilmStrip() {
+  const strip = $('filmStrip');
+  if (!strip) return;
+  if (!currentResult) { resetFilmStrip(); return; }
+  strip.onclick = event => {
+    if (!currentResult) return;
+    const rect = strip.getBoundingClientRect();
+    if (!rect.width) return;
+    seek(((event.clientX - rect.left) / rect.width) * (totalSeconds() - 1));
+  };
+  const key = filmStripKey();
+  if (key === filmStripLoadedKey && strip.querySelector('canvas')) {
+    strip.hidden = false;
+    return;
+  }
+  if (key === filmStripFailedKey) return;
+  const seq = ++filmStripSeq;
+  strip.hidden = true;
+  loadFilmStrip(seq, key).catch(() => {
+    if (seq !== filmStripSeq) return;
+    filmStripFailedKey = key;
+    strip.hidden = true;
+    strip.replaceChildren();
+  });
 }
 
 // Chunk 3 E: show/hide the muted curve by fading the existing line in or out over 250ms;
@@ -4275,7 +4520,12 @@ function buildTimeline() {
     <div class="tl-track" id="tlTrack" aria-label="Timeline"></div>
     <div class="tl-right"><span class="tl-time" id="tlTime"></span><button class="tl-btn" id="tlSound" aria-label="Sound on"></button></div>`;
   const track = $('tlTrack');
-  drawChart(track, { lines: [{ values: currentResult.signals.overall, colour: 'var(--heat)', width: 2 }], range: niceRange(currentResult.signals.overall), height: 50, dark: true, scope: 'timeline' });
+  const fill = document.createElement('i');
+  track.append(fill);
+  playheads.push({ scope: 'timeline', fn: t => {
+    const T = totalSeconds();
+    fill.style.transform = `scaleX(${T > 1 ? Math.max(0, Math.min(1, t / (T - 1))) : 0})`;
+  } });
   $('tlPlay').addEventListener('click', togglePlay);
   const snd = $('tlSound');
   snd.hidden = !hasLocalVideo();
@@ -4388,14 +4638,11 @@ function setChartHover(t) {
   chartHoverRaf = requestAnimationFrame(applyChartHover);
 }
 
-// One update per animation frame: the marks, the label and the brain preview move together.
+// One update per animation frame: the marks and the label move together. The brain follows the video only.
 function applyChartHover() {
   chartHoverRaf = 0;
   const on = chartHoverT != null;
   hoverMarks.forEach(m => m.fn(chartHoverT, on));
-  if (currentResult && !firstReveal) {
-    window.brainMap.setSecond(on ? Math.max(0, Math.min(totalSeconds() - 1, chartHoverT)) : currentTime());
-  }
 }
 
 function tick() {
@@ -4406,7 +4653,7 @@ function tick() {
   updateBrainValues(t);
   updateMomentActive(t);
   updateCompareTransport(t);
-  if (currentResult && !firstReveal && chartHoverT == null) window.brainMap.setSecond(t);
+  if (currentResult && !firstReveal) window.brainMap.setSecond(t);
 }
 
 function buildAllCharts() {
@@ -5006,6 +5253,7 @@ video.addEventListener('click', togglePlay);
 video.addEventListener('seeked', tick);
 video.addEventListener('timeupdate', () => { if (video.paused) tick(); });
 video.addEventListener('loadedmetadata', tick);
+video.addEventListener('loadedmetadata', scheduleFilmStrip);
 video.addEventListener('play', () => {
   if (currentTab !== 'compare' || !compareVideoB.getAttribute('src')) return;
   seekCompareVideoB();
@@ -5175,6 +5423,7 @@ window.addEventListener('resize', () => {
   clearTimeout(laneResizeTimer);
   laneResizeTimer = setTimeout(() => {
     if (currentTab === 'compare' && comparison) { buildCompareChart(); tick(); }
+    if (currentTab === 'charts') scheduleFilmStrip();
   }, 120);
 });
 
