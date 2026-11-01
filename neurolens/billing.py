@@ -356,12 +356,10 @@ def _curve_reward(
     if preview:
         return cents, None, None
     if facts is not None:
-        # The server's own measured length only; the page's figure is the user's word.
+        # The server's own measured length only; the page's figure is the user's word. A job
+        # with no measured length cannot prove the match, so it is not paid.
         analysed_ms = job["verified_duration_ms"]
-        if (
-            analysed_ms is not None
-            and abs(facts.duration_s - analysed_ms / 1000) > length_tolerance_s
-        ):
+        if analysed_ms is None or abs(facts.duration_s - analysed_ms / 1000) > length_tolerance_s:
             return refuse("length_mismatch")
     if now < reward_from_at:
         return cents, reward_from, "too_early"

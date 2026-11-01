@@ -450,31 +450,41 @@ def test_the_save_rejects_an_answer_the_check_supplied(
     assert retention_keys(aws, job_id) == []
 
 
-def test_the_save_requires_the_questions_when_facts_are_unknown(
-    db, aws, make_cfg, tmp_path, monkeypatch, pg
+@pytest.mark.parametrize("answered", [True, False], ids=["answered", "not_answered"])
+def test_without_facts_the_questions_are_optional_weights(
+    db, aws, make_cfg, tmp_path, monkeypatch, pg, answered
 ):
+    """A lookup that fails after the check hid the questions must still save (M3j §6)."""
+    from neurolens import youtube
+
+    client = app_for(aws, db, make_cfg, tmp_path)
+    job_id, _ = make_job(db)
+    patch_lookup(monkeypatch, youtube.LookupFailed("the video lookup failed"))
+    body = retention_body(views=VIEWS, published=PUBLISHED) if answered else retention_body()
+
+    saved = client.post(f"/api/jobs/{job_id}/retention", json=body)
+
+    assert saved.status_code == 200
+    [snapshot] = snapshot_rows(pg, job_id)
+    assert snapshot["checked_views"] is None
+    assert snapshot["published_at"] is None
+    assert snapshot["video_seconds"] is None
+    assert snapshot["views"] == (VIEWS if answered else None)
+    assert snapshot["published"] == (PUBLISHED if answered else None)
+
+
+def test_without_facts_a_bad_answer_is_still_refused(db, aws, make_cfg, tmp_path, monkeypatch, pg):
     from neurolens import youtube
 
     client = app_for(aws, db, make_cfg, tmp_path)
     job_id, _ = make_job(db)
     patch_lookup(monkeypatch, youtube.LookupFailed("the video lookup failed"))
 
-    refused = client.post(f"/api/jobs/{job_id}/retention", json=retention_body())
-    assert refused.status_code == 400
+    resp = client.post(f"/api/jobs/{job_id}/retention", json=retention_body(views="lots"))
+
+    assert resp.status_code == 400
     assert snapshot_rows(pg, job_id) == []
     assert retention_keys(aws, job_id) == []
-
-    saved = client.post(
-        f"/api/jobs/{job_id}/retention",
-        json=retention_body(views=VIEWS, published=PUBLISHED),
-    )
-    assert saved.status_code == 200
-    [snapshot] = snapshot_rows(pg, job_id)
-    assert snapshot["checked_views"] is None
-    assert snapshot["published_at"] is None
-    assert snapshot["video_seconds"] is None
-    assert snapshot["views"] == VIEWS
-    assert snapshot["published"] == PUBLISHED
 
 
 def test_a_facebook_link_needs_the_questions_and_stores_no_checked_facts(

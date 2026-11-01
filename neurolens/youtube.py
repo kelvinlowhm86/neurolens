@@ -5,6 +5,7 @@ that cannot be made, is told apart: no items is `None`; every failure is `Lookup
 message never holds the API key or the request's URL.
 """
 
+import http.client
 import json
 import re
 import urllib.error
@@ -90,7 +91,7 @@ def lookup(video_id, api_key, *, timeout=5):
             body = response.read()
     except LookupFailed:
         raise
-    except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, OSError) as err:
+    except (urllib.error.URLError, http.client.HTTPException, OSError) as err:
         if isinstance(err, urllib.error.HTTPError):
             raise LookupFailed(f"YouTube answered {err.code}.") from None
         raise LookupFailed(f"The video lookup failed: {type(err).__name__}.") from None

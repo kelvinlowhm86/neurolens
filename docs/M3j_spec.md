@@ -65,8 +65,8 @@ Explorer (not confirmed to work).
   `created_at + reward_min_days`.
 - Conditions, in this order (the first unmet one is the `reason`): `invalid` (quality flags, save
   only); `not_charged`; `already_rewarded` (this job, the same video hash, or the same `video_ref`);
-  `not_funded`; `cap_reached`; `length_mismatch` (facts known and
-  `|duration_s - verified_duration_ms / 1000| > length_tolerance_s`); `too_early` (now, the
+  `not_funded`; `cap_reached`; `length_mismatch` (facts known and either the job has no server-measured
+  length or `|duration_s - verified_duration_ms / 1000| > length_tolerance_s`); `too_early` (now, the
   database's clock, before `reward_from`).
 - `reason` is `None` when it pays; `reward_from` is returned only with `too_early`.
 - `billing.curve_offer(db, user_id, job_id, video_ref, facts, reward_cap, reward_window_days,
@@ -88,8 +88,9 @@ Explorer (not confirmed to work).
   server-measured length, never the page's. `VideoTaken`/`VideoLinkChanged` → 409 as on
   save. Nothing is written.
 - `POST /api/jobs/<id>/retention`: after the link, the facts (§4) (a second lookup: the server
-  never trusts the page's). `views` and `published` are required only when the facts are unknown;
-  with facts they must be absent or null and are stored null. Then as now, passing `facts`.
+  never trusts the page's). With facts, `views` and `published` must be absent or null and are
+  stored null. Without facts they are optional training weights (validated when given), so a
+  lookup that fails after the check hid those questions still saves. Then as now, passing `facts`.
 - Both routes need a signed-in owner; each check costs 1 unit of YouTube's 10,000 a day.
 
 ## 7. Migration 011 (`infra/migrations/011_checked_facts.sql`)

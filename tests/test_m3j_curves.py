@@ -9,6 +9,7 @@ sleeping.
 """
 
 import importlib
+import http.client
 import json
 import urllib.error
 import urllib.request
@@ -142,8 +143,9 @@ def test_a_non_200_reply_is_a_failed_lookup(monkeypatch, status):
         lambda request: (_ for _ in ()).throw(TimeoutError("timed out")),
         lambda request: FakeResponse(b"not json"),
         lambda request: FakeResponse({"items": [{"snippet": {}}]}),
+        lambda request: (_ for _ in ()).throw(http.client.IncompleteRead(b"")),
     ],
-    ids=["timeout", "bad_json", "missing_fields"],
+    ids=["timeout", "bad_json", "missing_fields", "broken_connection"],
 )
 def test_a_broken_reply_is_a_failed_lookup(monkeypatch, fail):
     patch_urlopen(monkeypatch, fail)
@@ -509,3 +511,19 @@ def test_list_jobs_no_longer_promises_a_reward_date(db, pg):
 
     assert row["curve_reward_cents"] == PRICE_CENTS
     assert "curve_reward_from" not in row
+
+
+def test_a_job_without_a_measured_length_is_not_paid_for_a_checked_video(db, pg):
+    """The match cannot be proved without the server's own length (M3j §5)."""
+    job_id, _ = make_job(db)
+    pg.conn.execute(
+        "UPDATE jobs SET verified_duration_ms = NULL WHERE job_id = %s::uuid", (job_id,)
+    )
+    billing.grant_credit(db, f"{WEB_USER_ID}@example.com", 100)
+
+    result = billing.add_curve(
+        db, WEB_USER_ID, job_id, **curve_args(job_id, facts_=facts(days_ago(30)))
+    )
+
+    assert result["rewarded_cents"] == 0
+    assert result["reason"] == "length_mismatch"
