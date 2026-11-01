@@ -125,6 +125,10 @@ def curve_kwargs(job_id, *, sha="review-curve"):
         "promoted": False,
         "reward_cap": 5,
         "reward_window_days": 30,
+        "video_ref": f"youtube:{job_id.replace('-', '')[:11]}",
+        "same_cut": "same",
+        "source": "youtube_api",
+        "reward_min_days": 7,
     }
 
 
@@ -465,7 +469,7 @@ def test_the_90_day_rule_keeps_a_job_that_gained_a_snapshot_after_selection(
 def test_consent_stores_the_version_and_time(db, pg):
     job_id, _ = make_job(db, consent=True)
     job = pg.job(job_id)
-    assert billing.CONSENT_VERSION == "2026-10-31"
+    assert billing.CONSENT_VERSION == "2026-11-02"
     assert job["consent_version"] == billing.CONSENT_VERSION
     assert job["consented_at"] is not None
 
@@ -492,7 +496,7 @@ def test_privacy_page_states_the_reward_limits_the_server_enforces():
     research = settings.load_settings()["research"]
     cap = research["curve_rewards_per_window"]
     days = research["curve_reward_window_days"]
-    assert "once per video" in text
+    assert "once per published video" in text
     assert f"up to {cap} videos in any {days} days" in text
     assert f"at least {results.MIN_CURVE_POINTS} points" in text
     assert f"never goes above {results.MAX_WATCH_RATIO * 100:,}%" in text

@@ -693,6 +693,8 @@ def test_a_unique_constraint_race_answers_409_duplicate_curve(db, aws, make_cfg,
             f"/api/jobs/{job_id}/retention",
             json={
                 "report": report_text(curve()),
+                "video_url": YOUTUBE_LINK,
+                "same_cut": "same",
                 "views": VIEWS,
                 "published": PUBLISHED,
                 "promoted": False,

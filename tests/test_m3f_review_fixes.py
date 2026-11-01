@@ -62,6 +62,10 @@ def curve_args(job_id):
         "promoted": False,
         "reward_cap": 5,
         "reward_window_days": 30,
+        "video_ref": f"youtube:{job_id.replace('-', '')[:11]}",
+        "same_cut": "same",
+        "source": "youtube_api",
+        "reward_min_days": 7,
     }
 
 
@@ -83,8 +87,9 @@ def run_or_fail(call, label):
         pytest.fail(f"{label} does not accept a bigint days parameter: {type(err).__name__}: {err}")
 
 
-def test_add_curve_accepts_a_bigint_reward_window(db):
+def test_add_curve_accepts_a_bigint_reward_window(db, pg):
     job_id = make_job(db)
+    pg.age(job_id, created_s=8 * DAY)
     billing.grant_credit(db, f"{WEB_USER_ID}@example.com", 100)
 
     result = run_or_fail(

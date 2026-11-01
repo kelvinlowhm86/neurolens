@@ -16,7 +16,8 @@
   "research": {
     "curve_rewards_per_window": 5,
     "curve_reward_window_days": 30,
-    "no_curve_days": 90
+    "no_curve_days": 90,
+    "curve_reward_min_days": 7
   },
   "response": {
     "colour_range": 0.5
@@ -40,7 +41,8 @@
     "dev_email": "dev@localhost"
   },
   "billing": {
-    "starter_cents": 0
+    "starter_cents": 0,
+    "invite_cents": 1000
   },
   "server": {
     "host": "127.0.0.1",

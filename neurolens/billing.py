@@ -16,7 +16,7 @@ Pure Python (the Lambdas import this): no numpy, no psycopg.
 import json
 import logging
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from neurolens import storage
 from neurolens.pricing import estimate_cost_cents
@@ -31,12 +31,13 @@ OK = "ok"
 STALE_AFTER_S = 90
 # The wording of the research-consent box (M3f §5a). A wording change needs a new value here and
 # the new text on the page together; old jobs keep the version they agreed to.
-CONSENT_VERSION = "2026-10-31"
+CONSENT_VERSION = "2026-11-02"
 # A session row older than this (by its last use) no longer signs anybody in (M3f §6b).
 SESSION_DAYS = 30
 # The reward preview's defaults when a caller does not supply config.json's research limits.
 DEFAULT_REWARD_CAP = 5
 DEFAULT_REWARD_WINDOW_DAYS = 30
+DEFAULT_REWARD_MIN_DAYS = 7
 
 CURVE_REMOVED_MESSAGES = {
     "stopped": "You stopped sharing this video.",
@@ -75,6 +76,20 @@ class CurveRefused(Exception):
         self.code = code
         self.message = message
         self.status = status
+
+
+class VideoTaken(CurveRefused):
+    """Another account already linked this published video (M3i §6)."""
+
+    def __init__(self):
+        super().__init__("video_link_taken", "This video is linked to another account.")
+
+
+class VideoLinkChanged(CurveRefused):
+    """This analysis is already linked to a different published video (M3i §6)."""
+
+    def __init__(self):
+        super().__init__("video_link_changed", "This analysis is already linked to another video.")
 
 
 # ---------------------------------------------------------------- helpers (inside a transaction)
@@ -285,6 +300,43 @@ def _reward_eligible(tx, user_id, reward_cap, reward_window_days):
     return recent < reward_cap
 
 
+def _curve_reward(
+    job,
+    *,
+    user_eligible,
+    same_video_rewarded=False,
+    same_link_rewarded=False,
+    valid=True,
+    reward_min_days=DEFAULT_REWARD_MIN_DAYS,
+    preview=False,
+    now=None,
+):
+    """The reward `add_curve` would pay and the date it becomes possible (M3i §6).
+
+    `preview` ignores the date and the published link, which are what `list_jobs` shows before
+    the form is filled in; `add_curve` passes the real link. Both callers use this helper, so
+    the preview and the payment cannot drift apart. The returned date is UTC text, set only when
+    every condition except the date holds. `now` is the database's clock (`add_curve` reads it in
+    its transaction), like every other money rule.
+    """
+    reward_from = storage.utc_text(job["created_at"] + timedelta(days=reward_min_days))
+    if (
+        not valid
+        or job["captured_cents"] is None
+        or job["captured_cents"] <= 0
+        or job["curve_rewarded_at"] is not None
+        or same_video_rewarded
+        or same_link_rewarded
+        or not user_eligible
+    ):
+        return 0, None
+    if preview:
+        return job["captured_cents"], reward_from
+    if now < job["created_at"] + timedelta(days=reward_min_days):
+        return 0, reward_from
+    return job["captured_cents"], None
+
+
 def list_jobs(
     db,
     user_id,
@@ -292,6 +344,7 @@ def list_jobs(
     *,
     reward_cap=DEFAULT_REWARD_CAP,
     reward_window_days=DEFAULT_REWARD_WINDOW_DAYS,
+    reward_min_days=DEFAULT_REWARD_MIN_DAYS,
 ):
     """The user's jobs, newest first, at most `limit` (M3b §4a, M3f §3, §5d).
 
@@ -299,26 +352,25 @@ def list_jobs(
     queued job the dispatcher has not priced yet (M3e §8). For a done, shared job, `sharing` is
     true while its research copy is present, `curve_count` is its stored curves, and
     `curve_reward_cents` is what a valid curve would return now (0 when it cannot);
-    `curve_rewarded` is true once a curve has returned this job's credit. The user's
-    reward conditions are read once for the whole call.
+    `curve_reward_from` is the date a reward becomes possible, and `curve_rewarded` is true once
+    a curve has returned this job's credit. The shape of both reward fields comes from the helper
+    `add_curve` uses; the preview ignores the date and the link until the form names them.
     """
     with db.transaction() as tx:
         reward_ok = _reward_eligible(tx, user_id, reward_cap, reward_window_days)
         rows = tx.execute(
             "SELECT j.job_id, j.filename, j.status, j.created_at, j.verified_duration_ms, "
             "j.captured_cents, j.error_code, j.research_consent, j.claimed_at, "
+            "j.curve_rewarded_at, "
             "(j.status = :queued AND j.verified_duration_ms IS NULL) AS cancellable, "
             "(j.status = :done AND j.research_consent "
             "AND j.dataset_removed_at IS NULL) AS sharing, "
             "(SELECT count(*) FROM retention_snapshots s "
             "WHERE s.job_id = j.job_id) AS curve_count, "
             "(j.curve_rewarded_at IS NOT NULL) AS curve_rewarded, "
-            "CASE WHEN :reward_ok AND j.status = :done AND j.research_consent "
-            "AND j.dataset_removed_at IS NULL AND j.captured_cents > 0 "
-            "AND j.curve_rewarded_at IS NULL AND NOT EXISTS "
-            "(SELECT 1 FROM jobs other WHERE other.video_sha256 = j.video_sha256 "
+            "EXISTS (SELECT 1 FROM jobs other WHERE other.video_sha256 = j.video_sha256 "
             "AND other.video_sha256 IS NOT NULL AND other.curve_rewarded_at IS NOT NULL) "
-            "THEN j.captured_cents ELSE 0 END AS curve_reward_cents "
+            "AS same_video_rewarded "
             "FROM jobs j WHERE j.user_id = :user_id AND j.deleted_at IS NULL "
             "AND (j.error_code IS NULL OR j.error_code <> :cancelled) "
             "ORDER BY j.created_at DESC LIMIT :limit",
@@ -328,10 +380,23 @@ def list_jobs(
                 "done": DONE,
                 "queued": QUEUED,
                 "cancelled": "cancelled",
-                "reward_ok": reward_ok,
             },
         )
     for row in rows:
+        if row["sharing"]:
+            cents, reward_from = _curve_reward(
+                row,
+                user_eligible=reward_ok,
+                same_video_rewarded=row["same_video_rewarded"],
+                reward_min_days=reward_min_days,
+                preview=True,
+            )
+        else:
+            cents, reward_from = 0, None
+        row["curve_reward_cents"] = cents
+        row["curve_reward_from"] = reward_from if cents > 0 else None
+        row.pop("same_video_rewarded")
+        row.pop("curve_rewarded_at")
         if row["claimed_at"] is not None:
             row["claimed_at"] = row["claimed_at"].astimezone(UTC).strftime(storage.TIME_FORMAT)
     return rows
@@ -989,21 +1054,29 @@ def add_curve(
     promoted,
     reward_cap,
     reward_window_days,
+    video_ref,
+    same_cut,
+    source,
+    reward_min_days,
 ):
     """Store one retention snapshot and reward the analysis when all the rules allow it.
 
     One transaction with the balance row locked before the job row (M3f §5c, §5d): the job must
-    be the user's, done, shared, not removed and not deleted. A curve already stored under the
-    same hash, on any job or account, raises DuplicateCurve and stores nothing. A valid curve of a
-    charged job whose video hash has never been rewarded, by an account that has had credit beyond
-    the starter, and below the per-window cap, returns the captured price once.
+    be the user's, done, shared, not removed and not deleted. A published video can belong to only
+    one account: a link another account already used raises VideoTaken, and a job already linked
+    to a different video raises VideoLinkChanged (M3i §6). A curve already stored under the same
+    hash, on any job or account, raises DuplicateCurve and stores nothing. A valid curve of a
+    charged job returns the captured price once, at least `reward_min_days` after the analysis,
+    when neither the video hash nor the published link has been rewarded, by an account that has
+    had credit beyond the starter and below the per-window cap. All checks run before anything is
+    written, so a refusal stores nothing.
     """
     with db.transaction() as tx:
         _lock_balance(tx, user_id)
         rows = tx.execute(
             "SELECT user_id, status, research_consent, dataset_removed_at, "
-            "dataset_removed_reason, deleted_at, captured_cents, curve_rewarded_at, video_sha256 "
-            "FROM jobs WHERE job_id = CAST(:job_id AS uuid) FOR UPDATE",
+            "dataset_removed_reason, deleted_at, captured_cents, curve_rewarded_at, video_sha256, "
+            "created_at, now() AS db_now FROM jobs WHERE job_id = CAST(:job_id AS uuid) FOR UPDATE",
             {"job_id": job_id},
         )
         job = rows[0] if rows else None
@@ -1019,6 +1092,22 @@ def add_curve(
             )
             raise CurveRefused("dataset_removed", message)
 
+        taken = tx.execute(
+            "SELECT 1 AS present FROM retention_snapshots s "
+            "JOIN jobs j ON j.job_id = s.job_id "
+            "WHERE s.video_ref = :video_ref AND j.user_id <> :user_id LIMIT 1",
+            {"video_ref": video_ref, "user_id": user_id},
+        )
+        if taken:
+            raise VideoTaken()
+        changed = tx.execute(
+            "SELECT 1 AS present FROM retention_snapshots WHERE job_id = CAST(:job_id AS uuid) "
+            "AND video_ref IS NOT NULL AND video_ref <> :video_ref LIMIT 1",
+            {"job_id": job_id, "video_ref": video_ref},
+        )
+        if changed:
+            raise VideoLinkChanged()
+
         duplicate = tx.execute(
             "SELECT 1 AS present FROM retention_snapshots WHERE curve_sha256 = :sha LIMIT 1",
             {"sha": curve_sha256},
@@ -1026,27 +1115,33 @@ def add_curve(
         if duplicate:
             raise DuplicateCurve("this curve was already added")
 
-        reward = 0
-        if (
-            not quality_flags
-            and job["captured_cents"] is not None
-            and job["captured_cents"] > 0
-            and job["curve_rewarded_at"] is None
-        ):
-            same_video = tx.execute(
-                "SELECT 1 AS present FROM jobs other WHERE other.video_sha256 = :sha "
-                "AND other.video_sha256 IS NOT NULL AND other.curve_rewarded_at IS NOT NULL "
-                "LIMIT 1",
-                {"sha": job["video_sha256"]},
-            )
-            if not same_video and _reward_eligible(tx, user_id, reward_cap, reward_window_days):
-                reward = job["captured_cents"]
+        same_video = tx.execute(
+            "SELECT 1 AS present FROM jobs other WHERE other.video_sha256 = :sha "
+            "AND other.video_sha256 IS NOT NULL AND other.curve_rewarded_at IS NOT NULL LIMIT 1",
+            {"sha": job["video_sha256"]},
+        )
+        same_link = tx.execute(
+            "SELECT 1 AS present FROM retention_snapshots WHERE video_ref = :video_ref "
+            "AND rewarded_cents > 0 LIMIT 1",
+            {"video_ref": video_ref},
+        )
+        reward, reward_from = _curve_reward(
+            job,
+            user_eligible=_reward_eligible(tx, user_id, reward_cap, reward_window_days),
+            same_video_rewarded=bool(same_video),
+            same_link_rewarded=bool(same_link),
+            valid=not quality_flags,
+            reward_min_days=reward_min_days,
+            now=job["db_now"],
+        )
 
         tx.execute(
             "INSERT INTO retention_snapshots (snapshot_id, job_id, raw_key, csv_key, "
-            "curve_sha256, points, quality_flags, views, published, promoted, rewarded_cents) "
+            "curve_sha256, points, quality_flags, views, published, promoted, rewarded_cents, "
+            "video_ref, same_cut, source) "
             "VALUES (CAST(:snapshot_id AS uuid), CAST(:job_id AS uuid), :raw_key, :csv_key, "
-            ":sha, :points, CAST(:flags AS text[]), :views, :published, :promoted, :reward)",
+            ":sha, :points, CAST(:flags AS text[]), :views, :published, :promoted, :reward, "
+            ":video_ref, :same_cut, :source)",
             {
                 "snapshot_id": snapshot_id,
                 "job_id": job_id,
@@ -1059,6 +1154,9 @@ def add_curve(
                 "published": published,
                 "promoted": promoted,
                 "reward": reward,
+                "video_ref": video_ref,
+                "same_cut": same_cut,
+                "source": source,
             },
         )
         tx.execute(
@@ -1072,4 +1170,7 @@ def add_curve(
                 "UPDATE jobs SET curve_rewarded_at = now() WHERE job_id = CAST(:job_id AS uuid)",
                 {"job_id": job_id},
             )
-    return {"rewarded_cents": reward, "quality": list(quality_flags)}
+    result = {"rewarded_cents": reward, "quality": list(quality_flags)}
+    if reward_from is not None:
+        result["reward_from"] = reward_from
+    return result

@@ -1,10 +1,11 @@
 """Give a user credit by email (docs/M3b_spec.md §7a): for the team and study participants.
 
     python infra/grant_credit.py 5 --backend data_api     # $5.00, Aurora (NEUROLENS_DB_* in .env)
-    python infra/grant_credit.py 2.50 --backend postgres  # $2.50, local Postgres (NEUROLENS_DB_DSN)
+    python infra/grant_credit.py --backend postgres       # the $10 invite credit, local Postgres
 
-The amount is in dollars, with at most two decimals. Asks for the email at a prompt, so
-participants' emails never land in shell history, shows the user's current balance, then asks
+The amount is in dollars, with at most two decimals; with none it grants
+`billing.invite_cents` from `config.json` (5 minutes at today's price). Asks for the email at a
+prompt, so participants' emails never land in shell history, shows the user's balance, then asks
 to confirm. The credit is added to what they have. The user must have signed in once (unknown
 emails stop with an error). The credit and its `grant` ledger row are written in one
 transaction. Runs from a laptop with the `neurolens` profile, never from the web app.
@@ -14,7 +15,7 @@ import argparse
 import re
 import sys
 
-from neurolens import billing, settings
+from neurolens import billing, pricing, settings
 from neurolens import db as dbmod
 
 
@@ -35,13 +36,23 @@ def _dollars(cents):
 
 def main(argv=None, ask=input, db=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("dollars", help="credit to add, in dollars, e.g. 5 or 2.50")
+    parser.add_argument(
+        "dollars", nargs="?", help="credit to add, in dollars; omit for the invite credit"
+    )
     parser.add_argument("--backend", required=True, choices=["data_api", "postgres"])
     args = parser.parse_args(argv)
-    try:
-        cents = dollars_to_cents(args.dollars)
-    except ValueError as exc:
-        parser.error(str(exc))
+    if args.dollars is None:
+        cents = settings.load_settings()["billing"]["invite_cents"]
+        minutes = cents / pricing.CENTS_PER_BLOCK * pricing.BLOCK_SECONDS / 60
+        confirm = (
+            f"Grant {_dollars(cents)} ({minutes:g} min, the invite credit) to {{email}}? [y/N] "
+        )
+    else:
+        try:
+            cents = dollars_to_cents(args.dollars)
+        except ValueError as exc:
+            parser.error(str(exc))
+        confirm = f"Add {_dollars(cents)} to {{email}}? [y/N] "
 
     email = ask("Email of the user to credit: ").strip()
     if not email:
@@ -58,7 +69,7 @@ def main(argv=None, ask=input, db=None):
         return 1
     before = billing.get_balance(db, user_id)["available_cents"]
     print(f"{email} has {_dollars(before)} available now.")
-    if ask(f"Add {_dollars(cents)} to {email}? [y/N] ").strip() != "y":
+    if ask(confirm.format(email=email)).strip() != "y":
         print("Not confirmed: nothing granted.")
         return 1
 

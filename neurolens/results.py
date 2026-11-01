@@ -5,6 +5,8 @@ import csv
 import io
 import json
 import math
+import re
+from urllib.parse import parse_qs, urlsplit
 
 SERIES = [
     "faces",
@@ -126,6 +128,146 @@ def parse_retention_report(text):
         pairs.append((elapsed, watch))
         previous = elapsed
     return pairs
+
+
+VIDEO_LINK_MAX_CHARS = 300
+VIDEO_LINK_MESSAGE = "Paste the video's YouTube or Facebook link."
+FACEBOOK_REELS_MESSAGE = "Facebook Reels aren't supported yet."
+FACEBOOK_SHORT_LINK_MESSAGE = (
+    "Open the link and paste the full facebook.com address from the browser bar."
+)
+FACEBOOK_REPORT_SHAPE_MESSAGE = (
+    "This Facebook report isn't in the expected shape. Please send it to the NeuroLens team."
+)
+FACEBOOK_REPORT_VIDEO_MESSAGE = "This report is for a different video than the link."
+
+_YOUTUBE_HOSTS = {"youtube.com", "www.youtube.com", "m.youtube.com"}
+_YOUTUBE_SHORT_HOSTS = {"youtu.be", "www.youtu.be"}
+_FACEBOOK_HOSTS = {"facebook.com", "www.facebook.com", "m.facebook.com"}
+_YOUTUBE_ID = re.compile(r"[A-Za-z0-9_-]{11}")
+_DIGITS = re.compile(r"\d+")
+_YOUTUBE_PATH_KINDS = {"shorts", "live", "embed"}
+
+
+def _host_and_parts(text):
+    """The lower-case host and non-empty path parts of a link, with or without a scheme."""
+    raw = text.strip()
+    if "://" not in raw:
+        raw = "https://" + raw
+    parts = urlsplit(raw)
+    host = (parts.hostname or "").lower()
+    path = [part for part in parts.path.split("/") if part]
+    return host, path, parse_qs(parts.query)
+
+
+def _youtube_id(host, path, query):
+    if host in _YOUTUBE_SHORT_HOSTS:
+        return path[0] if len(path) == 1 else None
+    if host not in _YOUTUBE_HOSTS:
+        return None
+    if path == ["watch"]:
+        values = query.get("v")
+        return values[0] if values else None
+    if len(path) == 2 and path[0] in _YOUTUBE_PATH_KINDS:
+        return path[1]
+    return None
+
+
+def _facebook_id(host, path, query):
+    if host not in _FACEBOOK_HOSTS:
+        return None
+    if path == ["watch"]:
+        values = query.get("v")
+        return values[0] if values else None
+    if path == ["video.php"]:
+        values = query.get("v")
+        return values[0] if values else None
+    if "videos" in path:
+        index = path.index("videos")
+        rest = path[index + 1 :]
+        if len(rest) == 1:
+            return rest[0]
+        if len(rest) == 2:
+            return rest[1]
+    return None
+
+
+def parse_video_link(text):
+    """The (platform, video_id) of a published video's YouTube or Facebook link (M3i §3).
+
+    The form's link is accepted with or without `https://`, `www.` or `m.`; a refusal raises
+    ValueError with the sentence the form shows. Only the documented YouTube and Facebook page
+    forms are accepted; Reels and the short links that need a lookup name their own refusal.
+    """
+    if not isinstance(text, str):
+        raise ValueError(VIDEO_LINK_MESSAGE)
+    text = text.strip()
+    if not text or len(text) > VIDEO_LINK_MAX_CHARS:
+        raise ValueError(VIDEO_LINK_MESSAGE)
+    host, path, query = _host_and_parts(text)
+
+    if host in {"fb.watch", "www.fb.watch"} or (
+        host in _FACEBOOK_HOSTS and len(path) >= 2 and path[:2] == ["share", "v"]
+    ):
+        raise ValueError(FACEBOOK_SHORT_LINK_MESSAGE)
+    if (
+        host in _FACEBOOK_HOSTS
+        and path
+        and (path[0] == "reel" or (len(path) >= 2 and path[:2] == ["share", "r"]))
+    ):
+        raise ValueError(FACEBOOK_REELS_MESSAGE)
+
+    video_id = _youtube_id(host, path, query)
+    platform = "youtube"
+    if video_id is None:
+        video_id = _facebook_id(host, path, query)
+        platform = "facebook"
+    if video_id is None:
+        raise ValueError(VIDEO_LINK_MESSAGE)
+    if platform == "youtube":
+        valid = _YOUTUBE_ID.fullmatch(video_id) is not None
+    else:
+        valid = _DIGITS.fullmatch(video_id) is not None
+    if not valid:
+        raise ValueError(VIDEO_LINK_MESSAGE)
+    return platform, video_id
+
+
+def parse_facebook_retention(text, video_id):
+    """The (elapsed_ratio, watch_ratio) rows of Meta's documented retention reply (M3i §4).
+
+    The reply is `GET /<video_id>/video_insights?metric=total_video_retention_graph`: one
+    lifetime metric whose id starts with the linked video's id and whose last value holds the
+    40 equal intervals `"0"`-`"39"` as fractions in 0-1. Anything else raises ValueError; the
+    shape message asks the user to send the file to the team because it is not stored.
+    """
+    try:
+        report = json.loads(text)
+    except (TypeError, ValueError):
+        raise ValueError(FACEBOOK_REPORT_SHAPE_MESSAGE) from None
+
+    data = report.get("data") if isinstance(report, dict) else None
+    if not isinstance(data, list) or len(data) != 1 or not isinstance(data[0], dict):
+        raise ValueError(FACEBOOK_REPORT_SHAPE_MESSAGE)
+    item = data[0]
+    if item.get("name") != "total_video_retention_graph" or item.get("period") != "lifetime":
+        raise ValueError(FACEBOOK_REPORT_SHAPE_MESSAGE)
+    if not str(item.get("id", "")).startswith(f"{video_id}/"):
+        raise ValueError(FACEBOOK_REPORT_VIDEO_MESSAGE)
+
+    values = item.get("values")
+    if not isinstance(values, list) or not values:
+        raise ValueError(FACEBOOK_REPORT_SHAPE_MESSAGE)
+    last = values[-1]
+    intervals = last.get("value") if isinstance(last, dict) else None
+    expected = {str(number) for number in range(40)}
+    if not isinstance(intervals, dict) or set(intervals) != expected:
+        raise ValueError(FACEBOOK_REPORT_SHAPE_MESSAGE)
+    for key in expected:
+        value = intervals[key]
+        if not _number(value) or not 0 <= value <= 1:
+            raise ValueError(FACEBOOK_REPORT_SHAPE_MESSAGE)
+    return [(number / 40, intervals[str(number)]) for number in range(40)]
 
 
 def retention_csv(pairs):

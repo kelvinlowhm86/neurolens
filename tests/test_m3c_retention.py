@@ -17,6 +17,7 @@ from neurolens.web.app import create_app
 
 HEADER = "elapsed_ratio,watch_ratio"
 STARTER_CENTS = 10_000
+YOUTUBE_LINK = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
 COLUMN_HEADERS = [
     {"name": "elapsedVideoTimeRatio", "columnType": "DIMENSION", "dataType": "FLOAT"},
     {"name": "audienceWatchRatio", "columnType": "METRIC", "dataType": "FLOAT"},
@@ -251,7 +252,14 @@ def test_retention_post_stores_the_two_column_csv_for_a_done_consented_job(clien
     text = report_text([[0.0, 0.0], [0.5, 1.2], [1.0, 0.9]])
     resp = client.post(
         f"/api/jobs/{job_id}/retention",
-        json={"report": text, "views": "lt_1k", "published": "week", "promoted": False},
+        json={
+            "report": text,
+            "video_url": YOUTUBE_LINK,
+            "same_cut": "same",
+            "views": "lt_1k",
+            "published": "week",
+            "promoted": False,
+        },
     )
     assert 200 <= resp.status_code < 300
     [snapshot] = snapshot_keys(pg, job_id)
@@ -264,7 +272,13 @@ def test_a_new_retention_upload_adds_a_snapshot(client, aws, db, pg):
     job_id, _ = make_job(db, consent=True)
     first = report_text([[0.0, 0.0], [1.0, 0.5]])
     second = report_text([[0.0, 0.2], [0.5, 0.6], [1.0, 0.9]])
-    body = {"views": "lt_1k", "published": "week", "promoted": False}
+    body = {
+        "video_url": YOUTUBE_LINK,
+        "same_cut": "same",
+        "views": "lt_1k",
+        "published": "week",
+        "promoted": False,
+    }
     first_resp = client.post(f"/api/jobs/{job_id}/retention", json={"report": first, **body})
     second_resp = client.post(f"/api/jobs/{job_id}/retention", json={"report": second, **body})
     assert 200 <= first_resp.status_code < 300
@@ -331,7 +345,10 @@ def test_retention_on_a_deleted_job_is_404(client, aws, db, pg):
 def test_a_broken_report_is_400_invalid_retention_report_with_its_row_number(client, aws, db):
     job_id, _ = make_job(db, consent=True)
     text = report_text([[0.0, 0.0], [0.5, -1.0]])
-    resp = client.post(f"/api/jobs/{job_id}/retention", json={"report": text})
+    resp = client.post(
+        f"/api/jobs/{job_id}/retention",
+        json={"report": text, "video_url": YOUTUBE_LINK, "same_cut": "same"},
+    )
     assert resp.status_code == 400
     data = resp.get_json()
     assert data["error"] == "invalid_retention_report"
@@ -343,7 +360,10 @@ def test_retention_report_over_64_kb_is_refused(client, aws, db):
     job_id, _ = make_job(db, consent=True)
     text = raw_report_text(50)
     assert len(text.encode()) > 64 * 1024
-    resp = client.post(f"/api/jobs/{job_id}/retention", json={"report": text})
+    resp = client.post(
+        f"/api/jobs/{job_id}/retention",
+        json={"report": text, "video_url": YOUTUBE_LINK, "same_cut": "same"},
+    )
     assert resp.status_code == 413
     assert resp.get_json()["error"] == "invalid_retention_report"
     assert not object_exists(aws, retention_key(job_id))
@@ -355,7 +375,14 @@ def test_a_valid_report_just_under_64_kb_is_accepted(client, aws, db, pg):
     assert 63 * 1024 < len(text.encode()) < 64 * 1024
     resp = client.post(
         f"/api/jobs/{job_id}/retention",
-        json={"report": text, "views": "lt_1k", "published": "week", "promoted": False},
+        json={
+            "report": text,
+            "video_url": YOUTUBE_LINK,
+            "same_cut": "same",
+            "views": "lt_1k",
+            "published": "week",
+            "promoted": False,
+        },
     )
     assert 200 <= resp.status_code < 300
     [snapshot] = snapshot_keys(pg, job_id)

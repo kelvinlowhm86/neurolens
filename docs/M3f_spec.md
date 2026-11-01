@@ -18,7 +18,7 @@ disagree, this one wins, and the older section is updated to match.
 Sections 2–8 below, their tests (§10), one real run (§11) and the docs (§8).
 ### Out of scope
 Connect YouTube or any platform API (YouTube API policy forbids derived data and models), TikTok,
-Instagram, Meta Ads, reminders, email, browser notifications, tutorial mode, an agency bulk route, a
+Instagram, Meta ad curves, reminders, email, browser notifications, tutorial mode, an agency bulk route, a
 place in line among other users, waking the database from the landing page.
 
 ## 2. Batch upload
@@ -40,9 +40,6 @@ place in line among other users, waking the database from the landing page.
   consent box (§5a, one for the whole batch), and Upload.
 - If the total is more than the available credit: "Needs 5 min of credit; you have 3 min 30 s" and Upload stays
   disabled until rows are removed. With no valid row Upload is disabled.
-- When the consent box is ticked, each valid row shows a quiet "Add audience retention" link (the
-  video is already on YouTube). It opens the curve form (§5d) for that row; the curve is held by the
-  page and sent when that job is done (§5d). Once a curve is added the link reads "Audience retention added".
 - Upload closes the dialog and any open result (the player stops, the brain stops drawing) and shows
   History. The upload box is free at once: a new dialog can add more files, which queue behind.
 
@@ -156,17 +153,18 @@ place in line among other users, waking the database from the landing page.
 ### 5a. Consent
 - One box per batch, unticked, never required:
   "Share for research and to train NeuroLens's own models ([details](/static/privacy.html#research)).
-  I own the rights to it." Under it, aligned with the label, a quiet line: "Add its YouTube
-  retention curve later and get its credit back."
+  I own the rights to it." Under it, aligned with the label, a quiet line: "Add its YouTube or
+  Facebook retention curve a week later and get its credit back."
 - The page sends `consent_version`, the version of the wording it showed, with each presign that
   has `research_consent`. The server accepts only its current `billing.CONSENT_VERSION`
-  (`"2026-10-31"`); any other value → 409 `consent_outdated` ("Please refresh the page."), nothing
+  (`"2026-11-02"`); any other value → 409 `consent_outdated` ("Please refresh the page."), nothing
   reserved. It stores `consent_version` and `consented_at = now()` per consented job (migration 006).
   A wording change means a new constant and the new text on the page together; old jobs keep the
   version they agreed to.
 - The privacy page's `#research` section ("Sharing a video for research") states, in plain words:
   sharing is optional and changes nothing about the analysis; what is kept (the video, its file
-  details, any retention curve and the ranges given with it); the purposes (study how what is on
+  details, any retention curve and the ranges and link given with it, and whether it was re-cut);
+  the purposes (study how what is on
   screen relates to how audiences watch, and build and test NeuroLens's own engagement models, which
   may later be offered as a paid product, with notice first); models are trained on videos and real
   audience data, never on NeuroLens's brain predictions; never published, sold or given outside the
@@ -175,10 +173,11 @@ place in line among other users, waking the database from the landing page.
   removes the copy at once (a model trained before is not retrained, but the data is not used again);
   the uploader confirms rights and that identifiable people agreed to appear, keeps all rights and
   gives a free, non-exclusive licence for these purposes; as a thank-you, a valid audience-retention
-  curve can make that video's analysis free: its price comes back as credit (not cash), once per
-  video (the same file uploaded twice counts once), up to 5 videos in any 30 days, only on accounts
-  that have had credit added; valid means at least 20 points, not flat, not rising overall and never
-  above 1,000%. A test keeps these numbers equal to config.json and `results`.
+  curve from YouTube or Facebook, added at least 7 days after the analysis, can make that video's
+  analysis free: its price comes back as credit (not cash), once per published video (the same file
+  or link counts once), up to 5 videos in any 30 days, only on accounts that have had credit
+  added; valid means at least 20 points, not flat, not rising overall and never above 1,000%. A
+  test keeps these numbers equal to config.json and `results`.
 
 ### 5b. What is stored where
 - `dataset/<job_id>/`: the video (`video<ext>`) and retention snapshots
@@ -226,72 +225,72 @@ place in line among other users, waking the database from the landing page.
   video's research copy was deleted after 90 days without a curve."
 
 ### 5d. Adding a curve
-- Offered on a done, shared, not-removed job: the quiet "Add audience retention" link on its History
-  row, and always in its "⋯" menu (a newer snapshot). When a reward is possible (the job's
-  `curve_reward_cents` > 0) the entry points name it, so people see why to click: the row link reads
-  "Get X back" and the menu item "Add audience retention (get X back)", X being `curve_reward_cents` as credit time (§2c).
-  On the results page, until its first snapshot, a bordered thank-you card: "Thanks for sharing.
-  Add its YouTube retention curve to get your X of credit back." when a reward is possible, otherwise
-  "Thanks for sharing.", with a quiet "Add audience retention" button. The card shows only once the History list has the job (shared, no
-  curve); a job not yet listed gets it when the list arrives. In the upload dialog, per row (§2a).
-- The form (a small pop-up): the video name, the guide link, "Choose file", and three required choice
-  rows: views ("Under 1k", "1k–10k", "10k–100k", "Over 100k"), published ("This week", "This month",
-  "Earlier"), promoted with ads ("Yes", "No"). When a reward is possible (below) the form says "Add a
-  valid curve and this analysis is free (1 min 30 s back)." The reward amount uses the heat orange
-  (`--heat`, `#FF8A2A`). Save, then the saved or error message.
-- A curve chosen in the upload dialog is sent once its job is done, while the tab is open. If that
-  fails, or the tab closed first, the row's link still offers it; a failed send shows "Couldn't add
-  the curve for <name>." on the row.
-- `POST /api/jobs/<id>/retention` body: `report` (text, as now; at most 64 KiB), `views` (`lt_1k`,
-  `1k_10k`, `10k_100k`, `gt_100k`), `published` (`week`, `month`, `older`), `promoted` (bool). Bad
-  values → 400. A report that is empty, has fewer than 2 rows, is malformed JSON, misses a required
-  column, has a bad row, or is over 64 KiB → 400 `invalid_retention_report` (413 for the size), with
-  nothing stored; the form explains the fix and links to the guide.
-  The job must be done, shared and not removed (409s as now, with the messages of §5c).
+- Offered on a done, shared, not-removed job: the quiet link on its History row, always in its "⋯"
+  menu (a newer snapshot), and the results page's thank-you card until its first snapshot. While a
+  reward is possible and its date is still ahead, the row link reads "Get X back from 9 Nov" and the
+  menu item "Add audience retention (get X back from 9 Nov)"; after the date, "Get X back" and
+  "Add audience retention (get X back)". The card names YouTube or Facebook and the date too (M3i
+  §7). X is `curve_reward_cents` as credit time (§2c). There is no link in the upload dialog.
+- The form (a small pop-up): the video name, a "Video link" field, the report file, the guide link,
+  then four required one-tap choice rows: views ("Under 1k", "1k–10k", "10k–100k", "Over 100k"),
+  published ("This week", "This month", "Earlier"), promoted with ads ("Yes", "No") and published
+  video ("Same as analysed", "Lightly edited", "Re-cut"). The guide link opens the link's platform
+  section once a valid link is typed, else the top. When a reward is possible the form gives the
+  reward line of M3i §7. The reward amount uses the heat orange (`--heat`, `#FF8A2A`). Save, then
+  the saved or error message.
+- `POST /api/jobs/<id>/retention` body: `report` (text; at most 64 KiB), `video_url` (the published
+  video's link) and `same_cut` (`same`, `light_edit`, `recut`), plus `views` (`lt_1k`, `1k_10k`,
+  `10k_100k`, `gt_100k`), `published` (`week`, `month`, `older`) and `promoted` (bool). The link,
+  report and form checks, their order and their refusals are in M3i §6. A YouTube report is parsed
+  as before; a Facebook report is parsed by M3i §4, given the link's id. A report that is empty,
+  has fewer than 2 rows, is malformed JSON, misses a required column, has a bad row, or is over
+  64 KiB → 400 `invalid_retention_report` (413 for the size), with nothing stored; the form
+  explains the fix and links to the guide. The job must be done, shared and not removed (409s as
+  now, with the messages of §5c).
 - Duplicates are checked before any S3 write. If `add_curve` refuses for any reason (including a
   unique-constraint race, which answers 409 `duplicate_curve`), the route deletes the two files it
   wrote.
-- Order: parse the report (`results.parse_retention_report`, unchanged) → validate the form choices →
-  write the raw `.json` and the `.csv` to S3 under a new `snapshot_id` → compute the quality flags and
-  call `billing.add_curve`. An S3 failure → 500, nothing recorded, and a file already written is
-  deleted. A database failure after the writes leaves two orphan files under the job's prefix,
-  removed with it.
+- Order: parse the link and the report (M3i §3-§4) → validate the form choices → write the raw
+  `.json` and the `.csv` to S3 under a new `snapshot_id` → compute the quality flags and call
+  `billing.add_curve`. An S3 failure → 500, nothing recorded, and a file already written is deleted.
+  A database failure after the writes leaves two orphan files under the job's prefix, removed with
+  it.
 - **Quality (`results.curve_quality(pairs)`, pure):** valid when there are at least 20 points, the
   watch ratio spread is at least 0.02 (not flat), the last value is not above the first (not rising
   overall) and no value is above 10. It returns the list of failed checks (empty = valid). The
   report holds no video length, so a curve cannot be matched to its video's length; the reward caps
   below limit that.
-- **`billing.add_curve(db, user_id, job_id, snapshot_id, raw_key, csv_key, curve_sha256, points,
-  quality_flags, views, published, promoted, reward_cap, reward_window_days)`**, one transaction with
-  the job row locked:
-  - the job must be the user's, done, shared, not removed and not deleted, else the matching refusal;
-  - a curve with the same `curve_sha256` already stored (any job, any account) → `DuplicateCurve`
-    (409 `duplicate_curve`, "This curve was already added.");
-  - insert the `retention_snapshots` row; set `jobs.retention_added_at` if empty;
-  - **reward** the job's `captured_cents` when all hold: the curve is valid; `captured_cents > 0`; the
-    job has no `curve_rewarded_at`; no other job with the same non-null `video_sha256` has
-    `curve_rewarded_at`; the user has received credit beyond the starter credit at least once (a
-    ledger row of kind `grant` or `test_topup`, a payment in a real launch), so throwaway accounts
-    cannot farm rewards; the user has fewer than `reward_cap` rewards in the last
-    `reward_window_days` days. Then `_move(tx, user_id, job_id, "curve_reward", +captured, 0)`,
-    `jobs.curve_rewarded_at = now()` and the snapshot's `rewarded_cents`;
-  - returns `{"rewarded_cents": n, "quality": [...]}`.
-  A partial unique index on the ledger (`job_id` where `kind = 'curve_reward'`) makes a second reward
+- **`billing.add_curve`** stores the snapshot with its `video_ref` (`<platform>:<video_id>`),
+  `same_cut` and `source` (`youtube_api` or `facebook_api`). Its refusals (an account's existing
+  link, a second link on one job), its reward conditions (including `curve_reward_min_days` and the
+  once-per-published-video rule) and its `reward_from` reply are in M3i §6; the earlier conditions
+  still apply alongside them: a valid curve; `captured_cents > 0`; the job has no
+  `curve_rewarded_at`; no other job with the same non-null `video_sha256` has `curve_rewarded_at`;
+  the user has received credit beyond the starter credit at least once (a ledger row of kind
+  `grant` or `test_topup`, a payment in a real launch), so throwaway accounts cannot farm rewards;
+  the user has fewer than `reward_cap` rewards in the last `reward_window_days` days. Then
+  `_move(tx, user_id, job_id, "curve_reward", +captured, 0)`, `jobs.curve_rewarded_at = now()` and
+  the snapshot's `rewarded_cents`.
+- A partial unique index on the ledger (`job_id` where `kind = 'curve_reward'`) makes a second reward
   for one job impossible even if the code is wrong.
 - Settings in `config.json` `research`: `curve_rewards_per_window` (5), `curve_reward_window_days`
-  (30), `no_curve_days` (90). These are anti-abuse product limits, not budget limits.
+  (30), `curve_reward_min_days` (7, M3i §2), `no_curve_days` (90). These are anti-abuse product
+  limits, not budget limits.
 - Replies on the form (`curveResultMessage`/`curveQualityMessage` in `static/app.html`): when
   rewarded, "Thanks! This analysis is now free: 1 min 30 s of credit is back." (the amount
   comes from the reply's `rewarded_cents`, as credit time, §2c); when the report is saved but fails
   a quality check, "Thanks for adding it. The report was saved, but no credit was refunded because
   <reasons>." with the reasons: too little viewing data (fewer than 20 points), the retention barely
   changes across the video, the retention at the end is higher than at the start, or unusually high
-  repeat viewing (unknown flags get a generic reason); otherwise "Thanks, saved." A curve held in the
-  upload dialog also says "Thanks, saved." The credit in the top bar refreshes after a server save.
-- `list_jobs` returns, for shared jobs, `sharing` (done, shared and not removed), `curve_count` and
-  `curve_reward_cents` (what a valid curve would give now, 0 if not possible). It applies every reward
-  condition above except the curve's own validity; the per-user ones (funded, under the cap) come from
-  one helper shared with `add_curve`, so the preview and the payment cannot drift apart. `needs_retention` is
+  repeat viewing (unknown flags get a generic reason); when only the date is unmet, "Thanks, saved.
+  Add a newer curve from 9 Nov to get X back."; otherwise "Thanks, saved." Link and report refusals
+  show the server's message. A rewarded curve gets the small celebration of M3i §7. The credit in
+  the top bar refreshes after a server save.
+- `list_jobs` returns, for shared jobs, `sharing` (done, shared and not removed), `curve_count`,
+  `curve_reward_cents` (what a valid curve would give, ignoring the date and the link until the form
+  names them, 0 if not possible) and `curve_reward_from` (UTC text, the date a reward becomes
+  possible when `curve_reward_cents > 0`); the date and the per-user conditions come from the helper
+  `add_curve` uses, so the preview and the payment cannot drift apart (M3i §6). `needs_retention` is
   replaced by `curve_count = 0`.
 
 ### 5e. Migration 006 (`infra/migrations/006_m3f.sql`)
@@ -302,7 +301,7 @@ place in line among other users, waking the database from the landing page.
   `added_at TIMESTAMPTZ NOT NULL DEFAULT now()`, `source TEXT NOT NULL DEFAULT 'youtube_api'`,
   `raw_key`, `csv_key`, `curve_sha256 TEXT NOT NULL UNIQUE`, `points INT`, `quality_flags TEXT[]`,
   `views`, `published`, `promoted BOOLEAN`, `rewarded_cents INT NOT NULL DEFAULT 0`; index on
-  `job_id`.
+  `job_id`. Migration 010 adds `video_ref` and `same_cut` (M3i §5).
 - Ledger: the partial unique index of §5d. The ledger's `kind` check (if any) allows
   `curve_reward`.
 

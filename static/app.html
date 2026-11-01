@@ -61,7 +61,7 @@
   .btn-danger { background: none; border: 1px solid var(--line); color: var(--danger); border-radius: var(--radius); padding: 6px 12px; min-height: 34px; }
   .btn-danger:hover { border-color: var(--danger); }
   .btn-danger:disabled { opacity: .5; cursor: default; }
-  .btn-ghost, .btn-white, .btn-danger, .result-tab, .history-link, .batch-curve { transition: color var(--t-quick) var(--ease-out), background var(--t-quick) var(--ease-out), border-color var(--t-quick) var(--ease-out), transform var(--t-press) var(--ease-out); }
+  .btn-ghost, .btn-white, .btn-danger, .result-tab, .history-link { transition: color var(--t-quick) var(--ease-out), background var(--t-quick) var(--ease-out), border-color var(--t-quick) var(--ease-out), transform var(--t-press) var(--ease-out); }
 
   .D { display: grid; grid-template-columns: minmax(340px, 420px) minmax(0, 1fr); height: calc(100vh - 56px); overflow: hidden; }
   body:has(.D) { overflow: hidden; }
@@ -124,8 +124,6 @@
   .batch-name { font-weight: 600; word-break: break-all; }
   .batch-meta { color: var(--muted); font: 11.5px var(--mono); margin-top: 2px; }
   .batch-meta.error { color: var(--danger); }
-  .batch-curve { background: none; border: 0; padding: 0; color: var(--muted); font-size: 11.5px; text-decoration: underline; text-underline-offset: 2px; margin-top: 2px; }
-  .batch-curve:hover { color: var(--ink); }
   .batch-x { width: 26px; height: 24px; flex: none; border: 1px solid var(--line); border-radius: var(--radius); background: none; color: var(--muted); font-size: 14px; line-height: 1; }
   .batch-x:hover { color: var(--ink); border-color: var(--muted); }
   .batch-total { font-size: 12.5px; color: var(--ink); }
@@ -211,6 +209,17 @@
   .choices label:has(input:checked) { border-color: var(--accent); color: var(--ink); }
   .curve-file { font-size: 12px; color: var(--muted); word-break: break-all; }
   .curve-file:empty { display: none; }
+  .curve-link { width: 100%; margin-top: 10px; border: 1px solid var(--line); border-radius: var(--radius); padding: 8px 10px; font-size: 12.5px; background: var(--well); color: var(--ink); }
+  .curve-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .reward-tick { display: inline-block; width: 15px; height: 15px; margin-left: 6px; vertical-align: -2px; color: var(--accent); }
+  .reward-tick path { stroke-dasharray: 20; stroke-dashoffset: 20; animation: tick-in .35s var(--ease-out) forwards; }
+  @keyframes tick-in { to { stroke-dashoffset: 0; } }
+  .credit.glow { animation: credit-glow .8s var(--ease-out); }
+  @keyframes credit-glow { 0%, 100% { box-shadow: none; } 40% { box-shadow: 0 0 0 1px var(--heat), 0 0 14px rgba(255,138,42,.45); color: var(--heat); } }
+  @media (prefers-reduced-motion: reduce) {
+    .reward-tick path { animation: none; stroke-dashoffset: 0; }
+    .credit.glow { animation: none; }
+  }
   .reward-note { font-size: 12.5px; color: var(--ink); }
   .reward-amount { color: var(--accent); font-family: var(--mono); }
   .reward-note:empty { display: none; }
@@ -850,7 +859,7 @@
       <input type="checkbox" id="consentBox">
       <div class="consent-copy">
         <label for="consentBox">Share for research and to train NeuroLens's own models (<a href="/static/privacy.html#research" target="_blank" rel="noopener">details</a>). I own the rights to it.</label>
-        <p class="consent-note">Add its YouTube retention curve later and get its credit back.</p>
+        <p class="consent-note">Add its YouTube or Facebook retention curve a week later and get its credit back.</p>
       </div>
     </div>
     <div class="actions">
@@ -874,15 +883,17 @@
   <h2 id="curveDialogTitle">Add audience retention</h2>
   <p id="curveVideo"></p>
   <p id="curveSampleNote" hidden>Sample: nothing is sent.</p>
-  <p>Choose the video's audience-retention report (the .json file from YouTube). <a href="/static/retention_guide.html" target="_blank" rel="noopener">How to get the report</a></p>
-  <p class="reward-note" id="curveReward"></p>
+  <input class="curve-link" id="curveLink" type="text" placeholder="YouTube or Facebook link" autocomplete="url" aria-label="Video link">
   <div class="actions" style="margin-top:12px">
     <button class="btn-ghost" id="curvePick">Choose file</button>
     <span class="curve-file" id="curveFileName"></span>
   </div>
+  <p>Choose the video's audience-retention report (the .json file from YouTube or Facebook). <a id="curveGuide" href="/static/retention_guide.html" target="_blank" rel="noopener">How to get the report</a></p>
+  <p class="reward-note" id="curveReward"></p>
   <div class="choice-row"><span>Views</span><div class="choices" id="curveViews"></div></div>
   <div class="choice-row"><span>Published</span><div class="choices" id="curvePublished"></div></div>
   <div class="choice-row"><span>Promoted with ads</span><div class="choices" id="curvePromoted"></div></div>
+  <div class="choice-row"><span>Published video</span><div class="choices" id="curveSameCut"></div></div>
   <p id="curveMsg"></p>
   <div class="actions">
     <button class="btn-white" id="curveSave" disabled>Save</button>
@@ -1272,26 +1283,49 @@ function updateNoCreditPanel() {
   $('noCreditPanel').classList.toggle('active', me.balance.available_cents < price);
 }
 
-function showBalance() {
+function renderBalance(available) {
   const b = me.balance;
-  const seconds = creditSeconds(b.available_cents);
-  if (seconds == null) { $('balance').innerHTML = ''; updateNoCreditPanel(); return; }
+  const seconds = creditSeconds(available);
+  if (seconds == null) { $('balance').innerHTML = ''; return; }
   // A phone shows whole minutes only ("13 min credit"), rounded down so it never overstates.
   const { m, s, text } = minSec(seconds);
   const amount = m && s ? `${m} min<span class="bar-hide-sm"> ${s} s</span>` : text;
   const held = b.reserved_cents ? `<span class="credit-held"> · ${creditWords(b.reserved_cents)} held</span>` : '';
   $('balance').innerHTML = `<span class="credit-amt">${amount} credit</span>${held}`;
+}
+
+function showBalance(fromCents = null) {
+  const target = me.balance.available_cents;
+  const el = $('balance');
+  if (fromCents != null && !REDUCED_MOTION && target > fromCents) {
+    const start = performance.now();
+    el.classList.add('glow');
+    const step = now => {
+      const t = Math.min(1, (now - start) / 800);
+      const eased = 1 - Math.pow(1 - t, 3);
+      renderBalance(Math.round(fromCents + (target - fromCents) * eased));
+      if (t < 1) requestAnimationFrame(step);
+      else {
+        renderBalance(target);
+        setTimeout(() => el.classList.remove('glow'), 900);
+      }
+    };
+    requestAnimationFrame(step);
+  } else {
+    el.classList.remove('glow');
+    renderBalance(target);
+  }
   updateNoCreditPanel();
 }
 
-async function loadBalance() {
+async function loadBalance(fromCents = null) {
   if (!signedIn) return;
   try {
     const res = await fetch('/api/me');
     if (res.status === 401) return window.location.reload();
     if (!res.ok) return;
     me = await res.json();
-    showBalance();
+    showBalance(fromCents);
   } catch (e) { /* the balance is information only */ }
 }
 
@@ -1450,7 +1484,6 @@ function renderHistory(jobs) {
     showRetention(shown.job_id, title);
   }
   updateTabTitle(jobs);
-  sendPendingCurves(jobs);
   const list = $('historyList');
   // The presign reserves the job before its file is sent, so while this tab is still uploading it the
   // upload row stands for it; listing the job too would show the same video twice.
@@ -1458,7 +1491,7 @@ function renderHistory(jobs) {
   const listed = jobs.filter(job => !uploading.has(job.job_id));
   reconcileRows(list, [
     ...uploadQueue.map(entry => [`queue:${entry.item.id}`, JSON.stringify([entry.state, entry.reason, entry.signedOut, entry.item.thumb]), () => queueRow(entry)]),
-    ...listed.map(job => [`job:${job.job_id}`, JSON.stringify([job, historyDetail(job), historyNumber(job), curveFailures.get(job.job_id), cancelWindows.has(job.job_id), localFrames.has(job.job_id)]), () => historyRow(job)]),
+    ...listed.map(job => [`job:${job.job_id}`, JSON.stringify([job, historyDetail(job), historyNumber(job), cancelWindows.has(job.job_id), localFrames.has(job.job_id)]), () => historyRow(job)]),
   ]);
   $('historyPanel').classList.add('active');
   $('historyCount').textContent = listed.length + uploadQueue.length ? String(listed.length + uploadQueue.length) : '';
@@ -1606,8 +1639,7 @@ function historyRow(job) {
   name.textContent = number > 1 ? shortNumbered(label, number) : shortName(label);
   name.title = number > 1 ? `${label} (${number})` : label;
   const sub = document.createElement('div'); sub.className = 'history-sub';
-  const failure = curveFailures.get(job.job_id);
-  sub.textContent = failure ? `${historyDetail(job)} · ${failure}` : historyDetail(job);
+  sub.textContent = historyDetail(job);
   main.append(name);
   main.append(sub);
   const actions = document.createElement('div'); actions.className = 'history-actions';
@@ -2030,7 +2062,7 @@ async function addFiles(files) {
   for (const file of files) {
     const item = {
       id: ++batchSeq, file, name: file.name, type: '', duration: 0, price: 0,
-      state: 'checking', reason: '', thumb: null, curve: null, removed: false,
+      state: 'checking', reason: '', thumb: null, removed: false,
     };
     if (batchItems.filter(i => i.state === 'valid' || i.state === 'checking').length >= maxBatchFiles()) {
       item.state = 'overflow';
@@ -2091,7 +2123,7 @@ function finishBatchItem(item, state, reason) {
 
 function renderBatch() {
   const list = $('batchList');
-  reconcileRows(list, batchItems.map(item => [String(item.id), JSON.stringify([item.state, item.reason, item.thumb, item.duration, item.price, !!item.curve, $('consentBox').checked]), () => batchRow(item)]));
+  reconcileRows(list, batchItems.map(item => [String(item.id), JSON.stringify([item.state, item.reason, item.thumb, item.duration, item.price, $('consentBox').checked]), () => batchRow(item)]));
   updateBatchTotal();
 }
 
@@ -2119,14 +2151,6 @@ function batchRow(item) {
     if (item.state === 'invalid') meta.classList.add('error');
   }
   main.append(name, meta);
-  if (item.state === 'valid' && $('consentBox').checked) {
-    const curve = document.createElement('button');
-    curve.type = 'button';
-    curve.className = 'batch-curve';
-    curve.textContent = item.curve ? 'Audience retention added' : 'Add audience retention';
-    curve.addEventListener('click', () => openCurve({ kind: 'item', item, title: item.name }));
-    main.append(curve);
-  }
   const remove = document.createElement('button');
   remove.type = 'button';
   remove.className = 'batch-x';
@@ -2179,8 +2203,6 @@ function startBatchUpload() {
 
 let uploadQueue = [], queueRunning = false;
 const cancelWindows = new Map();      // job_id → when its 15-second window ends
-const pendingCurves = new Map();      // job_id → { curve, name } held until the job is done
-const curveFailures = new Map();      // job_id → row message
 
 // A queued entry stops counting for the tab title when it can no longer become a finished job.
 function untrackQueueEntry(entry) {
@@ -2228,7 +2250,7 @@ const UPLOAD_STALL_MS = 60000;
 
 // The version of the consent wording shown in the upload dialog; the server records it per job and
 // refuses an outdated one (M3f §5a). Change it together with the wording and billing.CONSENT_VERSION.
-const CONSENT_VERSION = '2026-10-31';
+const CONSENT_VERSION = '2026-11-02';
 
 async function uploadEntry(entry) {
   const item = entry.item;
@@ -2332,7 +2354,6 @@ async function uploadEntry(entry) {
       cancelWindows.set(jobId, Date.now() + 15000);
       tabJobs.set(jobId, false);
       if (item.thumb) localFrames.set(jobId, item.thumb);
-      if (item.curve) pendingCurves.set(jobId, { curve: item.curve, name: item.name });
       renderHistory(jobsCache);
       refreshAccount();
       resolve();
@@ -3280,6 +3301,21 @@ function openResult(jobId, result) {
 
 // The results page shows the thank-you card for a shared job until its first snapshot;
 // it and the History row's link and "⋯" item open the same curve form (§5d).
+function rewardDateText(value) {
+  const date = value instanceof Date ? value : new Date(value);
+  if (!Number.isFinite(date.getTime())) return '';
+  const sameYear = date.getFullYear() === new Date().getFullYear();
+  return date.toLocaleDateString('en-GB', sameYear
+    ? { day: 'numeric', month: 'short' }
+    : { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+function futureRewardDate(job) {
+  if (!((job.curve_reward_cents || 0) > 0) || !job.curve_reward_from) return null;
+  const date = new Date(job.curve_reward_from);
+  return Number.isFinite(date.getTime()) && date.getTime() > Date.now() ? date : null;
+}
+
 let resultCurve = null;
 function showRetention(jobId, title) {
   let cached = null;
@@ -3292,10 +3328,11 @@ function showRetention(jobId, title) {
   }
   $('retentionCard').hidden = !resultCurve;
   if (resultCurve) {
-    const cents = jobCurveTarget(cached).rewardCents || 0;
-    const reward = cents > 0 ? creditWords(cents) : null;
+    const target = jobCurveTarget(cached);
+    const reward = target.rewardCents > 0 ? creditWords(target.rewardCents) : null;
+    const date = futureRewardDate(target.job);
     $('retentionCardText').textContent = reward
-      ? `Thanks for sharing. Add its YouTube retention curve to get your ${reward} of credit back.`
+      ? `Thanks for sharing. Add its YouTube or Facebook retention curve${date ? ` from ${rewardDateText(date)}` : ''} to get your ${reward} of credit back.`
       : 'Thanks for sharing.';
   }
 }
@@ -3316,15 +3353,25 @@ $('retentionCardBtn').addEventListener('click', () => {
   openCurve(jobCurveTarget(cached || { job_id: resultCurve.jobId, filename: resultCurve.title }));
 });
 
-// Name the refund where people decide to click; the plain name when none is due.
+// Name the refund where people decide to click; the plain name when none is due, and the
+// date while adding now would be too early.
 function retentionLabel(job, inMenu) {
   const reward = (job.curve_reward_cents || 0) > 0 ? creditWords(job.curve_reward_cents) : null;
   if (!reward) return 'Add audience retention';
-  return inMenu ? `Add audience retention (get ${reward} back)` : `Get ${reward} back`;
+  const date = futureRewardDate(job);
+  const from = date ? ` from ${rewardDateText(date)}` : '';
+  return inMenu ? `Add audience retention (get ${reward} back${from})` : `Get ${reward} back${from}`;
 }
 
 function jobCurveTarget(job) {
-  return { kind: 'job', job, jobId: job.job_id, title: job.filename || `Job ${job.job_id.slice(0, 8)}`, rewardCents: job.curve_reward_cents || 0 };
+  return {
+    kind: 'job',
+    job,
+    jobId: job.job_id,
+    title: job.filename || `Job ${job.job_id.slice(0, 8)}`,
+    rewardCents: job.curve_reward_cents || 0,
+    rewardFrom: job.curve_reward_from || null,
+  };
 }
 
 // ---- Curve form (§5d) ----
@@ -3333,9 +3380,11 @@ const curveDialog = $('curveDialog');
 const CURVE_VIEWS = [['lt_1k', 'Under 1k'], ['1k_10k', '1k–10k'], ['10k_100k', '10k–100k'], ['gt_100k', 'Over 100k']];
 const CURVE_PUBLISHED = [['week', 'This week'], ['month', 'This month'], ['older', 'Earlier']];
 const CURVE_PROMOTED = [['yes', 'Yes'], ['no', 'No']];
+const CURVE_SAME_CUT = [['same', 'Same as analysed'], ['light_edit', 'Lightly edited'], ['recut', 'Re-cut']];
 choiceGroup($('curveViews'), 'curveViews', CURVE_VIEWS);
 choiceGroup($('curvePublished'), 'curvePublished', CURVE_PUBLISHED);
 choiceGroup($('curvePromoted'), 'curvePromoted', CURVE_PROMOTED);
+choiceGroup($('curveSameCut'), 'curveSameCut', CURVE_SAME_CUT);
 
 function choiceGroup(host, name, options) {
   host.replaceChildren();
@@ -3378,6 +3427,9 @@ function curveQualityMessage(flags) {
 
 function curveReportError(status, data) {
   const detail = typeof data.message === 'string' ? data.message.trim() : '';
+  if (detail.startsWith('This Facebook report') || detail.startsWith('This report is for a different video')) {
+    return { message: detail, guide: false };
+  }
   const lower = detail.toLowerCase();
   let explanation;
   if (status === 413) {
@@ -3409,7 +3461,7 @@ function curveReportError(status, data) {
   return { message: explanation, guide: true };
 }
 
-function curveResultMessage(data) {
+function curveResultMessage(data, rewardCents = 0) {
   const rewarded = data.rewarded_cents || 0;
   if (rewarded > 0) {
     return {
@@ -3417,10 +3469,18 @@ function curveResultMessage(data) {
         ? `Thanks! This analysis is now free: ${creditWords(rewarded)} of credit is back.`
         : 'Thanks! This analysis is now free: its credit has been returned.',
       guide: false,
+      rewarded: true,
     };
   }
   if (Array.isArray(data.quality) && data.quality.length) {
     return { message: curveQualityMessage(data.quality), guide: false };
+  }
+  if (data.reward_from) {
+    const amount = creditWords(rewardCents);
+    return {
+      message: `Thanks, saved. Add a newer curve from ${rewardDateText(data.reward_from)} to get ${amount || 'its credit'} back.`,
+      guide: false,
+    };
   }
   return { message: 'Thanks, saved.', guide: false };
 }
@@ -3442,6 +3502,92 @@ function setCurveMsg(text, isError, withGuideLink) {
   }
 }
 
+function videoLinkPlatform(text) {
+  const value = (text || '').trim();
+  if (!value) return null;
+  let url;
+  try {
+    url = new URL(/^[a-z]+:\/\//i.test(value) ? value : `https://${value}`);
+  } catch (e) {
+    return null;
+  }
+  const host = url.hostname.toLowerCase();
+  if (/(^|\.)youtu\.be$/.test(host) || /(^|\.)youtube\.com$/.test(host)) {
+    return /(?:watch\?.*v=|youtu\.be\/|\/shorts\/|\/live\/|\/embed\/)/.test(url.pathname + url.search)
+      ? 'youtube'
+      : null;
+  }
+  if (/(^|\.)facebook\.com$/.test(host) && !url.pathname.startsWith('/reel/')) {
+    return /(?:\/videos\/|\/watch\/?\?v=|\/video\.php\?v=)/.test(url.pathname + url.search)
+      ? 'facebook'
+      : null;
+  }
+  return null;
+}
+
+function updateCurveGuide() {
+  const platform = videoLinkPlatform($('curveLink').value);
+  $('curveGuide').href = `/static/retention_guide.html${platform ? `#${platform}` : ''}`;
+}
+
+function rewardTick() {
+  const span = document.createElement('span');
+  span.className = 'reward-tick';
+  span.setAttribute('aria-hidden', 'true');
+  span.innerHTML = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l3.2 3.2L13 4.5"/></svg>';
+  return span;
+}
+
+function celebrate(anchor) {
+  if (REDUCED_MOTION) return;
+  const canvas = document.createElement('canvas');
+  const ratio = window.devicePixelRatio || 1;
+  canvas.width = window.innerWidth * ratio;
+  canvas.height = window.innerHeight * ratio;
+  Object.assign(canvas.style, {
+    position: 'fixed', inset: '0', width: '100%', height: '100%',
+    pointerEvents: 'none', zIndex: '9999',
+  });
+  document.body.append(canvas);
+  const ctx = canvas.getContext('2d');
+  ctx.scale(ratio, ratio);
+  const box = anchor && anchor.getBoundingClientRect
+    ? anchor.getBoundingClientRect()
+    : { left: window.innerWidth / 2, top: window.innerHeight / 2, width: 0, height: 0 };
+  const colours = ['#FF8A2A', '#FFC24A', '#F26B1D', '#FFD27A', '#B93A12'];
+  const pieces = Array.from({ length: 30 }, () => ({
+    x: box.left + box.width / 2 + (Math.random() - 0.5) * 40,
+    y: box.top + box.height / 2,
+    vx: (Math.random() - 0.5) * 260,
+    vy: -Math.random() * 220 - 40,
+    size: 3 + Math.random() * 4,
+    rot: Math.random() * Math.PI,
+    spin: (Math.random() - 0.5) * 10,
+    colour: colours[Math.floor(Math.random() * colours.length)],
+  }));
+  const started = performance.now();
+  const frame = now => {
+    const t = Math.min(1, (now - started) / 1000);
+    ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+    pieces.forEach(piece => {
+      piece.vy += 10;
+      piece.x += piece.vx / 60;
+      piece.y += piece.vy / 60;
+      piece.rot += piece.spin / 60;
+      ctx.save();
+      ctx.globalAlpha = 1 - t;
+      ctx.translate(piece.x, piece.y);
+      ctx.rotate(piece.rot);
+      ctx.fillStyle = piece.colour;
+      ctx.fillRect(-piece.size / 2, -piece.size / 2, piece.size, piece.size * 0.6);
+      ctx.restore();
+    });
+    if (t < 1) requestAnimationFrame(frame);
+    else canvas.remove();
+  };
+  requestAnimationFrame(frame);
+}
+
 function openCurve(target) {
   curveTarget = target;
   curveFile = null;
@@ -3451,19 +3597,26 @@ function openCurve(target) {
   $('curveSampleNote').hidden = !curvePreview;
   $('curveVideo').textContent = target.title;
   $('curveFileName').textContent = '';
+  $('curveLink').value = '';
+  $('curveLink').disabled = curvePreview;
+  $('curveLink').hidden = curvePreview;
+  updateCurveGuide();
   const reward = $('curveReward');
   reward.textContent = '';
   if (target.kind === 'job' && target.rewardCents > 0 && creditWords(target.rewardCents)) {
+    const date = target.rewardFrom ? new Date(target.rewardFrom) : null;
+    const ahead = date && Number.isFinite(date.getTime()) && date.getTime() > Date.now();
     const amount = document.createElement('span');
     amount.className = 'reward-amount';
     amount.textContent = creditWords(target.rewardCents);
-    reward.append('Add a valid curve and this analysis is free (', amount, ' back).');
+    reward.append(`Add a valid curve${ahead ? ` from ${rewardDateText(date)}` : ''} and this analysis is free (`, amount, ' back).');
+    if (ahead) reward.append(' Curves added earlier are saved without credit.');
   }
   setCurveMsg('');
   $('curveSave').hidden = false;
   $('curveSave').disabled = true;
   $('curveClose').textContent = 'Cancel';
-  ['curveViews', 'curvePublished', 'curvePromoted'].forEach(id => {
+  ['curveViews', 'curvePublished', 'curvePromoted', 'curveSameCut'].forEach(id => {
     $(id).querySelectorAll('input').forEach(input => { input.checked = false; });
   });
   if (!curveDialog.open) curveDialog.showModal();
@@ -3475,9 +3628,14 @@ function curveChoice(name) {
 }
 
 function updateCurveSave() {
-  $('curveSave').disabled = curvePreview || !(curveFile && curveChoice('curveViews') && curveChoice('curvePublished') && curveChoice('curvePromoted'));
+  const linkOk = videoLinkPlatform($('curveLink').value) != null;
+  $('curveSave').disabled = curvePreview || !(linkOk && curveFile && curveChoice('curveViews') && curveChoice('curvePublished') && curveChoice('curvePromoted') && curveChoice('curveSameCut'));
 }
 
+$('curveLink').addEventListener('input', () => {
+  updateCurveGuide();
+  updateCurveSave();
+});
 $('curvePick').addEventListener('click', () => $('curveInput').click());
 $('curveInput').addEventListener('change', ev => {
   curveFile = ev.target.files[0] || null;
@@ -3490,6 +3648,8 @@ curveDialog.addEventListener('close', () => {
   curvePreview = false;
   $('curvePick').disabled = false;
   $('curveInput').disabled = false;
+  $('curveLink').disabled = false;
+  $('curveLink').hidden = false;
   $('curveSampleNote').hidden = true;
 });
 closeOnBackdrop(curveDialog);
@@ -3503,20 +3663,16 @@ function curveSaved() {
 $('curveSave').addEventListener('click', async () => {
   if (!curveTarget || $('curveSave').disabled || curveTarget.kind === 'sample') return;
   const target = curveTarget;
+  const beforeCents = me && me.balance ? me.balance.available_cents : 0;
   const report = curveFile ? await curveFile.text() : '';
   const body = {
     report,
+    video_url: $('curveLink').value.trim(),
+    same_cut: curveChoice('curveSameCut'),
     views: curveChoice('curveViews'),
     published: curveChoice('curvePublished'),
     promoted: curveChoice('curvePromoted') === 'yes',
   };
-  if (target.kind === 'item') {
-    target.item.curve = body;
-    setCurveMsg('Thanks, saved.');
-    curveSaved();
-    renderBatch();
-    return;
-  }
   setCurveMsg('Saving…');
   $('curveSave').disabled = true;
   try {
@@ -3533,38 +3689,20 @@ $('curveSave').addEventListener('click', async () => {
       $('curveSave').disabled = false;
       return setCurveMsg(message, true);
     }
-    curveFailures.delete(target.jobId);
-    const outcome = curveResultMessage(data);
+    const outcome = curveResultMessage(data, target.rewardCents || 0);
     setCurveMsg(outcome.message, false, outcome.guide);
+    if (outcome.rewarded) {
+      $('curveMsg').append(rewardTick());
+      celebrate($('curveMsg'));
+    }
     curveSaved();
     loadHistory();
-    loadBalance();
+    loadBalance(outcome.rewarded ? beforeCents : null);
   } catch (e) {
     setCurveMsg("Couldn't reach the server. Please try again.", true);
     $('curveSave').disabled = false;
   }
 });
-
-// A curve chosen in the upload dialog is sent once its job is done, while the tab is open.
-async function sendPendingCurves(jobs) {
-  if (pendingCurves.size === 0) return;
-  for (const [jobId, entry] of [...pendingCurves]) {
-    const job = jobs.find(j => j.job_id === jobId);
-    if (!job) { pendingCurves.delete(jobId); continue; }  // cancelled jobs are not listed
-    if (job.status !== 'done' || !job.sharing) continue;
-    pendingCurves.delete(jobId);
-    try {
-      const res = await postJSON(`/api/jobs/${jobId}/retention`, entry.curve);
-      if (res.status === 401) return window.location.reload();
-      if (!res.ok) curveFailures.set(jobId, `Couldn't add the curve for ${entry.name}.`);
-      else curveFailures.delete(jobId);
-    } catch (e) {
-      curveFailures.set(jobId, `Couldn't add the curve for ${entry.name}.`);
-    }
-    loadHistory();
-    loadBalance();
-  }
-}
 
 // ---- Stop sharing (§5c) ----
 

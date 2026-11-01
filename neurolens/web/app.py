@@ -185,6 +185,7 @@ def create_app(
     research_cfg = cfg.get("research") or {}
     reward_cap = research_cfg.get("curve_rewards_per_window", DEFAULT_REWARD_CAP)
     reward_window_days = research_cfg.get("curve_reward_window_days", DEFAULT_REWARD_WINDOW_DAYS)
+    reward_min_days = research_cfg.get("curve_reward_min_days", billing.DEFAULT_REWARD_MIN_DAYS)
     static_dir = root / "static"
     autoscaling = None
     if gpu_endpoint:
@@ -487,6 +488,7 @@ def create_app(
             int(limit),
             reward_cap=reward_cap,
             reward_window_days=reward_window_days,
+            reward_min_days=reward_min_days,
         )
         rows = []
         for job in jobs:
@@ -759,7 +761,17 @@ def create_app(
             return _error("dataset_removed", message, status=409)
 
         data = request.get_json(silent=True)
-        text = data.get("report") if isinstance(data, dict) else None
+        if not isinstance(data, dict):
+            return _error("invalid_request", "The request body must contain the report text.")
+        video_url = data.get("video_url")
+        if not isinstance(video_url, str):
+            return _error("invalid_request", "video_url must be the video's link.")
+        try:
+            platform, video_id = results.parse_video_link(video_url)
+        except ValueError as err:
+            return _error("invalid_video_link", str(err))
+
+        text = data.get("report")
         if not isinstance(text, str):
             return _error("invalid_request", "The request body must contain the report text.")
         if len(text.encode()) > RETENTION_MAX_BYTES:
@@ -769,10 +781,16 @@ def create_app(
                 status=413,
             )
         try:
-            pairs = results.parse_retention_report(text)
+            if platform == "facebook":
+                pairs = results.parse_facebook_retention(text, video_id)
+            else:
+                pairs = results.parse_retention_report(text)
         except ValueError as err:
             return _error("invalid_retention_report", str(err))
 
+        same_cut = data.get("same_cut")
+        if same_cut not in {"same", "light_edit", "recut"}:
+            return _error("invalid_request", "same_cut must be one of the listed choices.")
         views = data.get("views")
         if views not in RETENTION_VIEWS:
             return _error("invalid_request", "views must be one of the listed choices.")
@@ -834,6 +852,10 @@ def create_app(
                 promoted=promoted,
                 reward_cap=reward_cap,
                 reward_window_days=reward_window_days,
+                video_ref=f"{platform}:{video_id}",
+                same_cut=same_cut,
+                source=f"{platform}_api",
+                reward_min_days=reward_min_days,
             )
         except (billing.DuplicateCurve, dbmod.DuplicateCurveViolation):
             _delete_curve_files(s3, bucket, [raw_key, csv_key], job["job_id"])

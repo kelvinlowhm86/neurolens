@@ -73,12 +73,12 @@
 
   <p>Thank you for sharing your audience-retention report. Your contribution helps us understand
   how people watch videos and improve NeuroLens. Follow the steps below to get the report from
-  YouTube and add it to the analysis of a finished video you've shared for research.</p>
+  YouTube or Facebook and add it to the analysis of a finished video you've shared for research.</p>
 
   <p>If your analysis is eligible for a credit refund, the "Add audience retention" window will
   show the amount you can receive.</p>
 
-  <h2>Get the report</h2>
+  <h2 id="youtube">YouTube</h2>
   <ol>
     <li>Open Google's APIs Explorer for the YouTube Analytics API method <code>reports.query</code>:
     <a href="https://developers.google.com/youtube/analytics/reference/reports/query">https://developers.google.com/youtube/analytics/reference/reports/query</a>.
@@ -103,6 +103,25 @@
     <li>In NeuroLens, click "Add audience retention" on the finished video's row or result,
     choose your <code>retention.json</code> file, fill in the remaining details and click "Save".</li>
   </ol>
+  <p>Add it from 7 days after your analysis to get its credit back.</p>
+
+  <h2 id="facebook">Facebook</h2>
+  <ol>
+    <li>Open Meta's Graph API Explorer:
+    <a href="https://developers.facebook.com/tools/explorer/">https://developers.facebook.com/tools/explorer/</a>.</li>
+    <li>Under <strong>User or Page</strong>, pick the Page that published the video, and allow the
+    <code>pages_read_engagement</code> and <code>read_insights</code> permissions when Meta asks.</li>
+    <li>Paste this into the query field, replacing the video id with the number in the video's
+    address, then click <strong>Submit</strong>:
+    <code>&lt;video id&gt;/video_insights?metric=total_video_retention_graph</code>.</li>
+    <li>Copy the whole JSON reply, including the opening <code>{</code> and closing
+    <code>}</code>, and save it as a <code>.json</code> file. Make sure the filename ends in
+    <code>.json</code>, not <code>.txt</code>.</li>
+    <li>In NeuroLens, click "Add audience retention" on the finished video's row or result,
+    choose that file, paste the video's Facebook link, fill in the remaining details and click
+    "Save".</li>
+  </ol>
+  <p>Add it from 7 days after your analysis to get its credit back.</p>
 
   <h2>If your report is empty</h2>
   <p>A response with no rows means YouTube has no retention data available for the video yet.
@@ -111,8 +130,8 @@
   to today. If those are correct, try getting the report again later, once YouTube has more data.
   You can still view your NeuroLens analysis without adding a report.</p>
 
-  <p class="updated">Written from the YouTube Analytics API documentation as of 15 October 2026;
-  Google may change its tools.</p>
+  <p class="updated">Written from the YouTube Analytics API and Meta Graph API documentation as of
+  2 November 2026; Google and Meta may change their tools.</p>
 
   <p>Questions? Email <a href="mailto:joshualumzy@gmail.com">joshualumzy@gmail.com</a>.</p>
 

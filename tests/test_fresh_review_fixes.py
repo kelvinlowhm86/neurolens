@@ -133,6 +133,10 @@ def add_curve(db, user_id, job_id, sha, *, cap=5, window=30):
         promoted=False,
         reward_cap=cap,
         reward_window_days=window,
+        video_ref=f"youtube:{job_id.replace('-', '')[:11]}",
+        same_cut="same",
+        source="youtube_api",
+        reward_min_days=7,
     )
 
 
@@ -360,6 +364,7 @@ def test_curve_reward_preview_matches_what_add_curve_pays(db, pg):
     user = make_user(db)
     billing.grant_credit(db, f"{user}@example.com", 500)
     job_id, _ = make_job(db, user, sha="b" * 64)
+    pg.age(job_id, created_s=8 * DAY)
 
     shown = preview(db, user, job_id)["curve_reward_cents"]
     assert shown > 0
@@ -372,6 +377,7 @@ def test_curve_reward_preview_is_zero_at_the_reward_cap(db, pg):
     user = make_user(db)
     billing.grant_credit(db, f"{user}@example.com", 500)
     rewarded, _ = make_job(db, user, sha="d" * 64)
+    pg.age(rewarded, created_s=8 * DAY)
     assert add_curve(db, user, rewarded, "e" * 64)["rewarded_cents"] > 0
 
     next_job, _ = make_job(db, user, sha="f" * 64)
@@ -498,6 +504,7 @@ def test_a_purged_stopped_videos_hash_still_blocks_another_reward(aws, db, pg):
     billing.grant_credit(db, f"{user}@example.com", 500)
     video = "5" * 64
     first, _ = make_job(db, user, sha=video)
+    pg.age(first, created_s=8 * DAY)
     assert add_curve(db, user, first, "6" * 64)["rewarded_cents"] > 0
     assert billing.mark_dataset_removed(db, first, "stopped", user_id=user) is True
     billing.purge_job_files(db, aws.s3, aws.bucket, first)
@@ -523,6 +530,8 @@ def test_a_failed_second_retention_write_deletes_the_first_and_records_nothing(
         f"/api/jobs/{job_id}/retention",
         json={
             "report": report_text(),
+            "video_url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+            "same_cut": "same",
             "views": VIEWS,
             "published": PUBLISHED,
             "promoted": False,

@@ -13,6 +13,7 @@ from neurolens import billing, storage
 from neurolens.web.app import create_app
 
 STARTER_CENTS = 10_000
+YOUTUBE_LINK = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
 COLUMN_HEADERS = [
     {"name": "elapsedVideoTimeRatio", "columnType": "DIMENSION", "dataType": "FLOAT"},
     {"name": "audienceWatchRatio", "columnType": "METRIC", "dataType": "FLOAT"},
@@ -75,6 +76,8 @@ def test_a_successful_upload_records_the_retention_curve(aws, db, pg, make_cfg, 
         f"/api/jobs/{job_id}/retention",
         json={
             "report": valid_report(),
+            "video_url": YOUTUBE_LINK,
+            "same_cut": "same",
             "views": "lt_1k",
             "published": "week",
             "promoted": False,
