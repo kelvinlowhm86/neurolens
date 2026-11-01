@@ -27,8 +27,9 @@
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   [hidden] { display: none !important; }
-  html { background: var(--bg); }
+  html { background: var(--bg); scroll-behavior: smooth; }
   body { min-height: 100vh; background-color: var(--bg); background-image: var(--grid); background-size: 24px 24px; color: var(--text); font: 14px/1.55 var(--display); letter-spacing: -0.003em; }
+  section[id] { scroll-margin-top: 72px; }
   a { color: inherit; }
   a, button { transition: color var(--t-quick) var(--ease-out), background-color var(--t-quick) var(--ease-out), border-color var(--t-quick) var(--ease-out), transform var(--t-press) var(--ease-out); }
   button:active, a:active { transform: scale(.98); }
@@ -37,6 +38,9 @@
 
   .bar { background: var(--bar); color: var(--text); display: flex; align-items: center; gap: 12px; padding: 0 24px; height: 56px; border-bottom: 1px solid var(--line); }
   .brand { font: 600 17px/1 var(--display); letter-spacing: -0.02em; margin-right: auto; color: inherit; text-decoration: none; }
+  .bar-nav { display: flex; align-items: center; gap: 22px; margin-right: 22px; }
+  .bar-nav a { font-size: 13px; color: var(--muted); text-decoration: none; }
+  .bar-nav a:hover { color: var(--text); }
   .btn-white { background: var(--text); color: var(--bg); border: 1px solid var(--text); border-radius: 3px; padding: 10px 16px; font-weight: 600; text-decoration: none; display: inline-block; white-space: nowrap; }
   .btn-white:hover { background: #fff; border-color: #fff; }
   .btn-line { border: 1px solid var(--line); color: var(--text); border-radius: 3px; padding: 9px 15px; text-decoration: none; display: inline-block; white-space: nowrap; }
@@ -91,25 +95,89 @@
   .step-num { font: 500 12px/1 var(--mono); color: var(--accent-2); padding-top: 5px; font-variant-numeric: tabular-nums; }
   .step p { margin-top: 8px; color: var(--muted); font-size: 14.5px; max-width: 38em; }
 
+  .showcase { max-width: 1120px; margin: 96px auto 0; padding: 0 64px; display: flex; flex-direction: column; gap: 96px; }
+  .show-row { display: grid; grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr); gap: 56px; align-items: center; }
+  .show-row.flip .show-copy { order: 2; }
+  .show-row.flip .show-visual { order: 1; }
+  .show-copy { display: flex; flex-direction: column; gap: 14px; }
+  .show-eyebrow { font: 500 12px/1 var(--mono); color: var(--accent-2); font-variant-numeric: tabular-nums; }
+  .show-text { font-size: 15px; line-height: 1.6; color: var(--muted); max-width: 34em; }
+  .show-well { background: var(--well); border: 1px solid var(--line); border-radius: 3px; padding: 20px; }
+  .show-svg { display: block; width: 100%; height: 56px; overflow: visible; }
+  .show-strip + .show-strip { margin-top: 16px; }
+  .show-strip-label { display: block; margin-bottom: 6px; font-size: 13px; color: var(--muted); }
+  .show-zero { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 2 4; opacity: .55; vector-effect: non-scaling-stroke; }
+  .show-fill { opacity: 1; transition: opacity 700ms var(--ease-out) 80ms; }
+  .show-line { fill: none; stroke: var(--text); stroke-opacity: .85; stroke-width: 1.5; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; stroke-dasharray: 1; stroke-dashoffset: 0; transition: stroke-dashoffset 900ms var(--ease-out); }
+  .show-line-a { stroke: #FF8A2A; stroke-width: 2; }
+  .show-line-b { stroke: #6FA8FF; stroke-width: 2; }
+  .show-play { stroke: #fff; stroke-width: 1; stroke-opacity: .45; vector-effect: non-scaling-stroke; }
+  .show-axis { display: flex; justify-content: space-between; margin-top: 10px; font: 11px var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+  html.has-reveal .show-visual:not(.is-drawn) .show-line { stroke-dashoffset: 1; }
+  html.has-reveal .show-visual:not(.is-drawn) .show-fill { opacity: 0; }
+  .show-headline { font-size: 17px; line-height: 1.45; font-weight: 500; color: var(--text); }
+  .show-moments:not([hidden]) { margin-top: 16px; border-top: 1px solid var(--line); }
+  .show-moment { display: grid; grid-template-columns: 48px minmax(0, 1fr); gap: 14px; padding: 14px 0; }
+  .show-moment + .show-moment { border-top: 1px solid var(--line); }
+  .show-moment:last-child { padding-bottom: 0; }
+  .show-moment-time { font: 500 12px/1.5 var(--mono); color: var(--accent-2); font-variant-numeric: tabular-nums; }
+  .show-moment-what { display: block; font-size: 14px; line-height: 1.5; color: var(--text); }
+  .show-moment-try { display: block; margin-top: 3px; font-size: 13px; line-height: 1.45; color: var(--muted); }
+  .show-legend { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; margin-bottom: 12px; font-size: 12px; color: var(--muted); }
+  .show-legend-item { display: inline-flex; align-items: center; gap: 7px; }
+  .show-dash { display: inline-block; width: 14px; height: 2px; border-radius: 1px; }
+  .show-dash.a { background: #FF8A2A; }
+  .show-dash.b { background: #6FA8FF; }
+  .show-compare-svg { height: 150px; }
+  .show-compare-headline { margin-top: 14px; font-size: 15px; line-height: 1.45; color: var(--text); }
+
+  .access { max-width: 1120px; margin: 80px auto 88px; padding: 0 64px; display: grid; grid-template-columns: 260px 1fr; gap: 64px; }
+  .access-cols { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .access-col { padding: 0 28px; border-left: 1px solid var(--line); }
+  .access-col:first-child { padding-left: 0; border-left: 0; }
+  .access-col:last-child { padding-right: 0; }
+  .access-label { display: block; font-size: 13px; color: var(--muted); }
+  .access-value { display: block; margin-top: 8px; font: 600 24px/1.1 var(--display); color: var(--text); letter-spacing: -0.02em; }
+  .access-col p { margin-top: 10px; font-size: 13.5px; line-height: 1.5; color: var(--muted); }
+
   .closing { max-width: 1120px; margin: 0 auto 72px; padding: 40px 64px; background: var(--panel); border: 1px solid var(--line); border-radius: 3px; display: flex; align-items: center; gap: 24px; flex-wrap: wrap; }
   .closing h2 { margin-right: auto; }
-  .closing-note { flex-basis: 100%; color: var(--muted); font-size: 13px; }
-  footer { border-top: 1px solid var(--line); padding: 26px 24px; font-size: 12px; color: var(--muted); display: flex; gap: 18px; flex-wrap: wrap; }
+  footer { border-top: 1px solid var(--line); padding: 32px 64px 26px; font-size: 12px; color: var(--muted); }
   footer a { text-decoration: none; }
   footer a:hover { color: var(--text); }
+  .footer-top { max-width: 1120px; margin: 0 auto; display: flex; align-items: flex-start; justify-content: space-between; gap: 32px; }
+  .footer-name { display: block; font: 600 15px/1.2 var(--display); color: var(--text); }
+  .footer-brand p { margin-top: 4px; }
+  .footer-links { display: flex; gap: 20px; flex-wrap: wrap; }
+  .footer-bottom { max-width: 1120px; margin: 22px auto 0; padding-top: 18px; border-top: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 11.5px; }
+  #footerCredits { display: flex; flex-wrap: wrap; gap: 18px; }
 
   @media (max-width: 860px) {
     .bar { padding: 0 16px; }
+    .bar-nav { display: none; }
     .hero { grid-template-columns: 1fr; padding: 40px 16px 48px; gap: 32px; min-height: 0; }
     .hero-player { height: auto; }
     .brain-box { min-height: 280px; }
+    .showcase { margin: 56px auto 0; padding: 0 16px; gap: 56px; }
+    .show-row { grid-template-columns: 1fr; gap: 24px; }
+    .show-row.flip .show-copy, .show-row.flip .show-visual { order: 0; }
     .how { grid-template-columns: 1fr; margin: 56px 16px 24px; padding: 48px 24px; gap: 32px; }
+    .access { grid-template-columns: 1fr; margin: 56px auto 56px; padding: 0 16px; gap: 24px; }
+    .access-cols { grid-template-columns: 1fr; }
+    .access-col { padding: 18px 0; border-left: 0; border-top: 1px solid var(--line); }
+    .access-col:first-child { padding-top: 0; border-top: 0; }
+    .access-col:last-child { padding-bottom: 0; }
     .closing { margin: 0 16px 56px; padding: 28px 24px; }
+    footer { padding: 28px 16px 22px; }
+    .footer-top { flex-direction: column; gap: 20px; }
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .step, .curve-callout { transition: none; }
+    html { scroll-behavior: auto; }
+    .step, .curve-callout, .show-line, .show-fill { transition: none; }
     html.has-reveal .step:not(.is-visible) { opacity: 1; transform: none; }
+    html.has-reveal .show-visual:not(.is-drawn) .show-line { stroke-dashoffset: 0; }
+    html.has-reveal .show-visual:not(.is-drawn) .show-fill { opacity: 1; }
   }
 
   /* Page-to-page change (landing <-> app): the header stays put, the old page dims away
@@ -138,6 +206,10 @@
 <div class="vt-scan" aria-hidden="true"></div>
 <header class="bar">
   <a class="brand" href="/">NeuroLens</a>
+  <nav class="bar-nav" aria-label="Page sections">
+    <a href="#how">How it works</a>
+    <a href="#access">Early access</a>
+  </nav>
   <a class="btn-white" id="topSignIn" href="/login">Sign in</a>
 </header>
 
@@ -145,7 +217,7 @@
   <section class="hero">
     <div class="hero-copy">
       <h1>Watch a brain watch your video.</h1>
-      <p class="lede">NeuroLens predicts how an average viewer's brain responds to a video, second by second: which areas light up for faces, places, speech and sound.</p>
+      <p class="lede">NeuroLens predicts how an average viewer's brain responds to a video, second by second: which areas light up for faces, places, speech and sound. Find the moments that land and the ones that dip, and pick the stronger cut before you publish.</p>
       <div class="actions">
         <a class="btn-white explore" href="/app">Explore samples</a>
         <a class="btn-line" id="heroSignIn" href="/login">Sign in to upload</a>
@@ -182,7 +254,66 @@
     </div>
   </section>
 
-  <section class="how">
+  <section class="showcase" id="showcase" hidden>
+    <div class="show-row" id="showRowSignals" hidden>
+      <div class="show-copy">
+        <span class="show-eyebrow">01 / Signals</span>
+        <h2>Seeing, hearing, understanding.</h2>
+        <p class="show-text">Seven brain areas, grouped into three. Every second is measured against typical film and TV viewing, so you can compare any two videos.</p>
+      </div>
+      <div class="show-visual">
+        <div class="show-well">
+          <div class="show-strip">
+            <span class="show-strip-label">Seeing</span>
+            <svg class="show-svg" id="stripSee" role="img" aria-label="Seeing over time"></svg>
+          </div>
+          <div class="show-strip">
+            <span class="show-strip-label">Hearing</span>
+            <svg class="show-svg" id="stripHear" role="img" aria-label="Hearing over time"></svg>
+          </div>
+          <div class="show-strip">
+            <span class="show-strip-label">Understanding</span>
+            <svg class="show-svg" id="stripUnderstand" role="img" aria-label="Understanding over time"></svg>
+          </div>
+          <div class="show-axis"><span>0:00</span><span id="showSignalsEnd"></span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="show-row flip" id="showRowReport" hidden>
+      <div class="show-copy">
+        <span class="show-eyebrow">02 / Report</span>
+        <h2>A report you can act on.</h2>
+        <p class="show-text">A written report names the moments that hold attention and the ones to change, with the second each one starts.</p>
+      </div>
+      <div class="show-visual">
+        <div class="show-well">
+          <p class="show-headline" id="showReportHeadline"></p>
+          <div class="show-moments" id="showReportMoments" hidden></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="show-row" id="showRowCompare" hidden>
+      <div class="show-copy">
+        <span class="show-eyebrow">03 / Compare</span>
+        <h2>Compare two cuts.</h2>
+        <p class="show-text">Put two versions side by side and see where each one wins.</p>
+      </div>
+      <div class="show-visual">
+        <div class="show-well">
+          <div class="show-legend">
+            <span class="show-legend-item"><span class="show-dash a"></span><span id="showLegendA"></span></span>
+            <span class="show-legend-item"><span class="show-dash b"></span><span id="showLegendB"></span></span>
+          </div>
+          <svg class="show-svg show-compare-svg" id="showCompareSvg" role="img" aria-label="Overall response of two cuts"></svg>
+          <p class="show-compare-headline" id="showCompareHeadline" hidden></p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="how" id="how">
     <h2>How it works</h2>
     <ol class="steps">
       <li class="step">
@@ -209,18 +340,51 @@
     </ol>
   </section>
 
+  <section class="access" id="access">
+    <h2>Early access</h2>
+    <div class="access-cols">
+      <div class="access-col">
+        <span class="access-label">Samples</span>
+        <span class="access-value">Open</span>
+        <p>Explore every sample without an account.</p>
+      </div>
+      <div class="access-col">
+        <span class="access-label">Your videos</span>
+        <span class="access-value">Invited</span>
+        <p>Free credit for invited creators, marketers, teachers and researchers.</p>
+      </div>
+      <div class="access-col">
+        <span class="access-label">Shared for research</span>
+        <span class="access-value">Free</span>
+        <p>Share the video and add its YouTube retention curve, and its analysis can be free.</p>
+      </div>
+    </div>
+  </section>
+
   <section class="closing">
     <h2>See it on your own video.</h2>
     <a class="btn-white" id="closingSignIn" href="/login">Sign in to upload</a>
-    <p class="closing-note">Share a video for research and add its YouTube retention curve, and its analysis can be free.</p>
   </section>
 </main>
 
 <footer>
-  <a href="/static/privacy.html">Privacy policy</a>
-  <a href="https://docs.google.com/forms/d/e/1FAIpQLSfD9KLriYmfbjjkhnbDQh6ckf7oZhgmOAC_I-pvVVcq9F5csQ/viewform" target="_blank" rel="noopener">Give feedback</a>
-  <span>Brain model: TRIBE v2 by Meta, CC BY-NC 4.0</span>
-  <span id="footerCredit" hidden></span>
+  <div class="footer-top">
+    <div class="footer-brand">
+      <span class="footer-name">NeuroLens</span>
+      <p>Predicted brain response for video, second by second.</p>
+    </div>
+    <nav class="footer-links" aria-label="Footer">
+      <a class="explore" href="/app">Samples</a>
+      <a href="#how">How it works</a>
+      <a href="#access">Early access</a>
+      <a href="/static/privacy.html">Privacy policy</a>
+      <a href="https://docs.google.com/forms/d/e/1FAIpQLSfD9KLriYmfbjjkhnbDQh6ckf7oZhgmOAC_I-pvVVcq9F5csQ/viewform" target="_blank" rel="noopener">Give feedback</a>
+    </nav>
+  </div>
+  <div class="footer-bottom">
+    <span>Brain model: TRIBE v2 by Meta, CC BY-NC 4.0</span>
+    <span id="footerCredits" hidden></span>
+  </div>
 </footer>
 
 <script>
@@ -264,7 +428,11 @@ const videoBox = $('videoBox');
 const brainBox = $('brainBox');
 const brainSecond = $('brainSecond');
 const comingSoon = $('comingSoon');
-const footerCredit = $('footerCredit');
+const footerCredits = $('footerCredits');
+const showcaseSection = $('showcase');
+const showRowSignals = $('showRowSignals');
+const showRowReport = $('showRowReport');
+const showRowCompare = $('showRowCompare');
 const heroVideo = $('heroVideo');
 const soundToggle = $('soundToggle');
 const curveBox = $('curveBox');
@@ -288,6 +456,9 @@ const curve = {
   full: '', lastPos: -1, active: -1, ready: false
 };
 
+const showcase = { signals: null, compare: null };
+const credits = new Set();
+
 let limitsPromise = null;
 function getLimits() {
   if (!limitsPromise) {
@@ -298,17 +469,12 @@ function getLimits() {
   return limitsPromise;
 }
 
-async function loadLimit() {
+async function loadLimits() {
   const limits = await getLimits();
   const seconds = limits && Number(limits.max_video_duration_seconds);
-  if (!Number.isFinite(seconds) || seconds <= 0) return;
-  const minutes = Math.max(1, Math.round(seconds / 60));
-  const price = limits && limits.price;
-  if (price && Number.isFinite(price.cents_per_block) && Number.isFinite(price.block_seconds) && price.block_seconds > 0) {
-    const perBlock = `$${(price.cents_per_block / 100).toFixed(2)}`;
-    $('uploadLimit').textContent = `Any video up to ${minutes} ${minutes === 1 ? 'minute' : 'minutes'}, ${perBlock} per ${price.block_seconds} seconds. Sample videos are free without an account.`;
-  } else {
-    $('uploadLimit').textContent = `Any video up to ${minutes} ${minutes === 1 ? 'minute' : 'minutes'}, and sample videos are free without an account.`;
+  const minutes = Number.isFinite(seconds) && seconds > 0 ? Math.max(1, Math.round(seconds / 60)) : null;
+  if (minutes !== null) {
+    $('uploadLimit').textContent = `Any video up to ${minutes} ${minutes === 1 ? 'minute' : 'minutes'}. Sample videos are free without an account.`;
   }
 }
 
@@ -317,14 +483,21 @@ function showComingSoon() {
   brainBox.hidden = true;
   curveBox.hidden = true;
   comingSoon.hidden = false;
-  footerCredit.hidden = true;
   curve.ready = false;
 }
 
-function showAttribution(text) {
-  if (!text) return;
-  footerCredit.textContent = text;
-  footerCredit.hidden = false;
+function addCredit(text) {
+  if (typeof text === 'string' && text.trim()) credits.add(text.trim());
+}
+
+function renderCredits() {
+  footerCredits.replaceChildren();
+  for (const text of credits) {
+    const span = document.createElement('span');
+    span.textContent = text;
+    footerCredits.appendChild(span);
+  }
+  footerCredits.hidden = credits.size === 0;
 }
 
 function brainUnavailable() {
@@ -357,6 +530,158 @@ async function loadBrain(sample) {
 function formatClock(seconds) {
   const whole = Math.max(0, Math.floor(seconds));
   return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, '0')}`;
+}
+
+function finiteSeries(values) {
+  return Array.isArray(values) && values.length >= 2 && values.every(value => Number.isFinite(value))
+    ? values
+    : null;
+}
+
+function sampleSeries(sample, key) {
+  const signals = sample && sample.result && sample.result.signals;
+  return signals ? finiteSeries(signals[key]) : null;
+}
+
+const SVG_NS = 'http://www.w3.org/2000/svg';
+let svgUid = 0;
+
+function svgEl(name, attrs = {}) {
+  const element = document.createElementNS(SVG_NS, name);
+  for (const [key, value] of Object.entries(attrs)) element.setAttribute(key, value);
+  return element;
+}
+
+function largestAbs(seriesList) {
+  let largest = 0;
+  for (const values of seriesList) for (const value of values) largest = Math.max(largest, Math.abs(value));
+  return largest;
+}
+
+function seriesPath(values, width, mid, range, xOf) {
+  const amplitude = Math.max(1, mid - 8);
+  let path = '';
+  for (let i = 0; i < values.length; i++) {
+    const y = mid - (values[i] / range) * amplitude;
+    path += (i ? 'L' : 'M') + xOf(i).toFixed(1) + ',' + y.toFixed(1);
+  }
+  return path;
+}
+
+// Closes the area to the zero line at the series' own last x, so a shorter series ends there.
+function areaPath(line, lastX, mid) {
+  return `${line}L${lastX.toFixed(1)},${mid.toFixed(1)}L0,${mid.toFixed(1)}Z`;
+}
+
+function svgWidth(svg) {
+  const rect = svg.getBoundingClientRect();
+  return Math.max(1, rect.width || svg.clientWidth || 1);
+}
+
+function drawSignals() {
+  const state = showcase.signals;
+  if (!state) return;
+  const range = Math.max(0.15, largestAbs(state.series.map(item => item.values)) * 1.1);
+  const playheads = [];
+  for (const item of state.series) {
+    const svg = item.svg;
+    if (!svg) continue;
+    const width = svgWidth(svg);
+    const height = 56;
+    const mid = height / 2;
+    const line = seriesPath(item.values, width, mid, range, i => (i / (item.values.length - 1)) * width);
+    const area = areaPath(line, width, mid);
+    const heatId = `show-heat-${++svgUid}`;
+    const belowId = `show-below-${++svgUid}`;
+    const aboveClipId = `show-above-${++svgUid}`;
+    const belowClipId = `show-below-clip-${++svgUid}`;
+
+    const defs = svgEl('defs');
+    const heat = svgEl('linearGradient', {
+      id: heatId, gradientUnits: 'userSpaceOnUse',
+      x1: '0', y1: mid.toFixed(1), x2: '0', y2: '0'
+    });
+    for (const [offset, colour, opacity] of [
+      [0, '#800000', .05], [.35, '#E61A0A', .12], [.7, '#FF800A', .2], [1, '#FFFFD9', .34]
+    ]) {
+      heat.appendChild(svgEl('stop', { offset: String(offset), 'stop-color': colour, 'stop-opacity': String(opacity) }));
+    }
+    const below = svgEl('linearGradient', {
+      id: belowId, gradientUnits: 'userSpaceOnUse',
+      x1: '0', y1: mid.toFixed(1), x2: '0', y2: String(height)
+    });
+    below.appendChild(svgEl('stop', { offset: '0', 'stop-color': '#6F7E99', 'stop-opacity': '.14' }));
+    below.appendChild(svgEl('stop', { offset: '1', 'stop-color': '#6F7E99', 'stop-opacity': '0' }));
+    const aboveClip = svgEl('clipPath', { id: aboveClipId });
+    aboveClip.appendChild(svgEl('rect', { x: '0', y: '0', width: width.toFixed(1), height: mid.toFixed(1) }));
+    const belowClip = svgEl('clipPath', { id: belowClipId });
+    belowClip.appendChild(svgEl('rect', {
+      x: '0', y: mid.toFixed(1), width: width.toFixed(1), height: (height - mid).toFixed(1)
+    }));
+    defs.append(heat, below, aboveClip, belowClip);
+
+    const fillAbove = svgEl('path', {
+      d: area, fill: `url(#${heatId})`, 'clip-path': `url(#${aboveClipId})`, class: 'show-fill'
+    });
+    const fillBelow = svgEl('path', {
+      d: area, fill: `url(#${belowId})`, 'clip-path': `url(#${belowClipId})`, class: 'show-fill'
+    });
+    const zero = svgEl('line', {
+      x1: '0', y1: mid.toFixed(1), x2: width.toFixed(1), y2: mid.toFixed(1), class: 'show-zero'
+    });
+    const drawn = svgEl('path', { d: line, class: 'show-line', pathLength: '1' });
+    const playhead = svgEl('line', {
+      x1: '0', y1: '0', x2: '0', y2: String(height), class: 'show-play'
+    });
+    svg.setAttribute('viewBox', `0 0 ${width.toFixed(1)} ${height}`);
+    svg.replaceChildren(defs, fillAbove, fillBelow, zero, drawn, playhead);
+    playheads.push({ element: playhead, width });
+  }
+  state.playheads = playheads;
+}
+
+function drawCompare() {
+  const state = showcase.compare;
+  const svg = $('showCompareSvg');
+  if (!state || !svg) return;
+  const width = svgWidth(svg);
+  const height = 150;
+  const mid = height / 2;
+  const maxLength = Math.max(state.a.values.length, state.b.values.length);
+  const range = Math.max(0.15, largestAbs([state.a.values, state.b.values]) * 1.1);
+  const xOf = i => (i / (maxLength - 1)) * width;
+  const aLine = seriesPath(state.a.values, width, mid, range, xOf);
+  const bLine = seriesPath(state.b.values, width, mid, range, xOf);
+  const zero = svgEl('line', {
+    x1: '0', y1: mid.toFixed(1), x2: width.toFixed(1), y2: mid.toFixed(1), class: 'show-zero'
+  });
+  const aFill = svgEl('path', {
+    d: areaPath(aLine, xOf(state.a.values.length - 1), mid), fill: '#FF8A2A', 'fill-opacity': '.08', class: 'show-fill'
+  });
+  const bFill = svgEl('path', {
+    d: areaPath(bLine, xOf(state.b.values.length - 1), mid), fill: '#6FA8FF', 'fill-opacity': '.08', class: 'show-fill'
+  });
+  const aDrawn = svgEl('path', { d: aLine, class: 'show-line show-line-a', pathLength: '1' });
+  const bDrawn = svgEl('path', { d: bLine, class: 'show-line show-line-b', pathLength: '1' });
+  svg.setAttribute('viewBox', `0 0 ${width.toFixed(1)} ${height}`);
+  svg.replaceChildren(aFill, bFill, zero, aDrawn, bDrawn);
+}
+
+function updateShowcasePlayhead(seconds) {
+  const state = showcase.signals;
+  if (!state || !state.playheads || showRowSignals.hidden) return;
+  const fraction = state.duration > 0 ? Math.max(0, Math.min(1, seconds / state.duration)) : 0;
+  for (const playhead of state.playheads) {
+    const x = (fraction * playhead.width).toFixed(1);
+    playhead.element.setAttribute('x1', x);
+    playhead.element.setAttribute('x2', x);
+  }
+}
+
+function drawShowcase() {
+  if (showcase.signals) drawSignals();
+  if (showcase.compare) drawCompare();
+  updateShowcasePlayhead(Number.isFinite(heroVideo.currentTime) ? heroVideo.currentTime : 0);
 }
 
 function valueAt(values, position) {
@@ -476,29 +801,162 @@ function setupCurve(sample) {
   updateCurve(Number.isFinite(heroVideo.currentTime) ? heroVideo.currentTime : 0);
 }
 
-async function loadHero() {
-  let sample = null;
-  try {
-    const res = await fetch('/data/samples.json', { cache: 'no-store' });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    const samples = Array.isArray(data.samples) ? data.samples : [];
-    sample = samples.find(entry => entry && entry.landing === true) || samples[0] || null;
-  } catch (error) { /* an empty list or a failed request both get the quiet panel */ }
-  if (!sample || !sample.video_file) {
-    showComingSoon();
-    return;
+function setupReport(sample) {
+  const report = sample && sample.report && typeof sample.report === 'object' ? sample.report : null;
+  const headline = report && typeof report.headline === 'string' ? report.headline.trim() : '';
+  if (!headline) return false;
+  $('showReportHeadline').textContent = headline;
+  const box = $('showReportMoments');
+  box.replaceChildren();
+  const moments = report && Array.isArray(report.moments)
+    ? report.moments.filter(moment => moment && Number.isFinite(moment.start) && typeof moment.what_happens === 'string' && moment.what_happens.trim())
+    : [];
+  for (const moment of moments.slice(0, 2)) {
+    const row = document.createElement('div');
+    row.className = 'show-moment';
+    const time = document.createElement('span');
+    time.className = 'show-moment-time';
+    time.textContent = formatClock(moment.start);
+    const body = document.createElement('div');
+    const what = document.createElement('span');
+    what.className = 'show-moment-what';
+    what.textContent = moment.what_happens;
+    body.appendChild(what);
+    if (typeof moment.suggestion === 'string' && moment.suggestion.trim()) {
+      const suggestion = document.createElement('span');
+      suggestion.className = 'show-moment-try';
+      suggestion.textContent = `Try: ${moment.suggestion}`;
+      body.appendChild(suggestion);
+    }
+    row.append(time, body);
+    box.appendChild(row);
   }
+  box.hidden = box.childElementCount === 0;
+  return true;
+}
+
+function setupShowcase(hero, samples, comparisons) {
+  let shown = false;
+  let heroUsed = false;
+
+  try {
+    const see = sampleSeries(hero, 'see');
+    const hear = sampleSeries(hero, 'hear');
+    const understand = sampleSeries(hero, 'understand');
+    if (see && hear && understand) {
+      const duration = Number(hero.result && hero.result.duration_seconds);
+      const seconds = Number.isFinite(duration) && duration > 0
+        ? duration
+        : Math.max(see.length, hear.length, understand.length);
+      showcase.signals = {
+        duration: seconds,
+        series: [
+          { values: see, svg: $('stripSee') },
+          { values: hear, svg: $('stripHear') },
+          { values: understand, svg: $('stripUnderstand') }
+        ]
+      };
+      $('showSignalsEnd').textContent = formatClock(seconds);
+      showRowSignals.hidden = false;
+      shown = true;
+      heroUsed = true;
+    }
+  } catch (error) {
+    console.warn('showcase signals:', error);
+  }
+
+  try {
+    if (setupReport(hero)) {
+      showRowReport.hidden = false;
+      shown = true;
+      heroUsed = true;
+    }
+  } catch (error) {
+    console.warn('showcase report:', error);
+  }
+
+  if (hero && (heroUsed || hero.video_file)) addCredit(hero.attribution);
+
+  try {
+    const comparison = Array.isArray(comparisons) ? comparisons[0] : null;
+    if (comparison) {
+      const list = Array.isArray(samples) ? samples : [];
+      const a = list.find(sample => sample && sample.id === comparison.a);
+      const b = list.find(sample => sample && sample.id === comparison.b);
+      const aValues = sampleSeries(a, 'overall');
+      const bValues = sampleSeries(b, 'overall');
+      if (a && b && aValues && bValues) {
+        const titleOf = sample => typeof sample.title === 'string' && sample.title.trim() ? sample.title.trim() : 'Untitled';
+        showcase.compare = {
+          a: { values: aValues, title: titleOf(a) },
+          b: { values: bValues, title: titleOf(b) }
+        };
+        $('showLegendA').textContent = `A  ${showcase.compare.a.title}`;
+        $('showLegendB').textContent = `B  ${showcase.compare.b.title}`;
+        const headline = comparison.report && typeof comparison.report.headline === 'string'
+          ? comparison.report.headline.trim()
+          : '';
+        const headlineEl = $('showCompareHeadline');
+        headlineEl.textContent = headline;
+        headlineEl.hidden = !headline;
+        addCredit(a.attribution);
+        addCredit(b.attribution);
+        showRowCompare.hidden = false;
+        shown = true;
+      }
+    }
+  } catch (error) {
+    console.warn('showcase compare:', error);
+  }
+
+  showcaseSection.hidden = !shown;
+  if (shown) {
+    drawShowcase();
+    setupVisualReveal();
+  }
+  renderCredits();
+}
+
+function setupVisualReveal() {
+  if (REDUCE_MOTION || !('IntersectionObserver' in window)) return;
+  const visuals = document.querySelectorAll('.show-row:not([hidden]) .show-visual');
+  if (!visuals.length) return;
+  document.documentElement.classList.add('has-reveal');
+  const observer = new IntersectionObserver(entries => {
+    for (const entry of entries) {
+      if (!entry.isIntersecting) continue;
+      entry.target.classList.add('is-drawn');
+      observer.unobserve(entry.target);
+    }
+  }, { threshold: 0.3 });
+  for (const visual of visuals) observer.observe(visual);
+}
+
+function showHero(sample) {
   comingSoon.hidden = true;
   videoBox.hidden = false;
   brainBox.hidden = false;
-  showAttribution(sample.attribution);
   heroVideo.src = `/data/${sample.video_file}`;
   heroVideo.muted = true;
   heroVideo.play().catch(() => {});
   loadBrain(sample);
   setupCurve(sample);
   requestAnimationFrame(measureCurve);
+}
+
+async function loadLanding() {
+  let data = null;
+  try {
+    const res = await fetch('/data/samples.json', { cache: 'no-store' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    data = await res.json();
+  } catch (error) { /* an empty list or a failed request both get the quiet panel */ }
+  const samples = data && Array.isArray(data.samples) ? data.samples : [];
+  const comparisons = data && Array.isArray(data.comparisons) ? data.comparisons : [];
+  const hero = samples.find(entry => entry && entry.landing === true) || samples[0] || null;
+  if (!hero || !hero.video_file) showComingSoon();
+  else showHero(hero);
+  setupShowcase(hero, samples, comparisons);
 }
 
 function renderSoundToggle() {
@@ -542,14 +1000,18 @@ function tick() {
     brainSecond.textContent = `${Math.floor(t)} s`;
   }
   updateCurve(t);
+  updateShowcasePlayhead(t);
   requestAnimationFrame(tick);
 }
 requestAnimationFrame(tick);
-window.addEventListener('resize', measureCurve, { passive: true });
+window.addEventListener('resize', () => {
+  measureCurve();
+  drawShowcase();
+}, { passive: true });
 
 setupReveal();
-loadHero();
-loadLimit();
+loadLanding();
+loadLimits();
 </script>
 </body>
 </html>
