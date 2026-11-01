@@ -16,7 +16,10 @@ one disagree, this one wins, and the older section is updated to match (§10).
 - Facebook Page videos are a second curve source, beside YouTube. Built from Meta's documentation
   only; no real report has been seen yet, so the check is strict and a mismatch is refused loudly.
   Meta ad curves and Facebook/Instagram Reels are left out until a real report is seen.
-- Invited users get a standard 3 minutes of credit (enough to analyse and compare 2–3 short cuts).
+- Invited users get a standard 5 minutes of credit (enough for a brand team to compare two cuts of
+  two or three 30–60 s ads).
+- A rewarded curve gets a small celebration (a short confetti burst, the credit counting up); the
+  page stays clean, modern and light: the form's new questions are compact one-tap rows.
 - The upload dialog's "Add audience retention" link is removed: with the 7-day rule a curve added
   at upload never earns the reward, and the History row offers the same form later.
 
@@ -29,7 +32,7 @@ Instagram, Vimeo, reminders or email when the 7 days are up.
 
 ## 2. Settings (`config.json`)
 - `research.curve_reward_min_days`: 7. A starting value, adjusted from data later.
-- `billing.invite_cents`: 600 (3 min at today's price, `pricing.CENTS_PER_BLOCK` 100 per 30 s).
+- `billing.invite_cents`: 1000 (5 min at today's price, `pricing.CENTS_PER_BLOCK` 100 per 30 s).
   `billing.starter_cents` stays 0: credit comes only by invitation.
 
 ## 3. Video link (`neurolens/results.py`, pure)
@@ -108,6 +111,14 @@ Dates are the reward date in the viewer's local time, "9 Nov" (with the year onl
   valid curve from 9 Nov and this analysis is free (X back). Curves added earlier are saved without
   credit."; after it, as now. The guide link goes to the guide's section for the link's platform
   once a valid link is typed, else to the top.
+- **Look:** the form stays light: the link field first; the four choice rows are compact segmented
+  one-tap rows (as the existing ones), no extra headings or help text beyond the reward line.
+- **Reward moment** (only when `rewarded_cents > 0`): a small confetti burst from the reply, about
+  30 pieces in the page's own colours (heat orange `--heat` and the brain map's heat shades), over in
+  about 1 s, drawn on a temporary canvas that is removed after; the reply shows a tick that draws in;
+  the top bar's credit counts up from the old to the new amount over about 0.8 s with a brief
+  `--heat` glow. With the system's "reduce motion" setting (`prefers-reduced-motion`), no confetti
+  and no count-up: the new amount and the tick just appear. No library: a few lines of canvas code.
 - **Reply:** saved, valid, and only the date unmet: "Thanks, saved. Add a newer curve from 9 Nov
   to get X back." The other replies are unchanged; link and report refusals show the server's
   message.
@@ -122,16 +133,16 @@ Dates are the reward date in the viewer's local time, "9 Nov" (with the year onl
   was re-cut"; the reward rules add "added at least 7 days after the analysis" and "once per
   published video"; curves come "from YouTube or Facebook". The test that keeps the privacy page's
   numbers equal to `config.json` covers the 7.
-- **Landing (`static/index.html`), Early access:** Invited: "3 minutes of free analysis for invited
+- **Landing (`static/index.html`), Early access:** Invited: "5 minutes of free analysis for invited
   creators, marketers, teachers and researchers."; Free: "Share a video for research, add its
-  YouTube or Facebook retention curve a week later, and get its credit back." A test keeps "3
+  YouTube or Facebook retention curve a week later, and get its credit back." A test keeps "5
   minutes" equal to `billing.invite_cents` at the current price.
 - **Consent:** the wording shown changes, so `billing.CONSENT_VERSION` becomes `"2026-11-02"` with the
   page's text (M3f §5a rule).
 
 ## 9. Invite credit (`infra/grant_credit.py`)
 The amount becomes optional: with none, it grants `billing.invite_cents` from `config.json` and the
-confirm line reads "Grant $6.00 (3 min, the invite credit) to <email>?". With an amount, as now.
+confirm line reads "Grant $10.00 (5 min, the invite credit) to <email>?". With an amount, as now.
 The grant is a `grant` ledger row as now, so invited users count as funded for curve rewards
 (M3f §5d).
 
@@ -164,7 +175,7 @@ Full treatment (money). Behaviour, not call details.
 - `list_jobs`: `curve_reward_from` is `created_at + 7 days`; absent when no reward is possible.
 - Route: missing or bad `video_url`/`same_cut` → 400 and nothing in S3; a Facebook report whose id
   differs from the link → 400; a Facebook curve saves with `source = 'facebook_api'`.
-- `grant_credit.py` with no amount grants 600 cents; with an amount, as now.
+- `grant_credit.py` with no amount grants 1000 cents; with an amount, as now.
 - Copy: landing "3 minutes" matches config; the privacy page's 7 matches config; the consent version
   on the page equals `billing.CONSENT_VERSION`.
 - **Break-it checks** (on committed code, restore with `git checkout <file>`): remove the date
