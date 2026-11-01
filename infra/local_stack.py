@@ -72,6 +72,10 @@ def _config(dsn):
     cfg["db"] = {"backend": "postgres", "dsn": dsn}
     cfg["server"] = {"host": "127.0.0.1", "port": WEB_PORT}
     cfg["auth"] = {"mode": "dev", "dev_user_id": "dev-user", "dev_email": "dev@localhost"}
+    # Public, read-only YouTube lookups (M3j §3); without the variable, links fall back as on a
+    # failed lookup.
+    if os.environ.get("NEUROLENS_YOUTUBE_API_KEY"):
+        cfg["youtube_api_key"] = os.environ["NEUROLENS_YOUTUBE_API_KEY"]
     return cfg
 
 

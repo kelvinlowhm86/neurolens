@@ -77,8 +77,8 @@
   how people watch videos and improve NeuroLens. Follow the steps below to get the report from
   YouTube or Facebook and add it to the analysis of a finished video you've shared.</p>
 
-  <p>When the link is one we can check, the "Add audience retention" window fills in the video's
-  own values and shows the amount you can receive before you do any work.</p>
+  <p>Open this guide from the "Add audience retention" window after pasting your video's link,
+  and the values below are filled in for that video.</p>
 
   <h2 id="youtube">YouTube</h2>
   <ol>
@@ -92,16 +92,16 @@
         <li><code>ids</code>: <code id="ytIds">channel==MINE</code>
         <button class="copy" type="button" data-copy="ytIds">Copy</button></li>
         <li><code>startDate</code>: <code id="ytStart">the day before the video was published, as YYYY-MM-DD</code>
-        <button class="copy" type="button" data-copy="ytStart">Copy</button></li>
+        <button class="copy" type="button" data-copy="ytStart" hidden>Copy</button></li>
         <li><code>endDate</code>: <code id="ytEnd">today, as YYYY-MM-DD</code>
-        <button class="copy" type="button" data-copy="ytEnd">Copy</button></li>
+        <button class="copy" type="button" data-copy="ytEnd" hidden>Copy</button></li>
         <li><code>metrics</code>: <code id="ytMetrics">audienceWatchRatio,relativeRetentionPerformance</code>
         <button class="copy" type="button" data-copy="ytMetrics">Copy</button></li>
         <li><code>dimensions</code>: <code id="ytDimensions">elapsedVideoTimeRatio</code>
         <button class="copy" type="button" data-copy="ytDimensions">Copy</button></li>
-        <li><code>filters</code>: <code id="ytFilters">video==</code> followed by the video's ID (the part after
-        <code>v=</code> in its link)
-        <button class="copy" type="button" data-copy="ytFilters">Copy</button></li>
+        <li><code>filters</code>: <code id="ytFilters">video==</code><span id="ytFiltersHint"> followed by the video's ID (the
+        part after <code>v=</code> in its link)</span>
+        <button class="copy" type="button" data-copy="ytFilters" hidden>Copy</button></li>
       </ul>
     </li>
     <li>Run it.</li>
@@ -121,7 +121,7 @@
     <code>pages_read_engagement</code> and <code>read_insights</code> permissions when Meta asks.</li>
     <li>Paste this into the query field, then click <strong>Submit</strong>:
     <code id="fbQuery">&lt;video id&gt;/video_insights?metric=total_video_retention_graph</code>
-    <button class="copy" type="button" data-copy="fbQuery">Copy</button>.</li>
+    <button class="copy" type="button" data-copy="fbQuery" hidden>Copy</button>.</li>
     <li>Copy the whole JSON reply, including the opening <code>{</code> and closing
     <code>}</code>.</li>
     <li>In NeuroLens, click "Add audience retention" on the finished video's row or result,
@@ -152,9 +152,10 @@
   const start = params.get('start');
   const pad = n => String(n).padStart(2, '0');
   const ymd = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  // A filled-in value gets its Copy button; a placeholder (no values given) never does.
   const set = (id, text) => {
-    const el = document.getElementById(id);
-    if (el) el.textContent = text;
+    document.getElementById(id).textContent = text;
+    document.querySelector(`[data-copy="${id}"]`).hidden = false;
   };
 
   if (platform === 'youtube' && videoId) {
@@ -165,6 +166,7 @@
     }
     set('ytEnd', ymd(new Date()));
     set('ytFilters', `video==${videoId}`);
+    document.getElementById('ytFiltersHint').hidden = true;
   }
   if (platform === 'facebook' && videoId) {
     set('fbQuery', `${videoId}/video_insights?metric=total_video_retention_graph`);
