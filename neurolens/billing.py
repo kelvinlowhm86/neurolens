@@ -298,7 +298,8 @@ def list_jobs(
     Deleted and cancelled jobs are left out. `claimed_at` is UTC text; `cancellable` marks a
     queued job the dispatcher has not priced yet (M3e §8). For a done, shared job, `sharing` is
     true while its research copy is present, `curve_count` is its stored curves, and
-    `curve_reward_cents` is what a valid curve would return now (0 when it cannot). The user's
+    `curve_reward_cents` is what a valid curve would return now (0 when it cannot);
+    `curve_rewarded` is true once a curve has returned this job's credit. The user's
     reward conditions are read once for the whole call.
     """
     with db.transaction() as tx:
@@ -311,6 +312,7 @@ def list_jobs(
             "AND j.dataset_removed_at IS NULL) AS sharing, "
             "(SELECT count(*) FROM retention_snapshots s "
             "WHERE s.job_id = j.job_id) AS curve_count, "
+            "(j.curve_rewarded_at IS NOT NULL) AS curve_rewarded, "
             "CASE WHEN :reward_ok AND j.status = :done AND j.research_consent "
             "AND j.dataset_removed_at IS NULL AND j.captured_cents > 0 "
             "AND j.curve_rewarded_at IS NULL AND NOT EXISTS "

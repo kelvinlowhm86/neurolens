@@ -47,6 +47,7 @@ JOB_KEYS = {
     "sharing",
     "curve_count",
     "curve_reward_cents",
+    "curve_rewarded",
 }
 DAY = 24 * 3600
 

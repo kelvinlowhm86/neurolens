@@ -161,6 +161,7 @@ def test_list_jobs_returns_the_sharing_and_curve_fields(db, pg):
     assert row["sharing"] is True
     assert row["curve_count"] == 0
     assert row["curve_reward_cents"] == PRICE_CENTS
+    assert row["curve_rewarded"] is False
 
     assert add_curve(db, job_id)["rewarded_cents"] == PRICE_CENTS
 
@@ -168,6 +169,7 @@ def test_list_jobs_returns_the_sharing_and_curve_fields(db, pg):
     assert row["sharing"] is True
     assert row["curve_count"] == 1
     assert row["curve_reward_cents"] == 0
+    assert row["curve_rewarded"] is True
 
 
 def test_an_unshared_job_is_not_sharing(db):
