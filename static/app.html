@@ -608,7 +608,7 @@
       <section class="video-panel">
         <div class="panel-head"><span>Video</span><span class="spacer"></span><span class="mono" id="videoClock"></span></div>
         <div class="video-box" id="videoBox">
-          <video id="videoPlayer" playsinline muted></video>
+          <video id="videoPlayer" playsinline muted preload="auto"></video><!-- preload: the whole clip downloads up front so chart clicks jump at once -->
           <div class="video-missing" id="videoMissing" hidden></div>
         </div>
       </section>
@@ -925,6 +925,7 @@ const compareVideoB = document.createElement('video');
 compareVideoB.id = 'compareVideoB';
 compareVideoB.playsInline = true;
 compareVideoB.muted = true;
+compareVideoB.preload = 'auto'; // the whole clip, so jumps on the chart respond at once
 
 function fmt(s) {
   const n = Math.max(0, Math.floor(Number.isFinite(s) ? s : 0));
