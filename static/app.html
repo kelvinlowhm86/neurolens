@@ -550,7 +550,7 @@
 <body>
 <div class="vt-scan" aria-hidden="true"></div>
 <header class="bar">
-  <a class="brand" id="brand" href="/">NeuroLens</a>
+  <a class="brand" href="/">NeuroLens</a>
   <span class="header-meta" id="headerMeta"></span>
   <div class="spacer"></div>
   <span class="credit" id="balance"></span>
@@ -849,7 +849,7 @@
       <input type="checkbox" id="consentBox">
       <div class="consent-copy">
         <label for="consentBox">Share for research and to train NeuroLens's own models (<a href="/static/privacy.html#research" target="_blank" rel="noopener">details</a>). I own the rights to it.</label>
-        <p class="consent-note">Add its YouTube retention curve later and this analysis can be free.</p>
+        <p class="consent-note">Add its YouTube retention curve later and get its credit back.</p>
       </div>
     </div>
     <div class="actions">
@@ -1324,7 +1324,6 @@ $('startupRetry').addEventListener('click', () => start());
 
 function showSignedOut() {
   signedIn = false;
-  $('brand').href = '/';
   clearTimeout(historyPollTimer);
   openJobIds = new Set();
   closeAccountMenu();
@@ -1346,7 +1345,6 @@ function showSignedOut() {
 
 function showApp(meJson) {
   me = meJson; signedIn = true;
-  $('brand').href = '/app';
   $('startupPanel').classList.remove('active');
   $('signInPanel').classList.remove('active');
   applyChooser();
@@ -1716,9 +1714,7 @@ function historyDetail(job) {
     const parts = [day];
     const length = historyLength(job);
     if (length) parts.push(length);
-    const used = job.captured_cents != null ? creditWords(job.captured_cents) : null;
     if (job.curve_rewarded) parts.push('free');
-    else if (used) parts.push(`used ${used}`);
     // Each part stays whole; on a narrow row the line wraps between parts instead of being cut.
     const line = parts.map(part => part.replace(/ /g, '\u00a0')).join(' · ');
     if (!job.result_available) return `${line} · result expired`;

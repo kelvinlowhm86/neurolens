@@ -157,7 +157,7 @@ place in line among other users, waking the database from the landing page.
 - One box per batch, unticked, never required:
   "Share for research and to train NeuroLens's own models ([details](/static/privacy.html#research)).
   I own the rights to it." Under it, aligned with the label, a quiet line: "Add its YouTube
-  retention curve later and this analysis can be free."
+  retention curve later and get its credit back."
 - The page sends `consent_version`, the version of the wording it showed, with each presign that
   has `research_consent`. The server accepts only its current `billing.CONSENT_VERSION`
   (`"2026-10-31"`); any other value → 409 `consent_outdated` ("Please refresh the page."), nothing
