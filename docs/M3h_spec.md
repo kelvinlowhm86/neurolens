@@ -42,9 +42,19 @@ text, sorted, so `job_a < job_b` (PostgreSQL orders `uuid` the same way as this 
 `ValueError` for a non-UUID or for the same id twice. Every caller (routes, Lambda, laptop fake)
 goes through it, so the order is decided in one place.
 
-"A" is always `job_a` and "B" is `job_b`, in the database, the event, the request to the model,
-the stored answer and the GET answer. The page maps A and B to the two names (§8); nothing is
-ever relabelled after the model has written it.
+Stored A is always `job_a` and stored B is `job_b`, in the database, the event, the request to
+the model and the stored answer. In its text the model names the videos only by the markers
+`[A]` and `[B]` (§5b), so the letters can be filled in later.
+
+**Shown order: the opened video is A.** Everything served to a person (the GET answer, the
+PDF, the samples' entries) is turned so the video they opened is A (left, orange) and the other
+is B (right, blue). `report_prompt.orient_comparison(report, flip)` (pure, no AWS) returns a
+copy: with `flip` true, each difference's `a` and `b` swap and `a_does_better` and
+`b_does_better` swap; in every text (headline, summary, `what_differs`, `brain_response`, list
+items) `[A]` becomes `B` and `[B]` becomes `A` when flipped, else `A` and `B`. Other fields
+(`created_at`, `model`, …) are kept. It raises `ValueError` when neither the headline nor the
+summary holds a marker (an answer written before markers): that is a loud error, never a
+silent guess at which letters to swap. `flip` is true when the opened video is stored B.
 
 `storage.comparison_key(job_a, job_b)` = `results/<job_a>_<job_b>.report.json`. It sits under
 `results/`, so it expires with the results after 30 days, and it matches the existing
@@ -95,8 +105,9 @@ Billing functions (`neurolens/billing.py`), the Data API rules of M3g apply (`CA
   when tries are used up. Otherwise `claim_comparison` (False → 409 `report_writing`), then
   `report_starter({"pair": [job_a, job_b]})`. If that raises: `release_comparison_try`, log, 503
   `report_failed`. Answers 202 `{"report_state": "writing"}`.
-- `GET /api/compare/<x>/<y>/report`: `owned_job` for each, `comparison_pair`; answers
-  `{"a": job_a, "b": job_b, "report_state", "tries_left", "report"}`. No row: state null and all
+- `GET /api/compare/<x>/<y>/report`: `owned_job` for each, `comparison_pair`; `x` is the
+  opened video. Answers `{"a": x, "b": y, "report_state", "tries_left", "report"}`, the report
+  turned by `orient_comparison(report, flip=(x != job_a))` (§2). No row: state null and all
   tries left. A stale `writing` is answered as `failed`, like M3g §4. `report` is the stored JSON
   when ready, else null.
 - `report_starter` now takes the Lambda event, not a job id: `{"job_id": id}` for a single
@@ -190,8 +201,9 @@ Writing:
 - A stronger response may be called stronger brain engagement, or said to suggest more
   attention. Never claim anything about what real viewers do: views, watch time, retention,
   drop-off, clicks or sharing, and never give a score.
-- Write for a video maker, in plain words. Cite times in whole seconds, always naming the video
-  (A 12 s, B 20-24 s). Name what happens on screen from the pictures.
+- Write for a video maker, in plain words. Name the videos only as [A] and [B], brackets
+  included, in every field; never a bare A or B. Cite times in whole seconds, always naming the
+  video ([A] 12 s, [B] 20-24 s). Name what happens on screen from the pictures.
 - Differences are the few stretches that explain the verdict most, no two covering the same
   stretch: each one names its time in A, in B or in both (null for the video where it has no
   match), what differs on screen and how the response differs, one sentence each. Leave out
@@ -229,7 +241,9 @@ SPAN = { "start": int, "end": int } | null
 After parsing, `_comparison_problem(answer, duration_a, duration_b)` checks only what the page
 relies on, like M3g §5d: every field present with its type; each difference's `a` and `b` is
 null or a span with `0 <= start <= end < duration` of that video; `a` and `b` are not both null;
-the three lists hold only text; the summary ends a sentence as M3g §5d. Never lengths or counts.
+the three lists hold only text; the summary ends a sentence as M3g §5d; the headline and the
+summary each hold `[A]` or `[B]`; with the markers removed, no text holds `B` as a word or `A`
+followed by a space and a digit or by `'s`/`’s` (a missed marker). Never lengths or counts.
 Failure codes as M3g §5d.
 
 ## 6. Deletion
@@ -265,13 +279,14 @@ deletes its object (§5a).
 { "samples": [ { …as M3d §9…, "report": <stored single report minus usage> (optional),
                 "pdf_file": <path> (optional), "sharing_example": true (optional),
                 "landing": true (optional) } ],
-  "comparisons": [ { "a": <sample id>, "b": <sample id>, "report": <stored comparison minus usage> } ] }
+  "comparisons": [ { "a": <sample id>, "b": <sample id>, "report": <comparison minus usage,
+                      turned so a is A>, "pdf_file": <path> } ] }
 ```
 At most one sample carries `sharing_example` and at most one carries `landing` (the hero the
-landing page plays; without it the first sample is used). In a comparison entry, `a` is the sample
-made from the report's `job_a` and `b` the one from `job_b`, so the report's A and B need no
-relabelling. A pair appears at most once, in either order; the page matches it either way round.
-`comparisons` may be missing or empty.
+landing page plays; without it the first sample is used). Each pair has two comparison
+entries, one per way round: in each, `a` is the sample opened, and its `report` has already
+been turned by `orient_comparison` (plain letters, no markers), so the page never turns text.
+The page uses the entry whose `a` is the open sample. `comparisons` may be missing or empty.
 
 ### 7b. `infra/make_sample.py` (operator script, `AWS_PROFILE=neurolens`)
 - The existing form also downloads `results/<job_id>.report.json` when present and stores it as
@@ -282,8 +297,8 @@ relabelling. A pair appears at most once, in either order; the page matches it e
 - New form: `make_sample.py compare <sample_id_1> <job_id_1> <sample_id_2> <job_id_2>`. Both
   samples must already be in `samples.json`. It reads `comparison_key(comparison_pair(job_1,
   job_2))`, checks it with `_comparison_problem` against the two samples' durations, maps
-  `job_a`/`job_b` to their sample ids, and adds or replaces the entry for that pair. Missing
-  object: stops with a message, writes nothing.
+  `job_a`/`job_b` to their sample ids, and replaces both entries for that pair (one per way
+  round, §7a, each with its own PDF). Missing object: stops with a message, writes nothing.
 
 ### 7c. `infra/deploy_web.sh`
 Unchanged rule: only samples whose clip is listed in `data/videos/SOURCES.md` are published. The
@@ -318,17 +333,15 @@ Modest changes; the redesign comes later.
     M3g note "Written by Claude from predicted brain responses." When there is no report and none
     can be written, the verdict card is hidden and the chart comes first. On a phone the two
     videos stack; on a desktop each video is capped at about 190 px tall, 16:9 and centred.
-  - A is always the left video and orange; B is always the right video and blue. The key line
-    "A = <name> · B = <name>" uses the stored names (from the GET's `a`/`b`, or the sample entry).
-    When the open video is stored B, its section moves to the right in blue and the other
-    (stored A) moves left in orange, using CSS order while each video stays in its own host.
-    The A/B badges, name colours, progress bars, difference dots and chart lines follow stored A/B. Ready:
+  - The open video is always A: the left video, orange; the other is B: right, blue (§2: the
+    report arrives already turned). The key line "A = <open name> · B = <other name>". The A/B
+    badges, name colours, progress bars, difference dots and chart lines all follow that. Ready:
     the headline and summary, then one row per difference, with time chips first (a coloured dot
     and "0:00–0:06", plus "only" when just one side has it), then what differs, then the brain
     response in muted text clamped to two lines. Clicking a row moves both videos to that span's
     start.
-  - Swapping the main video keeps the same pair; the videos, rows and chart are redrawn so the
-    times, colours and A/B sides still follow the stored pair.
+  - Swap (jobs) makes the other video the open one, so it becomes A: the page asks the GET again
+    in the new order and redraws.
 - All model text is inserted with `textContent`, never as HTML. Compare titles show the full name
   and wrap, each in its line's colour with its average overall in words (M3d §8).
 
@@ -345,7 +358,7 @@ table. The web role and the reaper already delete `results/*`. Reserved concurre
 
 ## 11. Laptop (`infra/local_stack.py`)
 `_report_starter` takes the event. For `{"pair": …}` it runs `write_comparison` in a thread with
-`FakeReportClient` and a canned valid comparison built from the two results alone (one
+`FakeReportClient` and a canned valid comparison (with `[A]`/`[B]` markers) built from the two results alone (one
 difference spanning `0 .. min(2, duration - 1)` in both, one item per list). Migration 009 runs
 on the local database like the others.
 
@@ -364,8 +377,10 @@ Full treatment: it triggers paid Bedrock calls. Fake SDK client and fake S3; no 
   writing and counts against the same tries; tries cap; stale `writing` reclaimable, fresh one
   not; either job not the user's, not done or deleted, or the user deleted → no claim and no row;
   release gives the try back.
-- Routes: each 4xx/202 case in §4, for both orders of the ids; the GET answers the same `a`/`b`
-  either way round; start failure → 503 and the try returned; a stale `writing` read as
+- Routes: each 4xx/202 case in §4, for both orders of the ids; the GET answers `a` = the first
+  id in the URL and the report turned to match (x/y and y/x give swapped spans, lists and
+  letters; the stored object is never changed); the comparison PDF puts the URL's first video as
+  A; start failure → 503 and the try returned; a stale `writing` read as
   `failed`; the starter receives `{"pair": [job_a, job_b]}`; signed out → 401.
 - Lambda: success stores the comparison at its key then sets ready; not `writing` → no Bedrock
   call; either input missing → `failed missing_input` and no call; refusal, truncation, bad JSON,
@@ -376,6 +391,11 @@ Full treatment: it triggers paid Bedrock calls. Fake SDK client and fake S3; no 
 - Deletion: deleting either video, through the route and through account delete, removes the
   comparison row and object and leaves the partner's own files; a failed S3 delete keeps the rows
   for the reaper; `remove_deleted_account` succeeds after the purge.
+- Orientation: `orient_comparison` without flip turns markers into A/B and changes nothing else;
+  with flip it swaps every difference's spans, the two "does better" lists and the letters in
+  every text field, and leaves other fields alone; the input is never mutated; an answer with no marker in headline or summary raises.
+- Answer check: a missing marker in the headline or summary, a bare `B` word, `A 12 s` or `A's`
+  outside markers → `bad_answer`; an answer using markers throughout passes.
 - Request: `series_table` has one row per second whose cells are the result's values at that
   second in header order; the comparison request has A's blocks, then B's, each image after its
   labelled `A t = <t> s` / `B t = <t> s`; image count equals the two frame counts.
@@ -487,7 +507,7 @@ reviewed by an independent Opus pass; its fixes are part of this section.
   other S3 error is raised (500). Name = the upload's file name.
 - `GET /api/compare/<x>/<y>/report.pdf`: `comparison_ids` (400 `same_video`, 404 not yours), both
   results through `owned_result`, the comparison row `ready` and its report stored, else 409
-  `no_report`. A and B as stored (canonical pair, §2).
+  `no_report`. Turned like the GET (§2): `x` is A, its name and result first.
 - Both answer `application/pdf` with an attachment name built like the CSV's
   (`_disposition` generalised to take the suffix): "<stem> – NeuroLens report.pdf" and
   "<stem A> vs <stem B> – NeuroLens comparison.pdf" (ASCII fallback in `filename`, full name in
@@ -503,8 +523,8 @@ reviewed by an independent Opus pass; its fixes are part of this section.
 
 ### 18d. Samples (`infra/make_sample.py`, `infra/deploy_web.sh`)
 - Both forms write the PDF with the same module: `data/output/<id>/report.pdf` (name = the
-  sample title) when the sample has a report, and `data/output/compare/<a>__<b>.pdf` for a
-  comparison; they record `pdf_file` in the entry. Frames come from `results/<job_id>.frames`
+  sample title) when the sample has a report, and `data/output/compare/<a>__<b>.pdf` for each
+  comparison entry (so two per pair, one per way round); they record `pdf_file` in the entry. Frames come from `results/<job_id>.frames`
   (the job id is in the sample's result). A third form, `make_sample.py pdfs`, re-renders every
   sample's and comparison's PDF from `samples.json` (run it after a layout change).
 - `deploy_web.sh` copies each public sample's and public comparison's `pdf_file` with the rest.
