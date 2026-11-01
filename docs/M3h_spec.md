@@ -322,7 +322,7 @@ Modest changes; the redesign comes later.
     "A = <name> · B = <name>" uses the stored names (from the GET's `a`/`b`, or the sample entry).
     When the open video is stored B, its section moves to the right in blue and the other
     (stored A) moves left in orange, using CSS order while each video stays in its own host.
-    The name colours, progress bars, difference dots and chart lines follow stored A/B. Ready:
+    The A/B badges, name colours, progress bars, difference dots and chart lines follow stored A/B. Ready:
     the headline and summary, then one row per difference, with time chips first (a coloured dot
     and "0:00–0:06", plus "only" when just one side has it), then what differs, then the brain
     response in muted text clamped to two lines. Clicking a row moves both videos to that span's

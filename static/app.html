@@ -4920,10 +4920,13 @@ function buildCompareView() {
   $('compareNameA').title = `${aName}${averageTip(avgA)}`;
   $('compareNameA').style.color = side === 'b' ? 'var(--blue)' : 'var(--accent)';
   $('compareBadgeA').style.color = side === 'b' ? 'var(--blue)' : 'var(--accent)';
+  // The badges carry the stored pair's letters (the verdict's A and B), not 'this video' / 'other'.
+  $('compareBadgeA').textContent = side === 'b' ? 'B' : 'A';
   $('compareNameB').textContent = `${bName}${onAverage(avgB)}`;
   $('compareNameB').title = `${bName}${averageTip(avgB)}`;
   $('compareNameB').style.color = side === 'b' ? 'var(--accent)' : 'var(--blue)';
   $('compareBadgeB').style.color = side === 'b' ? 'var(--accent)' : 'var(--blue)';
+  $('compareBadgeB').textContent = side === 'b' ? 'A' : 'B';
   $('compareVideos').classList.toggle('a-right', side === 'b');
   $('compareBarA').parentElement.classList.toggle('blue', side === 'b');
   $('compareBarB').parentElement.classList.toggle('blue', side === 'a');
