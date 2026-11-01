@@ -176,7 +176,7 @@ Full treatment (money). Behaviour, not call details.
 - Route: missing or bad `video_url`/`same_cut` → 400 and nothing in S3; a Facebook report whose id
   differs from the link → 400; a Facebook curve saves with `source = 'facebook_api'`.
 - `grant_credit.py` with no amount grants 1000 cents; with an amount, as now.
-- Copy: landing "3 minutes" matches config; the privacy page's 7 matches config; the consent version
+- Copy: landing "5 minutes" matches config; the privacy page's 7 matches config; the consent version
   on the page equals `billing.CONSENT_VERSION`.
 - **Break-it checks** (on committed code, restore with `git checkout <file>`): remove the date
   condition; remove the other-account link check; remove the once-per-`video_ref` reward check.
