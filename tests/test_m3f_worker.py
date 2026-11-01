@@ -1,8 +1,8 @@
-"""M3f worker storage split (docs/M3f_spec.md §5b, §10 "Worker").
+"""M3f worker storage split (docs/M3f_spec.md §5b, §10 "Worker"; M3j §9b).
 
-A consented job keeps its video under `dataset/<job_id>/` and writes NeuroLens's own output
-(`result.json` and `brain`) under `academic/<job_id>/`, never under `dataset/`. The worker records
-the video's SHA-256 before the copy, so it survives a copy that fails.
+A consented job keeps its video under `dataset/<job_id>/`; NeuroLens's own output stays only in
+`results/`. The worker records the video's SHA-256 before the copy, so it survives a copy that
+fails.
 """
 
 import contextlib
@@ -83,7 +83,7 @@ class CopyFails:
         return getattr(self._inner, name)
 
 
-def test_a_consented_job_splits_video_and_output_between_dataset_and_academic(
+def test_a_consented_job_keeps_only_the_video_under_dataset(
     aws, db, pg, make_cfg, roi_masks_small, clip_path
 ):
     job_id, key = make_job(db)
@@ -92,17 +92,11 @@ def test_a_consented_job_splits_video_and_output_between_dataset_and_academic(
 
     assert run_job(aws, db, job_id, clip_path, make_cfg(), roi_masks_small) is worker.Outcome.DONE
 
-    dataset = prefix_keys(aws, f"dataset/{job_id}/")
-    assert dataset == [f"dataset/{job_id}/video.mp4"]
+    assert prefix_keys(aws, f"dataset/{job_id}/") == [f"dataset/{job_id}/video.mp4"]
     assert object_bytes(aws, f"dataset/{job_id}/video.mp4") == Path(clip_path).read_bytes()
-
-    for name in ("result.json", "brain"):
-        assert object_exists(aws, f"academic/{job_id}/{name}")
-    result = object_bytes(aws, f"academic/{job_id}/result.json")
-    assert result == object_bytes(aws, f"results/{job_id}.json")
-    assert object_bytes(aws, f"academic/{job_id}/brain") == object_bytes(
-        aws, f"results/{job_id}.brain"
-    )
+    assert prefix_keys(aws, f"academic/{job_id}/") == []
+    assert object_exists(aws, f"results/{job_id}.json")
+    assert object_exists(aws, f"results/{job_id}.brain")
 
 
 def test_the_video_hash_is_recorded(aws, db, pg, make_cfg, roi_masks_small, clip_path):
@@ -128,4 +122,4 @@ def test_the_hash_is_recorded_before_a_copy_that_fails(
     assert outcome is worker.Outcome.FAILED
     expected = hashlib.sha256(Path(clip_path).read_bytes()).hexdigest()
     assert pg.job(job_id)["video_sha256"] == expected
-    assert not object_exists(aws, f"academic/{job_id}/result.json")
+    assert not object_exists(aws, f"dataset/{job_id}/video.mp4")

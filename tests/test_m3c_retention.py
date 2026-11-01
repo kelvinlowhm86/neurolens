@@ -239,6 +239,20 @@ def test_parse_retention_report_refuses_a_row_of_the_wrong_shape(row):
 # ---------------------------------------------------------------- the route
 
 
+@pytest.fixture(autouse=True)
+def youtube_falls_back(monkeypatch):
+    """M3j: the save route looks the link up; these tests keep the unknown-facts fallback."""
+    try:
+        from neurolens import youtube
+    except ImportError:
+        return
+
+    def failed(*args, **kwargs):
+        raise youtube.LookupFailed("test fallback")
+
+    monkeypatch.setattr(youtube, "lookup", failed)
+
+
 def snapshot_keys(pg, job_id):
     return pg.rows(
         "SELECT raw_key, csv_key FROM retention_snapshots "

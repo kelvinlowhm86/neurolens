@@ -98,6 +98,8 @@ def curve_args(job_id, *, sha="a" * 64, points=None, video_ref=None):
         "same_cut": "same",
         "source": "youtube_api",
         "reward_min_days": REWARD_MIN_DAYS,
+        "facts": None,
+        "length_tolerance_s": 2,
     }
 
 
@@ -174,6 +176,20 @@ def retention_keys(aws, job_id):
 
 
 # ---------------------------------------------------------------- the route's new fields
+
+
+@pytest.fixture(autouse=True)
+def youtube_falls_back(monkeypatch):
+    """M3j: the save route looks the link up; these tests keep the unknown-facts fallback."""
+    try:
+        from neurolens import youtube
+    except ImportError:
+        return
+
+    def failed(*args, **kwargs):
+        raise youtube.LookupFailed("test fallback")
+
+    monkeypatch.setattr(youtube, "lookup", failed)
 
 
 def test_a_youtube_curve_saves_its_link_and_same_cut_answer(db, aws, make_cfg, tmp_path, pg):

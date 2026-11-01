@@ -137,6 +137,8 @@ def add_curve(db, user_id, job_id, sha, *, cap=5, window=30):
         same_cut="same",
         source="youtube_api",
         reward_min_days=7,
+        facts=None,
+        length_tolerance_s=2,
     )
 
 
@@ -515,6 +517,20 @@ def test_a_purged_stopped_videos_hash_still_blocks_another_reward(aws, db, pg):
 
 
 # ---------------------------------------------------------------- F. retention route writes
+
+
+@pytest.fixture(autouse=True)
+def youtube_falls_back(monkeypatch):
+    """M3j: the save route looks the link up; these tests keep the unknown-facts fallback."""
+    try:
+        from neurolens import youtube
+    except ImportError:
+        return
+
+    def failed(*args, **kwargs):
+        raise youtube.LookupFailed("test fallback")
+
+    monkeypatch.setattr(youtube, "lookup", failed)
 
 
 def test_a_failed_second_retention_write_deletes_the_first_and_records_nothing(

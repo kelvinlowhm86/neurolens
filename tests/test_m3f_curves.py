@@ -66,6 +66,8 @@ def curve_args(job_id, *, sha="a" * 64, points=None, flags=None, **overrides):
         "same_cut": "same",
         "source": "youtube_api",
         "reward_min_days": REWARD_MIN_DAYS,
+        "facts": None,
+        "length_tolerance_s": 2,
     }
     args.update(overrides)
     return args
@@ -134,6 +136,20 @@ class PutFails:
 
     def __getattr__(self, name):
         return getattr(self._inner, name)
+
+
+@pytest.fixture(autouse=True)
+def youtube_falls_back(monkeypatch):
+    """M3j: the save route looks the link up; these tests keep the unknown-facts fallback."""
+    try:
+        from neurolens import youtube
+    except ImportError:
+        return
+
+    def failed(*args, **kwargs):
+        raise youtube.LookupFailed("test fallback")
+
+    monkeypatch.setattr(youtube, "lookup", failed)
 
 
 # ---------------------------------------------------------------- curve_quality
@@ -575,7 +591,7 @@ def test_an_s3_failure_records_nothing(db, aws, make_cfg, tmp_path, pg):
     "reason, message",
     [
         ("stopped", "You stopped sharing this video."),
-        ("no_curve", "This video's research copy was deleted after 90 days without a curve."),
+        ("no_curve", "This video's shared copy was deleted after 90 days without a curve."),
     ],
 )
 def test_a_removed_copy_says_why(db, aws, make_cfg, tmp_path, pg, reason, message):
@@ -642,7 +658,7 @@ def test_any_refused_curve_deletes_the_files_the_route_wrote(
     def refuse(*args, **kwargs):
         raise billing.CurveRefused(
             "dataset_removed",
-            "This video's research copy was deleted after 90 days without a curve.",
+            "This video's shared copy was deleted after 90 days without a curve.",
         )
 
     monkeypatch.setattr(billing, "add_curve", refuse)

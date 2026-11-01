@@ -127,6 +127,8 @@ def add_curve(db, job_id, *, sha="curve-sha"):
         same_cut="same",
         source="youtube_api",
         reward_min_days=7,
+        facts=None,
+        length_tolerance_s=2,
     )
 
 

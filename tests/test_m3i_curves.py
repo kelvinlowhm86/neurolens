@@ -70,6 +70,8 @@ def curve_args(job_id, *, sha="a" * 64, points=None, flags=None, video_ref=None,
         "same_cut": "same",
         "source": "youtube_api",
         "reward_min_days": REWARD_MIN_DAYS,
+        "facts": None,
+        "length_tolerance_s": 2,
     }
     args.update(overrides)
     return args
@@ -410,7 +412,7 @@ def test_a_second_link_on_a_job_that_already_has_one_is_video_link_changed(db, p
 # ---------------------------------------------------------------- list_jobs: the reward date
 
 
-def test_list_jobs_previews_the_reward_date_from_created_at(db, pg):
+def test_list_jobs_previews_the_reward_without_a_date(db, pg):
     job_id, _ = make_job(db, consent=True)
     pg.age(job_id, created_s=5 * DAY_S)
     billing.grant_credit(db, f"{WEB_USER_ID}@example.com", 100)
@@ -419,7 +421,7 @@ def test_list_jobs_previews_the_reward_date_from_created_at(db, pg):
 
     assert row["sharing"] is True
     assert row["curve_reward_cents"] == PRICE_CENTS
-    assert row["curve_reward_from"] == reward_date(pg, job_id)
+    assert "curve_reward_from" not in row
 
 
 @pytest.mark.parametrize("consent", [False, True], ids=["unshared", "unfunded"])
@@ -429,4 +431,4 @@ def test_list_jobs_has_no_reward_date_when_no_reward_is_possible(db, pg, consent
     [row] = billing.list_jobs(db, WEB_USER_ID, 50, reward_min_days=REWARD_MIN_DAYS)
 
     assert row["curve_reward_cents"] == 0
-    assert row.get("curve_reward_from") is None
+    assert "curve_reward_from" not in row

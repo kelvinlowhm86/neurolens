@@ -97,9 +97,11 @@ def consented_done_job(db, new_key, *, consent=True):
 
 
 def write_job_files(aws, job_id, key):
-    """The upload, the research copy, and the user's own result, brain and thumbnail."""
+    """The upload, its dataset copy, the old course-study copy, and the user's own result files."""
     upload(aws, key)
-    storage.put_dataset(aws.s3, aws.bucket, job_id, key, {"job_id": job_id}, brain=b"dataset brain")
+    storage.put_dataset(aws.s3, aws.bucket, job_id, key)
+    aws.s3.put_object(Bucket=aws.bucket, Key=f"academic/{job_id}/result.json", Body=b"{}")
+    aws.s3.put_object(Bucket=aws.bucket, Key=f"academic/{job_id}/brain", Body=b"dataset brain")
     assert storage.put_result(aws.s3, aws.bucket, job_id, {"job_id": job_id}) is True
     aws.s3.put_object(Bucket=aws.bucket, Key=f"results/{job_id}.brain", Body=b"brain")
     aws.s3.put_object(Bucket=aws.bucket, Key=f"results/{job_id}.jpg", Body=b"thumbnail")

@@ -8,6 +8,7 @@ research copy the route refuses with 409 `dataset_removed`. Job history exposes
 import json
 import uuid
 
+import pytest
 from conftest import WEB_USER_ID
 from neurolens import billing, storage
 from neurolens.web.app import create_app
@@ -66,6 +67,20 @@ def make_job(db, *, consent=True, done=True, processing=False):
 
 
 # ---------------------------------------------------------------- the upload route
+
+
+@pytest.fixture(autouse=True)
+def youtube_falls_back(monkeypatch):
+    """M3j: the save route looks the link up; these tests keep the unknown-facts fallback."""
+    try:
+        from neurolens import youtube
+    except ImportError:
+        return
+
+    def failed(*args, **kwargs):
+        raise youtube.LookupFailed("test fallback")
+
+    monkeypatch.setattr(youtube, "lookup", failed)
 
 
 def test_a_successful_upload_records_the_retention_curve(aws, db, pg, make_cfg, tmp_path):

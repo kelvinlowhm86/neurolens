@@ -103,9 +103,11 @@ def research_keys(job_id, ext=".mp4"):
 
 
 def write_research_copy(aws, job_id, key):
-    """An upload, its research copy, and the raw brain the worker writes before the result."""
+    """An upload, its dataset copy, and the old course-study copy the purge still removes."""
     upload(aws, key)
-    storage.put_dataset(aws.s3, aws.bucket, job_id, key, {"job_id": job_id}, brain=b"brain bytes")
+    storage.put_dataset(aws.s3, aws.bucket, job_id, key)
+    aws.s3.put_object(Bucket=aws.bucket, Key=f"academic/{job_id}/result.json", Body=b"{}")
+    aws.s3.put_object(Bucket=aws.bucket, Key=f"academic/{job_id}/brain", Body=b"brain bytes")
     aws.s3.put_object(Bucket=aws.bucket, Key=f"results/{job_id}.brain", Body=b"brain bytes")
 
 

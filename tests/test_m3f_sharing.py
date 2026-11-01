@@ -129,6 +129,8 @@ def curve_kwargs(job_id, *, sha="review-curve"):
         "same_cut": "same",
         "source": "youtube_api",
         "reward_min_days": 7,
+        "facts": None,
+        "length_tolerance_s": 2,
     }
 
 
@@ -469,7 +471,7 @@ def test_the_90_day_rule_keeps_a_job_that_gained_a_snapshot_after_selection(
 def test_consent_stores_the_version_and_time(db, pg):
     job_id, _ = make_job(db, consent=True)
     job = pg.job(job_id)
-    assert billing.CONSENT_VERSION == "2026-11-02"
+    assert billing.CONSENT_VERSION == "2026-11-03"
     assert job["consent_version"] == billing.CONSENT_VERSION
     assert job["consented_at"] is not None
 
@@ -486,8 +488,8 @@ def test_page_consent_version_matches_the_server():
 
 def test_privacy_page_states_the_reward_limits_the_server_enforces():
     html = (REPO_ROOT / "static" / "privacy.html").read_text()
-    start = re.search(r'<h2[^>]*id="research"[^>]*>', html)
-    assert start, 'static/privacy.html has no <h2 id="research"> section'
+    start = re.search(r'<h2[^>]*id="sharing"[^>]*>', html)
+    assert start, 'static/privacy.html has no <h2 id="sharing"> section'
     rest = html[start.end() :]
     end = re.search(r"<h2\b", rest)
     section = rest[: end.start()] if end else rest

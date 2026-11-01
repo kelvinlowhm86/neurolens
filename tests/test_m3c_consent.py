@@ -201,8 +201,9 @@ def test_a_consented_job_is_copied_to_the_dataset(
     outcome = run_job(aws, db, job_id, clip_path, make_cfg(), roi_masks_small)
     assert outcome is worker.Outcome.DONE
     video = f"dataset/{job_id}/video.mp4"
-    result_key = f"academic/{job_id}/result.json"
+    result_key = f"results/{job_id}.json"
     assert object_exists(aws, video) and object_exists(aws, result_key)
+    assert not object_exists(aws, f"academic/{job_id}/result.json")
     body = aws.s3.get_object(Bucket=aws.bucket, Key=video)["Body"].read()
     assert body == Path(clip_path).read_bytes()
     result = json.loads(aws.s3.get_object(Bucket=aws.bucket, Key=result_key)["Body"].read())
@@ -269,9 +270,8 @@ def test_the_dataset_is_written_before_put_result(
 
     written = [written_key(call) for call in s3.calls]
     video = written.index(f"dataset/{job_id}/video.mp4")
-    dataset_result = written.index(f"academic/{job_id}/result.json")
     published = written.index(f"results/{job_id}.json")
-    assert video < published and dataset_result < published
+    assert video < published
 
 
 def test_a_worker_that_lost_its_claim_before_saving_writes_nothing_to_the_dataset(
@@ -336,34 +336,24 @@ def test_an_unconsented_worker_that_lost_its_claim_writes_nothing(
 # ---------------------------------------------------------------- storage.put_dataset
 
 
-def test_put_dataset_copies_the_video_with_its_extension_and_stores_the_result(aws, new_key):
+def test_put_dataset_copies_the_video_with_its_extension_and_writes_nothing_else(aws, new_key):
     job_id, key = new_key(".mov")
     aws.s3.put_object(Bucket=aws.bucket, Key=key, Body=b"the video")
-    result = {"format": 2, "job_id": job_id, "duration_seconds": 0, "signals": {}, "muted": {}}
-    storage.put_dataset(aws.s3, aws.bucket, job_id, key, result, brain=b"brain bytes")
+
+    storage.put_dataset(aws.s3, aws.bucket, job_id, key)
+
     video = aws.s3.get_object(Bucket=aws.bucket, Key=f"dataset/{job_id}/video.mov")["Body"]
     assert video.read() == b"the video"
-    stored = aws.s3.get_object(Bucket=aws.bucket, Key=f"academic/{job_id}/result.json")["Body"]
-    assert json.loads(stored.read()) == result
-    brain = aws.s3.get_object(Bucket=aws.bucket, Key=f"academic/{job_id}/brain")["Body"]
-    assert brain.read() == b"brain bytes"
-
-
-def test_put_dataset_refuses_a_nan_result(aws, new_key):
-    job_id, key = new_key()
-    aws.s3.put_object(Bucket=aws.bucket, Key=key, Body=b"the video")
-    with pytest.raises(ValueError):
-        storage.put_dataset(aws.s3, aws.bucket, job_id, key, {"bad": float("nan")}, brain=b"x")
-    assert not object_exists(aws, f"dataset/{job_id}/result.json")
+    assert dataset_keys(aws, job_id) == [f"dataset/{job_id}/video.mov"]
+    assert not object_exists(aws, f"academic/{job_id}/result.json")
+    assert not object_exists(aws, f"academic/{job_id}/brain")
 
 
 def test_put_dataset_replaces_an_earlier_copy(aws, new_key):
     job_id, key = new_key()
     aws.s3.put_object(Bucket=aws.bucket, Key=key, Body=b"first video")
-    storage.put_dataset(aws.s3, aws.bucket, job_id, key, {"job_id": job_id, "n": 1}, brain=b"1")
+    storage.put_dataset(aws.s3, aws.bucket, job_id, key)
     aws.s3.put_object(Bucket=aws.bucket, Key=key, Body=b"second video")
-    storage.put_dataset(aws.s3, aws.bucket, job_id, key, {"job_id": job_id, "n": 2}, brain=b"2")
+    storage.put_dataset(aws.s3, aws.bucket, job_id, key)
     video = aws.s3.get_object(Bucket=aws.bucket, Key=f"dataset/{job_id}/video.mp4")["Body"]
     assert video.read() == b"second video"
-    stored = aws.s3.get_object(Bucket=aws.bucket, Key=f"academic/{job_id}/result.json")["Body"]
-    assert json.loads(stored.read())["n"] == 2

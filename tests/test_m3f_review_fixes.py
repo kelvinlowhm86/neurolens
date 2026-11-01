@@ -66,6 +66,8 @@ def curve_args(job_id):
         "same_cut": "same",
         "source": "youtube_api",
         "reward_min_days": 7,
+        "facts": None,
+        "length_tolerance_s": 2,
     }
 
 

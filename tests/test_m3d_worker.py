@@ -122,14 +122,15 @@ def test_put_brain_refuses_a_bad_value_before_writing(aws, value):
     assert object_bytes(aws, "results/job-1.brain") == b"earlier"
 
 
-def test_put_dataset_writes_the_given_brain_bytes(aws):
+def test_put_dataset_copies_only_the_video(aws):
     job_id, key = "job-1", "uploads/user/job-1.mp4"
     aws.s3.put_object(Bucket=aws.bucket, Key=key, Body=b"video")
-    result = {"format": 2, "duration_seconds": 0, "signals": {}, "muted": {}}
 
-    storage.put_dataset(aws.s3, aws.bucket, job_id, key, result, brain=b"brain bytes")
+    storage.put_dataset(aws.s3, aws.bucket, job_id, key)
 
-    assert object_bytes(aws, f"academic/{job_id}/brain") == b"brain bytes"
+    assert object_bytes(aws, f"dataset/{job_id}/video.mp4") == b"video"
+    assert not object_exists(aws, f"academic/{job_id}/brain")
+    assert not object_exists(aws, f"academic/{job_id}/result.json")
 
 
 # ---------------------------------------------------------------- the worker's write order
@@ -208,7 +209,7 @@ def test_a_float16_overflow_fails_the_job_before_any_result_is_published(
     assert pg.job(job_id)["status"] == "failed"
 
 
-def test_a_consented_job_writes_the_same_brain_bytes_to_the_dataset(
+def test_a_consented_job_keeps_its_brain_only_under_results(
     aws, db, make_cfg, roi_masks_small, clip_path
 ):
     job_id, key = make_job(db, consent=True)
@@ -217,7 +218,7 @@ def test_a_consented_job_writes_the_same_brain_bytes_to_the_dataset(
 
     assert run_job(aws, db, job_id, clip_path, make_cfg(), roi_masks_small) is worker.Outcome.DONE
 
-    brain = object_bytes(aws, f"results/{job_id}.brain")
-    assert object_bytes(aws, f"academic/{job_id}/brain") == brain
+    assert object_bytes(aws, f"results/{job_id}.brain")
+    assert not object_exists(aws, f"academic/{job_id}/brain")
     stored = json.loads(object_bytes(aws, f"results/{job_id}.json"))
     assert stored["format"] == 2
