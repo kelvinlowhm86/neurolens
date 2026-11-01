@@ -1038,7 +1038,12 @@ window.brainMap = {
 };
 
 const params = new URLSearchParams(window.location.search);
-const dollars = cents => `$${(cents / 100).toFixed(2)}`;
+// Credit is shown as video time (m:ss) at the served price; null until /api/limits has loaded.
+function creditTime(cents) {
+  const p = limits && limits.price;
+  if (!p || !(p.cents_per_block > 0) || !(p.block_seconds > 0) || !Number.isFinite(cents)) return null;
+  return fmt(cents / p.cents_per_block * p.block_seconds);
+}
 
 function applyChooser() {
   $('analysesPanel').hidden = !signedIn;
@@ -1193,8 +1198,9 @@ $('downloadBtn').addEventListener('click', () => {
 const deleteDialog = $('deleteDialog');
 function openDeleteDialog() {
   const credit = me && me.balance ? me.balance.available_cents + me.balance.reserved_cents : 0;
+  const time = credit > 0 ? creditTime(credit) : null;
   $('deleteAccountText').textContent = 'This deletes every video, analysis and login for this account'
-    + (credit > 0 ? `, and your ${dollars(credit)} credit.` : '.') + ' Type DELETE to confirm.';
+    + (credit > 0 ? (time ? `, and your ${time} of credit.` : ', and your credit.') : '.') + ' Type DELETE to confirm.';
   $('deleteAccountConfirm').value = '';
   $('deleteAccountMsg').textContent = '';
   $('deleteAccountMsg').classList.remove('error');
@@ -1257,8 +1263,10 @@ function updateNoCreditPanel() {
 
 function showBalance() {
   const b = me.balance;
-  const held = b.reserved_cents ? `<span class="credit-held"> (${dollars(b.reserved_cents)} held)</span>` : '';
-  $('balance').innerHTML = `<span class="credit-label">Credit: </span><span class="credit-amt">${dollars(b.available_cents)}</span>${held}`;
+  const available = creditTime(b.available_cents);
+  if (available == null) { $('balance').innerHTML = ''; updateNoCreditPanel(); return; }
+  const held = b.reserved_cents ? `<span class="credit-held"> (${creditTime(b.reserved_cents)} held)</span>` : '';
+  $('balance').innerHTML = `<span class="credit-label">Credit: </span><span class="credit-amt">${available}</span>${held}`;
   updateNoCreditPanel();
 }
 
@@ -1337,8 +1345,7 @@ function showApp(meJson) {
   $('historyPanel').classList.add('active');
   $('headerMeta').textContent = '';
   showBalance();
-  loadLimits();
-  loadHistory();
+  loadLimits().then(loadHistory); // history rows show credit, which needs the price
   const jobParam = params.get('job');
   if (jobParam && /^[0-9a-f-]{36}$/i.test(jobParam)) trackJob(jobParam);
   if (params.get('upload')) {
@@ -1696,7 +1703,8 @@ function historyDetail(job) {
     const parts = [day];
     const length = historyLength(job);
     if (length) parts.push(length);
-    if (job.captured_cents != null) parts.push(dollars(job.captured_cents));
+    const used = job.captured_cents != null ? creditTime(job.captured_cents) : null;
+    if (used) parts.push(`${used} credit`);
     const line = parts.join(' · ');
     if (!job.result_available) return `${line} · result expired`;
     const msLeft = created.getTime() + RESULT_DAYS * 86400000 - Date.now();
@@ -1875,13 +1883,14 @@ function loadSample(idx) {
 async function loadLimits() {
   try {
     const res = await fetch('/api/limits');
-    if (!res.ok) return null;
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
     limits = await res.json();
-    const from = estimateCostCents(1) != null ? ` · from ${dollars(estimateCostCents(1))}` : '';
-    $('limitsText').textContent = `MP4, MOV or WebM · up to ${limits.max_video_duration_seconds} seconds${from}`;
-    if (signedIn && me) updateNoCreditPanel();
+    const block = limits.price && limits.price.block_seconds > 0 ? ` · credit rounds up to ${limits.price.block_seconds} s` : '';
+    $('limitsText').textContent = `MP4, MOV or WebM · up to ${limits.max_video_duration_seconds} seconds${block}`;
+    if (creditTime(0) == null) console.error('No usable price in /api/limits: credit is hidden', limits.price);
+    if (signedIn && me) showBalance();
     return limits;
-  } catch (e) { return null; }
+  } catch (e) { console.error("Couldn't load /api/limits: credit is hidden", e); return null; }
 }
 const ACCEPTED_TYPES = ['video/mp4', 'video/quicktime', 'video/webm'];
 const EXTENSION_TYPES = { mp4: 'video/mp4', mov: 'video/quicktime', webm: 'video/webm' };
@@ -2089,7 +2098,7 @@ function batchRow(item) {
   name.title = item.name;
   const meta = document.createElement('div'); meta.className = 'batch-meta';
   if (item.state === 'valid') {
-    meta.textContent = `${fmt(item.duration)} · ${dollars(item.price)}`;
+    meta.textContent = `${fmt(item.duration)} · ${creditTime(item.price)} credit`;
   } else if (item.state === 'checking') {
     meta.textContent = 'Checking…';
   } else {
@@ -2130,10 +2139,10 @@ function updateBatchTotal() {
   totalEl.classList.remove('error');
   if (valid.length === 0) { totalEl.textContent = ''; return; }
   if (total > available) {
-    totalEl.textContent = `Needs ${dollars(total)}; you have ${dollars(available)}`;
+    totalEl.textContent = `Needs ${creditTime(total)} of credit; you have ${creditTime(available)}`;
     totalEl.classList.add('error');
   } else {
-    totalEl.textContent = `${dollars(total)} · charged only for videos that finish · cancel within 15 s`;
+    totalEl.textContent = `Uses ${creditTime(total)} of credit · only videos that finish · cancel within 15 s`;
   }
 }
 
@@ -3275,9 +3284,10 @@ function showRetention(jobId, title) {
   }
   $('retentionCard').hidden = !resultCurve;
   if (resultCurve) {
-    const reward = jobCurveTarget(cached).rewardCents;
-    $('retentionCardText').textContent = reward > 0
-      ? `Thanks for sharing. Add its YouTube retention curve to get your ${dollars(reward)} back.`
+    const cents = jobCurveTarget(cached).rewardCents || 0;
+    const reward = cents > 0 ? creditTime(cents) : null;
+    $('retentionCardText').textContent = reward
+      ? `Thanks for sharing. Add its YouTube retention curve to get your ${reward} of credit back.`
       : 'Thanks for sharing.';
   }
 }
@@ -3300,9 +3310,9 @@ $('retentionCardBtn').addEventListener('click', () => {
 
 // Name the refund where people decide to click; the plain name when none is due.
 function retentionLabel(job, inMenu) {
-  const reward = job.curve_reward_cents || 0;
-  if (reward <= 0) return 'Add audience retention';
-  return inMenu ? `Add audience retention (${dollars(reward)} back)` : `Get ${dollars(reward)} back`;
+  const reward = (job.curve_reward_cents || 0) > 0 ? creditTime(job.curve_reward_cents) : null;
+  if (!reward) return 'Add audience retention';
+  return inMenu ? `Add audience retention (${reward} back)` : `Get ${reward} back`;
 }
 
 function jobCurveTarget(job) {
@@ -3395,7 +3405,9 @@ function curveResultMessage(data) {
   const rewarded = data.rewarded_cents || 0;
   if (rewarded > 0) {
     return {
-      message: `Thanks! This analysis is now free: ${dollars(rewarded)} has been returned to your credit.`,
+      message: creditTime(rewarded)
+        ? `Thanks! This analysis is now free: ${creditTime(rewarded)} of credit has been returned.`
+        : 'Thanks! This analysis is now free: its credit has been returned.',
       guide: false,
     };
   }
@@ -3433,10 +3445,10 @@ function openCurve(target) {
   $('curveFileName').textContent = '';
   const reward = $('curveReward');
   reward.textContent = '';
-  if (target.kind === 'job' && target.rewardCents > 0) {
+  if (target.kind === 'job' && target.rewardCents > 0 && creditTime(target.rewardCents)) {
     const amount = document.createElement('span');
     amount.className = 'reward-amount';
-    amount.textContent = dollars(target.rewardCents);
+    amount.textContent = creditTime(target.rewardCents);
     reward.append('Add a valid curve and this analysis is free (', amount, ' back).');
   }
   setCurveMsg('');

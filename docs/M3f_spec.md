@@ -36,9 +36,9 @@ place in line among other users, waking the database from the landing page.
 - **Server limit:** presign refuses with 429 `too_many_waiting` ("Too many videos waiting. Try again
   when some finish.") when the user already has `upload.max_waiting_jobs` (10, `config.json`) jobs
   queued. The page shows it on the row like any presign refusal.
-- Below the rows: one total, "$4.00 · charged only for videos that finish · cancel within 15 s", the
+- Below the rows: one total, "Uses 4:00 of credit · only videos that finish · cancel within 15 s", the
   consent box (§5a, one for the whole batch), and Upload.
-- If the total is more than the available credit: "Needs $5.00; you have $3.70" and Upload stays
+- If the total is more than the available credit: "Needs 5:00 of credit; you have 3:30" and Upload stays
   disabled until rows are removed. With no valid row Upload is disabled.
 - When the consent box is ticked, each valid row shows a quiet "Add audience retention" link (the
   video is already on YouTube). It opens the curve form (§5d) for that row; the curve is held by the
@@ -69,10 +69,17 @@ place in line among other users, waking the database from the landing page.
   and retain the list's order.
 
 ### 2c. Credit notes
+- **Credit is shown as video time, never money** (the service is free, M3c). The server keeps
+  cents (balances, ledger, charges, rewards; no API change); the page converts with `/api/limits`
+  `price`: seconds = cents / `cents_per_block` × `block_seconds`, shown as `m:ss` rounded down, so
+  the page holds no price of its own. Top bar "Credit: 4:30" ("(1:00 held)" while held); upload
+  row "0:31 · 1:00 credit"; the upload box line ends "credit rounds up to 30 s". Until the price
+  has loaded (or if it fails, logged to the console) the credit is hidden rather than shown in
+  another unit, and amounts drop out of messages; History loads after the price.
 - The "no credit" note shows whenever the available credit is below the price of the shortest
-  allowed video, not only at $0.00.
+  allowed video, not only at none.
 - Delete account names the credit that will be lost: "…every video, analysis and login, and your
-  $4.60 credit." (no credit part at $0.00).
+  4:30 of credit." (no credit part at none).
 
 ## 3. Waiting, progress and the tab title
 - **Migration 006** adds `jobs.claimed_at TIMESTAMPTZ`; `billing.claim` sets it to `now()` on every
@@ -218,15 +225,15 @@ place in line among other users, waking the database from the landing page.
 - Offered on a done, shared, not-removed job: the quiet "Add audience retention" link on its History
   row, and always in its "⋯" menu (a newer snapshot). When a reward is possible (the job's
   `curve_reward_cents` > 0) the entry points name it, so people see why to click: the row link reads
-  "Get $X back" and the menu item "Add audience retention ($X back)", X being `curve_reward_cents`.
+  "Get X back" and the menu item "Add audience retention (X back)", X being `curve_reward_cents` as credit time (§2c).
   On the results page, until its first snapshot, a bordered thank-you card: "Thanks for sharing.
-  Add its YouTube retention curve to get your $X back." when a reward is possible, otherwise
+  Add its YouTube retention curve to get your X of credit back." when a reward is possible, otherwise
   "Thanks for sharing.", with a quiet "Add audience retention" button. The card shows only once the History list has the job (shared, no
   curve); a job not yet listed gets it when the list arrives. In the upload dialog, per row (§2a).
 - The form (a small pop-up): the video name, the guide link, "Choose file", and three required choice
   rows: views ("Under 1k", "1k–10k", "10k–100k", "Over 100k"), published ("This week", "This month",
   "Earlier"), promoted with ads ("Yes", "No"). When a reward is possible (below) the form says "Add a
-  valid curve and this analysis is free ($0.72 back)." The reward amount uses the heat orange
+  valid curve and this analysis is free (0:21 back)." The reward amount uses the heat orange
   (`--heat`, `#FF8A2A`). Save, then the saved or error message.
 - A curve chosen in the upload dialog is sent once its job is done, while the tab is open. If that
   fails, or the tab closed first, the row's link still offers it; a failed send shows "Couldn't add
@@ -270,8 +277,8 @@ place in line among other users, waking the database from the landing page.
 - Settings in `config.json` `research`: `curve_rewards_per_window` (5), `curve_reward_window_days`
   (30), `no_curve_days` (90). These are anti-abuse product limits, not budget limits.
 - Replies on the form (`curveResultMessage`/`curveQualityMessage` in `static/app.html`): when
-  rewarded, "Thanks! This analysis is now free: $0.72 has been returned to your credit." (the amount
-  comes from the reply's `rewarded_cents`; it is credit, not cash); when the report is saved but fails
+  rewarded, "Thanks! This analysis is now free: 0:21 of credit has been returned." (the amount
+  comes from the reply's `rewarded_cents`, as credit time, §2c); when the report is saved but fails
   a quality check, "Thanks for adding it. The report was saved, but no credit was refunded because
   <reasons>." with the reasons: too little viewing data (fewer than 20 points), the retention barely
   changes across the video, the retention at the end is higher than at the start, or unusually high
