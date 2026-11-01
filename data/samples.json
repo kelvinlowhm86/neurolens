@@ -5246,6 +5246,64 @@
   ],
   "comparisons": [
     {
+      "a": "cerave_30s",
+      "b": "cerave_76s",
+      "report": {
+        "headline": "A and B are nearly matched overall; A opens stronger, B peaks slightly higher mid-video",
+        "summary": "These are two cuts of the same CeraVe campaign, with B running roughly 45 seconds longer than A. Across their shared material the overall response is almost identical\u2014neither is ahead in clearly more seconds\u2014but A's immediate on-camera opening holds hearing and understanding well above typical from the first second, while B's curtain-and-silhouette introduction keeps the response below typical for the first eight seconds. B recovers and edges ahead from around 17 seconds onward, reaching a slightly higher combined peak during its close-up product and character section, though its abstract curtain and fantasy-garden passage is its weakest sustained stretch.",
+        "differences": [
+          {
+            "a": {
+              "start": 0,
+              "end": 5
+            },
+            "b": {
+              "start": 0,
+              "end": 8
+            },
+            "what_differs": "A opens immediately on Michael Cera speaking directly to camera and holding up the product; B opens on empty dark curtains and an obscured silhouette with no speech.",
+            "brain_response": "A is well above typical from the very first second, with hearing and understanding both strongly positive; B keeps all three groups below typical for the first eight seconds, with understanding particularly suppressed."
+          },
+          {
+            "a": {
+              "start": 19,
+              "end": 23
+            },
+            "b": {
+              "start": 17,
+              "end": 22
+            },
+            "what_differs": "A cuts to a wide boardroom shot as an establishing scene; B stays on close-up character and product footage accompanied by on-screen titles and speech.",
+            "brain_response": "B's hearing and understanding rise together to reach their joint peak for the video, pushing overall well above typical; A's hearing drops to near and then below typical as the wide boardroom shot displaces the character close-up, leaving B clearly ahead throughout this stretch."
+          },
+          {
+            "a": null,
+            "b": {
+              "start": 45,
+              "end": 52
+            },
+            "what_differs": "B moves through abstract curtain wipes with a text overlay followed by an animated narwhal sequence\u2014content with no equivalent in A.",
+            "brain_response": "Hearing and understanding both fall below typical and seeing softens, pulling B's overall response to its lowest sustained level in the video."
+          }
+        ],
+        "a_does_better": [
+          "A drives hearing and understanding above typical from the very first second, with no warm-up lag",
+          "A avoids any extended below-typical stretch, staying above typical for nearly its entire duration"
+        ],
+        "b_does_better": [
+          "B's mid-video close-up product and character section brings hearing and understanding to a higher combined peak than anything A reaches",
+          "The extended rock-climbing sequence keeps seeing well above typical for longer than A's shorter version of the same material"
+        ],
+        "suggestions": [
+          "Cut or substantially shorten B's dark curtain introduction and open sooner on the character speaking to camera, as A does, to avoid the eight-second below-typical drag at the start",
+          "Tighten or replace the abstract curtain-wipe and narwhal passage in B with a closer character or product moment to prevent the sustained dip in hearing and understanding mid-video"
+        ],
+        "model": "us.anthropic.claude-sonnet-4-6",
+        "created_at": "2026-10-31T10:28:57Z"
+      },
+      "pdf_file": "output/compare/cerave_30s__cerave_76s.pdf"
+    },
+    {
       "a": "bbb_720p_55s",
       "b": "sintel_trailer_720p",
       "report": {
@@ -5305,64 +5363,6 @@
         "created_at": "2026-10-31T10:24:07Z"
       },
       "pdf_file": "output/compare/bbb_720p_55s__sintel_trailer_720p.pdf"
-    },
-    {
-      "a": "cerave_30s",
-      "b": "cerave_76s",
-      "report": {
-        "headline": "A and B are nearly matched overall; A opens stronger, B peaks slightly higher mid-video",
-        "summary": "These are two cuts of the same CeraVe campaign, with B running roughly 45 seconds longer than A. Across their shared material the overall response is almost identical\u2014neither is ahead in clearly more seconds\u2014but A's immediate on-camera opening holds hearing and understanding well above typical from the first second, while B's curtain-and-silhouette introduction keeps the response below typical for the first eight seconds. B recovers and edges ahead from around 17 seconds onward, reaching a slightly higher combined peak during its close-up product and character section, though its abstract curtain and fantasy-garden passage is its weakest sustained stretch.",
-        "differences": [
-          {
-            "a": {
-              "start": 0,
-              "end": 5
-            },
-            "b": {
-              "start": 0,
-              "end": 8
-            },
-            "what_differs": "A opens immediately on Michael Cera speaking directly to camera and holding up the product; B opens on empty dark curtains and an obscured silhouette with no speech.",
-            "brain_response": "A is well above typical from the very first second, with hearing and understanding both strongly positive; B keeps all three groups below typical for the first eight seconds, with understanding particularly suppressed."
-          },
-          {
-            "a": {
-              "start": 19,
-              "end": 23
-            },
-            "b": {
-              "start": 17,
-              "end": 22
-            },
-            "what_differs": "A cuts to a wide boardroom shot as an establishing scene; B stays on close-up character and product footage accompanied by on-screen titles and speech.",
-            "brain_response": "B's hearing and understanding rise together to reach their joint peak for the video, pushing overall well above typical; A's hearing drops to near and then below typical as the wide boardroom shot displaces the character close-up, leaving B clearly ahead throughout this stretch."
-          },
-          {
-            "a": null,
-            "b": {
-              "start": 45,
-              "end": 52
-            },
-            "what_differs": "B moves through abstract curtain wipes with a text overlay followed by an animated narwhal sequence\u2014content with no equivalent in A.",
-            "brain_response": "Hearing and understanding both fall below typical and seeing softens, pulling B's overall response to its lowest sustained level in the video."
-          }
-        ],
-        "a_does_better": [
-          "A drives hearing and understanding above typical from the very first second, with no warm-up lag",
-          "A avoids any extended below-typical stretch, staying above typical for nearly its entire duration"
-        ],
-        "b_does_better": [
-          "B's mid-video close-up product and character section brings hearing and understanding to a higher combined peak than anything A reaches",
-          "The extended rock-climbing sequence keeps seeing well above typical for longer than A's shorter version of the same material"
-        ],
-        "suggestions": [
-          "Cut or substantially shorten B's dark curtain introduction and open sooner on the character speaking to camera, as A does, to avoid the eight-second below-typical drag at the start",
-          "Tighten or replace the abstract curtain-wipe and narwhal passage in B with a closer character or product moment to prevent the sustained dip in hearing and understanding mid-video"
-        ],
-        "model": "us.anthropic.claude-sonnet-4-6",
-        "created_at": "2026-10-31T10:28:57Z"
-      },
-      "pdf_file": "output/compare/cerave_30s__cerave_76s.pdf"
     }
   ]
 }
