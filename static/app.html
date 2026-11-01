@@ -3548,7 +3548,8 @@ function celebrate(anchor) {
     position: 'fixed', inset: '0', width: '100%', height: '100%',
     pointerEvents: 'none', zIndex: '9999',
   });
-  document.body.append(canvas);
+  // An open modal dialog sits in the browser's top layer, above any z-index: draw inside it.
+  ((anchor && anchor.closest && anchor.closest('dialog[open]')) || document.body).append(canvas);
   const ctx = canvas.getContext('2d');
   ctx.scale(ratio, ratio);
   const box = anchor && anchor.getBoundingClientRect
