@@ -3,7 +3,16 @@ which carries the sign-in code on /auth/callback."""
 
 import logging
 
+import pytest
 from conftest import LambdaContext, fresh_import, function_url_event
+
+
+@pytest.fixture(autouse=True)
+def youtube_key_parameter(ssm):
+    """M3j §2: the deployed launcher now needs the YouTube key, stored like Terraform stores it."""
+    ssm.put_parameter(
+        Name="/neurolens/web/youtube_api_key", Value="test-youtube-key", Type="SecureString"
+    )
 
 
 def test_each_request_logs_method_path_and_status_but_not_the_query(

@@ -28,6 +28,14 @@ def body_of(resp):
     return base64.b64decode(body) if resp.get("isBase64Encoded") else body.encode()
 
 
+@pytest.fixture(autouse=True)
+def youtube_key_parameter(ssm):
+    """M3j §2: the deployed launcher now needs the YouTube key, stored like Terraform stores it."""
+    ssm.put_parameter(
+        Name="/neurolens/web/youtube_api_key", Value="test-youtube-key", Type="SecureString"
+    )
+
+
 @pytest.fixture
 def lambda_handler(lambda_env, idp, auth_seam):
     """The web function's module as a new container imports it: config.json and environment

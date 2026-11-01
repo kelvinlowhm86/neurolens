@@ -237,6 +237,9 @@ def make_job(
     billing.reserve(
         db, user_id, job_id, key, "clip.mp4", round(seconds * 1000), research_consent=consent
     )
+    if state != "queued":
+        # The dispatcher measures the length before any GPU runs (M3e §3a).
+        assert billing.verify_queued(db, job_id, round(seconds * 1000), 3600) == "ok"
     if state in ("processing", "done", "failed"):
         assert billing.claim(db, job_id) == 1
     if state == "done":

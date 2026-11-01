@@ -75,14 +75,18 @@ def apply_env(cfg):
     aws.report_function; NEUROLENS_DB_DSN -> db.dsn (a local
     PostgreSQL DSN holds a password, so it never goes in config.json). M3b's web functions:
     NEUROLENS_AUTH_MODE / _COGNITO_ISSUER / _COGNITO_CLIENT_ID / _COGNITO_DOMAIN -> auth.mode /
-    auth.cognito_issuer / auth.cognito_client_id / auth.cognito_domain, NEUROLENS_PUBLIC_BASE_URL
-    -> public_base_url, and NEUROLENS_DEPLOYED -> deployed: true. Only variables that are set and
+    auth.cognito_issuer / auth.cognito_client_id / auth.cognito_domain,
+    NEUROLENS_PUBLIC_BASE_URL -> public_base_url, and NEUROLENS_DEPLOYED -> deployed: true.
+    NEUROLENS_YOUTUBE_API_KEY -> youtube_api_key (M3j §2). Only variables that are set and
     non-empty change anything. The input is never modified.
     """
     out = copy.deepcopy(cfg)
     token = os.environ.get("HF_TOKEN")
     if token:
         out["hf_token"] = token
+    youtube_key = os.environ.get("NEUROLENS_YOUTUBE_API_KEY")
+    if youtube_key:
+        out["youtube_api_key"] = youtube_key
     for var, section, key in (
         ("NEUROLENS_AWS_REGION", "aws", "region"),
         ("NEUROLENS_S3_BUCKET", "aws", "s3_bucket"),

@@ -23,6 +23,7 @@ from neurolens.web.app import create_app
 DEPLOYMENT_PARAMETERS = {
     "/neurolens/web/public_base_url": (None, "public_base_url"),
     "/neurolens/web/cognito_client_id": ("auth", "cognito_client_id"),
+    "/neurolens/web/youtube_api_key": (None, "youtube_api_key"),
 }
 _handler = None
 logger = logging.getLogger("neurolens")

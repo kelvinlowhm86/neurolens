@@ -74,71 +74,84 @@ link cannot be checked against its report.
 - `source` takes `'youtube_api'` (as now) or `'facebook_api'`.
 
 ## 6. Adding a curve (replaces the matching parts of M3f §5d)
+M3j §4-§6 supersedes the reward date and the form's order: the date comes from the checked publish
+date when we can check it, and the link is checked before any work. The link rules below remain.
 - `POST /api/jobs/<id>/retention` body adds `video_url` (text, required) and `same_cut` (`same`,
   `light_edit`, `recut`, required). Bad values → 400 (`invalid_video_link` with the message of §3,
   or the generic bad-field 400).
-- Order: parse the link (§3) → parse the report with that platform's parser (YouTube: unchanged;
-  Facebook: §4, given the link's id) → validate the form choices → the existing S3 writes → quality
-  flags → `billing.add_curve`. A link or report refusal stores nothing.
-- `billing.add_curve` gains `video_ref`, `same_cut`, `source` and `reward_min_days`, and in its
-  transaction, after the existing job checks and before the duplicate-curve check:
+- Order: parse the link (§3) → look the video up (M3j §4; the save does its own lookup and never
+  trusts the page) → parse the report with that platform's parser (YouTube: unchanged; Facebook:
+  §4, given the link's id) → validate the choices (`views` and `published` are required only when
+  the facts are unknown; with facts they must be absent or null) → the existing S3 writes →
+  quality flags → `billing.add_curve`, passing the facts. A link or report refusal stores nothing.
+- `POST /api/jobs/<id>/retention/check` takes `{video_url}` and returns the same job checks, the
+  same link facts, and `{platform, video_id, reward_cents, reward_from, reason, published_on}`
+  from `billing.curve_offer`, writing nothing (M3j §6). Its `VideoTaken` / `VideoLinkChanged`
+  refusals are the save's 409s.
+- `billing.add_curve` gains `video_ref`, `same_cut`, `source`, `reward_min_days`, `facts` and
+  `length_tolerance_s`, and in its transaction, after the existing job checks and before the
+  duplicate-curve check:
   - another snapshot with the same `video_ref` on a job of a different user → `VideoTaken`
     (409 `video_link_taken`, "This video is linked to another account.");
   - the job already has a snapshot with a different non-null `video_ref` → `VideoLinkChanged`
     (409 `video_link_changed`, "This analysis is already linked to another video.").
-  - The reward gets two more conditions: `now() >= jobs.created_at + reward_min_days days`, and no
-    snapshot with the same `video_ref` has `rewarded_cents > 0`.
-  - It returns also `reward_from` (UTC text, `created_at + reward_min_days`) when the only unmet
-    reward condition was the date.
-- `list_jobs` adds `curve_reward_from` (UTC text) for shared jobs whose `curve_reward_cents > 0`.
-  `curve_reward_cents` keeps meaning "what a valid curve would give", ignoring the date and the
-  link (unknown until the form). The date and the per-user conditions come from the same helper
-  `add_curve` uses, so the preview and the payment cannot drift apart.
+  - The reward rules are M3j §5: the date is `published_at + reward_min_days` when facts are
+    known, else `created_at + reward_min_days`; the length must match the analysed video within
+    `length_tolerance_s` when it can be checked; and no snapshot with the same `video_ref` has
+    `rewarded_cents > 0`. It returns `reason` (the first unmet condition) and `reward_from` only
+    with `too_early`.
+- `billing.curve_offer` shares the job checks, the link refusals and `_curve_reward` with
+  `add_curve`, so the check and the save cannot disagree.
+- `list_jobs` drops `curve_reward_from`: before a link there is no date to promise.
+  `curve_reward_cents` keeps meaning "what a valid curve would give", ignoring the date, the link
+  and the length.
 
 ## 7. Page (`static/app.html`)
-Dates are the reward date in the viewer's local time, "9 Nov" (with the year only if not this year).
+No date is promised before the form names a link (M3j §5).
 - **Upload dialog:** the per-row "Add audience retention" link, the curve held by the page and its
-  send-when-done path are removed (M3f §2a, §5d). The quiet line under the consent box: "Add its
-  YouTube or Facebook retention curve a week later and get its credit back."
-- **Entry points** (History row link, "⋯" menu, results card): when a reward is possible and the
-  date is still ahead: row link "Get X back from 9 Nov", menu "Add audience retention (get X back
-  from 9 Nov)", card "Thanks for sharing. Add its YouTube or Facebook retention curve from 9 Nov to
-  get your X of credit back.". After the date, as now ("Get X back", …), with "YouTube or Facebook"
-  in the card.
-- **Form:** after the video name, a "Video link" text field (placeholder "YouTube or Facebook
-  link"), then the file, then the choice rows: views, published, promoted (as now) and "Published
-  video" ("Same as analysed", "Lightly edited", "Re-cut"). The reward line: before the date "Add a
-  valid curve from 9 Nov and this analysis is free (X back). Curves added earlier are saved without
-  credit."; after it, as now. The guide link goes to the guide's section for the link's platform
-  once a valid link is typed, else to the top.
-- **Look:** the form stays light: the link field first; the four choice rows are compact segmented
-  one-tap rows (as the existing ones), no extra headings or help text beyond the reward line.
+  send-when-done path are removed (M3f §2a, §5d). The quiet line under the consent box is M3j §8's.
+- **Entry points** (History row link, "⋯" menu, results card): row link "Get X back", menu
+  "Add audience retention (get X back)", card "Thanks for sharing. Once it's been public a week,
+  add its retention curve: see real viewers beside the prediction and get X back."
+- **Form, step 1:** the video name and a "Video link" field only. On a valid-looking link
+  (debounced about 400 ms, and on paste) the page calls `/retention/check` and shows one line:
+  pays now, `too_early` (with the date, or "a week after your analysis" when facts are unknown),
+  `length_mismatch`, `cap_reached`, or the other-reason line (M3j §8). A refusal shows the
+  server's message and keeps step 2 hidden.
+- **Form, step 2** (after a non-refused check): the guide link for that link, one report box
+  "Paste the reply here" with a small "or choose a file" link, the promoted row and "Published
+  video" ("Same as analysed", "Lightly edited", "Re-cut"), and views and published only when the
+  facts are unknown. Save, then the saved or error message.
 - **Reward moment** (only when `rewarded_cents > 0`): a small confetti burst from the reply, about
   30 pieces in the page's own colours (heat orange `--heat` and the brain map's heat shades), over in
   about 1 s, drawn on a temporary canvas that is removed after; the reply shows a tick that draws in;
   the top bar's credit counts up from the old to the new amount over about 0.8 s with a brief
   `--heat` glow. With the system's "reduce motion" setting (`prefers-reduced-motion`), no confetti
   and no count-up: the new amount and the tick just appear. No library: a few lines of canvas code.
-- **Reply:** saved, valid, and only the date unmet: "Thanks, saved. Add a newer curve from 9 Nov
-  to get X back." The other replies are unchanged; link and report refusals show the server's
-  message.
+- **Reply:** rewarded as now; otherwise "Thanks, saved." first, then the line for its `reason`
+  (M3j §8). Quality failures keep their existing replies; link and report refusals show the
+  server's message.
 
 ## 8. Other pages
-- **Retention guide (`static/retention_guide.html`):** two sections, "YouTube" (the current steps)
-  and "Facebook" (Graph API Explorer: pick the Page under "User or Page", allow
-  `pages_read_engagement` and `read_insights`, paste `<video id>/video_insights?metric=total_video_retention_graph`,
-  Submit, save the reply as a `.json` file; the video id is the number in the video's address). Each
-  section ends with "Add it from 7 days after your analysis to get its credit back."
-- **Privacy (`static/privacy.html#research`):** what is kept adds "the video's link and whether it
-  was re-cut"; the reward rules add "added at least 7 days after the analysis" and "once per
-  published video"; curves come "from YouTube or Facebook". The test that keeps the privacy page's
-  numbers equal to `config.json` covers the 7.
+- **Retention guide (`static/retention_guide.html`):** reads `?platform=&v=&start=` from its
+  address. With YouTube values it fills the six values (startDate = the day before `start`, endDate
+  = today in the viewer's time zone, filters `video==<v>`), each with a Copy button; with Facebook
+  it fills the query with the id and a Copy button. Without values, as now. The steps say to paste
+  the reply into NeuroLens (no saving a file), and both sections end "Add it once the video has
+  been public a week to get its credit back."
+- **Privacy (`static/privacy.html#sharing`, with the old `#research` anchor still landing there):**
+  the section is "Sharing a video". Its purpose is to help improve NeuroLens by building and
+  testing its own engagement models, which may later be a paid product (notice first); the course
+  study and its copy are removed. What is kept adds the checked publish date, length and view
+  count. Reward rules: "public at least 7 days (7 days after the analysis when we can't check the
+  publish date)" and "the same length as the analysed video, give or take 2 seconds, when we can
+  check it". The test that keeps these numbers equal to `config.json` covers 7 and 2.
 - **Landing (`static/index.html`), Early access:** Invited: "5 minutes of free analysis for invited
-  creators, marketers, teachers and researchers."; Free: "Share a video for research, add its
-  YouTube or Facebook retention curve a week later, and get its credit back." A test keeps "5
-  minutes" equal to `billing.invite_cents` at the current price.
-- **Consent:** the wording shown changes, so `billing.CONSENT_VERSION` becomes `"2026-11-02"` with the
-  page's text (M3f §5a rule).
+  creators, marketers, teachers and researchers."; Shared: "Share a video, add its retention curve
+  once it's been public a week, and get its credit back." A test keeps "5 minutes" equal to
+  `billing.invite_cents` at the current price.
+- **Consent:** the wording shown changes, so `billing.CONSENT_VERSION` becomes `"2026-11-03"` with
+  the page's text (M3f §5a rule).
 
 ## 9. Invite credit (`infra/grant_credit.py`)
 The amount becomes optional: with none, it grants `billing.invite_cents` from `config.json` and the
@@ -190,5 +203,6 @@ Full treatment (money). Behaviour, not call details.
   limit reuse but cannot prove the report belongs to it.
 - Two accounts adding the same link at the same instant could both pass the other-account check
   (no lock across jobs). Needs two colluding accounts; the reward caps bound the cost.
-- The 7 days run from the analysis, not from publishing; a video published late gets a younger
-  curve. The "published" answer records this.
+- Facebook has no publish date or length, and a YouTube lookup that fails falls back to the
+  analysis date; the 7 days then run from the analysis (M3j §12). A checked YouTube video waits
+  from its publish date and must match the analysed length within 2 s.

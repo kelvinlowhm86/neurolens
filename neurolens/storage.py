@@ -189,33 +189,19 @@ def get_frames(s3, bucket, job_id):
     return frames, words
 
 
-def put_dataset(s3, bucket, job_id, upload_key, result, brain):
-    """Keep a consented job's video under dataset/<job_id>/ and our output under academic/.
+def put_dataset(s3, bucket, job_id, upload_key):
+    """Keep a consented job's video under dataset/<job_id>/ and nothing else (M3j §9b).
 
-    The video is copied from the upload key, keeping its extension (M3f §5b). The result and
-    brain are written under academic/<job_id>/, never under dataset/ (training reads only dataset/).
-    The result is serialised first, so a NaN or infinity raises ValueError before either write.
-    All writes replace earlier copies: a redelivered job writes the same content. Any S3 error is
-    raised to the worker's failure path.
+    The video is copied from the upload key, keeping its extension (M3f §5b). NeuroLens's own
+    result and brain stay under results/; the course-study copy under academic/ is no longer
+    written. A redelivered job replaces the same copy. Any S3 error is raised to the worker's
+    failure path.
     """
-    body = json.dumps(result, allow_nan=False).encode()
     ext = PurePosixPath(upload_key).suffix
     s3.copy_object(
         Bucket=bucket,
         CopySource={"Bucket": bucket, "Key": upload_key},
         Key=f"dataset/{job_id}/video{ext}",
-    )
-    s3.put_object(
-        Bucket=bucket,
-        Key=f"academic/{job_id}/result.json",
-        Body=body,
-        ContentType="application/json",
-    )
-    s3.put_object(
-        Bucket=bucket,
-        Key=f"academic/{job_id}/brain",
-        Body=brain,
-        ContentType="application/octet-stream",
     )
 
 
@@ -261,9 +247,9 @@ def object_exists(s3, bucket, key):
 def job_keys(job_id, object_key):
     """The job's own S3 keys: the upload, its result, brain, thumbnail, frames and phone copy.
 
-    The research copy is not a fixed list any more (M3f §5b): dataset/<job_id>/ also holds
-    retention snapshots, and our output lives under academic/<job_id>/. Both prefixes are removed
-    by `delete_job_prefixes`.
+    The shared copy is not a fixed list any more (M3f §5b): dataset/<job_id>/ also holds retention
+    snapshots. Old course-study copies under academic/<job_id>/ are still removed by
+    `delete_job_prefixes` until the M3j §9b purge.
     """
     job_id = str(job_id)
     return [
@@ -298,6 +284,7 @@ def delete_job_prefixes(s3, bucket, job_id):
     job_id = str(uuid.UUID(text))
     if job_id != text:
         raise ValueError(f"not a canonical UUID: {text!r}")
+    # academic/ is still purged until M3j §9b has removed the old course-study copies.
     for prefix in (f"dataset/{job_id}/", f"academic/{job_id}/"):
         pages = s3.get_paginator("list_objects_v2").paginate(Bucket=bucket, Prefix=prefix)
         for page in pages:

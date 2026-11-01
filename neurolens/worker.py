@@ -380,7 +380,7 @@ def _analyse(
         result = extract_response(preds_full, preds_noaudio, roi_masks)
         # Cast and check before any write: an overflowing or non-finite value must fail the job
         # before the dataset copy or the result exists (M3d §5).
-        brain = storage.brain_bytes(preds_full)
+        storage.brain_bytes(preds_full)
 
         # Frames are for the optional report: cutting or storing them never fails the paid job.
         try:
@@ -407,7 +407,7 @@ def _analyse(
             stage("saving_dataset")
             # Recorded before the copy, so a copy that fails still leaves the hash (M3f §5b).
             billing.record_video_hash(db, job_id, _sha256_file(video_path))
-            storage.put_dataset(s3, bucket, job_id, object_key, result, brain=brain)
+            storage.put_dataset(s3, bucket, job_id, object_key)
 
         # The phone copy is only for playback, so it never fails the paid job. Waited for before
         # the stage, so the claim is checked again after a long wait and before any result write.

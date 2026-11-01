@@ -80,9 +80,12 @@ Explorer (not confirmed to work).
 ## 6. Routes
 - `POST /api/jobs/<id>/retention/check`, body `{video_url}`: the same job checks as the save
   (404/409), the link (§3 of M3i), the facts (§4), then `curve_offer`. 200 `{platform, video_id,
-  reward_cents, reward_from, reason, published_on}`: `reward_cents` is what this curve would give
-  now or from `reward_from` (0 when it cannot); `published_on` is the publish date's UTC day as
-  `YYYY-MM-DD` (YouTube with facts only, else null). `VideoTaken`/`VideoLinkChanged` → 409 as on
+  reward_cents, reward_from, reason, published_on, video_seconds, analysed_seconds}`:
+  `reward_cents` is what this curve would give now or from `reward_from` (0 when it cannot);
+  `published_on` is the publish date's UTC day as `YYYY-MM-DD` and `video_seconds` the YouTube
+  length (both with facts only, else null); `analysed_seconds` is the server-measured length of
+  the analysed video, for the `length_mismatch` line. The length rule uses only the
+  server-measured length, never the page's. `VideoTaken`/`VideoLinkChanged` → 409 as on
   save. Nothing is written.
 - `POST /api/jobs/<id>/retention`: after the link, the facts (§4) (a second lookup: the server
   never trusts the page's). `views` and `published` are required only when the facts are unknown;

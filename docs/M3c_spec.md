@@ -11,12 +11,12 @@
 - **Free allowance, granted only.** New accounts start at 0. `infra/grant_credit.py` adds credit for course members (M3b §7a; the amount is typed in dollars). This means a stranger who signs in with Google cannot spend GPU money.
 - **Stripe removed from the service.** Before the removal, the last commit with Stripe (the custom GPU workers, after one real GPU job) is tagged `custom-gpu-stripe`. The report cites the tag as the working prototype of the future paid phase. No code is kept behind a switch.
 - **Consent is opt-in, per upload.** The box is unticked by default, and analysis works the same either way. Only consented videos are kept beyond the normal 30 days.
-- **Retention: up to 3 years (1095 days)** for a shared video and its course-study output, enforced by S3 lifecycle rules on `dataset/` and `academic/`; a shared video with no retention curve is purged 90 days after upload. Other uploads and results expire after 30 days. Teardown after the course deletes everything earlier.
+- **Retention: up to 3 years (1095 days)** for a shared video (and, until M3j §9b purges them, its old course-study output), enforced by S3 lifecycle rules on `dataset/` and `academic/`; a shared video with no retention curve is purged 90 days after upload. Other uploads and results expire after 30 days. Teardown after the course deletes everything earlier.
 - **Deletion:** per video, and the whole account. Both are refused while one of the user's jobs is queued or processing. A waiting job can be cancelled first (M3d §7). That is the only state in which the worker or reaper may still write to the job.
 
 ## 1. Scope
 ### In scope
-Migration 003; consent at upload; the research copy in the worker (the video under `dataset/`, our output under `academic/`); the retention-curve upload; per-video and account deletion; Stripe removal (code, tests, Terraform, SSM parameters, page, privacy page, specs); the research lifecycle rules; the guide `static/retention_guide.html`.
+Migration 003; consent at upload; the shared copy in the worker (the video under `dataset/`; our own output stays under `results/`, and the old course-study copy under `academic/` is removed in M3j §9b); the retention-curve upload; per-video and account deletion; Stripe removal (code, tests, Terraform, SSM parameters, page, privacy page, specs); the shared lifecycle rules; the guide `static/retention_guide.html`.
 
 ### Out of scope
 - Drawing the real curve next to the predicted one (a possible later addition).
@@ -33,17 +33,17 @@ Migration 003; consent at upload; the research copy in the worker (the video und
 ## 3. Consent and the research copy
 ### 3a. Upload
 - `POST /api/uploads/presign` takes an optional `research_consent`, which must be JSON `true` or `false`. Missing means `false`; any other value → 400 `invalid_request`. A true consent must carry the current `consent_version` (M3f §5a), else 409 `consent_outdated` and nothing is reserved. It is stored on the job by `billing.reserve(..., research_consent)`.
-- The page shows one consent box per batch in the upload dialog (M3f §2a), unticked and never required: "Share for research and to train NeuroLens's own models ([details](/static/privacy.html#research)). I own the rights to it." The box links to the privacy page; that section gives the model-training purpose and disclosures.
+- The page shows one consent box per batch in the upload dialog (M3f §2a), unticked and never required: "Share to help improve NeuroLens ([details](/static/privacy.html#sharing)). I own the rights to it." (M3j §8). The box links to the privacy page; that section gives the purpose and disclosures.
 
 ### 3b. Worker
 - **When:** after the analysis and before `put_result`, if the job has `research_consent`.
 - **Claim check first:** the worker calls `set_stage(..., "saving_dataset")`. If the claim is lost (the reaper refunded a stalled job, or it settled elsewhere), it raises `_ClaimLost` and writes nothing. A late worker therefore cannot leave research files behind for a job that has been refunded and deleted. A window of a few seconds between this check and the writes remains; that is a known limitation.
 - **Result check:** before `put_result`, every job calls `set_stage(..., "saving_result")`; a job that lost its claim writes no result (a consented job checks twice).
-- **Writes**, through one helper, `storage.put_dataset(s3, bucket, job_id, upload_key, result, brain)`:
+- **Write**, through one helper, `storage.put_dataset(s3, bucket, job_id, upload_key)`:
   - `copy_object` from the upload key to `dataset/<job_id>/video<ext>`, where `<ext>` is `PurePosixPath(upload_key).suffix`. A single copy works up to 5 GB and uploads are capped at 300 MB. No local file is needed.
-  - The result to `academic/<job_id>/result.json`, serialised with `allow_nan=False`, and the brain file to `academic/<job_id>/brain`; our output never goes under `dataset/`, which is the only place training reads (M3f §5b).
+  - No `academic/` copy is written any more (M3j §9b); NeuroLens's own result and brain stay under `results/`. Old course-study copies are removed by `infra/purge_academic.py`.
   - The video's SHA-256 is recorded with `billing.record_video_hash` before the copy.
-  - All writes may replace earlier copies, because a redelivered job writes the same content.
+  - A redelivered job replaces the same copy.
 - **Failure:** a research-copy write failure enters the worker's pre-publication failure path: refund only while it still owns the claim, then delete the research prefixes and the job's own files if the refund succeeded. Failed deletes are logged for retry by the reaper. A consented job is never marked done without its research copy.
 - **Data:** `billing.job_state` returns `research_consent`.
 
@@ -119,10 +119,10 @@ Marking first means no curve can be added while the purge runs. A failed purge l
 - `static/privacy.html`: remove Stripe, and add consent, the dataset, research retention (up to 3 years, or 90 days without a curve) and the delete options. It says uploads that are not kept for research are deleted after 30 days, and at once when the job is cancelled or refunded.
 
 ## 7. Permissions and storage (Terraform)
-- **Lifecycle rules:** `dataset/` and `academic/`, 1095 days each. Each file expires 3 years after it was stored; the reaper's 90-day no-curve purge is separate (M3f §5c).
-- **Worker role:** `s3:PutObject` on `dataset/*` and `academic/*`. The copy is a `copy_object`, which reads the upload with the `s3:GetObject` the worker already has (last bullet).
+- **Lifecycle rules:** `dataset/` and `academic/`, 1095 days each. Each file expires 3 years after it was stored; the reaper's 90-day no-curve purge is separate (M3f §5c). `academic/` leaves this rule in the Terraform apply after its old copies are purged (M3j §9b).
+- **Worker role:** `s3:PutObject` on `dataset/*` and `academic/*`. The copy is a `copy_object`, which reads the upload with the `s3:GetObject` the worker already has (last bullet). The `academic/*` grant goes with the same purge (M3j §9b).
 - **Web role:**
-  - `s3:DeleteObject` on `uploads/*`, `results/*`, `dataset/*` and `academic/*`;
+  - `s3:DeleteObject` on `uploads/*`, `results/*`, `dataset/*` and `academic/*` (the last until the M3j §9b purge);
   - `s3:PutObject` on `dataset/*/retention/*` (the raw report and parsed CSV of each snapshot);
   - `cognito-idp:ListUsers` and `cognito-idp:AdminDeleteUser` on our pool only.
 - **Role boundary:** `infra/iam/neurolens-role-boundary.json` gains a statement allowing those two actions on our user pool in us-east-1. The boundary caps every role, so without this the web role's grant would be denied. Josh applies the boundary change (a paste, like earlier IAM policy edits).
@@ -157,7 +157,7 @@ Marking first means no curve can be added while the purge runs. A failed purge l
 
 ## 9. Acceptance criteria
 1. Full suite passes with PostgreSQL. `ruff` is clean. `git grep -i stripe` finds only specs, git history notes and the ledger kind `test_topup`.
-2. Live: a consented fake job leaves `dataset/<job_id>/video…` and `academic/<job_id>/result.json` and `brain`; an unconsented one leaves nothing under `dataset/` or `academic/`.
+2. Live: a consented fake job leaves `dataset/<job_id>/video…` and nothing under `academic/` (M3j §9b); an unconsented one leaves nothing under `dataset/` or `academic/`.
 3. Live: a valid YouTube Analytics report is stored as a raw JSON snapshot and its two-column CSV under `dataset/<job_id>/retention/`; a broken one is refused with its row number.
 4. Live: per-video delete removes every file, and the job leaves the history.
 5. Live: deleting a test account removes its rows and its Cognito login, and signing in again gives a new empty account.

@@ -211,6 +211,10 @@
   .curve-file:empty { display: none; }
   .curve-link { width: 100%; margin-top: 10px; border: 1px solid var(--line); border-radius: var(--radius); padding: 8px 10px; font-size: 12.5px; background: var(--well); color: var(--ink); }
   .curve-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .curve-report { width: 100%; min-height: 110px; margin-top: 10px; border: 1px solid var(--line); border-radius: var(--radius); padding: 8px 10px; font: 12.5px/1.5 var(--mono); background: var(--well); color: var(--ink); resize: vertical; }
+  .curve-report:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .curve-file-row { margin-top: 6px; font-size: 12px; color: var(--muted); }
+  .curve-file-row a { color: var(--accent); }
   .reward-tick { display: inline-block; width: 15px; height: 15px; margin-left: 6px; vertical-align: -2px; color: var(--accent); }
   .reward-tick path { stroke-dasharray: 20; stroke-dashoffset: 20; animation: tick-in .35s var(--ease-out) forwards; }
   @keyframes tick-in { to { stroke-dashoffset: 0; } }
@@ -858,8 +862,8 @@
     <div class="consent-row">
       <input type="checkbox" id="consentBox">
       <div class="consent-copy">
-        <label for="consentBox">Share for research and to train NeuroLens's own models (<a href="/static/privacy.html#research" target="_blank" rel="noopener">details</a>). I own the rights to it.</label>
-        <p class="consent-note">Add its YouTube or Facebook retention curve a week later and get its credit back.</p>
+        <label for="consentBox">Share to help improve NeuroLens (<a href="/static/privacy.html#sharing" target="_blank" rel="noopener">details</a>). I own the rights to it.</label>
+        <p class="consent-note">Add its retention curve once it's been public a week: see real viewers beside the prediction, and get its credit back.</p>
       </div>
     </div>
     <div class="actions">
@@ -871,7 +875,7 @@
 
 <dialog class="modal" id="stopShareDialog" aria-labelledby="stopShareTitle">
   <h2 id="stopShareTitle">Stop sharing</h2>
-  <p>Stop sharing this video? Its research copy is deleted now.</p>
+  <p>Stop sharing this video? Its shared copy is deleted now.</p>
   <div class="actions">
     <button class="btn-danger" id="stopShareBtn">Stop sharing</button>
     <button class="btn-ghost" id="stopShareCancel">Cancel</button>
@@ -884,16 +888,16 @@
   <p id="curveVideo"></p>
   <p id="curveSampleNote" hidden>Sample: nothing is sent.</p>
   <input class="curve-link" id="curveLink" type="text" placeholder="YouTube or Facebook link" autocomplete="url" aria-label="Video link">
-  <div class="actions" style="margin-top:12px">
-    <button class="btn-ghost" id="curvePick">Choose file</button>
-    <span class="curve-file" id="curveFileName"></span>
-  </div>
-  <p>Choose the video's audience-retention report (the .json file from YouTube or Facebook). <a id="curveGuide" href="/static/retention_guide.html" target="_blank" rel="noopener">How to get the report</a></p>
   <p class="reward-note" id="curveReward"></p>
-  <div class="choice-row"><span>Views</span><div class="choices" id="curveViews"></div></div>
-  <div class="choice-row"><span>Published</span><div class="choices" id="curvePublished"></div></div>
-  <div class="choice-row"><span>Promoted with ads</span><div class="choices" id="curvePromoted"></div></div>
-  <div class="choice-row"><span>Published video</span><div class="choices" id="curveSameCut"></div></div>
+  <div id="curveStep2" hidden>
+    <p>Choose the video's audience-retention report (the .json file from YouTube or Facebook). <a id="curveGuide" href="/static/retention_guide.html" target="_blank" rel="noopener">How to get the report</a></p>
+    <textarea class="curve-report" id="curveReport" placeholder="Paste the reply here" aria-label="Paste the reply here"></textarea>
+    <p class="curve-file-row"><a href="#" id="curvePickLink">or choose a file</a> <span class="curve-file" id="curveFileName"></span></p>
+    <div class="choice-row"><span>Promoted with ads</span><div class="choices" id="curvePromoted"></div></div>
+    <div class="choice-row"><span>Published video</span><div class="choices" id="curveSameCut"></div></div>
+    <div class="choice-row" id="curveViewsRow"><span>Views</span><div class="choices" id="curveViews"></div></div>
+    <div class="choice-row" id="curvePublishedRow"><span>Published</span><div class="choices" id="curvePublished"></div></div>
+  </div>
   <p id="curveMsg"></p>
   <div class="actions">
     <button class="btn-white" id="curveSave" disabled>Save</button>
@@ -907,7 +911,7 @@
 const $ = id => document.getElementById(id);
 const video = $('videoPlayer');
 const BRAIN_UNAVAILABLE = 'The 3D view is not available for this video.';
-const VIDEO_DELETED = 'This video is no longer available to play. Original uploads are removed after 30 days. See the privacy policy for how long shared research copies are kept.';
+const VIDEO_DELETED = 'This video is no longer available to play. Original uploads are removed after 30 days. See the privacy policy for how long shared copies are kept.';
 const VIDEO_UNPLAYABLE = "This video can't be played here.";
 const GROUPS = {
   see: { label: 'Seeing', signals: ['faces', 'bodies', 'scenes', 'visual'] },
@@ -2250,7 +2254,7 @@ const UPLOAD_STALL_MS = 60000;
 
 // The version of the consent wording shown in the upload dialog; the server records it per job and
 // refuses an outdated one (M3f §5a). Change it together with the wording and billing.CONSENT_VERSION.
-const CONSENT_VERSION = '2026-11-02';
+const CONSENT_VERSION = '2026-11-03';
 
 async function uploadEntry(entry) {
   const item = entry.item;
@@ -2500,7 +2504,7 @@ const WORK_STAGE_LABELS = {
   inference_full: 'Predicting with sound',
   inference_noaudio: 'Predicting on mute',
   extracting_roi: 'Reading brain areas',
-  saving_dataset: 'Saving the research copy',
+  saving_dataset: 'Saving the shared copy',
   saving_result: 'Saving the result',
 };
 const WORK_STAGE_ORDER = Object.keys(WORK_STAGE_LABELS);
@@ -3310,12 +3314,6 @@ function rewardDateText(value) {
     : { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
-function futureRewardDate(job) {
-  if (!((job.curve_reward_cents || 0) > 0) || !job.curve_reward_from) return null;
-  const date = new Date(job.curve_reward_from);
-  return Number.isFinite(date.getTime()) && date.getTime() > Date.now() ? date : null;
-}
-
 let resultCurve = null;
 function showRetention(jobId, title) {
   let cached = null;
@@ -3328,12 +3326,11 @@ function showRetention(jobId, title) {
   }
   $('retentionCard').hidden = !resultCurve;
   if (resultCurve) {
-    const target = jobCurveTarget(cached);
-    const reward = target.rewardCents > 0 ? creditWords(target.rewardCents) : null;
-    const date = futureRewardDate(target.job);
+    const reward = cached && (cached.curve_reward_cents || 0) > 0
+      ? creditWords(cached.curve_reward_cents) : null;
     $('retentionCardText').textContent = reward
-      ? `Thanks for sharing. Add its YouTube or Facebook retention curve${date ? ` from ${rewardDateText(date)}` : ''} to get your ${reward} of credit back.`
-      : 'Thanks for sharing.';
+      ? `Thanks for sharing. Once it's been public a week, add its retention curve: see real viewers beside the prediction and get ${reward} back.`
+      : "Thanks for sharing. Once it's been public a week, add its retention curve: see real viewers beside the prediction.";
   }
 }
 function showSampleRetention(ctx) {
@@ -3353,14 +3350,11 @@ $('retentionCardBtn').addEventListener('click', () => {
   openCurve(jobCurveTarget(cached || { job_id: resultCurve.jobId, filename: resultCurve.title }));
 });
 
-// Name the refund where people decide to click; the plain name when none is due, and the
-// date while adding now would be too early.
+// Name the refund where people decide to click; no date is promised before the form names a link.
 function retentionLabel(job, inMenu) {
   const reward = (job.curve_reward_cents || 0) > 0 ? creditWords(job.curve_reward_cents) : null;
   if (!reward) return 'Add audience retention';
-  const date = futureRewardDate(job);
-  const from = date ? ` from ${rewardDateText(date)}` : '';
-  return inMenu ? `Add audience retention (get ${reward} back${from})` : `Get ${reward} back${from}`;
+  return inMenu ? `Add audience retention (get ${reward} back)` : `Get ${reward} back`;
 }
 
 function jobCurveTarget(job) {
@@ -3369,8 +3363,6 @@ function jobCurveTarget(job) {
     job,
     jobId: job.job_id,
     title: job.filename || `Job ${job.job_id.slice(0, 8)}`,
-    rewardCents: job.curve_reward_cents || 0,
-    rewardFrom: job.curve_reward_from || null,
   };
 }
 
@@ -3402,7 +3394,8 @@ function choiceGroup(host, name, options) {
   });
 }
 
-let curveTarget = null, curveFile = null, curvePreview = false;
+let curveTarget = null, curvePreview = false;
+let curveCheck = null, curveCheckTimer = null, curveCheckSeq = 0;
 
 function curveList(items) {
   if (items.length <= 1) return items[0] || '';
@@ -3441,7 +3434,7 @@ function curveReportError(status, data) {
   } else if (lower.includes('at least 2 rows')) {
     explanation = 'This report does not have enough viewing data yet. Check the video ID and date range using the guide. If they are correct, try again later; YouTube may need more viewing data.';
   } else if (lower.includes('valid json')) {
-    explanation = "This file isn't valid JSON. Copy the whole YouTube response, including the opening { and closing }, into a plain-text editor and save it as a .json file, then choose that file.";
+    explanation = "This file isn't valid JSON. Copy the whole YouTube response, including the opening { and closing }.";
   } else if (lower.includes(' column')) {
     const missing = detail.match(/has no (.+?) column/i);
     const name = missing ? ` the ${missing[1]}` : ' a';
@@ -3461,7 +3454,36 @@ function curveReportError(status, data) {
   return { message: explanation, guide: true };
 }
 
-function curveResultMessage(data, rewardCents = 0) {
+function curveBackText(rewardCents) {
+  const amount = creditWords(rewardCents);
+  return amount ? `get ${amount} back` : 'get its credit back';
+}
+
+function curveCheckLine(data) {
+  if (data.reason === null || data.reason === undefined) {
+    const amount = creditWords(data.reward_cents || 0);
+    return `Add its curve now and this analysis is free (${amount || 'its credit'} back).`;
+  }
+  if (data.reason === 'too_early') {
+    const from = data.reward_from ? rewardDateText(new Date(data.reward_from)) : null;
+    const when = data.published_on ? 'it went public' : 'your analysis';
+    const lead = from ? `Add its curve from ${from} (a week after ${when})`
+      : `Add its curve a week after ${when}`;
+    return `${lead} and ${curveBackText(data.reward_cents)}. Curves added earlier are saved without credit.`;
+  }
+  if (data.reason === 'length_mismatch') {
+    const lengths = data.video_seconds != null && data.analysed_seconds != null
+      ? `This video is ${data.video_seconds} s; the one you analysed is ${data.analysed_seconds} s.`
+      : "This video's length differs from the one you analysed.";
+    return `${lengths} Its curve is welcome, but only the analysed video's curve gets credit back.`;
+  }
+  if (data.reason === 'cap_reached') {
+    return "You've had 5 rewards in the last 30 days. Its curve is still welcome.";
+  }
+  return "Its curve is welcome; this one won't get credit back.";
+}
+
+function curveResultMessage(data, rewardCents = 0, checked = {}) {
   const rewarded = data.rewarded_cents || 0;
   if (rewarded > 0) {
     return {
@@ -3475,14 +3497,10 @@ function curveResultMessage(data, rewardCents = 0) {
   if (Array.isArray(data.quality) && data.quality.length) {
     return { message: curveQualityMessage(data.quality), guide: false };
   }
-  if (data.reward_from) {
-    const amount = creditWords(rewardCents);
-    return {
-      message: `Thanks, saved. Add a newer curve from ${rewardDateText(data.reward_from)} to get ${amount || 'its credit'} back.`,
-      guide: false,
-    };
-  }
-  return { message: 'Thanks, saved.', guide: false };
+  return {
+    message: `Thanks, saved. ${curveCheckLine({ ...checked, ...data, reward_cents: rewardCents })}`,
+    guide: false,
+  };
 }
 
 function setCurveMsg(text, isError, withGuideLink) {
@@ -3525,9 +3543,23 @@ function videoLinkPlatform(text) {
   return null;
 }
 
+function curveGuideHref(platform, videoId, start) {
+  if (!platform) return '/static/retention_guide.html';
+  const params = new URLSearchParams({ platform });
+  if (videoId) params.set('v', videoId);
+  if (start) params.set('start', start);
+  return `/static/retention_guide.html?${params.toString()}`;
+}
+
 function updateCurveGuide() {
   const platform = videoLinkPlatform($('curveLink').value);
-  $('curveGuide').href = `/static/retention_guide.html${platform ? `#${platform}` : ''}`;
+  const current = curveCheck && curveCheck.link === $('curveLink').value.trim()
+    ? curveCheck.data : null;
+  $('curveGuide').href = curveGuideHref(
+    platform,
+    current && current.video_id,
+    current && current.published_on,
+  );
 }
 
 function rewardTick() {
@@ -3589,30 +3621,75 @@ function celebrate(anchor) {
   requestAnimationFrame(frame);
 }
 
+function clearCurveCheck() {
+  curveCheck = null;
+  curveCheckSeq += 1;
+  $('curveStep2').hidden = true;
+  $('curveReward').textContent = '';
+  $('curveSave').disabled = true;
+}
+
+async function runCurveCheck() {
+  if (!curveTarget || curveTarget.kind !== 'job' || curvePreview) return;
+  const link = $('curveLink').value.trim();
+  if (!videoLinkPlatform(link)) return;
+  const seq = ++curveCheckSeq;
+  $('curveReward').textContent = 'Checking the link…';
+  $('curveStep2').hidden = true;
+  $('curveSave').disabled = true;
+  try {
+    const res = await postJSON(`/api/jobs/${curveTarget.jobId}/retention/check`, { video_url: link });
+    const data = await res.json().catch(() => ({}));
+    if (seq !== curveCheckSeq) return;
+    if (res.status === 401) return window.location.reload();
+    if (!res.ok) {
+      $('curveReward').textContent = '';
+      return setCurveMsg(data.message || "We couldn't check this link.", true);
+    }
+    curveCheck = { link, data };
+    $('curveReward').textContent = curveCheckLine(data);
+    $('curveStep2').hidden = false;
+    const factsKnown = !!data.published_on;
+    $('curveViewsRow').hidden = factsKnown;
+    $('curvePublishedRow').hidden = factsKnown;
+    if (factsKnown) {
+      ['curveViews', 'curvePublished'].forEach(id => {
+        $(id).querySelectorAll('input').forEach(input => { input.checked = false; });
+      });
+    }
+    setCurveMsg('');
+    updateCurveGuide();
+    updateCurveSave();
+  } catch (e) {
+    if (seq !== curveCheckSeq) return;
+    $('curveReward').textContent = '';
+    setCurveMsg("Couldn't reach the server. Please try again.", true);
+  }
+}
+
+function scheduleCurveCheck() {
+  clearTimeout(curveCheckTimer);
+  clearCurveCheck();
+  setCurveMsg('');
+  updateCurveGuide();
+  if (!videoLinkPlatform($('curveLink').value)) return;
+  curveCheckTimer = setTimeout(runCurveCheck, 400);
+}
+
 function openCurve(target) {
   curveTarget = target;
-  curveFile = null;
   curvePreview = target.kind === 'sample';
-  $('curvePick').disabled = curvePreview;
+  clearTimeout(curveCheckTimer);
+  clearCurveCheck();
   $('curveInput').disabled = curvePreview;
   $('curveSampleNote').hidden = !curvePreview;
   $('curveVideo').textContent = target.title;
   $('curveFileName').textContent = '';
+  $('curveReport').value = '';
   $('curveLink').value = '';
   $('curveLink').disabled = curvePreview;
   $('curveLink').hidden = curvePreview;
-  updateCurveGuide();
-  const reward = $('curveReward');
-  reward.textContent = '';
-  if (target.kind === 'job' && target.rewardCents > 0 && creditWords(target.rewardCents)) {
-    const date = target.rewardFrom ? new Date(target.rewardFrom) : null;
-    const ahead = date && Number.isFinite(date.getTime()) && date.getTime() > Date.now();
-    const amount = document.createElement('span');
-    amount.className = 'reward-amount';
-    amount.textContent = creditWords(target.rewardCents);
-    reward.append(`Add a valid curve${ahead ? ` from ${rewardDateText(date)}` : ''} and this analysis is free (`, amount, ' back).');
-    if (ahead) reward.append(' Curves added earlier are saved without credit.');
-  }
+  $('curveStep2').hidden = !curvePreview;
   setCurveMsg('');
   $('curveSave').hidden = false;
   $('curveSave').disabled = true;
@@ -3620,6 +3697,7 @@ function openCurve(target) {
   ['curveViews', 'curvePublished', 'curvePromoted', 'curveSameCut'].forEach(id => {
     $(id).querySelectorAll('input').forEach(input => { input.checked = false; });
   });
+  updateCurveGuide();
   if (!curveDialog.open) curveDialog.showModal();
 }
 
@@ -3629,25 +3707,40 @@ function curveChoice(name) {
 }
 
 function updateCurveSave() {
-  const linkOk = videoLinkPlatform($('curveLink').value) != null;
-  $('curveSave').disabled = curvePreview || !(linkOk && curveFile && curveChoice('curveViews') && curveChoice('curvePublished') && curveChoice('curvePromoted') && curveChoice('curveSameCut'));
+  if (curvePreview) {
+    $('curveSave').disabled = true;
+    return;
+  }
+  const factsKnown = !!(curveCheck && curveCheck.data.published_on);
+  const answers = curveChoice('curvePromoted') && curveChoice('curveSameCut')
+    && (factsKnown || (curveChoice('curveViews') && curveChoice('curvePublished')));
+  $('curveSave').disabled = !(curveCheck && $('curveReport').value.trim() && answers);
 }
 
-$('curveLink').addEventListener('input', () => {
+$('curveLink').addEventListener('input', scheduleCurveCheck);
+$('curveLink').addEventListener('paste', () => {
+  clearTimeout(curveCheckTimer);
+  clearCurveCheck();
   updateCurveGuide();
-  updateCurveSave();
+  curveCheckTimer = setTimeout(runCurveCheck, 0);
 });
-$('curvePick').addEventListener('click', () => $('curveInput').click());
-$('curveInput').addEventListener('change', ev => {
-  curveFile = ev.target.files[0] || null;
+$('curveReport').addEventListener('input', updateCurveSave);
+$('curvePickLink').addEventListener('click', e => {
+  e.preventDefault();
+  $('curveInput').click();
+});
+$('curveInput').addEventListener('change', async ev => {
+  const file = ev.target.files[0] || null;
   ev.target.value = '';
-  $('curveFileName').textContent = curveFile ? curveFile.name : '';
+  if (!file) return;
+  $('curveFileName').textContent = file.name;
+  $('curveReport').value = await file.text();
   updateCurveSave();
 });
 $('curveClose').addEventListener('click', () => curveDialog.close());
 curveDialog.addEventListener('close', () => {
+  clearTimeout(curveCheckTimer);
   curvePreview = false;
-  $('curvePick').disabled = false;
   $('curveInput').disabled = false;
   $('curveLink').disabled = false;
   $('curveLink').hidden = false;
@@ -3662,18 +3755,20 @@ function curveSaved() {
 }
 
 $('curveSave').addEventListener('click', async () => {
-  if (!curveTarget || $('curveSave').disabled || curveTarget.kind === 'sample') return;
+  if (!curveTarget || $('curveSave').disabled || curveTarget.kind === 'sample' || !curveCheck) return;
   const target = curveTarget;
   const beforeCents = me && me.balance ? me.balance.available_cents : 0;
-  const report = curveFile ? await curveFile.text() : '';
+  const factsKnown = !!curveCheck.data.published_on;
   const body = {
-    report,
+    report: $('curveReport').value,
     video_url: $('curveLink').value.trim(),
     same_cut: curveChoice('curveSameCut'),
-    views: curveChoice('curveViews'),
-    published: curveChoice('curvePublished'),
     promoted: curveChoice('curvePromoted') === 'yes',
   };
+  if (!factsKnown) {
+    body.views = curveChoice('curveViews');
+    body.published = curveChoice('curvePublished');
+  }
   setCurveMsg('Saving…');
   $('curveSave').disabled = true;
   try {
@@ -3690,7 +3785,8 @@ $('curveSave').addEventListener('click', async () => {
       $('curveSave').disabled = false;
       return setCurveMsg(message, true);
     }
-    const outcome = curveResultMessage(data, target.rewardCents || 0);
+    const outcome = curveResultMessage(
+      data, curveCheck.data.reward_cents || 0, curveCheck.data);
     setCurveMsg(outcome.message, false, outcome.guide);
     if (outcome.rewarded) {
       $('curveMsg').append(rewardTick());

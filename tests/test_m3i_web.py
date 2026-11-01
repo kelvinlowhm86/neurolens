@@ -403,7 +403,7 @@ def test_the_landing_page_offers_five_minutes_from_the_configured_credit():
         "5 minutes of free analysis for invited creators, marketers, teachers and researchers."
         in text
     )
-    assert "YouTube or Facebook retention curve a week later" in text
+    assert "add its retention curve once it's been public a week" in text
 
 
 def _section_text(html, anchor):
@@ -420,9 +420,9 @@ def test_the_privacy_page_states_the_configured_seven_day_rule():
     assert days == REWARD_MIN_DAYS
 
     html = (REPO_ROOT / "static" / "privacy.html").read_text()
-    text = _section_text(html, "research")
+    text = _section_text(html, "sharing")
 
-    assert f"at least {days} days after the analysis" in text
+    assert f"public at least {days} days" in text
     assert "YouTube or Facebook" in text
 
 

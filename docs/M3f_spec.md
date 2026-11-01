@@ -152,43 +152,47 @@ place in line among other users, waking the database from the landing page.
 ## 5. Research sharing
 ### 5a. Consent
 - One box per batch, unticked, never required:
-  "Share for research and to train NeuroLens's own models ([details](/static/privacy.html#research)).
-  I own the rights to it." Under it, aligned with the label, a quiet line: "Add its YouTube or
-  Facebook retention curve a week later and get its credit back."
+  "Share to help improve NeuroLens ([details](/static/privacy.html#sharing)). I own the rights to
+  it." Under it, aligned with the label, a quiet line: "Add its retention curve once it's been
+  public a week: see real viewers beside the prediction, and get its credit back." (M3j §8).
 - The page sends `consent_version`, the version of the wording it showed, with each presign that
   has `research_consent`. The server accepts only its current `billing.CONSENT_VERSION`
-  (`"2026-11-02"`); any other value → 409 `consent_outdated` ("Please refresh the page."), nothing
+  (`"2026-11-03"`, M3j §8); any other value → 409 `consent_outdated` ("Please refresh the page."), nothing
   reserved. It stores `consent_version` and `consented_at = now()` per consented job (migration 006).
   A wording change means a new constant and the new text on the page together; old jobs keep the
   version they agreed to.
-- The privacy page's `#research` section ("Sharing a video for research") states, in plain words:
-  sharing is optional and changes nothing about the analysis; what is kept (the video, its file
-  details, any retention curve and the ranges and link given with it, and whether it was re-cut);
-  the purposes (study how what is on
-  screen relates to how audiences watch, and build and test NeuroLens's own engagement models, which
-  may later be offered as a paid product, with notice first); models are trained on videos and real
-  audience data, never on NeuroLens's brain predictions; never published, sold or given outside the
-  team, results only as statistics; stored with AWS in the United States; kept up to 3 years, or
-  deleted 90 days after upload if no curve was added; "Stop sharing", Delete or deleting the account
-  removes the copy at once (a model trained before is not retrained, but the data is not used again);
-  the uploader confirms rights and that identifiable people agreed to appear, keeps all rights and
-  gives a free, non-exclusive licence for these purposes; as a thank-you, a valid audience-retention
-  curve from YouTube or Facebook, added at least 7 days after the analysis, can make that video's
-  analysis free: its price comes back as credit (not cash), once per published video (the same file
-  or link counts once), up to 5 videos in any 30 days, only on accounts that have had credit
-  added; valid means at least 20 points, not flat, not rising overall and never above 1,000%. A
-  test keeps these numbers equal to config.json and `results`.
+- The privacy page's `#sharing` section ("Sharing a video", with the old `#research` anchor still
+  landing there) states, in plain words: sharing is optional and changes nothing about the
+  analysis; what is kept (the video, its file details, any retention curve and the ranges and link
+  given with it, whether it was re-cut, and the checked publish date, length and view count when
+  we can check them); the purpose (help improve NeuroLens by building and testing its own
+  engagement models, which may later be offered as a paid product, with notice first); models are
+  trained on videos and real audience data, never on NeuroLens's brain predictions; never
+  published, sold or given outside the team, results only as statistics; stored with AWS in the
+  United States; the shared copy is kept up to 3 years, or deleted 90 days after upload if no
+  curve was added; "Stop sharing", Delete or deleting the account removes the copy at once (a
+  model trained before is not retrained, but the data is not used again); the uploader confirms
+  rights and that identifiable people agreed to appear, keeps all rights and gives a free,
+  non-exclusive licence for these purposes; as a thank-you, a valid audience-retention curve added
+  to a video that has been public at least 7 days (7 days after the analysis when we can't check
+  the publish date) can make that video's analysis free: its price comes back as credit (not cash),
+  and when we can check it the video must be the same length as the analysed video, give or take
+  2 seconds; once per published video (the same file or link counts once), up to 5 videos in any
+  30 days, only on accounts that have had credit added; valid means at least 20 points, not flat,
+  not rising overall and never above 1,000%. A test keeps these numbers equal to config.json.
 
 ### 5b. What is stored where
 - `dataset/<job_id>/`: the video (`video<ext>`) and retention snapshots
   (`retention/<snapshot_id>.json`, the file as uploaded, and `retention/<snapshot_id>.csv`, the parsed
   curve). The only place model training reads.
-- `academic/<job_id>/`: NeuroLens's result (`result.json`) and brain map (`brain`), for the course
-  study. The worker writes them here instead of `dataset/`.
+- No `academic/` copy is written any more (M3j §9b): the worker keeps the video under `dataset/`,
+  and NeuroLens's own result and brain stay under `results/`. Old course-study copies are removed
+  by `infra/purge_academic.py`; until then the prefix is still purged with its job.
 - The worker computes the video's SHA-256 from the downloaded file and records it with
   `billing.record_video_hash(db, job_id, sha256)` (`jobs.video_sha256`, migration 006) before the
   copy.
-- S3 lifecycle: `dataset/` and `academic/` expire after 1095 days (3 years).
+- S3 lifecycle: `dataset/` and `academic/` expire after 1095 days (3 years); `academic/` leaves
+  the lifecycle rule in the Terraform apply that follows the purge (M3j §9b).
 
 ### 5c. Clean-up and withdrawal
 - `storage.delete_job_prefixes(s3, bucket, job_id)` deletes every object under `dataset/<job_id>/`
@@ -225,73 +229,69 @@ place in line among other users, waking the database from the landing page.
   video's research copy was deleted after 90 days without a curve."
 
 ### 5d. Adding a curve
+M3j §5-§8 supersedes the reward date, the form and the replies; this section keeps the rules that
+still apply.
 - Offered on a done, shared, not-removed job: the quiet link on its History row, always in its "⋯"
-  menu (a newer snapshot), and the results page's thank-you card until its first snapshot. While a
-  reward is possible and its date is still ahead, the row link reads "Get X back from 9 Nov" and the
-  menu item "Add audience retention (get X back from 9 Nov)"; after the date, "Get X back" and
-  "Add audience retention (get X back)". The card names YouTube or Facebook and the date too (M3i
-  §7). X is `curve_reward_cents` as credit time (§2c). There is no link in the upload dialog.
-- The form (a small pop-up): the video name, a "Video link" field, the report file, the guide link,
-  then four required one-tap choice rows: views ("Under 1k", "1k–10k", "10k–100k", "Over 100k"),
-  published ("This week", "This month", "Earlier"), promoted with ads ("Yes", "No") and published
-  video ("Same as analysed", "Lightly edited", "Re-cut"). The guide link opens the link's platform
-  section once a valid link is typed, else the top. When a reward is possible the form gives the
-  reward line of M3i §7. The reward amount uses the heat orange (`--heat`, `#FF8A2A`). Save, then
-  the saved or error message.
+  menu (a newer snapshot), and the results page's thank-you card until its first snapshot. The
+  row link reads "Get X back" and the menu "Add audience retention (get X back)", with no date
+  before the form names a link. X is `curve_reward_cents` as credit time (§2c). There is no link
+  in the upload dialog.
+- The form checks the link first (M3j §8): step 1 is the video name and "Video link"; a
+  non-refused check shows step 2, the guide link, one "Paste the reply here" report box (or "or
+  choose a file"), promoted with ads, "Published video", and views and published only when the
+  facts are unknown.
 - `POST /api/jobs/<id>/retention` body: `report` (text; at most 64 KiB), `video_url` (the published
-  video's link) and `same_cut` (`same`, `light_edit`, `recut`), plus `views` (`lt_1k`, `1k_10k`,
-  `10k_100k`, `gt_100k`), `published` (`week`, `month`, `older`) and `promoted` (bool). The link,
-  report and form checks, their order and their refusals are in M3i §6. A YouTube report is parsed
-  as before; a Facebook report is parsed by M3i §4, given the link's id. A report that is empty,
-  has fewer than 2 rows, is malformed JSON, misses a required column, has a bad row, or is over
-  64 KiB → 400 `invalid_retention_report` (413 for the size), with nothing stored; the form
-  explains the fix and links to the guide. The job must be done, shared and not removed (409s as
-  now, with the messages of §5c).
+  video's link) and `same_cut` (`same`, `light_edit`, `recut`), plus `promoted` (bool), and `views`
+  (`lt_1k`, `1k_10k`, `10k_100k`, `gt_100k`) and `published` (`week`, `month`, `older`) only when
+  the facts are unknown. The link, report and form checks, their order and their refusals are in
+  M3i §6. A YouTube report is parsed as before; a Facebook report is parsed by M3i §4, given the
+  link's id. A report that is empty, has fewer than 2 rows, is malformed JSON, misses a required
+  column, has a bad row, or is over 64 KiB → 400 `invalid_retention_report` (413 for the size),
+  with nothing stored; the form explains the fix and links to the guide. The job must be done,
+  shared and not removed (409s as now, with the messages of §5c).
 - Duplicates are checked before any S3 write. If `add_curve` refuses for any reason (including a
   unique-constraint race, which answers 409 `duplicate_curve`), the route deletes the two files it
   wrote.
-- Order: parse the link and the report (M3i §3-§4) → validate the form choices → write the raw
-  `.json` and the `.csv` to S3 under a new `snapshot_id` → compute the quality flags and call
-  `billing.add_curve`. An S3 failure → 500, nothing recorded, and a file already written is deleted.
-  A database failure after the writes leaves two orphan files under the job's prefix, removed with
-  it.
+- Order: parse the link, look the video up (M3j §4; the save does its own lookup), parse the
+  report (M3i §3-§4), validate the form choices, write the raw `.json` and the `.csv` to S3 under a
+  new `snapshot_id`, compute the quality flags and call `billing.add_curve` with the facts. An S3
+  failure → 500, nothing recorded, and a file already written is deleted. A database failure after
+  the writes leaves two orphan files under the job's prefix, removed with it.
 - **Quality (`results.curve_quality(pairs)`, pure):** valid when there are at least 20 points, the
   watch ratio spread is at least 0.02 (not flat), the last value is not above the first (not rising
   overall) and no value is above 10. It returns the list of failed checks (empty = valid). The
-  report holds no video length, so a curve cannot be matched to its video's length; the reward caps
-  below limit that.
+  length check against the analysed video is separate and needs the checked facts (M3j §5).
 - **`billing.add_curve`** stores the snapshot with its `video_ref` (`<platform>:<video_id>`),
-  `same_cut` and `source` (`youtube_api` or `facebook_api`). Its refusals (an account's existing
-  link, a second link on one job), its reward conditions (including `curve_reward_min_days` and the
-  once-per-published-video rule) and its `reward_from` reply are in M3i §6; the earlier conditions
-  still apply alongside them: a valid curve; `captured_cents > 0`; the job has no
-  `curve_rewarded_at`; no other job with the same non-null `video_sha256` has `curve_rewarded_at`;
-  the user has received credit beyond the starter credit at least once (a ledger row of kind
-  `grant` or `test_topup`, a payment in a real launch), so throwaway accounts cannot farm rewards;
-  the user has fewer than `reward_cap` rewards in the last `reward_window_days` days. Then
-  `_move(tx, user_id, job_id, "curve_reward", +captured, 0)`, `jobs.curve_rewarded_at = now()` and
-  the snapshot's `rewarded_cents`.
+  `same_cut`, `source` (`youtube_api` or `facebook_api`) and the checked `checked_views`,
+  `published_at` and `video_seconds` (null when unknown). Its refusals (an account's existing link,
+  a second link on one job), its reward conditions and its `reason`/`reward_from` reply are in
+  M3i §6 and M3j §5; the earlier conditions still apply alongside them: a valid curve;
+  `captured_cents > 0`; the job has no `curve_rewarded_at`; no other job with the same non-null
+  `video_sha256` has `curve_rewarded_at`; the user has received credit beyond the starter credit
+  at least once (a ledger row of kind `grant` or `test_topup`), so throwaway accounts cannot farm
+  rewards; the user has fewer than `reward_cap` rewards in the last `reward_window_days` days.
+  Then `_move(tx, user_id, job_id, "curve_reward", +captured, 0)`,
+  `jobs.curve_rewarded_at = now()` and the snapshot's `rewarded_cents`.
 - A partial unique index on the ledger (`job_id` where `kind = 'curve_reward'`) makes a second reward
   for one job impossible even if the code is wrong.
 - Settings in `config.json` `research`: `curve_rewards_per_window` (5), `curve_reward_window_days`
-  (30), `curve_reward_min_days` (7, M3i §2), `no_curve_days` (90). These are anti-abuse product
-  limits, not budget limits.
+  (30), `curve_reward_min_days` (7), `curve_length_tolerance_s` (2, M3j §2), `no_curve_days` (90).
+  These are anti-abuse product limits, not budget limits.
 - Replies on the form (`curveResultMessage`/`curveQualityMessage` in `static/app.html`): when
-  rewarded, "Thanks! This analysis is now free: 1 min 30 s of credit is back." (the amount
-  comes from the reply's `rewarded_cents`, as credit time, §2c); when the report is saved but fails
-  a quality check, "Thanks for adding it. The report was saved, but no credit was refunded because
+  rewarded, "Thanks! This analysis is now free: 1 min 30 s of credit is back." (the amount comes
+  from the reply's `rewarded_cents`, as credit time, §2c); when the report is saved but fails a
+  quality check, "Thanks for adding it. The report was saved, but no credit was refunded because
   <reasons>." with the reasons: too little viewing data (fewer than 20 points), the retention barely
   changes across the video, the retention at the end is higher than at the start, or unusually high
-  repeat viewing (unknown flags get a generic reason); when only the date is unmet, "Thanks, saved.
-  Add a newer curve from 9 Nov to get X back."; otherwise "Thanks, saved." Link and report refusals
-  show the server's message. A rewarded curve gets the small celebration of M3i §7. The credit in
-  the top bar refreshes after a server save.
-- `list_jobs` returns, for shared jobs, `sharing` (done, shared and not removed), `curve_count`,
-  `curve_reward_cents` (what a valid curve would give, ignoring the date and the link until the form
-  names them, 0 if not possible) and `curve_reward_from` (UTC text, the date a reward becomes
-  possible when `curve_reward_cents > 0`); the date and the per-user conditions come from the helper
-  `add_curve` uses, so the preview and the payment cannot drift apart (M3i §6). `needs_retention` is
-  replaced by `curve_count = 0`.
+  repeat viewing (unknown flags get a generic reason); otherwise "Thanks, saved." first, then the
+  line for its `reason` (M3j §8). Link and report refusals show the server's message. A rewarded
+  curve gets the small celebration of M3i §7. The credit in the top bar refreshes after a server
+  save.
+- `list_jobs` returns, for shared jobs, `sharing` (done, shared and not removed), `curve_count` and
+  `curve_reward_cents` (what a valid curve would give, ignoring the date, the link and the length,
+  0 if not possible). There is no `curve_reward_from`: before a link there is no date to promise
+  (M3j §5); the amount and the per-user conditions come from the helper `add_curve` uses.
+  `needs_retention` is replaced by `curve_count = 0`.
 
 ### 5e. Migration 006 (`infra/migrations/006_m3f.sql`)
 - `jobs`: `claimed_at`, `consent_version TEXT`, `consented_at`, `video_sha256 TEXT`,

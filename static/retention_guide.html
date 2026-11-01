@@ -34,6 +34,8 @@
   li { margin: 4px 0; }
   strong { color: var(--text); }
   code { font: 13px var(--mono); color: var(--text); background: var(--well); border: 1px solid var(--line); border-radius: 3px; padding: 1px 5px; overflow-wrap: anywhere; }
+  .copy { margin-left: 6px; border: 1px solid var(--line); border-radius: 3px; background: var(--well); color: var(--muted); font: 11px var(--mono); padding: 1px 6px; cursor: pointer; }
+  .copy:hover { color: var(--text); border-color: var(--accent); }
   .updated { font-size: 13px; color: var(--muted); margin-bottom: 1.2em; }
   p + p { margin-top: .8em; }
   @media (max-width: 860px) {
@@ -73,10 +75,10 @@
 
   <p>Thank you for sharing your audience-retention report. Your contribution helps us understand
   how people watch videos and improve NeuroLens. Follow the steps below to get the report from
-  YouTube or Facebook and add it to the analysis of a finished video you've shared for research.</p>
+  YouTube or Facebook and add it to the analysis of a finished video you've shared.</p>
 
-  <p>If your analysis is eligible for a credit refund, the "Add audience retention" window will
-  show the amount you can receive.</p>
+  <p>When the link is one we can check, the "Add audience retention" window fills in the video's
+  own values and shows the amount you can receive before you do any work.</p>
 
   <h2 id="youtube">YouTube</h2>
   <ol>
@@ -87,23 +89,29 @@
     Google asks.</li>
     <li>Fill in these values:
       <ul>
-        <li><code>ids</code>: <code>channel==MINE</code></li>
-        <li><code>startDate</code>: the day the video was published, as <code>YYYY-MM-DD</code></li>
-        <li><code>endDate</code>: today, as <code>YYYY-MM-DD</code></li>
-        <li><code>metrics</code>: <code>audienceWatchRatio,relativeRetentionPerformance</code></li>
-        <li><code>dimensions</code>: <code>elapsedVideoTimeRatio</code></li>
-        <li><code>filters</code>: <code>video==</code> followed by the video's ID (the part after
-        <code>v=</code> in its link)</li>
+        <li><code>ids</code>: <code id="ytIds">channel==MINE</code>
+        <button class="copy" type="button" data-copy="ytIds">Copy</button></li>
+        <li><code>startDate</code>: <code id="ytStart">the day before the video was published, as YYYY-MM-DD</code>
+        <button class="copy" type="button" data-copy="ytStart">Copy</button></li>
+        <li><code>endDate</code>: <code id="ytEnd">today, as YYYY-MM-DD</code>
+        <button class="copy" type="button" data-copy="ytEnd">Copy</button></li>
+        <li><code>metrics</code>: <code id="ytMetrics">audienceWatchRatio,relativeRetentionPerformance</code>
+        <button class="copy" type="button" data-copy="ytMetrics">Copy</button></li>
+        <li><code>dimensions</code>: <code id="ytDimensions">elapsedVideoTimeRatio</code>
+        <button class="copy" type="button" data-copy="ytDimensions">Copy</button></li>
+        <li><code>filters</code>: <code id="ytFilters">video==</code> followed by the video's ID (the part after
+        <code>v=</code> in its link)
+        <button class="copy" type="button" data-copy="ytFilters">Copy</button></li>
       </ul>
     </li>
     <li>Run it.</li>
     <li>Copy the whole JSON response, including the opening <code>{</code> and closing
-    <code>}</code>. Paste it into a plain-text editor and save it as <code>retention.json</code>.
-    Make sure the filename ends in <code>.json</code>, not <code>.txt</code>.</li>
+    <code>}</code>.</li>
     <li>In NeuroLens, click "Add audience retention" on the finished video's row or result,
-    choose your <code>retention.json</code> file, fill in the remaining details and click "Save".</li>
+    paste the reply into the "Paste the reply here" box (or use "or choose a file"), fill in the
+    remaining details and click "Save".</li>
   </ol>
-  <p>Add it from 7 days after your analysis to get its credit back.</p>
+  <p>Add it once the video has been public a week to get its credit back.</p>
 
   <h2 id="facebook">Facebook</h2>
   <ol>
@@ -111,17 +119,16 @@
     <a href="https://developers.facebook.com/tools/explorer/">https://developers.facebook.com/tools/explorer/</a>.</li>
     <li>Under <strong>User or Page</strong>, pick the Page that published the video, and allow the
     <code>pages_read_engagement</code> and <code>read_insights</code> permissions when Meta asks.</li>
-    <li>Paste this into the query field, replacing the video id with the number in the video's
-    address, then click <strong>Submit</strong>:
-    <code>&lt;video id&gt;/video_insights?metric=total_video_retention_graph</code>.</li>
+    <li>Paste this into the query field, then click <strong>Submit</strong>:
+    <code id="fbQuery">&lt;video id&gt;/video_insights?metric=total_video_retention_graph</code>
+    <button class="copy" type="button" data-copy="fbQuery">Copy</button>.</li>
     <li>Copy the whole JSON reply, including the opening <code>{</code> and closing
-    <code>}</code>, and save it as a <code>.json</code> file. Make sure the filename ends in
-    <code>.json</code>, not <code>.txt</code>.</li>
+    <code>}</code>.</li>
     <li>In NeuroLens, click "Add audience retention" on the finished video's row or result,
-    choose that file, paste the video's Facebook link, fill in the remaining details and click
-    "Save".</li>
+    paste the reply into the "Paste the reply here" box (or use "or choose a file"), paste the
+    video's Facebook link, fill in the remaining details and click "Save".</li>
   </ol>
-  <p>Add it from 7 days after your analysis to get its credit back.</p>
+  <p>Add it once the video has been public a week to get its credit back.</p>
 
   <h2>If your report is empty</h2>
   <p>A response with no rows means YouTube has no retention data available for the video yet.
@@ -137,5 +144,45 @@
 
   <p><a href="/">Back to NeuroLens</a></p>
 </main>
+<script>
+(() => {
+  const params = new URLSearchParams(location.search);
+  const platform = params.get('platform');
+  const videoId = params.get('v');
+  const start = params.get('start');
+  const pad = n => String(n).padStart(2, '0');
+  const ymd = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const set = (id, text) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = text;
+  };
+
+  if (platform === 'youtube' && videoId) {
+    if (start) {
+      const day = new Date(`${start}T00:00:00`);
+      day.setDate(day.getDate() - 1);
+      set('ytStart', ymd(day));
+    }
+    set('ytEnd', ymd(new Date()));
+    set('ytFilters', `video==${videoId}`);
+  }
+  if (platform === 'facebook' && videoId) {
+    set('fbQuery', `${videoId}/video_insights?metric=total_video_retention_graph`);
+  }
+
+  document.querySelectorAll('[data-copy]').forEach(button => {
+    button.addEventListener('click', async () => {
+      const target = document.getElementById(button.dataset.copy);
+      try {
+        await navigator.clipboard.writeText(target.textContent.trim());
+        button.textContent = 'Copied';
+        setTimeout(() => { button.textContent = 'Copy'; }, 1200);
+      } catch (e) {
+        button.textContent = 'Copy failed';
+      }
+    });
+  });
+})();
+</script>
 </body>
 </html>

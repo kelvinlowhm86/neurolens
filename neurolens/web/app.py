@@ -21,7 +21,7 @@ from urllib.parse import quote
 from flask import Flask, jsonify, redirect, request, send_from_directory, session
 from werkzeug.exceptions import HTTPException
 
-from neurolens import billing, pricing, report_prompt, results, scaling, settings, storage
+from neurolens import billing, pricing, report_prompt, results, scaling, settings, storage, youtube
 from neurolens import db as dbmod
 from neurolens.web import auth
 
@@ -186,6 +186,9 @@ def create_app(
     reward_cap = research_cfg.get("curve_rewards_per_window", DEFAULT_REWARD_CAP)
     reward_window_days = research_cfg.get("curve_reward_window_days", DEFAULT_REWARD_WINDOW_DAYS)
     reward_min_days = research_cfg.get("curve_reward_min_days", billing.DEFAULT_REWARD_MIN_DAYS)
+    length_tolerance_s = research_cfg.get(
+        "curve_length_tolerance_s", billing.DEFAULT_LENGTH_TOLERANCE_S
+    )
     static_dir = root / "static"
     autoscaling = None
     if gpu_endpoint:
@@ -523,6 +526,42 @@ def create_app(
             return None, _not_found()
         return rows[0], None
 
+    def shared_job(job_id):
+        """The caller's own done, shared job, else the refusal both curve routes give (M3j §6)."""
+        job, error = owned_job(job_id)
+        if error:
+            return None, error
+        if job["status"] != billing.DONE:
+            return None, _error("job_not_done", "The job is not done yet.", status=409)
+        if not job["research_consent"]:
+            return None, _error("no_consent", "This video was not shared.", status=409)
+        if job["dataset_removed_at"] is not None:
+            message = billing.CURVE_REMOVED_MESSAGES.get(
+                job["dataset_removed_reason"], billing.CURVE_REMOVED_MESSAGES["no_curve"]
+            )
+            return None, _error("dataset_removed", message, status=409)
+        return job, None
+
+    def video_facts(platform, video_id, job_id):
+        """The checked facts for a link, or None when they cannot be checked (M3j §4).
+
+        Facebook supplies none. A YouTube lookup that fails or finds no video is logged; a missing
+        video is a 400 on both routes, while every other failure falls back to the analysis date.
+        """
+        if platform != "youtube":
+            return None, None
+        try:
+            facts = youtube.lookup(video_id, cfg.get("youtube_api_key"))
+        except youtube.LookupFailed as err:
+            logger.error(f"VIDEO_LOOKUP_FAILED {job_id}: {err}")
+            return None, None
+        if facts is None:
+            return None, _error(
+                "video_not_found",
+                "We can't see this video. Check the link, or add it once it's public.",
+            )
+        return facts, None
+
     def owned_result(job_id):
         """(result, job, None) for the caller's done job, else (None, None, an error response).
         A done job's result is read from S3; any other job answers ``result_not_ready`` without
@@ -744,21 +783,62 @@ def create_app(
             logger.exception(f"Could not delete the research copy of {job['job_id']}")
         return jsonify({"stopped": True})
 
+    @app.route("/api/jobs/<job_id>/retention/check", methods=["POST"])
+    def job_retention_check(job_id):
+        """What this curve would pay, before any work, without writing anything (M3j §6)."""
+        job, error = shared_job(job_id)
+        if error:
+            return error
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict):
+            return _error("invalid_request", "The request body must contain the video's link.")
+        video_url = data.get("video_url")
+        if not isinstance(video_url, str):
+            return _error("invalid_request", "video_url must be the video's link.")
+        try:
+            platform, video_id = results.parse_video_link(video_url)
+        except ValueError as err:
+            return _error("invalid_video_link", str(err))
+
+        facts, error = video_facts(platform, video_id, job["job_id"])
+        if error:
+            return error
+        user_id, _ = signed_in_user()
+        try:
+            cents, reward_from, reason = billing.curve_offer(
+                db,
+                user_id,
+                job["job_id"],
+                f"{platform}:{video_id}",
+                facts,
+                reward_cap,
+                reward_window_days,
+                reward_min_days,
+                length_tolerance_s,
+            )
+        except billing.CurveRefused as err:
+            return _error(err.code, err.message, status=err.status)
+        return jsonify(
+            {
+                "platform": platform,
+                "video_id": video_id,
+                "reward_cents": cents,
+                "reward_from": reward_from,
+                "reason": reason,
+                "published_on": facts.published_at.date().isoformat() if facts else None,
+                "video_seconds": facts.duration_s if facts else None,
+                "analysed_seconds": round(job["verified_duration_ms"] / 1000)
+                if job["verified_duration_ms"] is not None
+                else None,
+            }
+        )
+
     @app.route("/api/jobs/<job_id>/retention", methods=["POST"])
     def job_retention(job_id):
         """Store a shared job's audience-retention snapshot and reward it when valid (M3f §5d)."""
-        job, error = owned_job(job_id)
+        job, error = shared_job(job_id)
         if error:
             return error
-        if job["status"] != billing.DONE:
-            return _error("job_not_done", "The job is not done yet.", status=409)
-        if not job["research_consent"]:
-            return _error("no_consent", "This video was not shared for research.", status=409)
-        if job["dataset_removed_at"] is not None:
-            message = billing.CURVE_REMOVED_MESSAGES.get(
-                job["dataset_removed_reason"], billing.CURVE_REMOVED_MESSAGES["no_curve"]
-            )
-            return _error("dataset_removed", message, status=409)
 
         data = request.get_json(silent=True)
         if not isinstance(data, dict):
@@ -771,6 +851,10 @@ def create_app(
         except ValueError as err:
             return _error("invalid_video_link", str(err))
 
+        # The save does its own lookup: the server never trusts facts the page sends back.
+        facts, error = video_facts(platform, video_id, job["job_id"])
+        if error:
+            return error
         text = data.get("report")
         if not isinstance(text, str):
             return _error("invalid_request", "The request body must contain the report text.")
@@ -788,15 +872,24 @@ def create_app(
         except ValueError as err:
             return _error("invalid_retention_report", str(err))
 
+        if facts is not None:
+            if data.get("views") is not None or data.get("published") is not None:
+                return _error(
+                    "invalid_request",
+                    "We checked this video, so the views and published answers are not needed.",
+                )
+            views, published = None, None
+        else:
+            views = data.get("views")
+            if views not in RETENTION_VIEWS:
+                return _error("invalid_request", "views must be one of the listed choices.")
+            published = data.get("published")
+            if published not in RETENTION_PUBLISHED:
+                return _error("invalid_request", "published must be one of the listed choices.")
+
         same_cut = data.get("same_cut")
         if same_cut not in {"same", "light_edit", "recut"}:
             return _error("invalid_request", "same_cut must be one of the listed choices.")
-        views = data.get("views")
-        if views not in RETENTION_VIEWS:
-            return _error("invalid_request", "views must be one of the listed choices.")
-        published = data.get("published")
-        if published not in RETENTION_PUBLISHED:
-            return _error("invalid_request", "published must be one of the listed choices.")
         promoted = data.get("promoted")
         if not isinstance(promoted, bool):
             return _error("invalid_request", "promoted must be true or false.")
@@ -856,6 +949,8 @@ def create_app(
                 same_cut=same_cut,
                 source=f"{platform}_api",
                 reward_min_days=reward_min_days,
+                facts=facts,
+                length_tolerance_s=length_tolerance_s,
             )
         except (billing.DuplicateCurve, dbmod.DuplicateCurveViolation):
             _delete_curve_files(s3, bucket, [raw_key, csv_key], job["job_id"])
