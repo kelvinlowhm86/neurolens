@@ -145,7 +145,7 @@ _YOUTUBE_HOSTS = {"youtube.com", "www.youtube.com", "m.youtube.com"}
 _YOUTUBE_SHORT_HOSTS = {"youtu.be", "www.youtu.be"}
 _FACEBOOK_HOSTS = {"facebook.com", "www.facebook.com", "m.facebook.com"}
 _YOUTUBE_ID = re.compile(r"[A-Za-z0-9_-]{11}")
-_DIGITS = re.compile(r"\d+")
+_DIGITS = re.compile(r"[0-9]+")
 _YOUTUBE_PATH_KINDS = {"shorts", "live", "embed"}
 
 
