@@ -136,19 +136,19 @@ def valid_comparison(duration_a=3, duration_b=3):
     end_a = min(1, duration_a - 1)
     end_b = min(1, duration_b - 1)
     return {
-        "headline": "A draws the stronger response",
-        "summary": "A holds attention; B falls away in the middle.",
+        "headline": "[A] draws the stronger response",
+        "summary": "[A] holds attention; [B] falls away in the middle.",
         "differences": [
             {
                 "a": {"start": 0, "end": end_a},
                 "b": {"start": 0, "end": end_b},
-                "what_differs": "A opens on a face.",
-                "brain_response": "A's visual response rises above B's.",
+                "what_differs": "[A] opens on a face.",
+                "brain_response": "[A]'s visual response rises above [B]'s.",
             }
         ],
-        "a_does_better": ["A 0-1 s"],
-        "b_does_better": ["B 2-3 s"],
-        "suggestions": ["Keep A's opening."],
+        "a_does_better": ["[A] 0-1 s"],
+        "b_does_better": ["[B] 2-3 s"],
+        "suggestions": ["Keep [A]'s opening."],
     }
 
 
@@ -175,12 +175,12 @@ def test_success_stores_the_comparison_then_marks_it_ready(aws, db, pg, make_cfg
     row = comparison(pg, a, b)
     assert (row["state"], row["error"]) == ("ready", None)
     value = stored(aws, a, b)
-    assert value["headline"] == "A draws the stronger response"
-    assert value["summary"] == "A holds attention; B falls away in the middle."
+    assert value["headline"] == "[A] draws the stronger response"
+    assert value["summary"] == "[A] holds attention; [B] falls away in the middle."
     assert value["differences"] == valid_comparison(duration_a, duration_b)["differences"]
-    assert value["a_does_better"] == ["A 0-1 s"]
-    assert value["b_does_better"] == ["B 2-3 s"]
-    assert value["suggestions"] == ["Keep A's opening."]
+    assert value["a_does_better"] == ["[A] 0-1 s"]
+    assert value["b_does_better"] == ["[B] 2-3 s"]
+    assert value["suggestions"] == ["Keep [A]'s opening."]
     assert value["model"] == cfg["report"]["model"]
     assert value["created_at"].endswith("Z")
     assert value["usage"] == {"input_tokens": 11, "output_tokens": 22}

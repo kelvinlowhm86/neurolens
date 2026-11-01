@@ -2,6 +2,7 @@
 import it."""
 
 import base64
+import copy
 
 from neurolens import results
 
@@ -145,8 +146,9 @@ Writing:
 - A stronger response may be called stronger brain engagement, or said to suggest more
   attention. Never claim anything about what real viewers do: views, watch time, retention,
   drop-off, clicks or sharing, and never give a score.
-- Write for a video maker, in plain words. Cite times in whole seconds, always naming the video
-  (A 12 s, B 20-24 s). Name what happens on screen from the pictures.
+- Write for a video maker, in plain words. Name the videos only as [A] and [B], brackets
+  included, in every field; never a bare A or B. Cite times in whole seconds, always naming the
+  video ([A] 12 s, [B] 20-24 s). Name what happens on screen from the pictures.
 - Differences are the few stretches that explain the verdict most, no two covering the same
   stretch: each one names its time in A, in B or in both (null for the video where it has no
   match), what differs on screen and how the response differs, one sentence each. Leave out
@@ -317,3 +319,42 @@ def build_comparison_request(a, b):
     content.extend(_video_blocks(result_b, frames_b, words_b, "B"))
     content.append({"type": "text", "text": comparison_table(result_a, result_b)})
     return COMPARISON_PROMPT, content
+
+
+def _plain_letters(text, flip):
+    """The [A]/[B] markers turned into the shown letters (M3h §2): with flip the opened video
+    (stored B) is A, so [A] becomes B and [B] becomes A; else [A] becomes A and [B] B."""
+    first, second = ("B", "A") if flip else ("A", "B")
+    return text.replace("[A]", first).replace("[B]", second)
+
+
+def orient_comparison(report, flip):
+    """The stored comparison turned for the video the person opened (M3h §2): a copy with the
+    markers filled in and, with `flip`, every A and B swapped. Never mutates the input, and
+    raises when the answer was written before the markers."""
+    if not isinstance(report, dict):
+        raise ValueError("the comparison is not a JSON object")
+    headline, summary = report.get("headline"), report.get("summary")
+    if not (isinstance(headline, str) and isinstance(summary, str)):
+        raise ValueError("the comparison has no headline and summary to orient")
+    marked = any("[A]" in text or "[B]" in text for text in (headline, summary))
+    if not marked:
+        raise ValueError(
+            "the comparison names no video with [A] or [B]: it was written before the markers"
+        )
+    oriented = copy.deepcopy(report)
+    oriented["headline"] = _plain_letters(headline, flip)
+    oriented["summary"] = _plain_letters(summary, flip)
+    for difference in oriented.get("differences") or []:
+        if flip:
+            difference["a"], difference["b"] = difference["b"], difference["a"]
+        for name in ("what_differs", "brain_response"):
+            difference[name] = _plain_letters(difference[name], flip)
+    if flip:
+        oriented["a_does_better"], oriented["b_does_better"] = (
+            oriented["b_does_better"],
+            oriented["a_does_better"],
+        )
+    for name in ("a_does_better", "b_does_better", "suggestions"):
+        oriented[name] = [_plain_letters(item, flip) for item in oriented[name]]
+    return oriented

@@ -9,6 +9,7 @@ once and a broken answer is never stored.
 import json
 import logging
 import os
+import re
 from datetime import UTC, datetime
 
 from neurolens import billing, lambdas, report_prompt, settings, storage
@@ -153,6 +154,23 @@ def _span_problem(span, duration, name):
     return None
 
 
+_MARKER = re.compile(r"\[[AB]\]")
+# A bare B, but not one that is part of a word such as "B-roll"; A only in the forms that
+# betray a missed marker ("A 12 s", "A's"), never the article or an initial.
+_BARE_B = re.compile(r"(?<![\w-])B(?![\w-])")
+_BARE_A = re.compile(r"(?<![\w-])A(?: \d|['’]s\b)")
+
+
+def _missed_marker(text):
+    """Why the text still names a video outside the [A]/[B] markers, or None (M3h §5d)."""
+    stripped = _MARKER.sub("", text)
+    if _BARE_B.search(stripped):
+        return "a bare B"
+    if _BARE_A.search(stripped):
+        return "a bare A"
+    return None
+
+
 def _comparison_problem(answer, duration_a, duration_b):
     """Why the answer cannot be shown as a comparison, or None (M3h §5d). Each span is checked
     against its own video, and only what the page relies on is checked."""
@@ -161,6 +179,9 @@ def _comparison_problem(answer, duration_a, duration_b):
     for name in ("headline", "summary"):
         if not _is_text(answer.get(name)):
             return f"{name} is not text"
+    for name in ("headline", "summary"):
+        if not _MARKER.search(answer[name]):
+            return f"{name} does not name its video with [A] or [B]"
     if not _ends_a_sentence(answer["summary"]):
         return f"summary stops mid-sentence (ends {answer['summary'][-1:]!r})"
     for name in ("differences", "a_does_better", "b_does_better", "suggestions"):
@@ -187,6 +208,20 @@ def _comparison_problem(answer, duration_a, duration_b):
             difference.get("brain_response")
         ):
             return f"difference {number} lacks its text"
+    texts = [
+        answer["headline"],
+        answer["summary"],
+        *answer["a_does_better"],
+        *answer["b_does_better"],
+        *answer["suggestions"],
+    ]
+    for difference in answer["differences"]:
+        texts.append(difference["what_differs"])
+        texts.append(difference["brain_response"])
+    for text in texts:
+        missed = _missed_marker(text)
+        if missed:
+            return f"{missed} outside the [A]/[B] markers: {text!r}"
     return None
 
 

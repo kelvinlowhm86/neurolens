@@ -52,19 +52,19 @@ def single_report():
 
 def comparison_report():
     return {
-        "headline": "A written comparison",
-        "summary": "A written comparison summary.",
+        "headline": "[A] is the stronger video",
+        "summary": "[A] holds up; [B] settles sooner.",
         "differences": [
             {
                 "a": {"start": 0, "end": 1},
-                "b": {"start": 0, "end": 1},
-                "what_differs": "A differs here.",
-                "brain_response": "A rises more.",
+                "b": {"start": 1, "end": 1},
+                "what_differs": "[A] differs here.",
+                "brain_response": "[A] rises more.",
             }
         ],
-        "a_does_better": ["A opens faster."],
-        "b_does_better": ["B settles sooner."],
-        "suggestions": ["Keep A's opening."],
+        "a_does_better": ["[A] opens faster."],
+        "b_does_better": ["[B] settles sooner."],
+        "suggestions": ["Keep [A]'s opening."],
         "created_at": "2026-10-31T00:23:37Z",
     }
 
@@ -167,8 +167,41 @@ def test_a_ready_comparison_downloads_as_a_pdf(aws, db, pg, make_cfg, tmp_path):
     assert resp.data.startswith(b"%PDF")
     header = resp.headers["Content-Disposition"]
     header.encode("latin-1")
-    assert full_name(header) == "Ad A vs Ad B \u2013 NeuroLens comparison.pdf"
-    assert fallback_name(header) == "Ad A vs Ad B - NeuroLens comparison.pdf"
+    assert full_name(header) == "Ad B vs Ad A \u2013 NeuroLens comparison.pdf"
+    assert fallback_name(header) == "Ad B vs Ad A - NeuroLens comparison.pdf"
+
+
+def test_the_comparison_pdf_puts_the_urls_first_video_first(
+    aws, db, pg, make_cfg, tmp_path, monkeypatch
+):
+    from neurolens import report_pdf
+
+    client = app_for(aws, db, make_cfg, tmp_path)
+    a, b = done_pair(aws, db)
+    set_comparison(pg, a, b, "ready", tries=1)
+    put_comparison_report(aws, a, b, comparison_report())
+    pg.conn.execute(
+        "UPDATE jobs SET filename = CASE job_id "
+        "WHEN %s::uuid THEN 'Ad A.mp4' ELSE 'Ad B.mp4' END "
+        "WHERE job_id IN (%s::uuid, %s::uuid)",
+        (a, a, b),
+    )
+    captured = {}
+
+    def fake(first, second, report):
+        captured.update(first=first, second=second, report=report)
+        return b"%PDF-1.4"
+
+    monkeypatch.setattr(report_pdf, "comparison_pdf", fake)
+
+    resp = client.get(f"/api/compare/{b}/{a}/report.pdf")
+
+    assert resp.status_code == 200
+    assert captured["first"][0] == "Ad B.mp4"
+    assert captured["second"][0] == "Ad A.mp4"
+    assert captured["report"]["headline"] == "B is the stronger video"
+    assert captured["report"]["differences"][0]["a"] == {"start": 1, "end": 1}
+    assert captured["report"]["differences"][0]["b"] == {"start": 0, "end": 1}
 
 
 @pytest.mark.parametrize("state", [None, "writing", "failed"])

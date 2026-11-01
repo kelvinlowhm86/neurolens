@@ -163,23 +163,24 @@ def _canned_report(result):
 
 
 def _canned_comparison(result_a, result_b):
-    """A valid comparison for the local stack, built from the two results alone (M3h §11)."""
+    """A valid comparison for the local stack, built from the two results alone (M3h §11). The
+    model now writes [A]/[B] markers; the routes orient the answer before it is shown."""
     end_a = min(2, result_a["duration_seconds"] - 1)
     end_b = min(2, result_b["duration_seconds"] - 1)
     return {
-        "headline": "A sample comparison of these videos",
-        "summary": "A local sample comparison.",
+        "headline": "[A] is the stronger of the two videos",
+        "summary": "[A] holds attention better; [B] settles later.",
         "differences": [
             {
                 "a": {"start": 0, "end": end_a},
                 "b": {"start": 0, "end": end_b},
-                "what_differs": "The two videos open differently.",
-                "brain_response": "A starts slightly stronger than B.",
+                "what_differs": "[A] opens on a shot [B] lacks.",
+                "brain_response": "[A]'s response starts above [B]'s.",
             }
         ],
-        "a_does_better": ["A has the clearer opening."],
-        "b_does_better": ["B settles later."],
-        "suggestions": ["Compare the opening seconds."],
+        "a_does_better": ["[A] has the clearer opening."],
+        "b_does_better": ["[B] settles later."],
+        "suggestions": ["Compare [A]'s opening with [B]'s."],
     }
 
 

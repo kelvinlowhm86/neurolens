@@ -269,22 +269,29 @@ def test_get_with_no_row_answers_all_tries_left(aws, db, make_cfg, tmp_path):
 
         data = resp.get_json()
         assert resp.status_code == 200
-        assert (data["a"], data["b"]) == (a, b)
+        assert (data["a"], data["b"]) == (x, y)
         assert data["report_state"] is None
         assert data["tries_left"] == MAX_TRIES
         assert data["report"] is None
 
 
-def test_get_serves_a_ready_comparison_both_ways_round(aws, db, pg, make_cfg, tmp_path):
+def test_get_answers_the_opened_video_as_a_and_turns_the_report(aws, db, pg, make_cfg, tmp_path):
     client = app_for(aws, db, make_cfg, tmp_path)
     a, b = done_pair(aws, db)
     stored = {
-        "headline": "A beats B",
-        "summary": "A draws the stronger response.",
-        "differences": [],
-        "a_does_better": ["A 0-1 s"],
-        "b_does_better": [],
-        "suggestions": [],
+        "headline": "[A] beats [B]",
+        "summary": "[A] draws the stronger response; [B] falls away.",
+        "differences": [
+            {
+                "a": {"start": 0, "end": 1},
+                "b": {"start": 2, "end": 2},
+                "what_differs": "[A] opens on a face.",
+                "brain_response": "[A]'s response rises above [B]'s.",
+            }
+        ],
+        "a_does_better": ["[A] 0-1 s"],
+        "b_does_better": ["[B] 2-3 s"],
+        "suggestions": ["Keep [A]'s opening."],
     }
     aws.s3.put_object(
         Bucket=aws.bucket,
@@ -293,13 +300,25 @@ def test_get_serves_a_ready_comparison_both_ways_round(aws, db, pg, make_cfg, tm
     )
     set_comparison(pg, a, b, "ready", tries=1)
 
-    for x, y in ((a, b), (b, a)):
-        data = client.get(f"/api/compare/{x}/{y}/report").get_json()
+    forward = client.get(f"/api/compare/{a}/{b}/report").get_json()
+    backward = client.get(f"/api/compare/{b}/{a}/report").get_json()
 
-        assert (data["a"], data["b"]) == (a, b)
+    for data, x, y in ((forward, a, b), (backward, b, a)):
+        assert (data["a"], data["b"]) == (x, y)
         assert data["report_state"] == "ready"
         assert data["tries_left"] == MAX_TRIES - 1
-        assert data["report"] == stored
+    assert forward["report"]["headline"] == "A beats B"
+    assert backward["report"]["headline"] == "B beats A"
+    assert forward["report"]["differences"][0]["a"] == {"start": 0, "end": 1}
+    assert backward["report"]["differences"][0]["a"] == {"start": 2, "end": 2}
+    assert backward["report"]["differences"][0]["b"] == {"start": 0, "end": 1}
+    assert backward["report"]["a_does_better"] == ["A 2-3 s"]
+    assert backward["report"]["b_does_better"] == ["B 0-1 s"]
+    assert backward["report"]["suggestions"] == ["Keep B's opening."]
+    unchanged = json.loads(
+        aws.s3.get_object(Bucket=aws.bucket, Key=comparison_key(a, b))["Body"].read()
+    )
+    assert unchanged == stored
 
 
 def test_get_reads_a_stale_writing_comparison_as_failed(aws, db, pg, make_cfg, tmp_path):

@@ -21,7 +21,7 @@ from urllib.parse import quote
 from flask import Flask, jsonify, redirect, request, send_from_directory, session
 from werkzeug.exceptions import HTTPException
 
-from neurolens import billing, pricing, results, scaling, settings, storage
+from neurolens import billing, pricing, report_prompt, results, scaling, settings, storage
 from neurolens import db as dbmod
 from neurolens.web import auth
 
@@ -908,17 +908,20 @@ def create_app(
         )
 
     def comparison_ids(x, y):
-        """(job_a, job_b, None) for two of the caller's jobs, or (None, None, an error)."""
+        """(job_a, job_b, job_x, job_y, None) for two of the caller's jobs, or
+        (None, None, None, None, an error). job_x is the video the caller opened."""
         job_x, error = owned_job(x)
         if error:
-            return None, None, error
+            return None, None, None, None, error
         job_y, error = owned_job(y)
         if error:
-            return None, None, error
+            return None, None, None, None, error
         try:
-            return (*storage.comparison_pair(job_x["job_id"], job_y["job_id"]), None)
+            return (*storage.comparison_pair(job_x["job_id"], job_y["job_id"]), job_x, job_y, None)
         except ValueError:
             return (
+                None,
+                None,
                 None,
                 None,
                 _error("same_video", "Choose two different videos.", status=400),
@@ -927,7 +930,7 @@ def create_app(
     @app.route("/api/compare/<x>/<y>/report", methods=["POST"])
     def start_comparison(x, y):
         """Claim one free comparison attempt and start the report Lambda (M3h §4)."""
-        a, b, error = comparison_ids(x, y)
+        a, b, _, _, error = comparison_ids(x, y)
         if error:
             return error
         with db.transaction() as tx:
@@ -980,8 +983,8 @@ def create_app(
 
     @app.route("/api/compare/<x>/<y>/report")
     def get_comparison(x, y):
-        """The comparison's state, tries left and stored answer (M3h §4)."""
-        a, b, error = comparison_ids(x, y)
+        """The comparison's state, tries left and stored answer, turned so x is A (M3h §4, §2)."""
+        a, b, job_x, job_y, error = comparison_ids(x, y)
         if error:
             return error
         report_cfg = cfg.get("report") or {}
@@ -995,10 +998,12 @@ def create_app(
                 state = "failed"
             if state == "ready" and s3 is not None and bucket:
                 report = storage.get_comparison_report(s3, bucket, a, b)
+        if report is not None:
+            report = report_prompt.orient_comparison(report, flip=job_x["job_id"] != a)
         return jsonify(
             {
-                "a": a,
-                "b": b,
+                "a": job_x["job_id"],
+                "b": job_y["job_id"],
                 "report_state": state,
                 "tries_left": max(0, report_cfg["max_tries"] - tries),
                 "report": report,
@@ -1007,14 +1012,14 @@ def create_app(
 
     @app.route("/api/compare/<x>/<y>/report.pdf")
     def comparison_report_pdf(x, y):
-        """The written comparison as a PDF, in the canonical pair's order (M3h §18b)."""
-        a, b, error = comparison_ids(x, y)
+        """The written comparison as a PDF, turned so x is A and its name first (M3h §18b, §2)."""
+        a, b, job_x, job_y, error = comparison_ids(x, y)
         if error:
             return error
-        result_a, job_a, error = owned_result(a)
+        result_x, _, error = owned_result(job_x["job_id"])
         if error:
             return error
-        result_b, job_b, error = owned_result(b)
+        result_y, _, error = owned_result(job_y["job_id"])
         if error:
             return error
         row = billing.get_comparison(db, a, b)
@@ -1025,15 +1030,16 @@ def create_app(
         report = storage.get_comparison_report(s3, bucket, a, b)
         if not report:
             return _error("no_report", "There is no written comparison for this pair.", status=409)
+        report = report_prompt.orient_comparison(report, flip=job_x["job_id"] != a)
         from neurolens import report_pdf
 
         data = report_pdf.comparison_pdf(
-            (job_a["filename"], result_a, frames_for(a)),
-            (job_b["filename"], result_b, frames_for(b)),
+            (job_x["filename"], result_x, frames_for(job_x["job_id"])),
+            (job_y["filename"], result_y, frames_for(job_y["job_id"])),
             report,
         )
-        stem_a, stem_b = _stem(job_a["filename"]), _stem(job_b["filename"])
-        stem = f"{stem_a} vs {stem_b}" if stem_a and stem_b else (stem_a or stem_b)
+        stem_x, stem_y = _stem(job_x["filename"]), _stem(job_y["filename"])
+        stem = f"{stem_x} vs {stem_y}" if stem_x and stem_y else (stem_x or stem_y)
         return (
             data,
             200,

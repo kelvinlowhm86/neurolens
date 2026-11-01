@@ -9,9 +9,10 @@ The first form downloads the job's result, brain file and report (when present) 
 data/output/<id>/ (id = the video's file stem), grabs a thumbnail at 1 s (or --thumbnail-at), and
 writes the entry into data/samples.json with the summary computed from the result. Re-run it
 after a summary rule change. The compare form copies the stored comparison for two samples that
-are already in samples.json. Both forms also write the PDF and record its path. `pdfs` re-renders
-every stored sample and comparison PDF from samples.json after a layout change. This is an
-operator script: it talks to AWS and is never run by the tests.
+are already in samples.json, as two entries, one per way round (M3h §7). Both forms also write
+the PDF and record its path. `pdfs` re-renders every stored sample and comparison PDF from
+samples.json after a layout change. This is an operator script: it talks to AWS and is never
+run by the tests.
 """
 
 import argparse
@@ -204,7 +205,7 @@ def add_sample(args):
 def add_comparison(args):
     import boto3
 
-    from neurolens import report_pdf, storage
+    from neurolens import report_pdf, report_prompt, storage
     from neurolens.lambdas import report
 
     document = _document()
@@ -231,39 +232,40 @@ def add_comparison(args):
     if problem:
         raise SystemExit(f"{key} is not usable: {problem}")
 
-    entry = {
-        "a": sample_by_job[job_a],
-        "b": sample_by_job[job_b],
-        "report": _without_usage(answer),
-    }
-    sample_a, sample_b = by_id[entry["a"]], by_id[entry["b"]]
-    pdf_path = DATA / "output" / "compare" / f"{entry['a']}__{entry['b']}.pdf"
-    pdf_path.parent.mkdir(parents=True, exist_ok=True)
-    pdf_path.write_bytes(
-        report_pdf.comparison_pdf(
-            (
-                sample_a["title"],
-                sample_a["result"],
-                _frames(s3, bucket, sample_a["result"]),
-            ),
-            (
-                sample_b["title"],
-                sample_b["result"],
-                _frames(s3, bucket, sample_b["result"]),
-            ),
-            answer,
-        )
-    )
-    entry["pdf_file"] = pdf_path.relative_to(DATA).as_posix()
-    pair = {entry["a"], entry["b"]}
-    comparisons = [
+    stored = _without_usage(answer)
+    pair = {sample_by_job[job_a], sample_by_job[job_b]}
+    kept = [
         comparison
         for comparison in document.get("comparisons", [])
         if {comparison.get("a"), comparison.get("b")} != pair
     ]
-    comparisons.append(entry)
+    entries = []
+    for flip, (job_x, job_y) in enumerate(((job_a, job_b), (job_b, job_a))):
+        sample_x, sample_y = by_id[sample_by_job[job_x]], by_id[sample_by_job[job_y]]
+        oriented = report_prompt.orient_comparison(stored, flip=bool(flip))
+        pdf_path = DATA / "output" / "compare" / f"{sample_x['id']}__{sample_y['id']}.pdf"
+        pdf_path.parent.mkdir(parents=True, exist_ok=True)
+        pdf_path.write_bytes(
+            report_pdf.comparison_pdf(
+                (sample_x["title"], sample_x["result"], _frames(s3, bucket, sample_x["result"])),
+                (sample_y["title"], sample_y["result"], _frames(s3, bucket, sample_y["result"])),
+                oriented,
+            )
+        )
+        entries.append(
+            {
+                "a": sample_x["id"],
+                "b": sample_y["id"],
+                "report": oriented,
+                "pdf_file": pdf_path.relative_to(DATA).as_posix(),
+            }
+        )
+    comparisons = [*kept, *entries]
     _write_document(samples, comparisons)
-    print(f"Wrote comparison {entry['a']} / {entry['b']} to {SAMPLES}")
+    print(
+        f"Wrote comparisons {entries[0]['a']}/{entries[0]['b']} and "
+        f"{entries[1]['a']}/{entries[1]['b']} to {SAMPLES}"
+    )
 
 
 def re_render_pdfs():

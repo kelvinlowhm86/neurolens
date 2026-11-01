@@ -390,11 +390,12 @@
   .compare-time { color: var(--muted); font-size: 12px; }
   .compare-head .spacer { flex: 1; }
   .compare-videos { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; flex: none; }
-  .compare-videos.a-right > section:first-child { order: 2; }
   .compare-video { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 8px 8px 10px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
   .compare-video-head { display: flex; align-items: baseline; gap: 8px; min-width: 0; font-size: 12px; }
   .compare-badge { flex: none; font: 500 10px var(--mono); border: 1px solid currentColor; border-radius: 2px; padding: 0 4px; line-height: 1.5; }
   #compareNameA, #compareNameB { font-weight: 600; overflow-wrap: anywhere; }
+  #compareNameA, #compareBadgeA { color: var(--accent); }
+  #compareNameB, #compareBadgeB { color: var(--blue); }
   .compare-video-head .mono { margin-left: auto; color: var(--muted); font-size: 10.5px; flex: none; }
   .compare-video-host { position: relative; width: 100%; max-width: 338px; max-height: 190px; margin: 0 auto; aspect-ratio: 16 / 9; background: #000; border: 1px solid var(--line); border-radius: 2px; overflow: hidden; display: flex; align-items: center; justify-content: center; }
   .compare-video-host video { width: 100%; height: 100%; object-fit: contain; display: block; background: #000; }
@@ -922,7 +923,7 @@ let filmStripSeq = 0, filmStripLoadedKey = '', filmStripFailedKey = '';
 let currentTab = 'charts';
 let chartMoments = [];
 let comparisonReport = null, comparisonState = '', comparisonStateText = '', comparisonCanRetry = false;
-let comparisonCurrentSide = 'a', comparisonABNames = { aName: '', bName: '' };
+let comparisonABNames = { aName: '', bName: '' };
 let comparisonCandidates = [], compareActiveDiff = -1, compareVideoSeq = 0, compareVideoKey = '', compareOffset = 0;
 let progressJobId = null, progressStartedAt = 0, progressStatus = '', progressTimer = null, progressStages = [];
 const REDUCED_MOTION = (() => {
@@ -2837,7 +2838,6 @@ function resetReportPanel() {
   comparisonState = '';
   comparisonStateText = '';
   comparisonCanRetry = false;
-  comparisonCurrentSide = 'a';
   comparisonABNames = { aName: '', bName: '' };
   currentReportReady = false;
   compareActiveDiff = -1; compareOffset = 0;
@@ -2924,9 +2924,9 @@ function sampleComparisonEntry() {
   if (!comparison || comparison.kind !== 'sample' || !samplesData) return null;
   const mainId = currentContext && currentContext.sampleId;
   const otherId = comparison.sampleId;
+  // Each pair has two entries, one per way round; the one whose a is the open sample is shown.
   return (samplesData.comparisons || []).find(entry =>
-    (entry.a === mainId && entry.b === otherId) ||
-    (entry.a === otherId && entry.b === mainId)) || null;
+    entry.a === mainId && entry.b === otherId) || null;
 }
 
 function renderComparisonAnswer(source) {
@@ -2935,11 +2935,7 @@ function renderComparisonAnswer(source) {
   comparisonState = 'ready';
   comparisonStateText = '';
   comparisonCanRetry = false;
-  const { aName, bName } = comparisonNames(source);
-  const currentId = currentContext && (currentContext.sampleId || currentContext.jobId);
-  const side = source.a === currentId ? 'a' : (source.b === currentId ? 'b' : null);
-  comparisonCurrentSide = side === 'b' ? 'b' : 'a';
-  comparisonABNames = { aName, bName };
+  comparisonABNames = comparisonNames(source);
   refreshComparePanel();
 }
 
@@ -4723,7 +4719,7 @@ function morphCompareChart(lines, toRange, span, hasBands) {
   }).join(' ');
   const polys = [...rec.svg.querySelectorAll('polyline')];
   if (polys.length !== lines.length) return false;
-  // The colours (and widths) can swap when the comparison side changes; keep them current.
+  // Keep the current colours (and widths) as the curves move.
   polys.forEach((pl, i) => {
     pl.setAttribute('stroke', lines[i].colour);
     pl.setAttribute('stroke-width', lines[i].width || 2);
@@ -4753,11 +4749,9 @@ function morphCompareChart(lines, toRange, span, hasBands) {
 function buildCompareChart() {
   if (!currentResult || !comparison || !comparison.result || !comparison.result.signals) return;
   const span = compareSpan();
-  const currentColour = comparisonCurrentSide === 'b' ? 'var(--blue)' : 'var(--accent)';
-  const otherColour = comparisonCurrentSide === 'b' ? 'var(--accent)' : 'var(--blue)';
   const lines = [
-    { values: currentResult.signals.overall || [], colour: currentColour, width: 1.8 },
-    { values: comparison.result.signals.overall || [], colour: otherColour, width: 1.4 },
+    { values: currentResult.signals.overall || [], colour: 'var(--accent)', width: 1.8 },
+    { values: comparison.result.signals.overall || [], colour: 'var(--blue)', width: 1.4 },
   ];
   let range = 0;
   lines.forEach(line => { range = Math.max(range, niceRange(line.values)); });
@@ -4912,24 +4906,14 @@ async function loadCompareVideoB() {
 function buildCompareView() {
   if (!currentResult || !comparison) { clearCompareChart(); return; }
   const { aName, bName } = compareNames();
-  const side = comparisonCurrentSide === 'b' ? 'b' : 'a';
   const avgA = averageOverall(currentResult), avgB = averageOverall(comparison.result);
   const onAverage = v => v == null ? '' : ` · ${levelWord(v).toLowerCase()} on average`;
   const averageTip = v => v == null ? '' : ` · average ${fmtSigned(v)}`;
+  // The open video is always A: left and orange; the other is B: right and blue (M3h §8).
   $('compareNameA').textContent = `${aName}${onAverage(avgA)}`;
   $('compareNameA').title = `${aName}${averageTip(avgA)}`;
-  $('compareNameA').style.color = side === 'b' ? 'var(--blue)' : 'var(--accent)';
-  $('compareBadgeA').style.color = side === 'b' ? 'var(--blue)' : 'var(--accent)';
-  // The badges carry the stored pair's letters (the verdict's A and B), not 'this video' / 'other'.
-  $('compareBadgeA').textContent = side === 'b' ? 'B' : 'A';
   $('compareNameB').textContent = `${bName}${onAverage(avgB)}`;
   $('compareNameB').title = `${bName}${averageTip(avgB)}`;
-  $('compareNameB').style.color = side === 'b' ? 'var(--accent)' : 'var(--blue)';
-  $('compareBadgeB').style.color = side === 'b' ? 'var(--accent)' : 'var(--blue)';
-  $('compareBadgeB').textContent = side === 'b' ? 'A' : 'B';
-  $('compareVideos').classList.toggle('a-right', side === 'b');
-  $('compareBarA').parentElement.classList.toggle('blue', side === 'b');
-  $('compareBarB').parentElement.classList.toggle('blue', side === 'a');
   const kept = comparison.kind === 'sample' ? comparison.sampleId : comparison.jobId;
   if ([...$('compareSelect').options].some(option => option.value === kept)) $('compareSelect').value = kept;
   $('compareSwap').hidden = !(currentContext && currentContext.jobId && comparison.kind === 'job');
@@ -4950,8 +4934,8 @@ function selectCompareDiff(index) {
   compareActiveDiff = index;
   const difference = comparisonReport && comparisonReport.differences ? comparisonReport.differences[index] : null;
   if (difference) {
-    const mainSpan = comparisonCurrentSide === 'a' ? difference.a : difference.b;
-    const otherSpan = comparisonCurrentSide === 'a' ? difference.b : difference.a;
+    const mainSpan = difference.a;
+    const otherSpan = difference.b;
     const fallback = difference.a ? difference.a.start : (difference.b ? difference.b.start : 0);
     const mainStart = mainSpan ? mainSpan.start : fallback;
     const otherStart = otherSpan ? otherSpan.start : mainStart;
@@ -5011,8 +4995,9 @@ function showCompareRow() {
         j.result_available && j.status === 'done' && j.job_id !== jobId) : []);
   // A sample with a written comparison comes first, so opening Compare shows that verdict.
   if (sampleId) {
-    const written = new Set((samplesData.comparisons || []).flatMap(entry =>
-      entry.a === sampleId ? [entry.b] : (entry.b === sampleId ? [entry.a] : [])));
+    const written = new Set((samplesData.comparisons || [])
+      .filter(entry => entry.a === sampleId)
+      .map(entry => entry.b));
     candidates.sort((x, y) => written.has(y.id) - written.has(x.id));
   }
   const valueOf = item => sampleId ? item.id : item.job_id;
@@ -5148,7 +5133,6 @@ function useComparison(id, label, data) {
   comparisonReport = null;
   comparisonState = 'loading';
   comparisonStateText = '';
-  comparisonCurrentSide = 'a';
   comparisonABNames = { aName: '', bName: '' };
   $('compareMsg').textContent = '';
   $('compareMsg').classList.remove('error');
@@ -5171,7 +5155,6 @@ function useSampleComparison(sample) {
   comparisonReport = null;
   comparisonState = 'loading';
   comparisonStateText = '';
-  comparisonCurrentSide = 'a';
   comparisonABNames = { aName: '', bName: '' };
   $('compareMsg').textContent = '';
   $('compareMsg').classList.remove('error');

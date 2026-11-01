@@ -15,7 +15,7 @@ from pathlib import Path
 
 import boto3
 import pytest
-from neurolens import results
+from neurolens import report_prompt, results
 
 ROOT = Path(__file__).resolve().parent.parent
 MAKE_SAMPLE = ROOT / "infra" / "make_sample.py"
@@ -73,19 +73,19 @@ def report_answer(duration=3):
 
 def comparison_answer(duration_a=3, duration_b=3):
     return {
-        "headline": "A draws the stronger response",
-        "summary": "A holds attention.",
+        "headline": "[A] draws the stronger response",
+        "summary": "[A] holds attention; [B] falls away.",
         "differences": [
             {
                 "a": {"start": 0, "end": min(1, duration_a - 1)},
                 "b": {"start": 0, "end": min(1, duration_b - 1)},
-                "what_differs": "A opens on a face.",
-                "brain_response": "A's visual response rises.",
+                "what_differs": "[A] opens on a face.",
+                "brain_response": "[A]'s visual response rises above [B]'s.",
             }
         ],
-        "a_does_better": ["A 0-1 s"],
-        "b_does_better": ["B 2-3 s"],
-        "suggestions": ["Keep A's opening."],
+        "a_does_better": ["[A] 0-1 s"],
+        "b_does_better": ["[B] 2-3 s"],
+        "suggestions": ["Keep [A]'s opening."],
         "usage": {"input_tokens": 33, "output_tokens": 44},
     }
 
@@ -257,7 +257,7 @@ def test_make_sample_replaces_in_place_and_appends_only_a_new_id(script, monkeyp
     assert [sample["id"] for sample in samples] == ["a", "clip", "z", "clip2"]
 
 
-def test_compare_writes_the_canonical_a_and_b_and_replaces_either_order(script, monkeypatch):
+def test_compare_writes_both_ways_round_turned_and_replaces_the_pair(script, monkeypatch):
     module, data = script
     job_one, job_two = str(uuid.uuid4()), str(uuid.uuid4())
     one, two = "sample_one", "sample_two"
@@ -279,10 +279,21 @@ def test_compare_writes_the_canonical_a_and_b_and_replaces_either_order(script, 
 
     document = json.loads(module.SAMPLES.read_text())
     assert document["samples"] == samples
-    assert len(document["comparisons"]) == 1
-    entry = document["comparisons"][0]
-    assert (entry["a"], entry["b"]) == (sample_by_job[a], sample_by_job[b])
-    assert entry["report"] == {key: value for key, value in report.items() if key != "usage"}
+    assert len(document["comparisons"]) == 2
+    by_direction = {(entry["a"], entry["b"]): entry for entry in document["comparisons"]}
+    forward_id = (sample_by_job[a], sample_by_job[b])
+    backward_id = (sample_by_job[b], sample_by_job[a])
+    assert set(by_direction) == {forward_id, backward_id}
+    stored = {key: value for key, value in report.items() if key != "usage"}
+    forward = by_direction[forward_id]
+    backward = by_direction[backward_id]
+    assert forward["report"] == report_prompt.orient_comparison(stored, flip=False)
+    assert backward["report"] == report_prompt.orient_comparison(stored, flip=True)
+    assert "usage" not in forward["report"] and "usage" not in backward["report"]
+    assert forward["pdf_file"] == f"output/compare/{forward_id[0]}__{forward_id[1]}.pdf"
+    assert backward["pdf_file"] == f"output/compare/{backward_id[0]}__{backward_id[1]}.pdf"
+    assert (data / forward["pdf_file"]).read_bytes().startswith(b"%PDF")
+    assert (data / backward["pdf_file"]).read_bytes().startswith(b"%PDF")
 
 
 def test_deploy_filter_drops_a_comparison_unless_both_samples_are_public(tmp_path):
