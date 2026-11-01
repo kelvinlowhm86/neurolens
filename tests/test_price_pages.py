@@ -23,6 +23,6 @@ def test_page_holds_no_hard_coded_price(page):
         assert needle not in text, f"{page.name} hard-codes the price: {needle!r}"
 
 
-@pytest.mark.parametrize("page", PAGES, ids=lambda path: path.name)
-def test_page_reads_the_price_from_the_limits(page):
-    assert "cents_per_block" in page.read_text()
+def test_app_reads_the_price_from_the_limits():
+    # The landing page shows no price at all (non-commercial service, spec M3d 8b).
+    assert "cents_per_block" in (REPO_ROOT / "static" / "app.html").read_text()
