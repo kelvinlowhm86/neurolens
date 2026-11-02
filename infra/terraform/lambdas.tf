@@ -100,7 +100,6 @@ resource "aws_iam_role_policy" "m3a_lambda" {
           "${aws_s3_bucket.main.arn}/uploads/*",
           "${aws_s3_bucket.main.arn}/results/*",
           "${aws_s3_bucket.main.arn}/dataset/*",
-          "${aws_s3_bucket.main.arn}/academic/*",
         ]
       },
       {
@@ -508,13 +507,13 @@ resource "aws_cloudwatch_log_group" "report" {
 }
 
 resource "aws_lambda_function" "report" {
-  function_name                  = "neurolens-report"
-  role                           = aws_iam_role.report.arn
-  runtime                        = "python3.12"
-  handler                        = "neurolens.lambdas.report.handler"
-  filename                       = data.archive_file.m3a_lambdas.output_path
-  source_code_hash               = data.archive_file.m3a_lambdas.output_base64sha256
-  layers                         = [aws_lambda_layer_version.report.arn]
+  function_name    = "neurolens-report"
+  role             = aws_iam_role.report.arn
+  runtime          = "python3.12"
+  handler          = "neurolens.lambdas.report.handler"
+  filename         = data.archive_file.m3a_lambdas.output_path
+  source_code_hash = data.archive_file.m3a_lambdas.output_base64sha256
+  layers           = [aws_lambda_layer_version.report.arn]
   # Three SDK attempts of up to 280 s each fit (M3g §5a); stale_minutes stays above it.
   timeout                        = 900
   memory_size                    = 512

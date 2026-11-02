@@ -61,7 +61,7 @@ def test_a_failed_job_delete_purge_answers_success_and_the_reaper_finishes_it(
     reaper_env(90)
     client = app_for(aws, db, make_cfg, tmp_path, s3_client=DeleteReportsErrors(aws.s3))
     job_id, key = make_job(db, consent=consent)
-    dataset, academic, own = seed_research(aws, job_id, key)
+    dataset, own = seed_research(aws, job_id, key)
 
     resp = client.delete(f"/api/jobs/{job_id}")
 
@@ -70,13 +70,13 @@ def test_a_failed_job_delete_purge_answers_success_and_the_reaper_finishes_it(
     job = pg.job(job_id)
     assert job["deleted_at"] is not None
     assert job["dataset_purged_at"] is None
-    assert all(object_exists(aws, name) for name in [*dataset, *academic, *own])
+    assert all(object_exists(aws, name) for name in [*dataset, *own])
 
     run_reaper()
 
     job = pg.job(job_id)
     assert job["dataset_purged_at"] is not None
-    assert not any(object_exists(aws, name) for name in [*dataset, *academic, *own])
+    assert not any(object_exists(aws, name) for name in [*dataset, *own])
 
 
 def test_the_reaper_leaves_a_job_that_was_neither_deleted_nor_removed(
@@ -84,14 +84,14 @@ def test_the_reaper_leaves_a_job_that_was_neither_deleted_nor_removed(
 ):
     reaper_env(90)
     job_id, key = make_job(db)
-    dataset, academic, own = seed_research(aws, job_id, key)
+    dataset, own = seed_research(aws, job_id, key)
 
     run_reaper()
 
     job = pg.job(job_id)
     assert job["dataset_removed_at"] is None
     assert job["dataset_purged_at"] is None
-    assert all(object_exists(aws, name) for name in [*dataset, *academic, *own])
+    assert all(object_exists(aws, name) for name in [*dataset, *own])
 
 
 @pytest.mark.parametrize("path", ["stop_sharing", "no_curve"])
@@ -101,7 +101,7 @@ def test_a_removed_copy_loses_only_its_prefixes_and_keeps_the_users_own_files(
     reaper_env(90)
     client = app_for(aws, db, make_cfg, tmp_path)
     job_id, key = make_job(db)
-    dataset, academic, own = seed_research(aws, job_id, key)
+    dataset, own = seed_research(aws, job_id, key)
 
     if path == "stop_sharing":
         assert client.post(f"/api/jobs/{job_id}/stop-sharing").status_code == 200
@@ -112,5 +112,5 @@ def test_a_removed_copy_loses_only_its_prefixes_and_keeps_the_users_own_files(
     job = pg.job(job_id)
     assert job["dataset_removed_at"] is not None
     assert job["dataset_purged_at"] is not None
-    assert not any(object_exists(aws, name) for name in [*dataset, *academic])
+    assert not any(object_exists(aws, name) for name in dataset)
     assert all(object_exists(aws, name) for name in own)

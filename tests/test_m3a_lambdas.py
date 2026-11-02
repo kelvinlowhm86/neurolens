@@ -94,20 +94,14 @@ def consented_job(db, new_key, *, ext=".mp4", user_id=USER_ID):
 
 
 def research_keys(job_id, ext=".mp4"):
-    """The research copy's keys, as `storage.put_dataset` writes them (M3f §5b)."""
-    return [
-        f"dataset/{job_id}/video{ext}",
-        f"academic/{job_id}/result.json",
-        f"academic/{job_id}/brain",
-    ]
+    """The research copy's key, as `storage.put_dataset` writes it (M3f §5b)."""
+    return [f"dataset/{job_id}/video{ext}"]
 
 
 def write_research_copy(aws, job_id, key):
-    """An upload, its dataset copy, and the old course-study copy the purge still removes."""
+    """An upload, its dataset copy, and the user's own brain file."""
     upload(aws, key)
     storage.put_dataset(aws.s3, aws.bucket, job_id, key)
-    aws.s3.put_object(Bucket=aws.bucket, Key=f"academic/{job_id}/result.json", Body=b"{}")
-    aws.s3.put_object(Bucket=aws.bucket, Key=f"academic/{job_id}/brain", Body=b"brain bytes")
     aws.s3.put_object(Bucket=aws.bucket, Key=f"results/{job_id}.brain", Body=b"brain bytes")
 
 

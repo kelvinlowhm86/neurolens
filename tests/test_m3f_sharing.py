@@ -1,11 +1,11 @@
 """M3f research sharing (docs/M3f_spec.md §5a-§5c, §10 "delete_job_prefixes", "Stop sharing",
 "Reaper", "Consent").
 
-`storage.delete_job_prefixes` pages through `dataset/<job_id>/` and `academic/<job_id>/`, refuses
-anything that is not a UUID and raises when S3 reports a failed delete. The stop-sharing route
-deletes before it marks the copy removed. The reaper's 90-day clean-up counts from
-`research.no_curve_days` and keeps a job that has any snapshot. Job and account deletion use the
-same two prefixes. Consent stores the version and time only when it is given.
+`storage.delete_job_prefixes` pages through `dataset/<job_id>/`, refuses anything that is not a
+UUID and raises when S3 reports a failed delete. The stop-sharing route deletes before it marks
+the copy removed. The reaper's 90-day clean-up counts from `research.no_curve_days` and keeps a
+job that has any snapshot. Job and account deletion use the same prefix. Consent stores the
+version and time only when it is given.
 """
 
 import json
@@ -71,19 +71,15 @@ def seed_research(aws, job_id, key):
         f"dataset/{job_id}/retention/{uuid.uuid4()}.json",
         f"dataset/{job_id}/retention/{uuid.uuid4()}.csv",
     ]
-    academic = [
-        f"academic/{job_id}/result.json",
-        f"academic/{job_id}/brain",
-    ]
     own = [
         key,
         f"results/{job_id}.json",
         f"results/{job_id}.brain",
         f"results/{job_id}.jpg",
     ]
-    for name in [*dataset, *academic, *own]:
+    for name in [*dataset, *own]:
         aws.s3.put_object(Bucket=aws.bucket, Key=name, Body=b"x")
-    return dataset, academic, own
+    return dataset, own
 
 
 def object_exists(aws, key):
@@ -183,18 +179,18 @@ class CurveDuringPurge:
 # ---------------------------------------------------------------- delete_job_prefixes
 
 
-def test_delete_job_prefixes_deletes_every_object_under_both_prefixes_across_pages(aws):
+def test_delete_job_prefixes_deletes_every_object_under_the_dataset_prefix_across_pages(aws):
     job_id = str(uuid.uuid4())
     other = str(uuid.uuid4())
-    for prefix in (f"dataset/{job_id}/objects", f"academic/{job_id}/objects"):
-        for number in range(1001):
-            aws.s3.put_object(Bucket=aws.bucket, Key=f"{prefix}/{number:04d}", Body=b"x")
+    for number in range(1001):
+        aws.s3.put_object(
+            Bucket=aws.bucket, Key=f"dataset/{job_id}/objects/{number:04d}", Body=b"x"
+        )
     aws.s3.put_object(Bucket=aws.bucket, Key=f"dataset/{other}/video.mp4", Body=b"x")
 
     storage.delete_job_prefixes(aws.s3, aws.bucket, job_id)
 
     assert prefix_keys(aws, f"dataset/{job_id}/") == []
-    assert prefix_keys(aws, f"academic/{job_id}/") == []
     assert object_exists(aws, f"dataset/{other}/video.mp4")
 
 
@@ -231,17 +227,17 @@ def test_delete_job_prefixes_raises_when_s3_reports_a_failed_delete(aws):
 # ---------------------------------------------------------------- stop sharing
 
 
-def test_stop_sharing_deletes_both_prefixes_then_marks_the_copy_removed(
+def test_stop_sharing_deletes_the_dataset_prefix_then_marks_the_copy_removed(
     aws, db, pg, make_cfg, tmp_path
 ):
     client = app_for(aws, db, make_cfg, tmp_path)
     job_id, key = make_job(db)
-    dataset, academic, own = seed_research(aws, job_id, key)
+    dataset, own = seed_research(aws, job_id, key)
 
     resp = client.post(f"/api/jobs/{job_id}/stop-sharing")
 
     assert 200 <= resp.status_code < 300
-    assert not any(object_exists(aws, name) for name in [*dataset, *academic])
+    assert not any(object_exists(aws, name) for name in dataset)
     assert all(object_exists(aws, name) for name in own)
     job = pg.job(job_id)
     assert job["dataset_removed_at"] is not None
@@ -251,12 +247,12 @@ def test_stop_sharing_deletes_both_prefixes_then_marks_the_copy_removed(
 def test_a_failed_delete_still_marks_the_stop_sharing_row(aws, db, pg, make_cfg, tmp_path):
     client = app_for(aws, db, make_cfg, tmp_path, s3_client=DeleteReportsErrors(aws.s3))
     job_id, key = make_job(db)
-    dataset, academic, _ = seed_research(aws, job_id, key)
+    dataset, _ = seed_research(aws, job_id, key)
 
     resp = client.post(f"/api/jobs/{job_id}/stop-sharing")
 
     assert resp.status_code == 200
-    assert all(object_exists(aws, name) for name in [*dataset, *academic])
+    assert all(object_exists(aws, name) for name in dataset)
     job = pg.job(job_id)
     assert job["dataset_removed_at"] is not None
     assert job["dataset_removed_reason"] == "stopped"
@@ -269,7 +265,7 @@ def test_a_failed_stop_sharing_delete_marks_the_copy_and_the_reaper_finishes_it(
     reaper_env(90)
     client = app_for(aws, db, make_cfg, tmp_path, s3_client=DeleteReportsErrors(aws.s3))
     job_id, key = make_job(db)
-    dataset, academic, own = seed_research(aws, job_id, key)
+    dataset, own = seed_research(aws, job_id, key)
     billing.grant_credit(db, f"{WEB_USER_ID}@example.com", 100)
     balance = pg.balance(WEB_USER_ID)
 
@@ -280,7 +276,7 @@ def test_a_failed_stop_sharing_delete_marks_the_copy_and_the_reaper_finishes_it(
     assert job["dataset_removed_at"] is not None
     assert job["dataset_removed_reason"] == "stopped"
     assert job["dataset_purged_at"] is None
-    assert all(object_exists(aws, name) for name in [*dataset, *academic])
+    assert all(object_exists(aws, name) for name in dataset)
 
     with pytest.raises(billing.CurveRefused):
         billing.add_curve(db, WEB_USER_ID, job_id, **curve_kwargs(job_id))
@@ -292,7 +288,7 @@ def test_a_failed_stop_sharing_delete_marks_the_copy_and_the_reaper_finishes_it(
 
     job = pg.job(job_id)
     assert job["dataset_purged_at"] is not None
-    assert not any(object_exists(aws, name) for name in [*dataset, *academic])
+    assert not any(object_exists(aws, name) for name in dataset)
     assert all(object_exists(aws, name) for name in own)
 
 
@@ -395,7 +391,7 @@ def test_the_reaper_deletes_the_copy_after_90_days_and_says_no_curve(
 ):
     reaper_env(90)
     job_id, key = make_job(db)
-    dataset, academic, own = seed_research(aws, job_id, key)
+    dataset, own = seed_research(aws, job_id, key)
     pg.age(job_id, created_s=91 * DAY)
 
     run_reaper()
@@ -403,21 +399,21 @@ def test_the_reaper_deletes_the_copy_after_90_days_and_says_no_curve(
     job = pg.job(job_id)
     assert job["dataset_removed_at"] is not None
     assert job["dataset_removed_reason"] == "no_curve"
-    assert not any(object_exists(aws, name) for name in [*dataset, *academic])
+    assert not any(object_exists(aws, name) for name in dataset)
     assert all(object_exists(aws, name) for name in own)
 
 
 def test_the_reaper_keeps_a_copy_younger_than_its_configured_limit(aws, db, pg, reaper_env):
     reaper_env(90)
     job_id, key = make_job(db)
-    dataset, academic, _ = seed_research(aws, job_id, key)
+    dataset, _ = seed_research(aws, job_id, key)
     pg.age(job_id, created_s=89 * DAY)
 
     run_reaper()
 
     job = pg.job(job_id)
     assert job["dataset_removed_at"] is None
-    assert all(object_exists(aws, name) for name in [*dataset, *academic])
+    assert all(object_exists(aws, name) for name in dataset)
 
 
 def test_the_reaper_reads_the_limit_from_config(aws, db, pg, reaper_env):
@@ -434,7 +430,7 @@ def test_the_reaper_reads_the_limit_from_config(aws, db, pg, reaper_env):
 def test_the_reaper_keeps_a_job_that_has_any_snapshot(aws, db, pg, reaper_env):
     reaper_env(90)
     job_id, key = make_job(db)
-    dataset, academic, _ = seed_research(aws, job_id, key)
+    dataset, _ = seed_research(aws, job_id, key)
     insert_snapshot(pg, job_id)
     pg.age(job_id, created_s=91 * DAY)
 
@@ -442,7 +438,7 @@ def test_the_reaper_keeps_a_job_that_has_any_snapshot(aws, db, pg, reaper_env):
 
     job = pg.job(job_id)
     assert job["dataset_removed_at"] is None
-    assert all(object_exists(aws, name) for name in [*dataset, *academic])
+    assert all(object_exists(aws, name) for name in dataset)
 
 
 def test_the_90_day_rule_keeps_a_job_that_gained_a_snapshot_after_selection(
@@ -452,7 +448,7 @@ def test_the_90_day_rule_keeps_a_job_that_gained_a_snapshot_after_selection(
 
     reaper_env(90)
     job_id, key = make_job(db)
-    dataset, academic, _ = seed_research(aws, job_id, key)
+    dataset, _ = seed_research(aws, job_id, key)
     pg.age(job_id, created_s=91 * DAY)
     [stale] = reaper.expired_dataset_jobs(db, 90)
 
@@ -462,7 +458,7 @@ def test_the_90_day_rule_keeps_a_job_that_gained_a_snapshot_after_selection(
     job = pg.job(job_id)
     assert job["dataset_removed_at"] is None
     assert job["dataset_purged_at"] is None
-    assert all(object_exists(aws, name) for name in [*dataset, *academic])
+    assert all(object_exists(aws, name) for name in dataset)
 
 
 # ---------------------------------------------------------------- consent
@@ -514,21 +510,21 @@ def test_no_consent_leaves_the_version_and_time_empty(db, pg):
 # ---------------------------------------------------------------- job and account deletion
 
 
-def test_job_delete_removes_both_prefixes(aws, db, pg, make_cfg, tmp_path):
+def test_job_delete_removes_the_dataset_prefix(aws, db, pg, make_cfg, tmp_path):
     client = app_for(aws, db, make_cfg, tmp_path)
     job_id, key = make_job(db)
-    dataset, academic, own = seed_research(aws, job_id, key)
+    dataset, own = seed_research(aws, job_id, key)
 
     resp = client.delete(f"/api/jobs/{job_id}")
 
     assert resp.status_code in (200, 204)
-    assert not any(object_exists(aws, name) for name in [*dataset, *academic, *own])
+    assert not any(object_exists(aws, name) for name in [*dataset, *own])
     assert pg.job(job_id)["deleted_at"] is not None
 
 
 def test_job_delete_marks_the_job_before_it_purges_the_copy(aws, db, pg, make_cfg, tmp_path):
     job_id, key = make_job(db)
-    dataset, academic, _ = seed_research(aws, job_id, key)
+    dataset, _ = seed_research(aws, job_id, key)
     billing.grant_credit(db, f"{WEB_USER_ID}@example.com", 100)
     curve = CurveDuringPurge(aws.s3, db, job_id)
     client = app_for(aws, db, make_cfg, tmp_path, s3_client=curve)
@@ -541,7 +537,7 @@ def test_job_delete_marks_the_job_before_it_purges_the_copy(aws, db, pg, make_cf
     assert isinstance(curve.refused, billing.CurveRefused)
     assert pg.rows("SELECT * FROM retention_snapshots WHERE job_id = %s::uuid", job_id) == []
     assert "curve_reward" not in pg.kinds(WEB_USER_ID)
-    assert not any(object_exists(aws, name) for name in [*dataset, *academic])
+    assert not any(object_exists(aws, name) for name in dataset)
 
 
 @pytest.fixture
@@ -560,13 +556,13 @@ def cognito_admin(monkeypatch):
     monkeypatch.setattr(BaseClient, "_make_api_call", make_api_call)
 
 
-def test_account_delete_removes_both_prefixes(aws, db, pg, cognito_client, idp, cognito_admin):
+def test_account_delete_removes_the_dataset_prefix(aws, db, pg, cognito_client, idp, cognito_admin):
     assert sign_in(cognito_client, idp, email="ann@example.com").status_code in (302, 303)
     user_id = pg.one("SELECT user_id FROM users WHERE lower(email) = 'ann@example.com'")["user_id"]
     job_id, key = make_job(db, user_id=user_id)
-    dataset, academic, _ = seed_research(aws, job_id, key)
+    dataset, _ = seed_research(aws, job_id, key)
 
     resp = cognito_client.post("/api/account/delete", json={"confirm": "DELETE"})
 
     assert resp.status_code == 200
-    assert not any(object_exists(aws, name) for name in [*dataset, *academic])
+    assert not any(object_exists(aws, name) for name in dataset)

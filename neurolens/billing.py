@@ -458,7 +458,7 @@ def delete_job(db, user_id, job_id):
 def purge_job_files(db, s3, bucket, job_id):
     """Delete a marked job's files, then record that they are gone (M3f §5c).
 
-    Both research prefixes always go, and the job's `retention_snapshots` rows go with them. A
+    The research prefix always goes, and the job's `retention_snapshots` rows go with it. A
     deleted job's own files (upload, result, brain, thumbnail) go too; a copy that was only
     removed keeps the user's own result. Deleting a job also removes every comparison it is part
     of, in S3 and in the database (M3h §6).

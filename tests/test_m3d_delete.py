@@ -1,4 +1,4 @@
-"""M3d §5 deletion: both brain keys are listed and both deletes remove them (moto).
+"""M3d §5 deletion: the brain key is listed and both deletes remove it (moto).
 
 Mirrors tests/test_m3c_delete_job.py and tests/test_m3c_delete_account.py.
 """
@@ -55,8 +55,6 @@ def seed_files(aws, job_id, key):
         f"results/{job_id}.json",
         f"results/{job_id}.brain",
         f"dataset/{job_id}/video{ext}",
-        f"academic/{job_id}/result.json",
-        f"academic/{job_id}/brain",
         f"dataset/{job_id}/retention/snapshot.csv",
     ]
     for name in keys:
@@ -73,7 +71,7 @@ def object_exists(aws, key):
     return True
 
 
-def test_per_video_delete_removes_both_brain_files(client, aws, db):
+def test_per_video_delete_removes_the_brain_file(client, aws, db):
     job_id, key = make_job(db)
     keys = seed_files(aws, job_id, key)
 
@@ -81,11 +79,10 @@ def test_per_video_delete_removes_both_brain_files(client, aws, db):
 
     assert resp.status_code in (200, 204)
     assert not object_exists(aws, f"results/{job_id}.brain")
-    assert not object_exists(aws, f"academic/{job_id}/brain")
     assert not any(object_exists(aws, name) for name in keys)
 
 
-def test_account_delete_removes_both_brain_files(cognito_client, idp, aws, db, pg, cognito_admin):
+def test_account_delete_removes_the_brain_file(cognito_client, idp, aws, db, pg, cognito_admin):
     assert sign_in(cognito_client, idp, email="ann@example.com").status_code in (302, 303)
     user_id = pg.one("SELECT user_id FROM users WHERE lower(email) = 'ann@example.com'")["user_id"]
     job_id, key = make_job(db, user_id=user_id)
@@ -95,4 +92,3 @@ def test_account_delete_removes_both_brain_files(cognito_client, idp, aws, db, p
 
     assert resp.status_code == 200
     assert not object_exists(aws, f"results/{job_id}.brain")
-    assert not object_exists(aws, f"academic/{job_id}/brain")

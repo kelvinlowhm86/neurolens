@@ -53,7 +53,7 @@ resource "aws_iam_role_policy" "sagemaker" {
         Resource = aws_s3_bucket.main.arn
       },
       {
-        # Our result and brain under academic/, the shared video under dataset/, and the boot
+        # Our result and brain under results/, the shared video under dataset/, and the boot
         # record (M3f §5b).
         Sid    = "WriteResultsDatasetAndBootRecords"
         Effect = "Allow"
@@ -61,7 +61,6 @@ resource "aws_iam_role_policy" "sagemaker" {
         Resource = [
           "${aws_s3_bucket.main.arn}/results/*",
           "${aws_s3_bucket.main.arn}/dataset/*",
-          "${aws_s3_bucket.main.arn}/academic/*",
           "${aws_s3_bucket.main.arn}/experiments/boots/*",
           "${aws_s3_bucket.main.arn}/sagemaker-output/*",
         ]
@@ -75,7 +74,6 @@ resource "aws_iam_role_policy" "sagemaker" {
           "${aws_s3_bucket.main.arn}/uploads/*",
           "${aws_s3_bucket.main.arn}/results/*",
           "${aws_s3_bucket.main.arn}/dataset/*",
-          "${aws_s3_bucket.main.arn}/academic/*",
         ]
       },
       {

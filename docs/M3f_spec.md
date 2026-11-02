@@ -185,19 +185,17 @@ place in line among other users, waking the database from the landing page.
 - `dataset/<job_id>/`: the video (`video<ext>`) and retention snapshots
   (`retention/<snapshot_id>.json`, the file as uploaded, and `retention/<snapshot_id>.csv`, the parsed
   curve). The only place model training reads.
-- No `academic/` copy is written any more (M3j §9b): the worker keeps the video under `dataset/`,
-  and NeuroLens's own result and brain stay under `results/`. Old course-study copies are removed
-  by `infra/purge_academic.py`; until then the prefix is still purged with its job.
+- The worker keeps the video under `dataset/`; NeuroLens's own result and brain stay under
+  `results/` (M3j §9b).
 - The worker computes the video's SHA-256 from the downloaded file and records it with
   `billing.record_video_hash(db, job_id, sha256)` (`jobs.video_sha256`, migration 006) before the
   copy.
-- S3 lifecycle: `dataset/` and `academic/` expire after 1095 days (3 years); `academic/` leaves
-  the lifecycle rule in the Terraform apply that follows the purge (M3j §9b).
+- S3 lifecycle: `dataset/` expires after 1095 days (3 years).
 
 ### 5c. Clean-up and withdrawal
 - `storage.delete_job_prefixes(s3, bucket, job_id)` deletes every object under `dataset/<job_id>/`
-  and `academic/<job_id>/` (listed by prefix, paged). It refuses a `job_id` that is not a UUID, so it
-  can never list or delete a wider prefix. It raises on any failed delete.
+  (listed by prefix, paged). It refuses a `job_id` that is not a UUID, so it can never list or
+  delete a wider prefix. It raises on any failed delete.
 - **Mark first, then purge.** Removing a research copy (Stop sharing, the 90-day rule, job delete) first
   marks it in one guarded update under the job's row lock that re-checks it is still eligible
   (`dataset_removed_at` and its reason, or `deleted_at`), so no curve can be added after that moment;
@@ -222,9 +220,9 @@ place in line among other users, waking the database from the landing page.
   own result, brain and thumbnail are untouched. History's "⋯" menu shows "Stop sharing" on done,
   shared rows (`list_jobs` `sharing` requires status done), with a one-line confirm ("Stop sharing this video? Its research copy is deleted now.").
 - **No curve after 90 days:** the reaper's clean-up (M3e §7) uses `config.json`
-  `research.no_curve_days` (90), deletes both prefixes and sets reason `'no_curve'`. It counts from
+  `research.no_curve_days` (90), deletes the prefix and sets reason `'no_curve'`. It counts from
   `created_at` and skips jobs with any snapshot.
-- Job delete and account delete delete both prefixes (replacing the fixed dataset key list).
+- Job delete and account delete delete the `dataset/` prefix (replacing the fixed dataset key list).
 - A refused curve upload on a removed copy says why: "You stopped sharing this video." or "This
   video's research copy was deleted after 90 days without a curve."
 
@@ -396,7 +394,7 @@ Money and data paths get full treatment:
   nothing stored; refusals for not done, not shared, removed, deleted, someone else's job; balance and
   ledger change by exactly the captured price.
 - `curve_quality`: each check, at its edge.
-- `delete_job_prefixes`: deletes everything under both prefixes across pages; refuses a non-UUID
+- `delete_job_prefixes`: deletes everything under the dataset prefix across pages; refuses a non-UUID
   (including empty and `../`); raises on a failed delete.
 - Stop sharing: marks then purges; a purge failure still answers 200 and the reaper finishes it; 409s
   (including a queued or failed job); another user's job → 404.
@@ -407,7 +405,7 @@ Money and data paths get full treatment:
 - Reaper: 90 days from config; a job with a snapshot is kept; reason `'no_curve'`.
 - Retention route: field validation; an S3 failure on either write records nothing and leaves no
   file; the removed-copy messages.
-- Worker: result and brain go to `academic/`, the video to `dataset/`, the hash recorded; nothing of
+- Worker: result and brain go to `results/`, the video to `dataset/`, the hash recorded; nothing of
   NeuroLens's output under `dataset/`.
 - Consent: version and time stored only when consent is true.
 - `claim` sets `claimed_at`; `list_jobs` leaves out cancelled jobs and returns the new fields.
@@ -428,7 +426,7 @@ cold start plus a 5-file batch and its idle wait):
 1. A 5-file batch: each job charged once, all done on one warm GPU, title count and rows correct,
    cancel one file within 15 s (refunded, not listed).
 2. Add a curve to a shared result: reward appears in the credit and the ledger once; a second curve
-   is stored without a reward; stop sharing removes both prefixes.
+   is stored without a reward; stop sharing removes the dataset prefix.
 3. Stop sharing the six old jobs (§5f).
 
 ## 12. Acceptance criteria

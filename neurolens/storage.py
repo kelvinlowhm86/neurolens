@@ -193,9 +193,8 @@ def put_dataset(s3, bucket, job_id, upload_key):
     """Keep a consented job's video under dataset/<job_id>/ and nothing else (M3j §9b).
 
     The video is copied from the upload key, keeping its extension (M3f §5b). NeuroLens's own
-    result and brain stay under results/; the course-study copy under academic/ is no longer
-    written. A redelivered job replaces the same copy. Any S3 error is raised to the worker's
-    failure path.
+    result and brain stay under results/. A redelivered job replaces the same copy. Any S3 error
+    is raised to the worker's failure path.
     """
     ext = PurePosixPath(upload_key).suffix
     s3.copy_object(
@@ -247,9 +246,8 @@ def object_exists(s3, bucket, key):
 def job_keys(job_id, object_key):
     """The job's own S3 keys: the upload, its result, brain, thumbnail, frames and phone copy.
 
-    The shared copy is not a fixed list any more (M3f §5b): dataset/<job_id>/ also holds retention
-    snapshots. Old course-study copies under academic/<job_id>/ are still removed by
-    `delete_job_prefixes` until the M3j §9b purge.
+    The shared copy is not a fixed list (M3f §5b): dataset/<job_id>/ also holds retention
+    snapshots.
     """
     job_id = str(job_id)
     return [
@@ -275,29 +273,28 @@ def delete_keys(s3, bucket, keys):
 
 
 def delete_job_prefixes(s3, bucket, job_id):
-    """Delete every object under dataset/<job_id>/ and academic/<job_id>/, paged (M3f §5c).
+    """Delete every object under dataset/<job_id>/, paged (M3f §5c).
 
-    The job id must be a canonical UUID: nothing else can widen a prefix. Raises on any delete
+    The job id must be a canonical UUID: nothing else can widen the prefix. Raises on any delete
     S3 reports as failed, so a caller never marks a copy removed while part of it remains.
     """
     text = str(job_id)
     job_id = str(uuid.UUID(text))
     if job_id != text:
         raise ValueError(f"not a canonical UUID: {text!r}")
-    # academic/ is still purged until M3j §9b has removed the old course-study copies.
-    for prefix in (f"dataset/{job_id}/", f"academic/{job_id}/"):
-        pages = s3.get_paginator("list_objects_v2").paginate(Bucket=bucket, Prefix=prefix)
-        for page in pages:
-            keys = [item["Key"] for item in page.get("Contents", [])]
-            if not keys:
-                continue
-            reported = s3.delete_objects(
-                Bucket=bucket, Delete={"Objects": [{"Key": key} for key in keys]}
-            ).get("Errors")
-            if reported:
-                raise RuntimeError(
-                    f"S3 reported {len(reported)} failed deletes under {prefix} in {bucket}"
-                )
+    prefix = f"dataset/{job_id}/"
+    pages = s3.get_paginator("list_objects_v2").paginate(Bucket=bucket, Prefix=prefix)
+    for page in pages:
+        keys = [item["Key"] for item in page.get("Contents", [])]
+        if not keys:
+            continue
+        reported = s3.delete_objects(
+            Bucket=bucket, Delete={"Objects": [{"Key": key} for key in keys]}
+        ).get("Errors")
+        if reported:
+            raise RuntimeError(
+                f"S3 reported {len(reported)} failed deletes under {prefix} in {bucket}"
+            )
 
 
 def result_exists(s3, bucket, job_id):

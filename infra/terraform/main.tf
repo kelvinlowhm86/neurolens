@@ -78,7 +78,6 @@ resource "aws_s3_bucket_policy" "main" {
 #   uploads/              30 d   (S3 rounds to midnight UTC: 30-31 days) the input videos (job status lives in Aurora)
 #   results/              30 d   how long a result stays viewable / downloadable (product decision)
 #   dataset/             1095 d  shared videos and retention curves, kept for research (M3f §5b)
-#   academic/            1095 d  our own result and brain map for the course study (M3f §5b)
 #   sagemaker-output/     1 d    SageMaker's async answers; the job row and results/ are the record
 #   build/                7 d    source.zip for the image build; one build needs it only that day
 #   experiments/ never expire: M4 reads experiments/* for the final report.
@@ -112,17 +111,6 @@ resource "aws_s3_bucket_lifecycle_configuration" "main" {
     status = "Enabled"
     filter {
       prefix = "dataset/"
-    }
-    expiration {
-      days = 1095
-    }
-  }
-
-  rule {
-    id     = "expire-academic"
-    status = "Enabled"
-    filter {
-      prefix = "academic/"
     }
     expiration {
       days = 1095

@@ -17,8 +17,8 @@ spec and an older one disagree, this one wins, and the older section is updated 
 - Facts we checked replace questions: for YouTube links the form no longer asks views or when it
   was published.
 - Wording: sharing is "to help improve NeuroLens"; the course study is no longer a purpose, and the
-  extra copy of the result kept for it (`academic/`) is removed. The hook is seeing real viewers
-  beside the prediction.
+  extra copy of the result kept for it is gone. The hook is seeing real viewers beside the
+  prediction.
 - Easier steps: the guide fills in the video's own values with Copy buttons; the report can be
   pasted instead of saved as a file.
 - "Connect YouTube" (OAuth) is future work: reading channel analytics needs Google's app
@@ -145,17 +145,20 @@ all nullable.
   video, add its retention curve once it's been public a week, and get its credit back."
 
 ## 9b. Removing the course-study copy (`academic/`)
-- The worker stops writing `academic/<job_id>/` (`storage.put_dataset` loses the result and brain;
-  the video still goes to `dataset/<job_id>/`). Ships with the next worker image.
-- After that image is live, a one-off `infra/purge_academic.py` (dry run by default, `--delete` to
-  act; only the configured bucket, only the `academic/` prefix, paged; prints the count) removes the
-  old copies. Then remove `academic/` from `storage.delete_job_prefixes`, the S3 lifecycle rule,
-  and the IAM statements (worker, Lambdas, web), in one Terraform apply.
+- The worker writes no `academic/<job_id>/` copy: `storage.put_dataset` copies only the video to
+  `dataset/<job_id>/`, with no result or brain. NeuroLens's own result and brain stay under
+  `results/`.
+- `infra/purge_academic.py` (dry run by default, `--delete` to act; only the configured bucket, only
+  the `academic/` prefix, paged; prints the count) removed the old copies once.
+- Nothing else refers to the prefix: `storage.delete_job_prefixes` deletes only
+  `dataset/<job_id>/`, there is no S3 lifecycle rule for it, and the worker, Lambda and web IAM
+  statements name no `academic/*` resource.
 
 ## 10. Older specs updated with this build
 M3i §6 (reward conditions, `reward_from`, `list_jobs`), §7 (entry points, form, copy), §8, §12;
-M3f §5a (box, quiet line, privacy summary, consent version), §5b (`academic/` removed), §5d (form,
-body, replies), M3c and M3d where they describe `academic/`; M3d §8b landing copy.
+M3f §5a (box, quiet line, privacy summary, consent version), §5b (shared copy only), §5d (form,
+body, replies), M3a, M3c and M3d where they describe the shared copy or its deletion; M3d §8b
+landing copy.
 
 ## 11. Tests (written first by a separate agent; PostgreSQL for billing)
 Full treatment (money). Behaviour, not call details. The lookup is faked at the HTTP boundary.
@@ -193,5 +196,5 @@ Full treatment (money). Behaviour, not call details. The lookup is faked at the 
   (M3i §12).
 - The check route spends YouTube quota for a signed-in user; 10,000 a day is far above real use.
   Abuse needs a hostile signed-in account (stopping rule).
-- Until the new worker image is live, the old one still writes `academic/` copies; they are
-  deleted with their jobs and by §9b.
+- No `academic/` copies remain: the worker writes none, `infra/purge_academic.py` removed the old
+  ones once, and nothing else refers to the prefix.

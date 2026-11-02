@@ -70,13 +70,11 @@ def make_job(
 
 
 def seed_files(aws, job_id, key):
-    """The research prefixes plus the user's own upload, result, brain and thumbnail."""
+    """The research prefix plus the user's own upload, result, brain and thumbnail."""
     ext = PurePosixPath(key).suffix
     research = [
         f"dataset/{job_id}/video{ext}",
         f"dataset/{job_id}/result.json",
-        f"academic/{job_id}/result.json",
-        f"academic/{job_id}/brain",
     ]
     own = [key, f"results/{job_id}.json", f"results/{job_id}.brain", f"results/{job_id}.jpg"]
     for name in [*research, *own]:

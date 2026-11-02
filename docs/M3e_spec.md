@@ -91,7 +91,7 @@ The same rules as the old `verify` (length limit first, then record the duration
 - **Claim keep-alive:** `ClaimKeepAlive(on_beat, interval_seconds, max_seconds)`. It is the old `Heartbeat` minus SQS: it calls `billing.touch` every `worker.heartbeat_seconds` (50) and stops after `worker.max_job_minutes` (now **55**), logging an error and then calling `on_overrun` (`ClaimKeepAlive(on_beat, interval_seconds, max_seconds, on_overrun)`). In the container `on_overrun` ends the process (`os._exit(1)`): a Python thread stuck in the model cannot be stopped, and while it runs it holds the busy lock, so every later job sent to that instance would be refused with 503 and refunded untried. Ending the process fails the request, SageMaker replaces the unhealthy container, the claim goes stale within 90 s and the error handler refunds the job. A beat whose `touch` returns False (the claim is lost) logs a warning and stops renewing the claim, but the `max_job_minutes` deadline and `on_overrun` still apply (a model that hangs after a lost claim must still end the process); the next stage check ends the job as `LOST_CLAIM`.
 
 ### 4c. Failure inside the container
-- Any exception after the claim and before the result is published: `issue_refund(db, job_id, "processing_failed", _error_text(err), attempt=attempt)`. **Only if it returned True**, delete every file of the job (`storage.job_keys` and the two research prefixes, `storage.delete_job_prefixes`). Answer 500.
+- Any exception after the claim and before the result is published: `issue_refund(db, job_id, "processing_failed", _error_text(err), attempt=attempt)`. **Only if it returned True**, delete every file of the job (`storage.job_keys` and the research prefix, `storage.delete_job_prefixes`). Answer 500.
   - A refund that returns False (the claim was lost, or the job is already `done` because `settle_success` committed but its response was lost) deletes nothing: the files may belong to a charged result. The handler answers 500 too.
   - A failed file delete is logged with `REFUND_DELETE_FAILED <job_id>` and never undoes the refund. It still answers 500.
 - A SIGTERM (SageMaker removing the instance) is not handled. The process ends, the claim goes stale within 90 s, and §5 refunds.
@@ -187,9 +187,9 @@ The same rules as the old `verify` (length limit first, then record the duration
 - **Permissions:** `sagemaker:DescribeEndpoint` and `sagemaker:UpdateEndpointWeightsAndCapacities` on our endpoint only, plus `application-autoscaling:DescribeScalableTargets`.
 
 ## 7. Research consent, retention curves and clean-up
-M3f §5 replaces this section. It describes the consent box and its version, the `dataset/` and
-`academic/` layout, retention snapshots and the reward, Stop sharing, the 90-day clean-up without a
-curve (`research.no_curve_days`), and the reaper's removal of both prefixes. Migration 005's two
+M3f §5 replaces this section. It describes the consent box and its version, the `dataset/`
+layout, retention snapshots and the reward, Stop sharing, the 90-day clean-up without a
+curve (`research.no_curve_days`), and the reaper's removal of the prefix. Migration 005's two
 columns remain; migration 006 adds the rest. Nothing here should be read as a current rule.
 
 ## 8. Web
@@ -220,8 +220,8 @@ behaviour remains below.
 - the CodeBuild project `neurolens-worker-image` (Linux x86-64, privileged for Docker, 60-minute timeout) and its role, which may only read `build/source.zip`, pull the base image from AWS's `pytorch-inference` repository (account 763104351884: `BatchGetImage`, `GetDownloadUrlForLayer`, `BatchCheckLayerAvailability`; the buildspec logs in to that registry as well as ours), push to our repository and write its log group;
 - the SageMaker execution role:
   - read on `model-data/*`, `uploads/*` and `results/*` (the container checks for an existing result before it claims), and `s3:ListBucket` on the bucket (SageMaker lists `model-data/`, and without it a missing result answers 403 instead of 404, which `object_exists` raises on);
-  - put on `results/*`, `dataset/*`, `academic/*`, `experiments/boots/*` and `sagemaker-output/*`;
-  - delete on the job prefixes (refund clean-up);
+  - put on `results/*`, `dataset/*`, `experiments/boots/*` and `sagemaker-output/*`;
+  - delete on the job prefix (refund clean-up);
   - the Data API and the database secret;
   - ECR pull on our repository;
   - its logs;
@@ -238,7 +238,7 @@ behaviour remains below.
 - their roles, each scoped to `neurolens` resources:
   - `dispatcher`: consume the jobs queue (receive, delete, get attributes); `s3:GetObject` and `s3:DeleteObject` on `uploads/*`, `s3:ListBucket` on the bucket; `sagemaker:InvokeEndpointAsync` on the endpoint; `application-autoscaling:DescribeScalableTargets` (read-only, AWS offers no narrower resource than `*`) for the pause check; the Data API and the database secret; its logs;
   - `gpu_failed`: the M3a Lambda role (the DLQ handler's rights, same work);
-  - the M3a Lambda role deletes `uploads/*`, `results/*`, `dataset/*` and `academic/*` (`s3:DeleteObject`) and reads `results/*` and `uploads/*` (`s3:GetObject`); the reaper checks `retention_snapshots` in the database, not `retention.csv` in S3, so it needs no read on `dataset/*`;
+  - the M3a Lambda role deletes `uploads/*`, `results/*` and `dataset/*` (`s3:DeleteObject`) and reads `results/*` and `uploads/*` (`s3:GetObject`); the reaper checks `retention_snapshots` in the database, not `retention.csv` in S3, so it needs no read on `dataset/*`;
   - `gpu_guard`: §6c's permissions, the Data API and the database secret, its logs;
 - the lifecycle rules: `sagemaker-output/` 1 day, `build/` 7 days;
 - the container's log group `/aws/sagemaker/Endpoints/neurolens` with 14-day retention (its lines carry user ids and object keys). The endpoint depends on the group, so Terraform creates it before SageMaker could;
@@ -315,7 +315,7 @@ behaviour remains below.
   - each condition alone blocks it;
   - it logs the marker;
   - a keep-warm (min ≥ 1) blocks it.
-- **Reaper:** the 4-hour deadline; a refunded job whose files are still there has them deleted on the next run, with no second refund; the refund retry path leaves a `done` job's own files alone; the research clean-up selects done, consented jobs past `research.no_curve_days` with no `retention_snapshots` row and not already removed or deleted, marks the copy removed under the job's row lock with `require_no_snapshot=True`, then purges both `dataset/` and `academic/` prefixes; `add_curve` locks the same job row and refuses a removed copy, so a curve and a removal cannot both win; a failed purge leaves the row marked and is retried, and the user's own result is kept.
+- **Reaper:** the 4-hour deadline; a refunded job whose files are still there has them deleted on the next run, with no second refund; the refund retry path leaves a `done` job's own files alone; the research clean-up selects done, consented jobs past `research.no_curve_days` with no `retention_snapshots` row and not already removed or deleted, marks the copy removed under the job's row lock with `require_no_snapshot=True`, then purges the `dataset/` prefix; `add_curve` locks the same job row and refuses a removed copy, so a curve and a removal cannot both win; a failed purge leaves the row marked and is retried, and the user's own result is kept.
 - **Retention:** stores each snapshot and sets `retention_added_at`; refused after removal; `list_jobs` returns `sharing`, `curve_count` and `curve_reward_cents` (M3f §5d).
 - **Web:** paused when max 0 or no target; a read failure → 500.
 - **Cancel window:** an undispatched queued job is cancelled (refunded, files deleted); a dispatched one (`verified_duration_ms` set) → 409, nothing refunded or deleted; `list_jobs` `cancellable` is true only for the first; `verify_queued` on a cancelled job → `not_queued` (no invoke).

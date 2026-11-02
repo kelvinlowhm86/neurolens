@@ -64,8 +64,8 @@ locals {
         Resource = "*"
       },
       {
-        # Deleting a video or the whole account removes its upload, result and both research
-        # prefixes (M3f §5c). Missing keys are fine.
+        # Deleting a video or the whole account removes its upload, result and research
+        # prefix (M3f §5c). Missing keys are fine.
         Sid    = "DeleteJobFiles"
         Effect = "Allow"
         Action = "s3:DeleteObject"
@@ -73,7 +73,6 @@ locals {
           "${aws_s3_bucket.main.arn}/uploads/*",
           "${aws_s3_bucket.main.arn}/results/*",
           "${aws_s3_bucket.main.arn}/dataset/*",
-          "${aws_s3_bucket.main.arn}/academic/*",
         ]
       },
       {

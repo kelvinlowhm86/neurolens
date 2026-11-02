@@ -11,7 +11,7 @@ and `destroy` removes everything it created. The region is one setting (`region`
 
 - One S3 bucket: public access blocked, encrypted, HTTPS-only, ACLs disabled, browser upload
   (CORS) from `allowed_origins`, and prefix-scoped expiry (`uploads/` and `results/` after 30 days,
-  `dataset/` and `academic/` after 1095, `sagemaker-output/` after 1, `build/` after 7,
+  `dataset/` after 1095, `sagemaker-output/` after 1, `build/` after 7,
   `experiments/` never).
 - One SQS queue (visibility 1080 s, a 15 s delivery delay) and the wiring that sends a message
   whenever a file lands under `uploads/`. A second queue (`neurolens-jobs-dlq`) receives a job that

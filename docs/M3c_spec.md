@@ -11,12 +11,12 @@
 - **Free allowance, granted only.** New accounts start at 0. `infra/grant_credit.py` adds credit for course members (M3b §7a; the amount is typed in dollars). This means a stranger who signs in with Google cannot spend GPU money.
 - **Stripe removed from the service.** Before the removal, the last commit with Stripe (the custom GPU workers, after one real GPU job) is tagged `custom-gpu-stripe`. The report cites the tag as the working prototype of the future paid phase. No code is kept behind a switch.
 - **Consent is opt-in, per upload.** The box is unticked by default, and analysis works the same either way. Only consented videos are kept beyond the normal 30 days.
-- **Retention: up to 3 years (1095 days)** for a shared video (and, until M3j §9b purges them, its old course-study output), enforced by S3 lifecycle rules on `dataset/` and `academic/`; a shared video with no retention curve is purged 90 days after upload. Other uploads and results expire after 30 days. Teardown after the course deletes everything earlier.
+- **Retention: up to 3 years (1095 days)** for a shared video, enforced by an S3 lifecycle rule on `dataset/`; a shared video with no retention curve is purged 90 days after upload. Other uploads and results expire after 30 days. Teardown after the course deletes everything earlier.
 - **Deletion:** per video, and the whole account. Both are refused while one of the user's jobs is queued or processing. A waiting job can be cancelled first (M3d §7). That is the only state in which the worker or reaper may still write to the job.
 
 ## 1. Scope
 ### In scope
-Migration 003; consent at upload; the shared copy in the worker (the video under `dataset/`; our own output stays under `results/`, and the old course-study copy under `academic/` is removed in M3j §9b); the retention-curve upload; per-video and account deletion; Stripe removal (code, tests, Terraform, SSM parameters, page, privacy page, specs); the shared lifecycle rules; the guide `static/retention_guide.html`.
+Migration 003; consent at upload; the shared copy in the worker (the video under `dataset/`; our own output stays under `results/`); the retention-curve upload; per-video and account deletion; Stripe removal (code, tests, Terraform, SSM parameters, page, privacy page, specs); the shared lifecycle rule; the guide `static/retention_guide.html`.
 
 ### Out of scope
 - Drawing the real curve next to the predicted one (a possible later addition).
@@ -41,10 +41,10 @@ Migration 003; consent at upload; the shared copy in the worker (the video under
 - **Result check:** before `put_result`, every job calls `set_stage(..., "saving_result")`; a job that lost its claim writes no result (a consented job checks twice).
 - **Write**, through one helper, `storage.put_dataset(s3, bucket, job_id, upload_key)`:
   - `copy_object` from the upload key to `dataset/<job_id>/video<ext>`, where `<ext>` is `PurePosixPath(upload_key).suffix`. A single copy works up to 5 GB and uploads are capped at 300 MB. No local file is needed.
-  - No `academic/` copy is written any more (M3j §9b); NeuroLens's own result and brain stay under `results/`. Old course-study copies are removed by `infra/purge_academic.py`.
+  - The shared copy is only the video under `dataset/<job_id>/`; NeuroLens's own result and brain stay under `results/`.
   - The video's SHA-256 is recorded with `billing.record_video_hash` before the copy.
   - A redelivered job replaces the same copy.
-- **Failure:** a research-copy write failure enters the worker's pre-publication failure path: refund only while it still owns the claim, then delete the research prefixes and the job's own files if the refund succeeded. Failed deletes are logged for retry by the reaper. A consented job is never marked done without its research copy.
+- **Failure:** a research-copy write failure enters the worker's pre-publication failure path: refund only while it still owns the claim, then delete the research prefix and the job's own files if the refund succeeded. Failed deletes are logged for retry by the reaper. A consented job is never marked done without its research copy.
 - **Data:** `billing.job_state` returns `research_consent`.
 
 ### 3c. Retention curve
@@ -68,7 +68,7 @@ Migration 003; consent at upload; the shared copy in the worker (the video under
 2. Mark it deleted first: `billing.delete_job(db, user_id, job_id)` sets `deleted_at = now()`, `filename = NULL` and clears `dataset_purged_at`, so it is hidden from every route at once.
    - No status re-check is needed: `done` and `failed` are final, and `claim`, `settle_success` and `issue_refund` all refuse final jobs.
    - The job row and its ledger rows stay, so the credit history still adds up.
-3. Purge the files with `billing.purge_job_files`: every object under `dataset/<job_id>/` and `academic/<job_id>/` (the video, retention snapshots, result and brain), the job's own keys (the upload, `results/<job_id>.json`, `.brain` and `.jpg`), then its `retention_snapshots` rows. Missing keys are fine. A failed purge is logged; the job stays hidden and the reaper retries it (M3f §5c).
+3. Purge the files with `billing.purge_job_files`: every object under `dataset/<job_id>/` (the video and retention snapshots), the job's own keys (the upload, `results/<job_id>.json`, `.brain` and `.jpg`), then its `retention_snapshots` rows. Missing keys are fine. A failed purge is logged; the job stays hidden and the reaper retries it (M3f §5c).
 4. **Hiding deleted jobs:**
    - `owned_job`'s query is the one place every job route goes through. It gains `AND deleted_at IS NULL` and also returns `object_key`, so all routes answer 404 for a deleted job.
    - `list_jobs` skips deleted jobs.
@@ -93,7 +93,7 @@ Marking first means no curve can be added while the purge runs. A failed purge l
      After this nothing can write to the account: `reserve` refuses a user with `deleted_at` under the
      same lock, a curve needs a job that is not deleted, and no worker holds a job.
   2. Delete the Cognito accounts. For each returned identity whose issuer is our Cognito pool, call `ListUsers` with filter `sub = "<subject>"`, then `AdminDeleteUser` with the returned username. No match counts as already deleted. One NeuroLens user can have both a Google and an email login.
-  3. **Purge** each job with `billing.purge_job_files` (both research prefixes and the job's own
+  3. **Purge** each job with `billing.purge_job_files` (the research prefix and the job's own
      files). A failed purge is logged and left to the reaper.
   4. **Remove the rows**, `billing.remove_deleted_account(db, user_id)`: only when the user has
      `deleted_at` and every job has `dataset_purged_at`, delete the ledger, jobs (snapshots cascade),
@@ -119,10 +119,10 @@ Marking first means no curve can be added while the purge runs. A failed purge l
 - `static/privacy.html`: remove Stripe, and add consent, the dataset, research retention (up to 3 years, or 90 days without a curve) and the delete options. It says uploads that are not kept for research are deleted after 30 days, and at once when the job is cancelled or refunded.
 
 ## 7. Permissions and storage (Terraform)
-- **Lifecycle rules:** `dataset/` and `academic/`, 1095 days each. Each file expires 3 years after it was stored; the reaper's 90-day no-curve purge is separate (M3f §5c). `academic/` leaves this rule in the Terraform apply after its old copies are purged (M3j §9b).
-- **Worker role:** `s3:PutObject` on `dataset/*` and `academic/*`. The copy is a `copy_object`, which reads the upload with the `s3:GetObject` the worker already has (last bullet). The `academic/*` grant goes with the same purge (M3j §9b).
+- **Lifecycle rule:** `dataset/`, 1095 days. Each file expires 3 years after it was stored; the reaper's 90-day no-curve purge is separate (M3f §5c).
+- **Worker role:** `s3:PutObject` on `dataset/*`. The copy is a `copy_object`, which reads the upload with the `s3:GetObject` the worker already has (last bullet).
 - **Web role:**
-  - `s3:DeleteObject` on `uploads/*`, `results/*`, `dataset/*` and `academic/*` (the last until the M3j §9b purge);
+  - `s3:DeleteObject` on `uploads/*`, `results/*` and `dataset/*`;
   - `s3:PutObject` on `dataset/*/retention/*` (the raw report and parsed CSV of each snapshot);
   - `cognito-idp:ListUsers` and `cognito-idp:AdminDeleteUser` on our pool only.
 - **Role boundary:** `infra/iam/neurolens-role-boundary.json` gains a statement allowing those two actions on our user pool in us-east-1. The boundary caps every role, so without this the web role's grant would be denied. Josh applies the boundary change (a paste, like earlier IAM policy edits).
@@ -139,7 +139,7 @@ Marking first means no curve can be added while the purge runs. A failed purge l
   - `results.parse_retention_report`.
 - **Tests** (`tests/test_m3c_*.py`, written first; PostgreSQL for the billing ones):
   - consent stored, defaulting to false, with a non-boolean refused;
-  - the worker copies only consented jobs; a failed research write fails the job without settling it; the research write happens before `put_result`; a worker that lost its claim writes nothing under `dataset/` or `academic/`;
+  - the worker copies only consented jobs; a failed research write fails the job without settling it; the research write happens before `put_result`; a worker that lost its claim writes nothing under `dataset/`;
   - report rules, each rule broken once; each save writes a raw JSON snapshot and its two-column CSV under `dataset/<job_id>/retention/`; a retention POST with a JSON body reaches the handler;
   - retention refused for jobs not done, without consent, or not owned;
   - per-video delete: the S3 keys are gone, the job is hidden from every route, its ledger is intact, it is refused while active, repeating it is safe, and a failed purge still leaves the job marked deleted for the reaper to finish;
@@ -157,9 +157,9 @@ Marking first means no curve can be added while the purge runs. A failed purge l
 
 ## 9. Acceptance criteria
 1. Full suite passes with PostgreSQL. `ruff` is clean. `git grep -i stripe` finds only specs, git history notes and the ledger kind `test_topup`.
-2. Live: a consented fake job leaves `dataset/<job_id>/video…` and nothing under `academic/` (M3j §9b); an unconsented one leaves nothing under `dataset/` or `academic/`.
+2. Live: a consented fake job leaves `dataset/<job_id>/video…`; an unconsented one leaves nothing under `dataset/`.
 3. Live: a valid YouTube Analytics report is stored as a raw JSON snapshot and its two-column CSV under `dataset/<job_id>/retention/`; a broken one is refused with its row number.
 4. Live: per-video delete removes every file, and the job leaves the history.
 5. Live: deleting a test account removes its rows and its Cognito login, and signing in again gives a new empty account.
-6. `terraform plan` shows the webhook removed, the new lifecycle rules, the new permissions and the Cognito-delete alarm, and nothing else. The role boundary has the Cognito statement.
+6. `terraform plan` shows the webhook removed, the new lifecycle rule, the new permissions and the Cognito-delete alarm, and nothing else. The role boundary has the Cognito statement.
 7. The Opus review of the deletion and consent slice finds no HIGH.

@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 DEADLINE_S = 4 * 60 * 60
 HEARTBEAT_STALE_S = 10 * 60
 FAILED_RETRY_S = 2 * 24 * 60 * 60
-# Matches the dataset/ and academic/ S3 lifecycle rule (M3f §5c).
+# Matches the dataset/ S3 lifecycle rule (M3f §5c).
 SNAPSHOT_RETENTION_DAYS = 1095
 
 
