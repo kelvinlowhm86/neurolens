@@ -210,7 +210,8 @@ place in line among other users, waking the database from the landing page.
   its own files purged. Account delete marks too (M3c §5).
 - **Curve details go with the copy:** the purge deletes the job's `retention_snapshots` rows (after
   the files), and every reaper run deletes snapshot rows older than 1095 days, matching the S3 rule.
-  The reward guard does not depend on them: it is `jobs.curve_rewarded_at` and the video hash.
+  The reward guard does not depend on them: it reads `jobs.curve_rewarded_at`, the video hash and
+  `jobs.curve_reward_ref` (M3i §6).
 - **Lock order:** any transaction that locks both takes the user's balance row first, then the job row
   (`add_curve`, account delete, `reserve`), so two of them can never deadlock.
 - **Stop sharing:** `POST /api/jobs/<id>/stop-sharing` on a done, shared, not-removed job marks it

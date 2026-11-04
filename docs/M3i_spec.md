@@ -101,9 +101,17 @@ date when we can check it, and the link is checked before any work. The link rul
     facts are known, else `created_at + reward_min_days`; the length must match the analysed video
     within `length_tolerance_s` when it can be checked; a checked view count must be at least
     `research.curve_min_views` (1,000), while a hidden or unknown count pays as before; and no
-    snapshot with the same `video_ref` has `rewarded_cents > 0`. It returns `reason` (the first
+    job has `curve_reward_ref` equal to this `video_ref`. It returns `reason` (the first
     unmet condition) and `reward_from` only with `too_early`, or with `too_few_views` when the
     date is also still ahead.
+- **The rewarded link is kept on the job:** a rewarded save sets `jobs.curve_reward_ref` to the
+  `video_ref` in the same transaction as `curve_rewarded_at`, and the once-per-link check reads that
+  column, never `retention_snapshots`. Snapshots go when the copy is purged (Stop sharing, job
+  delete, 90 days, 1095 days; M3f §5), and a check that read them would forget the reward and pay the
+  same link again for a re-encoded upload. The column is cleared only with the job row (account
+  delete). Migration 013 (`infra/migrations/013_curve_reward_ref.sql`) adds the column, fills it from
+  existing rewarded snapshots, and adds a unique index on it where not null, so two saves can never
+  both reward one link: the second fails loudly.
 - `billing.curve_offer` shares the job checks, the link refusals and `_curve_reward` with
   `add_curve`, so the check and the save cannot disagree.
 - `list_jobs` drops `curve_reward_from`: before a link there is no date to promise.
@@ -193,6 +201,11 @@ Full treatment (money). Behaviour, not call details.
   - the same link on another account's job → `VideoTaken`, nothing stored; the same link on two of
     the same user's jobs → both stored, only the first eligible one rewarded;
   - a second link on a job that already has one → `VideoLinkChanged`;
+  - a link rewarded on one job, then that job's copy purged (Stop sharing) or the job deleted: the
+    same link on the user's new job (different video hash) is stored with no reward
+    (`already_rewarded`), and `curve_offer` says the same;
+  - migration 013 fills `curve_reward_ref` from a rewarded snapshot and leaves unrewarded jobs null;
+    a second job with the same non-null `curve_reward_ref` is refused by the database;
   - the existing M3f reward tests still pass with curves added after day 7.
 - `list_jobs`: has no `curve_reward_from`; `curve_reward_cents` previews the reward without a date.
 - Route: missing or bad `video_url`/`same_cut` → 400 and nothing in S3; a Facebook report whose id
@@ -201,8 +214,8 @@ Full treatment (money). Behaviour, not call details.
 - Copy: landing "5 minutes" matches config; the privacy page's 7 matches config; the consent version
   on the page equals `billing.CONSENT_VERSION`.
 - **Break-it checks** (on committed code, restore with `git checkout <file>`): remove the date
-  condition; remove the other-account link check; remove the once-per-`video_ref` reward check.
-  Each must turn a test red.
+  condition; remove the other-account link check; remove the once-per-`video_ref` reward check;
+  make that check read `retention_snapshots` again. Each must turn a test red.
 
 ## 12. Known limitations (accepted)
 - The Facebook route is built from documentation only. Meta's Explorer may need the creator to set
@@ -211,7 +224,11 @@ Full treatment (money). Behaviour, not call details.
 - A YouTube report holds no video id, so a YouTube curve's link is the user's word; the link rules
   limit reuse but cannot prove the report belongs to it.
 - Two accounts adding the same link at the same instant could both pass the other-account check
-  (no lock across jobs). Needs two colluding accounts; the reward caps bound the cost.
+  (no lock across jobs) and both store a curve; the unique index lets only one be rewarded, and the
+  other save fails with an error instead of a clear message. Needs two colluding accounts.
+- Deleting the account deletes its jobs, and with them the record of its rewarded links and video
+  hashes. A new account starts with no credit (credit comes only from Josh's grants), so it cannot
+  reuse them without Josh granting it credit again.
 - Facebook has no publish date or length, and a YouTube lookup that fails falls back to the
   analysis date; the 7 days then run from the analysis (M3j §12). A checked YouTube video waits
   from its publish date and must match the analysed length within 2 s.
