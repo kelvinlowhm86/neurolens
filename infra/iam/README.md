@@ -38,28 +38,13 @@ Terraform sets `permissions_boundary` on every role it creates, or AWS refuses t
 4. Only then remove any other policy on the user (the old inline `neurolens-deploy-scoped`, or a broad
    one such as AdministratorAccess), so it can touch NeuroLens only.
 
+Edits later: open the policy, Edit, paste the new file. AWS keeps up to five versions.
+
 ## New account: what the account owner does
 
-Four steps, done once, signed in as the account owner (or an admin). IAM and Billing are the same
-in every region; only step 3 needs the region set to **US East (N. Virginia) us-east-1** (top right
-of the console).
-
-1. **Access key for the deployer's user** (it already exists): IAM, Users, the user, Security
-   credentials, Create access key, "Command Line Interface (CLI)". Send both parts (the key ID and
-   the secret) to the deployer privately, for example a password-manager share; not in a group chat.
-   The secret is shown only once.
-2. **Permission policies:** follow "Apply" above (create the five policies, attach four to the user).
-3. **Bedrock** (lets the app write reports with Claude): region us-east-1, Bedrock console, Model
-   catalog, open **Claude Sonnet 4.6** (Anthropic). If it asks for use-case details, fill in the
-   short form (a university course project that writes a text summary of a video analysis). Then
-   open it in the Playground and send one short message ("hi"): the first use switches the model
-   on for the account, which the app's own limited permissions cannot do. Costs a fraction of a cent.
-4. **Credits:** Billing, Credits: check each credit's applicable products include SageMaker,
-   Bedrock, Lambda, Aurora (RDS), S3 and CloudFront, so nothing is charged to the card.
-
-At the end of the project: delete the user and the five `neurolens-*` policies.
-
-Edits later: open the policy, Edit, paste the new file. AWS keeps up to five versions.
+The account owner follows [ACCOUNT_OWNER.md](ACCOUNT_OWNER.md) (create the five policies, attach
+four, make an access key, switch on Claude, check the credits). The deployer then requests quotas
+himself with the `neurolens-quota-requests` policy.
 
 ## Check (with the `neurolens` profile)
 
