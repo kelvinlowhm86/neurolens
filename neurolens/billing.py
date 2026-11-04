@@ -629,8 +629,9 @@ def remove_deleted_account(db, user_id):
     """Delete a marked account's rows once every job's files are gone (M3c §5, M3f §5c).
 
     Only when the user has `deleted_at` and every job has `dataset_purged_at`; otherwise change
-    nothing and return False. Credit is free, so no financial record is kept. Locks the balance
-    row first, like every money-or-job transaction.
+    nothing and return False. Credit is free, so no financial record is kept. The access request
+    goes too, before the user row: it may have raced the delete (M3k §4). Locks the balance row
+    first, like every money-or-job transaction.
     """
     with db.transaction() as tx:
         tx.execute(
@@ -649,6 +650,7 @@ def remove_deleted_account(db, user_id):
         )
         if pending:
             return False
+        tx.execute("DELETE FROM access_requests WHERE user_id = :user_id", {"user_id": user_id})
         tx.execute("DELETE FROM ledger WHERE user_id = :user_id", {"user_id": user_id})
         tx.execute("DELETE FROM jobs WHERE user_id = :user_id", {"user_id": user_id})
         tx.execute("DELETE FROM balances WHERE user_id = :user_id", {"user_id": user_id})

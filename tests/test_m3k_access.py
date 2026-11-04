@@ -135,6 +135,16 @@ def test_a_second_request_is_refused_and_keeps_the_first(db, pg):
     assert row["channel_url"] == CHANNEL
 
 
+def test_a_deleted_account_cannot_ask_and_stores_nothing(db):
+    user_id = billing.sign_in(db, ISSUER, "sub-gone", "gone@example.com", 0)
+    billing.delete_account(db, user_id)
+
+    with pytest.raises(LookupError, match="no such user"):
+        access.add_request(db, user_id, CHANNEL, None)
+
+    assert access.request_status(db, user_id) is None
+
+
 # ---------------------------------------------------------------- granting and declining
 
 
@@ -201,6 +211,21 @@ def test_deleting_the_account_removes_its_access_request(db, pg):
 
     billing.delete_account(db, user_id)
 
+    assert pg.one("SELECT * FROM access_requests WHERE user_id = %s", user_id) is None
+
+
+def test_a_request_that_raced_the_delete_does_not_stop_remove_deleted_account(db, pg):
+    user_id = billing.sign_in(db, ISSUER, "sub-race", "race@example.com", 0)
+    billing.delete_account(db, user_id)
+    pg.conn.execute(
+        "INSERT INTO access_requests (user_id, channel_url, platform, note) "
+        "VALUES (%s, %s, 'youtube', NULL)",
+        (user_id, CHANNEL),
+    )
+
+    assert billing.remove_deleted_account(db, user_id) is True
+
+    assert pg.one("SELECT * FROM users WHERE user_id = %s", user_id) is None
     assert pg.one("SELECT * FROM access_requests WHERE user_id = %s", user_id) is None
 
 

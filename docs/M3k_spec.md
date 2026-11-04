@@ -61,8 +61,10 @@ One row per account (the primary key).
   `www.` or `m.` removed, must be `youtube.com`, `facebook.com`, `tiktok.com` or `instagram.com`,
   and the path must not be empty or `/`. Anything else raises `ValueError` with "Paste your
   YouTube, Facebook, TikTok or Instagram channel link." Length at most 300 characters.
-- `add_request(db, user_id, channel_url, note)`: validates (note stripped, empty → null, at most 500 characters), then `INSERT ... ON CONFLICT DO NOTHING
-  RETURNING`. An existing row raises `AlreadyRequested`. Returns the stored request (no email).
+- `add_request(db, user_id, channel_url, note)`: validates (note stripped, empty → null, at most 500 characters), then inserts only for a user that is not deleted (`INSERT ... SELECT ... FROM
+  users WHERE ... deleted_at IS NULL ON CONFLICT DO NOTHING RETURNING`). An existing row raises
+  `AlreadyRequested`; a deleted or unknown user raises `LookupError`. Returns the stored request
+  (no email).
 - `request_status(db, user_id) -> 'waiting' | 'granted' | 'declined' | None`.
 - `waiting_requests(db)`: rows with the user's email, oldest first, for the operator script.
 - `decline(db, email)`: sets a `waiting` request to `declined`, `decided_at = now()`; returns
@@ -71,7 +73,8 @@ One row per account (the primary key).
   `granted` with `decided_at = now()`, in the same transaction as the credit. So any grant,
   including one to a declined user, ends the request as granted.
 - `billing.delete_account` deletes the user's `access_requests` row in its transaction (it holds
-  a channel link and a note; nothing financial is lost). `remove_deleted_account` needs no change.
+  a channel link and a note; nothing financial is lost). `remove_deleted_account` deletes the row
+  too, before the user row (a request that raced the delete).
 
 ## 5. Notifying Josh (`neurolens/notify.py`)
 - `sns_notifier(region, topic_arn) -> callable(request, email)`: boto3 `sns.publish` to the

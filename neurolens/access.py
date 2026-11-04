@@ -61,15 +61,19 @@ def _clean_note(note):
 def add_request(db, user_id, channel_url, note):
     """Store a waiting request, once per account, and return it (M3k §4).
 
-    Validates the link and note first, so a bad request writes nothing. An account that already
-    has a request raises AlreadyRequested and keeps its first one.
+    Validates the link and note first, so a bad request writes nothing. The insert only finds a
+    user that is not deleted, so a request racing the account delete writes nothing. An account
+    that already has a request raises AlreadyRequested and keeps its first one; a deleted or
+    unknown user raises LookupError.
     """
     platform = platform_of(channel_url)
     note = _clean_note(note)
+    existing = []
     with db.transaction() as tx:
         rows = tx.execute(
             "INSERT INTO access_requests (user_id, channel_url, platform, note) "
-            "VALUES (:user_id, :channel_url, :platform, :note) "
+            "SELECT :user_id, :channel_url, :platform, :note FROM users "
+            "WHERE user_id = :user_id AND deleted_at IS NULL "
             "ON CONFLICT DO NOTHING RETURNING *",
             {
                 "user_id": user_id,
@@ -78,9 +82,16 @@ def add_request(db, user_id, channel_url, note):
                 "note": note,
             },
         )
-    if not rows:
+        if not rows:
+            existing = tx.execute(
+                "SELECT 1 AS present FROM access_requests WHERE user_id = :user_id",
+                {"user_id": user_id},
+            )
+    if rows:
+        return rows[0]
+    if existing:
         raise AlreadyRequested("this account already asked for free minutes")
-    return rows[0]
+    raise LookupError("no such user")
 
 
 def request_status(db, user_id):
