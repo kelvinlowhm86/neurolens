@@ -90,6 +90,7 @@ locals {
       (aws_lambda_function.dispatcher.function_name) = "Uploads may wait and never reach the GPU."
       (aws_lambda_function.gpu_guard.function_name)  = "A GPU left on would only be stopped by scale-in."
       (local.web_lambdas.web.name)                   = "The website may be failing for users."
+      (aws_lambda_function.report.function_name)     = "AI reports may stay stuck until they go stale."
     },
   )
 }
