@@ -290,7 +290,7 @@ def test_the_public_routes_stay_public(cognito_app, tmp_path):
     client = cognito_app().test_client()
     (tmp_path / "data" / "ok.txt").write_text("fine")
     assert client.get("/").status_code == 200
-    assert client.get("/static/chart.min.js").status_code == 200
+    assert client.get("/static/post_json.js").status_code == 200
     assert client.get("/data/ok.txt").data == b"fine"
     assert client.get("/login").status_code in (302, 303)
     assert client.get("/auth/callback").status_code == 400  # refused, but not 401

@@ -69,7 +69,7 @@ Scale on the whole queue, including messages being worked on. Scaling only on *v
 - **Scale in:** a metric-math alarm on `FILL(visible, 0) + FILL(not_visible, 0)` = 0 for 7 consecutive minutes (`ApproximateNumberOfMessagesVisible` + `ApproximateNumberOfMessagesNotVisible`), `treat_missing_data = "breaching"`, uses the "set to 0" policy (`workers_to_zero`). A busy worker is never removed by it: it holds scale-in protection while it has a job (§1a). A queue that publishes no metrics (quiet for hours) counts as empty. Verify that behaviour once with `get-metric-data` on the quiet queue, as in M2a.
 - SQS publishes these metrics about once a minute, and after a long quiet period they can take up to about 15 minutes to resume. That delay is part of the measured cold start (§10).
 - Outside a session the group's max is 0 (`stop_work.sh`), so an upload waits in the queue and starts a worker in the next session. `start_work.sh` sets max 1, after which an upload starts a worker by itself.
-- Standing configuration stays **min 0 / max 1 / desired 0**. Max 2 only during Experiment 2 (`start_work.sh --max 2`), then back to 1.
+- Standing configuration stays **min 0 / max 1 / desired 0**. Max 2 only during Experiment 2 (`max_instances = 2` in `infra/terraform/terraform.tfvars`), then back to 1.
 
 ### 2b. The worker never ends its own machine
 - The baked unit has no `OnSuccess=`/`OnFailure=` hooks, and the unit and script that ended the machine are gone. UserData writes the drop-in with `TimeoutStopSec=110` and `KillMode=mixed` under `[Service]` (SIGTERM reaches the worker alone, not its helper programs, so a helper killed first cannot make a stop look like a job failure; leftovers get SIGKILL when the worker exits) and the crash limit (`StartLimitIntervalSec=3600`, `StartLimitBurst=3`; M2a §3). After the limit the service stays failed and the machine waits for the breaker.
@@ -149,7 +149,7 @@ After the presigned S3 POST succeeds (204), the page currently shows "Uploaded �
 ## 8. First-job warm-up (WhisperX)
 A fresh worker's first job spends about 6 minutes in WhisperX (5 min 41 s on `neurolens-worker-v2`); later jobs take about 14 s. tribev2 runs WhisperX as `uvx whisperx ...` (pinned tribev2, `eventstransforms.py`). The image holds uv's cache and WhisperX environment in `/root/.cache/uv`.
 
-**Cause (diagnosed on the CPU rehearsal worker, build log §8):** two parts. (1) uv's saved package lists are older than its 10-minute freshness window, so `uvx` asks PyPI again; when any of WhisperX's 124 dependencies has a newer release than the image's, the resolution changes and uv builds a new environment (about 14 s on CPU) — and the worker runs dependency versions the image was never tested with. (2) Most of the time: the worker's disk is created from the image snapshot and fetches each block from S3 on its first read, so loading torch and WhisperX's libraries (and, on GPU, the CUDA libraries) is slow once (about 2 min 40 s of a 2 min 54 s cold `uvx whisperx --help` on CPU, against 16.5 s warm). The same effect is the 86–107 s first `import torch` in the worker.
+**Cause (diagnosed on the CPU rehearsal worker; figures in `docs/evidence/README.md`, "First-job warm-up"):** two parts. (1) uv's saved package lists are older than its 10-minute freshness window, so `uvx` asks PyPI again; when any of WhisperX's 124 dependencies has a newer release than the image's, the resolution changes and uv builds a new environment (about 14 s on CPU) — and the worker runs dependency versions the image was never tested with. (2) Most of the time: the worker's disk is created from the image snapshot and fetches each block from S3 on its first read, so loading torch and WhisperX's libraries (and, on GPU, the CUDA libraries) is slow once (about 2 min 40 s of a 2 min 54 s cold `uvx whisperx --help` on CPU, against 16.5 s warm). The same effect is the 86–107 s first `import torch` in the worker.
 
 **Fix:**
 1. `UV_OFFLINE=1` in `env.conf` (UserData): `uvx` resolves only from the image's cache, so it reuses the image's WhisperX environment, makes no PyPI requests and runs the tested versions. If the image ever lacked a package, the job fails loudly ("whisperx failed") instead of fetching it.
@@ -191,9 +191,8 @@ A 55 s 4K clip took 4.4 times longer than a 480p clip of similar length (video e
   - Client render: read `window.neurolensTimings.render_ms` in the browser console on 3 runs per clip length and add it to the run's CSV by hand.
   - Rows follow the contract's `experiment-1/runs.csv`. Everything goes into `experiments/experiment-1/<run_id>/` straight away (job rows are the live record, M3a). Analysis script `experiments/latency_breakdown.py`.
   - The same session also runs §9 Step A and the §6 real-job stop check. Estimate about $3–3.60 (about 1.6–1.9 GPU hours: 12 warm jobs about 50 minutes, boot and warm-up job, §9 Step A about 15 minutes, the stop check, manual timings); flag it before starting.
-- **Experiment 2 (scaling):** `locustfile.py` POSTs to `/api/uploads/presign`, uploads the fixed 15 s test video via the presigned POST (fields first, file last), then polls status to completion. Burst sizes match the report: **1, 5, 10 and 20** simultaneous jobs, `start_work.sh --max 2`.
+- **Experiment 2 (scaling):** `experiments/locustfile.py` POSTs to `/api/uploads/presign`, uploads the fixed 15 s test video via the presigned POST (fields first, file last), then polls status to completion. Burst sizes match the report: **1, 5, 10 and 20** simultaneous jobs; set `max_instances = 2` in Terraform for the session, then back to 1.
   - **One session, bursts back to back** (each after the previous has drained, without waiting for scale-in): burst 1 starts from zero workers (scale-out from 0, ideally after a quiet day, so the SQS metric delay is included); burst 5 grows the pool from 1 to 2; bursts 10 and 20 go beyond the 2-worker ceiling on purpose, to show the queue absorbing the backlog, no dropped or duplicated results, and a full drain. After burst 20, the group returns to 0 by the scale-in alarm (measured once).
-  - For this session set `worker_instance_types = ["g6e.xlarge"]` (Terraform), since the 8-vCPU GPU quota fits two `xlarge` but only one `2xlarge`; restore it afterwards.
   - Each run saves the contract's `experiment-2` files: Locust's CSV output, per-job times, the reliability counts (results vs submissions, duplicates, dead-lettered jobs), and `experiments/export_cloudwatch.py <run_id> --start --end` for the one-minute SQS and ASG series.
   - Estimate about $5–6 (about 2.5–3 GPU hours); flag it before starting.
 - **Cold-start breakdown** (from `cold_start.csv`): GPU capacity wait; model load; warm-up; ready; first job's transcribing. No target number is asserted in advance. Report the machine-side parts as ranges with their sample count, and the AWS-side wait (capacity) as observed events.
@@ -237,7 +236,7 @@ infra/terraform/          MODIFIED: scale-out/in alarms and policies, breaker La
 infra/lambda/breaker.py   NEW: circuit breaker (§2c)
 infra/iam/*.json          MODIFIED: deploy user (Lambda, EventBridge, logs, PassRole to Lambda,
                                     DescribeAlarmHistory); boundary (breaker's actions; no TerminateInstance)
-infra/start_work.sh       MODIFIED: --keep-warm --hours N warm hold with its scheduled end; --max 2; plain start sets max only
+infra/start_work.sh       MODIFIED: --keep-warm --hours N warm hold with its scheduled end; plain start sets max only
 infra/stop_work.sh        MODIFIED: deletes the hold's scheduled action; reports a tripped breaker
 infra/terraform/README.md MODIFIED: §2e demo routine, breaker, no worker-initiated shutdown
 neurolens/worker.py       MODIFIED: stage and hand-back calls, SKIPPED, Heartbeat, release, ShutdownSignal, ScaleInProtection, boot_record; idle exit removed
@@ -245,7 +244,7 @@ neurolens/storage.py      MODIFIED: result_exists, get_result, utc_text, utc_par
 neurolens/inference.py    MODIFIED: FAKE_INFERENCE_SECONDS (and §9 Step B, only if it goes ahead)
 neurolens/web/app.py      MODIFIED: /api/jobs/<id>/status and /api/jobs/<id>/result (Aurora-backed from M3a)
 config.json               MODIFIED: worker.heartbeat_seconds, worker.max_job_minutes
-locustfile.py             NEW
+experiments/locustfile.py     NEW
 requirements/experiments.txt  NEW: locust, matplotlib (experiment scripts; M4's consolidation also uses matplotlib)
 requirements/dev.txt      MODIFIED: adds -r experiments.txt; moto[s3,sqs,autoscaling]
 experiments/latency_run.py         NEW: Experiment 1 single run
@@ -254,12 +253,11 @@ experiments/export_cloudwatch.py   NEW: Experiment 2 CloudWatch series
 experiments/cold_start.py          NEW: cold_start.csv from boot records and scaling history
 tests/                    MODIFIED: §11 tests; M2a's idle-exit test removed
 static/                   MODIFIED: real polling, ?job= link, render timing
-docs/M2b_build_log.md     NEW: §8 diagnosis, §9 results, measurements and choices
 ```
 
 ## 13. Acceptance criteria
 CPU = rehearsal worker in fake mode with a slow fake job; GPU = real worker.
-1. **Scaling (CPU):** with `start_work.sh` (no keep option), one upload scales the group 0 → 1 by the alarm, the job completes, and the group returns to 0 about 7 minutes after the queue empties, visible in CloudWatch; no worker is terminated mid-job. A scale-in forced by hand during a job (the scale-in policy run with `execute-policy`) leaves the busy worker running until its job is done, then removes it. With `--max 2`, one upload launches only one worker. (GPU, Experiment 2: 0 → 1 → 2 and back to 0.)
+1. **Scaling (CPU):** with `start_work.sh` (no keep option), one upload scales the group 0 → 1 by the alarm, the job completes, and the group returns to 0 about 7 minutes after the queue empties, visible in CloudWatch; no worker is terminated mid-job. A scale-in forced by hand during a job (the scale-in policy run with `execute-policy`) leaves the busy worker running until its job is done, then removes it. With `max_instances = 2`, one upload launches only one worker. (GPU, Experiment 2: 0 → 1 → 2 and back to 0.)
 2. **Duplicates (CPU):** two identical SQS messages for one `job_id` (manual re-send) produce exactly one result object and one capture; the second delivery returns `SKIPPED` or `DUPLICATE`.
 3. **Crash (CPU):** `kill -9` of the worker process mid-job makes the job visible again within about 120 s, and a second attempt completes it.
 4. **Stop (CPU, then once on GPU):** `systemctl stop neurolens-worker` mid-job makes the job visible again within about 10 s, and the machine keeps running; on GPU during real video encoding (§6).
@@ -275,7 +273,7 @@ CPU = rehearsal worker in fake mode with a slow fake job; GPU = real worker.
 14. `FAKE_INFERENCE=1 pytest` passes locally and in CI, including the §11 tests, and the tests were committed before the implementation.
 
 ## 14. Between sessions, cost and teardown
-- End every working session with `stop_work.sh`; restore `worker_instance_types` after Experiment 2.
+- End every working session with `stop_work.sh`; restore `max_instances = 1` after Experiment 2.
 - **M2b GPU spend estimate:** Experiment 1 session with §9 Step A and the stop check about $3–3.60; Experiment 2 about $5–6; warm-up fix check and §9 Step B about $1 each; CPU rehearsals (including the 2-hour breaker test) about $1. About $11–13 in total. Disk initialization (§8) adds about $0.08 per worker boot. Flag each session's estimate before starting it.
 - Keep the software-only image, `models/`, `code/latest.zip` and `experiments/`; M3 and M4 reuse them. Keep the 4K baseline result until §9 is decided.
 - Final teardown (`terraform destroy`, deregistering images, deleting snapshots) happens only after M4's consolidation.

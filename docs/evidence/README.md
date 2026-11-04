@@ -82,7 +82,7 @@ On each tested type, after the timeline and double-encoding fixes: the 52 s Sint
 All three feature models run at 32-bit precision, read from the pinned code rather than measured. TRIBE v2's `config.yaml` (HuggingFace `facebook/tribev2`) sets `device: cuda` for the text (`meta-llama/Llama-3.2-3B`), audio (`facebook/w2v-bert-2.0`) and video (`facebook/vjepa2-vitg-fpc64-256`) extractors. In neuralset 0.0.2, half precision (`torch_dtype=float16`) is used only when `device` is `accelerate` (text) or for LLaVA video models; the audio extractor asks for `float32` explicitly; the others load with `transformers`' default, which is 32-bit in the 4.x versions `requirements/model.txt` allows (`<5`). Consistent with the first real jobs: the peak of 19.8 GB of GPU memory came with the text model, whose ~3.2 billion parameters take about 13 GB at 32 bits (about 6.4 GB at 16). Reduced precision was not tried: the brain model was trained on features made this way.
 
 ## Results (2026-10-03, image `neurolens-worker-v2`, code `b1fb933`)
-One run per clip per type, in us-east-1. "Warm" leaves out the one-time WhisperX environment set-up of a worker's first job (5.7-6 min on every type; see `docs/M2a_build_log.md`), which was measured directly where the job ran first and subtracted otherwise.
+One run per clip per type, in us-east-1. "Warm" leaves out the one-time WhisperX environment set-up of a worker's first job (5.7-6 min on every type; see "First-job warm-up" below), which was measured directly where the job ran first and subtracted otherwise.
 
 | | `g6e.xlarge` (L40S) | `g5.2xlarge` (A10G) | `g6.2xlarge` (L4) |
 |---|---|---|---|
@@ -96,11 +96,13 @@ One run per clip per type, in us-east-1. "Warm" leaves out the one-time WhisperX
 | `g6e.2xlarge` (fallback, same L40S, $2.24/h) | 119 s loop 485 s (code `b1fb933`, image v1): 1-3% faster than `xlarge`, about $0.30 a job (17-19% more) | | |
 | First job of a worker (119 s) | | 1,528 s | 1,880 s (over the 1,800 s queue timeout) |
 
-**Decision: `g6e.xlarge` stays** (then `g6e.2xlarge` when sold out). The two cheaper GPUs cost 1.3-1.6 times more per video and make people wait 2.3-3.2 times longer. The best cheaper type (A10G) is 31-57% dearer per video than `g6e`, outside the 20% re-run band, so no re-run was needed.
+**First-job warm-up (2026-10-03).** The one-time WhisperX environment set-up on a worker's first job took 5 min 41 s on the v2 image (8 min 3 s on v1); later jobs on the same worker take about 14 s. It is included in the first-job and cold-start figures, not in the warm job times above.
+
+**Decision: `g6e.xlarge` stays.** When it is unavailable the endpoint tries the next pool in `infra/terraform/sagemaker.tf`: `ml.g6.2xlarge`, then `ml.g5.2xlarge`, then `ml.g6e.2xlarge`. The two cheaper GPUs cost 1.3-1.6 times more per video and make people wait 2.3-3.2 times longer. The best cheaper type (A10G) is 31-57% dearer per video than `g6e`, outside the 20% re-run band, so no re-run was needed.
 
 **What limits the job:** video encoding on the A10G (same 32-bit compute as the L4, twice its memory bandwidth) was 2.4 times slower than on the L40S, close to the compute ratio (2.9) and far from the bandwidth ratio (1.4), so encoding is mainly limited by compute. The L4 alone could not show this: it trails the L40S by about 3 times on both.
 
-**As fallbacks when `g6e` is sold out:** both fit and give the same results, but they are not used (Josh, 2026-10-04): slower and dearer per video; a region move is the fallback instead (M4 spec §1). The L4's first 119 s job also took longer than the queue's 1,800 s visibility timeout. The fallback stays `g6e.2xlarge`: the same GPU, the same speed, about 20% more per job.
+**As fallbacks when `g6e` is sold out:** the endpoint's pools are, in order, `ml.g6.2xlarge`, `ml.g5.2xlarge` and `ml.g6e.2xlarge` (`infra/terraform/sagemaker.tf`). They fit and give the same results, but the two cheaper GPUs are slower and dearer per video; they are kept because they keep the service working when L40S capacity is unavailable (28 Oct, below). The L4's first 119 s job also took longer than the queue's 1,800 s visibility timeout.
 
 ## GPU availability on 28 Oct (SageMaker endpoint, us-east-1)
 Saved on 2026-10-28, because Application Auto Scaling keeps activity history for only 6 weeks.
@@ -116,3 +118,32 @@ aws application-autoscaling describe-scaling-activities --service-namespace sage
 `spot_placement_scores_2026-10-28.tsv`: EC2 Spot placement scores (1 = least likely to get capacity, 10 = most) every 30 minutes from 11:41 to 19:34 SGT, for each of our four GPU types alone and for any of them (`ALL`), in five regions. A hint about EC2 capacity, not proof of SageMaker capacity (SageMaker draws on its own pool). Averages for `ALL`: us-east-1 6.5, us-west-2 5.9, eu-central-1 5.5, ap-northeast-1 3.0, us-east-2 2.0; `g6e.xlarge` alone scored 1 in every region all day.
 
 What it means: L40S GPUs were scarce everywhere that day, us-east-1 was no worse than the alternatives, and the fallback types are what kept the service working. Availability changes from day to day, so a cold start can take minutes or close to an hour.
+
+# Evidence: worker image and start-up timings (2026-10-03 to 2026-10-05)
+
+These are the worker figures the specs cite, with their dates.
+
+## Images (2026-10-03)
+
+| | v1 | v2 |
+|---|---|---|
+| Base | Deep Learning Base OSS Nvidia Driver GPU (Ubuntu 22.04) | Canonical Ubuntu 22.04 |
+| Driver | 595.91.07 (CUDA 13.2) | 580.178.04 (CUDA 13.0) |
+| Python / torch | 3.12.15 / 2.6.0+cu124 | 3.12.15 / 2.6.0+cu124 |
+| `transformers` | not recorded | 4.57.6 |
+| Snapshot data stored | 78.5 GB | 22.9 GB |
+
+## First real GPU jobs (2026-10-03)
+
+Before the §7a fixes, a 52.2 s clip returned 53 rows and a 119.01 s clip returned 239 rows (the
+ghost-word timeline bug); after the fix the 119.01 s clip returns 120 rows. The video was encoded
+twice per job before the fix and once after. Peak GPU memory was 19.8 GB before the fix and
+19.94 GB after (the text model); video encoding used 13.5 GB.
+
+## First-job warm-up
+
+- **2026-10-03:** WhisperX's one-time set-up on a worker's first job took 8 min 3 s on v1 and
+  5 min 41 s on v2; later jobs on the same worker take about 14 s.
+- **2026-10-05 (CPU worker, fresh from the v2 image):** a cold `uvx whisperx --help` took 2 min 54 s
+  against 16.5 s warm; the worker's first `import torch` took 86-107 s. With `UV_OFFLINE=1` the
+  first `uvx` took 31.4 s.

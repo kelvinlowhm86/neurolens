@@ -358,7 +358,7 @@ Order, with no long gap between the steps:
 - ECR storage about $1/month for 3 images;
 - the day itself about $3–5.
 
-Measured figures replace these in the build log.
+Measured figures replace these in `docs/evidence/README.md`.
 
 ## 12a. Known limitations (accepted)
 - **The deploy user may create and delete any CloudWatch alarm.** `RegisterScalableTarget` refuses a caller without `cloudwatch:PutMetricAlarm` and `cloudwatch:DeleteAlarms` (day B: "User is missing the following permissions"), checked beyond our `neurolens-*` alarm names, so these two actions are on `*`. Misusing them needs a deliberate command by the key holder.
@@ -379,7 +379,7 @@ Measured figures replace these in the build log.
 
 ## 13. Acceptance criteria
 1. The full suite passes with PostgreSQL, and `ruff` is clean.
-2. `git grep -i -E 'autoscaling_group|nat_gateway|breaker|sqs.receive_message|ScaleInProtection'` finds only specs, build logs and git-history notes.
+2. `git grep -i -E 'autoscaling_group|nat_gateway|breaker|sqs.receive_message|ScaleInProtection'` finds only specs, evidence and git-history notes.
 3. `terraform plan` shows exactly the additions and deletions of §9.
 4. Day B: every check in §12 passes.
    - A job's whole wait from upload to result is recorded.

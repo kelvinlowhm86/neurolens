@@ -4,8 +4,8 @@ NeuroLens predicts brain activity for a video (TRIBE v2) and turns it into a sig
 
 ## Layout
 - `neurolens/` the package: `settings.py` (config + paths), `response.py` (signals from the brain-area map, pure maths, numpy only), `inference.py` (model + atlas loading, `build_events`, `without_audio`, `predict`, fake mode), `media.py` (ffprobe duration), `pricing.py`, `storage.py` (S3 helpers), `db.py` (Aurora/Postgres access), `billing.py` (credits, ledger, sign-in users), `results.py`, `experiment_runs.py`, `worker.py` (the SageMaker container: `/ping`, `/invocations`, claim, charge/refund), `lambdas/` (dispatcher, SageMaker error handler, GPU guard, reaper, dead-letter handler), `web/` (`app.py` `create_app()` and Flask routes, `auth.py`, `lambda_handler.py`).
-- `app.py` and `worker.py` at the root are thin launchers (`python app.py`, port 5003). `static/` the page. `data/` samples, videos, thumbnails.
-- `notebooks/` the two `.ipynb` files (need a GPU). `requirements/` per-machine dependency lists. `infra/` Terraform, IAM policies, the worker image and its build scripts, deploy and start/stop scripts, DB migrations. `experiments/` operator scripts for the study runs. `tests/` pytest. `docs/` specs.
+- `app.py` and `worker.py` at the root are thin launchers (`python app.py`, port 5003). `static/` the page. `data/` samples, videos, thumbnails (`data/videos/README.md`).
+- `notebooks/` the two `.ipynb` files (a laptop prototype needing its own GPU; `notebooks/README.md`). `requirements/` per-machine dependency lists. `infra/` Terraform, IAM, worker image, deploy and start/stop scripts, migrations, operator scripts (`infra/README.md`). `experiments/` report experiments, side trials and `locustfile.py` (`experiments/README.md`). `tests/` pytest. `docs/` specs, evidence, study and submitted `course/` documents (`docs/README.md`).
 
 ## Commands
 - Set up: `python3.12 -m venv .venv && source .venv/bin/activate && pip install -e . -r requirements/dev.txt`

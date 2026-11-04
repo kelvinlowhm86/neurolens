@@ -37,8 +37,9 @@ The endpoint only exists once `worker_image` is set: build the image first (§2b
 
 **Cost:** with everything stopped, the running cost is the stored image, the ECR repository,
 Aurora storage and the S3 files, a few dollars a month (the reaper waking Aurora every 3 hours is
-about $3). A GPU bills only while it runs: about $1.86/h for `g6e.xlarge` ($2.24/h for the
-`g6.2xlarge` fallback), and it stops itself 7 idle minutes after the last job. A deploy starts one
+about $3). A GPU bills only while it runs: about $1.86/h for `g6e.xlarge`, $0.98/h for
+`g6.2xlarge` (L4), $1.21/h for `g5.2xlarge` (A10G) and $2.24/h for `g6e.2xlarge`, and it stops
+itself 7 idle minutes after the last job. A deploy starts one
 instance for about 7 minutes (roughly $0.50–0.80).
 
 **From an empty account:** §0, §1, §2, §2f, §2b; then §5 for each work session and §6 to tear
