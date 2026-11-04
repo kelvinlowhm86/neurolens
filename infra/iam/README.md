@@ -40,26 +40,22 @@ Terraform sets `permissions_boundary` on every role it creates, or AWS refuses t
 
 ## New account: what the account owner does
 
-Done once, signed in as the account owner (or an admin), in region **us-east-1 (N. Virginia)**.
-Everything else the deploy user does itself.
+Four steps, done once, signed in as the account owner (or an admin). IAM and Billing are the same
+in every region; only step 3 needs the region set to **US East (N. Virginia) us-east-1** (top right
+of the console).
 
-1. Create the IAM user if it does not exist yet (IAM, Users, Create user; no console access needed).
-   Create an access key for it (Security credentials, Create access key, "Command Line Interface")
-   and send the key to the deployer privately (not by email or chat in plain text; a password
-   manager share or similar). Never put it in the repo.
-2. Apply the five policies: the "Apply" steps above.
-3. Bedrock, so the app can write reports with Claude: Bedrock console, Model catalog, open
-   **Claude Sonnet 4.6** (Anthropic). If it asks for use-case details, fill in the short form
-   (use case: a university course project that writes a text summary of a video analysis) and submit.
-   It is free; approval is usually quick.
-4. Check the account's credits cover SageMaker, Bedrock, Lambda, Aurora, S3 and CloudFront
-   (Billing, Credits, each credit's "Applicable products"), so nothing is charged to the card.
-5. Later, once: the deployer sends an updated `neurolens-role-boundary.json` (it names the new
-   account's sign-in pool, which exists only after the first deploy). Open the policy
-   `neurolens-role-boundary`, Edit, paste it, Save.
+1. **Access key for the deployer's user** (it already exists): IAM, Users, the user, Security
+   credentials, Create access key, "Command Line Interface (CLI)". Send both parts (the key ID and
+   the secret) to the deployer privately, for example a password-manager share; not in a group chat.
+   The secret is shown only once.
+2. **Permission policies:** follow "Apply" above (create the five policies, attach four to the user).
+3. **Bedrock** (lets the app write reports with Claude): region us-east-1, Bedrock console, Model
+   catalog, open **Claude Sonnet 4.6** (Anthropic). If it asks for use-case details, fill in the
+   short form (a university course project that writes a text summary of a video analysis). Free.
+4. **Credits:** Billing, Credits: check each credit's applicable products include SageMaker,
+   Bedrock, Lambda, Aurora (RDS), S3 and CloudFront, so nothing is charged to the card.
 
-The GPU quota (SageMaker "ml.g6e.xlarge for endpoint usage" and its backups) and any Lambda limit
-increase are requested by the deployer with the quota policy above.
+At the end of the project: delete the user and the five `neurolens-*` policies.
 
 Edits later: open the policy, Edit, paste the new file. AWS keeps up to five versions.
 
