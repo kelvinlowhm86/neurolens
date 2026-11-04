@@ -66,6 +66,9 @@ Still on Josh's page (Users, Josh):
 
 ## 4. Turn on Claude (Bedrock)
 
+The app uses Claude Sonnet 4.6, through AWS's Bedrock service, to write the AI report on each
+analysed video. This step lets it do that.
+
 Check the region at the top right says **United States (N. Virginia)**; if not, pick it. Open
 https://us-east-1.console.aws.amazon.com/bedrock/home?region=us-east-1#/model-catalog, search
 `Claude Sonnet 4.6` (made by Anthropic) and open it.
