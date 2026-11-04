@@ -1,5 +1,5 @@
 # Sourced by the scripts in infra/ (not run on its own). Sets the AWS profile and the region
-# (M2a §4i) from Terraform's `region` output only, so the region is written down in one place
+# from Terraform's `region` output only, so the region is written down in one place
 # (terraform.tfvars). Terraform, not a copy: it records where the resources actually are. The
 # shell's NEUROLENS_AWS_REGION (the Python app's copy, from .env) is ignored on purpose: a stale
 # copy would make stop_work.sh check the wrong region. No region is guessed when Terraform cannot

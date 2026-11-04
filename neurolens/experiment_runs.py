@@ -1,4 +1,4 @@
-"""Experiment run folders in S3 (docs/M2b_spec.md §10, the artifact contract).
+"""Experiment run folders in S3 (docs/M4_spec.md §3, the artifact contract).
 
 Each run lives in experiments/<experiment>/<run_id>/ with a manifest.json that lists the run's
 files. Shared by the experiment scripts and, later, M4's study export. boto3 clients are passed in.

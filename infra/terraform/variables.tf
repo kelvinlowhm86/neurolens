@@ -20,7 +20,7 @@ variable "allowed_origins" {
 }
 
 variable "region" {
-  description = "AWS region for everything except the Terraform state bucket (M2a §4i)."
+  description = "AWS region for everything except the Terraform state bucket."
   type        = string
   default     = "us-east-1"
 }

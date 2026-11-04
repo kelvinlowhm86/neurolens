@@ -228,7 +228,7 @@ with the result after 30 days.
 
 ## 8. Terraform and IAM
 - `aws_lambda_function.report`: the job Lambdas' zip plus `report.py`, `report_prompt.py` and
-  `results.py` (standard library only), the report layer, 512 MB, timeout 300 s, async `maximum_retry_attempts = 0`, reserved concurrency 5
+  `results.py` (standard library only), the report layer, 512 MB, timeout 900 s, async `maximum_retry_attempts = 0`, reserved concurrency 5
   (caps parallel Bedrock spend), env as the other job Lambdas.
 - Its role: Data API on the cluster, `s3:GetObject` on `results/*`, `s3:PutObject` and
   `s3:DeleteObject` on `results/*.report.json`, `bedrock:InvokeModel` on the US inference

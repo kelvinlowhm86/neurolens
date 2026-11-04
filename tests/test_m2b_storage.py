@@ -1,7 +1,7 @@
-"""M2b result helpers in neurolens.storage (moto). Written from docs/M2b_spec.md §1a (storage
-interfaces). M3a retires the S3 status objects (docs/M3a_spec.md §5): the get_status/put_status
-and `stages` tests are removed with their Aurora equivalents (§10, tests/test_m3a_billing.py
-set_stage and tests/test_m3a_worker.py); result_exists/get_result stay."""
+"""M2b result helpers in neurolens.storage (moto). Written from the M2b storage interfaces. M3a
+retired the S3 status objects: the get_status/put_status and `stages` tests are gone with their
+Aurora equivalents (§10, tests/test_m3a_billing.py set_stage and tests/test_m3a_worker.py);
+result_exists/get_result stay."""
 
 from neurolens import storage
 

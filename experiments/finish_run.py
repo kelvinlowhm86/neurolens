@@ -1,4 +1,4 @@
-"""Write a run's manifest.json once all its files are in S3 (docs/M2b_spec.md §10).
+"""Write a run's manifest.json once all its files are in S3 (docs/M4_spec.md §3).
 
     python experiments/finish_run.py experiment-1 <run_id> --series exp1-final \
         --started 2026-10-14T03:00:00Z --finished 2026-10-14T04:30:00Z \

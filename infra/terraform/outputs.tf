@@ -36,7 +36,7 @@ output "db_name" {
 }
 
 output "region" {
-  description = "The region everything runs in (M2a §4i); the scripts in infra/ read it from here."
+  description = "The region everything runs in; the scripts in infra/ read it from here."
   value       = var.region
 }
 

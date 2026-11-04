@@ -130,7 +130,7 @@ def make_cfg(aws, tmp_path):
             "max_upload_bytes": 300000000,
             # M3d §6: the response at which the 3D map's heat colour is full.
             "response": {"colour_range": 0.5},
-            # M2b §1a: the heartbeat settings config.json gains (same values).
+            # M3e §4b: the heartbeat settings config.json gains (same values).
             "worker": {"heartbeat_seconds": 50, "max_job_minutes": 75},
             # M3a §9: the development identity, starter credit and the address the app binds to.
             # No `db` block: tests hand the database in (create_app(db=...), handle_job(db=...)).

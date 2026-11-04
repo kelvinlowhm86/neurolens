@@ -270,7 +270,7 @@ behaviour remains below.
 - **`experiments/finish_run.py`:** `--ami-id` becomes `--image-digest`, and the manifest's `code_revision` is that digest (it identifies the code exactly; nothing reads S3). `experiment_runs.write_manifest` requires `revision`; the guessing `code_revision()` (REVISION file or the laptop's git) is deleted.
 - **`experiments/cold_start.py`:** the `instance_type` column comes from a required `--instance-type` (the boot record does not know it, and the manifest can only be written after `cold_start.csv`).
 - **Unchanged:** `latency_run.py` and `latency_breakdown.py` (they use the web API and job stages).
-- **`infra/check_aurora.py`** (the one check of the Data API's value formats): runs `verify_queued` instead of `verify`, drops `release_for_retry`, and checks the types of migration 005's columns too.
+- **`infra/check_aurora.py`** (the one check of the Data API's value formats): runs `verify_queued` and checks the types of migration 005's columns too.
 - **Docs:**
   - `AGENTS.md` Layout (`worker.py` is the SageMaker container; the new Lambdas; `media.py`);
   - `README.md` deploy steps;

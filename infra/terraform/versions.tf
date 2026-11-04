@@ -32,7 +32,7 @@ terraform {
   }
 }
 
-# The region is one setting (M2a §4i): us-east-1 by default, because the g6e GPU family used from
+# The region is one setting: us-east-1 by default, because the g6e GPU family used from
 # M2a onward is not offered in Singapore. The state bucket above stays in us-east-1 whatever this is.
 provider "aws" {
   region = var.region

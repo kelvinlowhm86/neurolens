@@ -1,8 +1,8 @@
 """M2b status and result endpoints, rewritten for M3a (Flask test client + moto + PostgreSQL).
-Written from docs/M2b_spec.md §1a (neurolens.web.app routes), §4 and §11, against the
-Aurora-backed endpoints of docs/M3a_spec.md §6 with a seeded job owned by the app's development
-user. Status and result come from the database alone: a result in S3 never makes an unfinished job
-look done. Ownership checks and the refunded-job rules are in tests/test_m3a_web.py.
+Written from docs/M3e_spec.md §8 and docs/M3b_spec.md §4a, against the Aurora-backed endpoints
+with a seeded job owned by the app's development user. Status and result come from the database
+alone: a result in S3 never makes an unfinished job look done. Ownership checks and the
+refunded-job rules are in tests/test_m3a_web.py.
 """
 
 import json

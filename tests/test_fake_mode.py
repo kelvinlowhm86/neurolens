@@ -1,5 +1,4 @@
-"""Tests for FAKE_INFERENCE mode in neurolens.inference. Written from docs/M1_spec.md 1 and 1a
-and docs/M2a_spec.md 7a."""
+"""Tests for FAKE_INFERENCE mode in neurolens.inference. Written from docs/M2a_spec.md §7a."""
 
 import json
 import math

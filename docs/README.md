@@ -9,8 +9,8 @@ are changing, and prefer the later spec where two disagree.
 |---|---|
 | `M0_spec.md` | changing the package layout, tooling or CI |
 | `M1_spec.md` | changing uploads, the queue or the S3 helpers |
-| `M2a_spec.md` | changing the worker image build or the inference-correction steps |
-| `M2b_spec.md` | changing the job lifecycle, reliability or Experiments 1–2 |
+| `M2a_spec.md` | changing the inference corrections or results in S3 |
+| `M2b_spec.md` | changing the job lifecycle, the warm hold or the 4K test |
 | `M3a_spec.md` | changing the database, credit, billing or refunds |
 | `M3b_spec.md` | changing sign-in, the AWS website, history or credit grants |
 | `M3c_spec.md` | changing the academic scope, consent, sharing or deletion |

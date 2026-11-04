@@ -133,7 +133,7 @@ Marking first means no curve can be added while the purge runs. A failed purge l
 - **New interfaces:**
   - `billing.reserve(db, user_id, job_id, object_key, filename, client_duration_ms, research_consent=False)`;
   - `billing.delete_job(db, user_id, job_id) -> bool`;
-  - `storage.put_dataset(s3, bucket, job_id, upload_key, result, brain)`;
+  - `storage.put_dataset(s3, bucket, job_id, upload_key)`;
   - `billing.delete_account(db, user_id) -> list[tuple[str, str]]` (marks the account; the deleted `(issuer, subject)` identities; raises `JobActive`), `billing.remove_deleted_account(db, user_id) -> bool`;
   - `billing.list_jobs` skips deleted jobs;
   - `results.parse_retention_report`.

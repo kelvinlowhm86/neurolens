@@ -1,4 +1,4 @@
-"""The pure helpers of the inference corrections. Written from docs/M2a_spec.md sections 7a and 8.
+"""The pure helpers of the inference corrections. Written from docs/M2a_spec.md section 7a.
 
 Runs on a laptop: small pandas tables and numpy arrays, no tribev2, torch or GPU.
 

@@ -7,7 +7,7 @@
 locals {
   account_id   = data.aws_caller_identity.current.account_id
   boundary_arn = "arn:aws:iam::${local.account_id}:policy/neurolens-role-boundary"
-  # IAM names are global (shared by every region): a deployment in another region (M2a §4i) adds
+  # IAM names are global (shared by every region): a deployment in another region adds
   # its region to them. us-east-1 keeps the original names, so its live roles are not replaced.
   iam_suffix = var.region == "us-east-1" ? "" : "-${var.region}"
 }

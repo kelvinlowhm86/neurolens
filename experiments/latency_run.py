@@ -1,4 +1,4 @@
-"""Experiment 1, one run (docs/M2b_spec.md §10): upload one clip like a browser would, follow the
+"""Experiment 1, one run (docs/M4_spec.md §3): upload one clip like a browser would, follow the
 job to the end and add one row to experiment-1/<run_id>/runs.csv in S3.
 
     python experiments/latency_run.py data/videos/_test_clips/clip_15s.mp4 \

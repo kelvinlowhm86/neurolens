@@ -33,7 +33,7 @@ def _probe_failure(message, stderr):
 
 def probe_duration(path, timeout_s=30):
     """Video length in seconds, measured with ffprobe from the file's packets, not the length its
-    header declares (M1 §1: whoever made the file wrote the header, so it could understate the
+    header declares (M3e §3: whoever made the file wrote the header, so it could understate the
     length). Raises UnreadableVideo when the file itself is at fault, ProbeFailed when ffprobe
     could not fetch or finish it."""
     try:

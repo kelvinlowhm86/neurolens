@@ -1,9 +1,8 @@
-"""M2a tests, written from docs/M2a_spec.md section 8 (and 4g, 6).
+"""M2a tests, written from docs/M2a_spec.md section 6.
 
 Covers: put_result (S3 results, never overwritten), the worker publishing through it and the
-DUPLICATE outcome, and resolve_paths keeping absolute paths. M2b §1a removed the idle exit of
-run() and its tests, and changed a result that exists before any work from DUPLICATE to SKIPPED
-(§5). Calls use the M3a §5 signatures (db, heartbeat(on_beat)), with each record's job seeded in
+DUPLICATE outcome, and resolve_paths keeping absolute paths. A result that exists before any work
+is SKIPPED. Calls use the container signatures (db, keep_alive), with each job seeded in
 PostgreSQL first.
 """
 
@@ -169,8 +168,8 @@ def test_worker_publishes_through_put_result(
 def test_existing_result_gives_skipped_and_is_left_unchanged(
     aws, make_cfg, roi_masks_small, db, new_job, clip_path
 ):
-    """M2b §5 changed the outcome: a result that exists before any work is SKIPPED (was
-    DUPLICATE in M2a). The result is still left unchanged."""
+    """A result that exists before any work is SKIPPED (M3e §4b). The result is still left
+    unchanged."""
     job_id, key = new_job()
     aws.s3.upload_file(str(clip_path), aws.bucket, key)
     earlier = {"job_id": job_id, "marker": "written by an earlier run"}

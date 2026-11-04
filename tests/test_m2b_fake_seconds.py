@@ -1,5 +1,5 @@
-"""FAKE_INFERENCE_SECONDS: a slow fake job for the CPU rehearsals. Written from docs/M2b_spec.md
-§1a (neurolens.inference fake mode) and §11.
+"""FAKE_INFERENCE_SECONDS: a slow fake job for the CPU rehearsals. Written from the fake-mode
+behaviour in `neurolens.inference`.
 
 Runs in a subprocess so the environment is read fresh whichever way the module reads it.
 Timings use whole seconds and generous bounds.

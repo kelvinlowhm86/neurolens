@@ -4,7 +4,7 @@
 **Operating model: product mode.** Nothing waits for a person. The website, sign-in, history and results are always available. GPU work runs on a SageMaker asynchronous endpoint that starts a GPU when a job is waiting and stops it after 7 idle minutes (M3e), and the reaper settles stuck jobs every 3 hours (§6). The only by-hand parts are operator tools: `start_work.sh --keep-warm` for demos and study sessions, and `stop_work.sh` to pause GPU work (§5).
 **Builds on:** M3a (Aurora via the Data API, three-stage billing, refunds, dead-letter and reaper Lambdas, Aurora-backed status and result endpoints, a development user on `127.0.0.1`). M3b replaces the development user with real accounts, runs the web app on Lambda behind CloudFront's free HTTPS address, and adds history, CSV export and credit grants. It ends with the product ready for the GPU batch and M4's usability study.
 
-**Ground rules for all of M3b:** region `us-east-1`. Python 3.12. All infrastructure is Terraform in `infra/terraform/`, tagged `Project=neurolens`, `Milestone=M3b`. Run AWS commands with the `neurolens` CLI profile only. **Tests first, as in M0 §5:** the §11 tests are written by a separate agent against §2–§8 before the implementation, and are not edited by the implementer. Money and sign-in code (§2, §7) get the full treatment: tests first, 2–3 break-it checks on committed code, and an independent Opus review. `/security-review` runs on the full M3 diff before M3 is merged, and its high-severity findings are fixed first.
+**Ground rules for all of M3b:** region `us-east-1`. Python 3.12. All infrastructure is Terraform in `infra/terraform/`, tagged `Project=neurolens`, `Milestone=M3b`. Run AWS commands with the `neurolens` CLI profile only. **Tests first, as in M0:** the §11 tests are written by a separate agent against §2–§8 before the implementation, and are not edited by the implementer. Money and sign-in code (§2, §7) get the full treatment: tests first, 2–3 break-it checks on committed code, and an independent Opus review. `/security-review` runs on the full M3 diff before M3 is merged, and its high-severity findings are fixed first.
 
 ## Decisions (8 Oct)
 | | Decision | Deciding reason |
@@ -96,7 +96,6 @@ The usability study itself, the participant withdrawal script (built nearer the 
 - `/result` and `/result.csv` serve the result for a `done` job only (M3e §8). Not-available cases: another user's or unknown job → 404 `not_found`; a `failed` job → 404 `not_found` (even if a late worker wrote a result); `queued`/`processing` → 404 `result_not_ready`; a `done` job whose result object is gone (the 30-day expiry) → 404 `result_expired`.
 - `POST /api/uploads/presign` gains one check, **before reserving any credit**: when the SageMaker endpoint's scaling maximum is 0 (GPU work stopped by `stop_work.sh`), it returns **503** `{"error": "processing_paused"}` and reserves nothing. It reads the endpoint's scalable target itself (`aws.gpu_endpoint`), not a separate flag, so the two can never disagree. If the read fails, it refuses with `presign_failed` (fails closed). In dev mode (no endpoint) there is no check. Known limitation: jobs already waiting when GPU work stops wait until it restarts or the 4-hour deadline refunds them (M3e §5); the user can cancel a waiting job (M3d §7).
 - `GET /api/samples` is **removed** (the page reads `/data/samples.json`). `GET /api/limits` stays and is the one `/api/*` route open signed out (it holds no user data; M3d §6 needs `colour_range` to colour samples' brains); every other `/api/*` route needs sign-in.
-- The README's results section notes that `auditory` and the two `auditory_with/without_audio` columns are normalised over different windows (M0 §2), not the CSV.
 
 ### 4b. Frontend
 - **Start-up:** the page calls `/api/me` once: **200** → the app (then `/api/limits`); **401** → the sign-in screen; **503 `database_waking`** → "Starting up…" with retries; **anything else** → "Something went wrong. Please try again in a minute." with a retry button.
@@ -173,11 +172,7 @@ Options are named by what they change; the help text says when to use each.
 - `requirements/web.txt` gains `authlib`, `requests`, `apig-wsgi`; loses `flask-cors`.
 
 ## 9. Experiment 3 (cloud vs on-premise cost)
-An independent track.
-- `experiments/tco_benchmark.py` times the full two-pass pipeline for 15 s, 30 s and 60 s clips and writes a CSV of wall-clock times.
-- **On-premise leg:** the school's GPU cluster via Slurm (`experiments/tco_benchmark.sbatch`, a GPU with 40 GB or more), falling back to a teammate's 2× RTX 4090 machine; 10 runs per length. Power cost from published GPU TDP figures, not measured. The cluster has no AWS credentials: copy the output to a laptop and upload it with the manifest.
-- **Cloud leg:** reuses Experiment 1's runs (3 per clip length) instead of new GPU time; the report states the run counts of each leg.
-- Output under `experiments/experiment-3/<run_id>/` with a `manifest.json` (M2b §10's contract). Costs use the **measured on-demand price** ($2.61 an hour for `ml.g6e.xlarge`) and measured runtimes; the consolidation recomputes cost per video and the break-even volume from them and shows the original planned figures beside them, labelled as planned. Never presented as observed fully-loaded costs.
+The experiment method is in `docs/M4_spec.md` §3.
 
 ## 10. Scaffolding deleted before the merge into `main`
 Scaffolding is gone: the worker's shutdown script and systemd unit, the EC2 worker group and its network, and the old restart/connect scripts.

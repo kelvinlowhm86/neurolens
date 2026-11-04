@@ -331,7 +331,7 @@ def test_configure_env_with_hf_token_still_sets_it(hf_clean, tmp_path):
 
 def test_worker_run_reads_its_config_through_load_settings(make_cfg, monkeypatch, patch_everywhere):
     cfg = make_cfg(db={"backend": "postgres", "dsn": "postgresql://unused.invalid/neurolens"})
-    # M3a §5: run() builds the database from config; never a real connection here
+    # M3e §4: serve() builds the database from config; never a real connection here
     patch_everywhere("from_config", lambda *a, **kw: object(), "neurolens.db", "neurolens.worker")
     del cfg["aws"]["s3_bucket"]
     loaded = []

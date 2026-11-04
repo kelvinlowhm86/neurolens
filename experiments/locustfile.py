@@ -1,4 +1,4 @@
-"""Experiment 2 load generator (docs/M2b_spec.md §10): each simulated user does one job like a
+"""Experiment 2 load generator (docs/M4_spec.md §3): each simulated user does one job like a
 browser would, then stops, so N users = a burst of N simultaneous jobs.
 
     CLIP=<video> BURST_SIZE=5 JOBS_CSV=jobs.csv locust -f experiments/locustfile.py \
