@@ -1,7 +1,8 @@
 # Docs
 
 The specs describe the current design; history lives in git. Read the spec for the milestone you
-are changing, and prefer the later spec where two disagree.
+are changing, and prefer the later spec where two disagree. The earlier self-managed GPU design (before
+SageMaker) is kept in the git tags `custom-gpu` and `custom-gpu-stripe`.
 
 ## Specs, in milestone order
 
