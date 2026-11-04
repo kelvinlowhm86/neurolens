@@ -3,13 +3,10 @@
 The check route looks the video up before any work and names every reward reason; the save route
 does its own lookup and stores the checked facts instead of the questions. The launcher reads the
 YouTube key from Parameter Store and fails to start without it. The pages carry the new wording,
-the worker stops writing the course-study copy, and `purge_academic.py` removes only `academic/`
-keys unless asked to act.
+and the worker stops writing the course-study copy.
 """
 
 import contextlib
-import importlib
-import importlib.util
 import json
 import re
 import uuid
@@ -34,8 +31,6 @@ YOUTUBE_REF = f"youtube:{YOUTUBE_ID}"
 FACEBOOK_ID = "1234567890"
 FACEBOOK_LINK = f"https://www.facebook.com/MyPage/videos/{FACEBOOK_ID}"
 FACEBOOK_REF = f"facebook:{FACEBOOK_ID}"
-
-PURGE_SCRIPT = REPO_ROOT / "infra" / "purge_academic.py"
 
 
 # ---------------------------------------------------------------- fixtures and helpers
@@ -664,58 +659,3 @@ def test_a_consented_job_writes_the_video_under_dataset_and_no_academic_copy(
     assert prefix_keys(aws, f"academic/{job_id}/") == []
     assert storage.object_exists(aws.s3, aws.bucket, f"results/{job_id}.json")
     assert storage.object_exists(aws.s3, aws.bucket, f"results/{job_id}.brain")
-
-
-# ---------------------------------------------------------------- purge_academic.py
-
-
-def load_purge():
-    spec = importlib.util.spec_from_file_location("purge_academic", PURGE_SCRIPT)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-def seed_bucket(aws):
-    keys = [
-        "academic/job-one/result.json",
-        "academic/job-one/brain",
-        "academic/job-two/result.json",
-        "dataset/job-one/video.mp4",
-        "results/job-one.json",
-    ]
-    for key in keys:
-        aws.s3.put_object(Bucket=aws.bucket, Key=key, Body=b"x")
-    return keys
-
-
-def purge_env(monkeypatch, aws):
-    monkeypatch.setenv("NEUROLENS_S3_BUCKET", aws.bucket)
-    monkeypatch.setenv("NEUROLENS_AWS_REGION", "us-east-1")
-
-
-def test_purge_academic_dry_run_deletes_nothing(aws, monkeypatch):
-    purge_env(monkeypatch, aws)
-    keys = seed_bucket(aws)
-    module = load_purge()
-
-    module.main([])
-
-    assert all(storage.object_exists(aws.s3, aws.bucket, key) for key in keys)
-
-
-def test_purge_academic_delete_removes_only_academic_keys(aws, monkeypatch):
-    purge_env(monkeypatch, aws)
-    seed_bucket(aws)
-    aws.s3.create_bucket(Bucket="another-bucket")
-    aws.s3.put_object(Bucket="another-bucket", Key="academic/job/result.json", Body=b"x")
-    module = load_purge()
-
-    module.main(["--delete"])
-
-    assert not storage.object_exists(aws.s3, aws.bucket, "academic/job-one/result.json")
-    assert not storage.object_exists(aws.s3, aws.bucket, "academic/job-one/brain")
-    assert not storage.object_exists(aws.s3, aws.bucket, "academic/job-two/result.json")
-    assert storage.object_exists(aws.s3, aws.bucket, "dataset/job-one/video.mp4")
-    assert storage.object_exists(aws.s3, aws.bucket, "results/job-one.json")
-    assert storage.object_exists(aws.s3, "another-bucket", "academic/job/result.json")

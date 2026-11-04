@@ -162,8 +162,7 @@ all nullable.
 - The worker writes no `academic/<job_id>/` copy: `storage.put_dataset` copies only the video to
   `dataset/<job_id>/`, with no result or brain. NeuroLens's own result and brain stay under
   `results/`.
-- `infra/purge_academic.py` (dry run by default, `--delete` to act; only the configured bucket, only
-  the `academic/` prefix, paged; prints the count) removed the old copies once.
+- The bucket holds no `academic/` objects.
 - Nothing else refers to the prefix: `storage.delete_job_prefixes` deletes only
   `dataset/<job_id>/`, there is no S3 lifecycle rule for it, and the worker, Lambda and web IAM
   statements name no `academic/*` resource.
@@ -196,7 +195,6 @@ Full treatment (money). Behaviour, not call details. The lookup is faked at the 
 - Copy: consent version on the page equals `billing.CONSENT_VERSION`; privacy page 7 and 2 equal
   `config.json`; no page says "for research".
 - Worker: a consented job writes the video under `dataset/` and nothing under `academic/`.
-- `purge_academic.py`: dry run deletes nothing; `--delete` removes only `academic/` keys (moto).
 - **Break-it checks** (on committed code, restore with `git checkout <file>`): use the analysis
   date even when facts are known; drop the length condition; let the save skip its own lookup and
   accept a fact from the page. Each must turn a test red.
@@ -210,5 +208,4 @@ Full treatment (money). Behaviour, not call details. The lookup is faked at the 
   (M3i §12).
 - The check route spends YouTube quota for a signed-in user; 10,000 a day is far above real use.
   Abuse needs a hostile signed-in account (stopping rule).
-- No `academic/` copies remain: the worker writes none, `infra/purge_academic.py` removed the old
-  ones once, and nothing else refers to the prefix.
+- No `academic/` copies remain: the worker writes none and nothing else refers to the prefix.
