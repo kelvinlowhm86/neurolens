@@ -51,7 +51,9 @@ of the console).
 2. **Permission policies:** follow "Apply" above (create the five policies, attach four to the user).
 3. **Bedrock** (lets the app write reports with Claude): region us-east-1, Bedrock console, Model
    catalog, open **Claude Sonnet 4.6** (Anthropic). If it asks for use-case details, fill in the
-   short form (a university course project that writes a text summary of a video analysis). Free.
+   short form (a university course project that writes a text summary of a video analysis). Then
+   open it in the Playground and send one short message ("hi"): the first use switches the model
+   on for the account, which the app's own limited permissions cannot do. Costs a fraction of a cent.
 4. **Credits:** Billing, Credits: check each credit's applicable products include SageMaker,
    Bedrock, Lambda, Aurora (RDS), S3 and CloudFront, so nothing is charged to the card.
 
