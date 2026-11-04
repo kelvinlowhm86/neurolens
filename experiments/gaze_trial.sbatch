@@ -60,7 +60,7 @@ if [ ! -f "$CHECKPOINT" ]; then
     rm -rf "$VINET/final_models"
 fi
 
-python experiments/gaze_trial.py data/videos/_test_clips/gaze/*.mp4 \
-    --out data/videos/_test_clips/gaze_trial
+python experiments/gaze_trial.py data/videos/gaze/*.mp4 \
+    --out data/experiment_results/gaze_trial
 
 echo GAZE_TRIAL_DONE

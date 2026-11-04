@@ -27,7 +27,7 @@ for tool in ffmpeg ffprobe; do
     fi
 done
 
-python experiments/crop_vs_pad.py data/videos/_test_clips/gaze/*.mp4 \
-    --out data/videos/_test_clips/gaze_results
+python experiments/crop_vs_pad.py data/videos/gaze/*.mp4 \
+    --out data/experiment_results/crop_vs_pad
 
 echo CROP_VS_PAD_DONE

@@ -27,7 +27,7 @@ for tool in ffmpeg ffprobe; do
     fi
 done
 
-python experiments/run_clips.py data/videos/_test_clips/cerave/*.mp4 \
-    --out data/videos/_test_clips/cerave_results
+python experiments/run_clips.py data/videos/cerave_*.mp4 \
+    --out data/experiment_results/run_clips_cerave
 
 echo RUN_CLIPS_DONE

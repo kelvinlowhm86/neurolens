@@ -37,6 +37,9 @@ hub/
 !/data/videos/README.md
 !/data/videos/SOURCES.md
 
+# Results of the Slurm side experiments (experiments/*.sbatch); local only
+/data/experiment_results/
+
 # ─── Generated output ──────────────────────────────────────────────────────
 /data/output/**/*.json
 /data/output/**/*.csv

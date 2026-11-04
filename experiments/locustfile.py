@@ -1,13 +1,13 @@
 """Experiment 2 load generator (docs/M2b_spec.md §10): each simulated user does one job like a
 browser would, then stops, so N users = a burst of N simultaneous jobs.
 
-    BURST_SIZE=5 JOBS_CSV=jobs.csv locust -f locustfile.py --headless -u 5 -r 5 \
-        --host http://localhost:5003 --csv locust --run-time 3h
+    CLIP=<video> BURST_SIZE=5 JOBS_CSV=jobs.csv locust -f experiments/locustfile.py \
+        --headless -u 5 -r 5 --host http://localhost:5003 --csv locust --run-time 3h
 
 Each user POSTs /api/uploads/presign, uploads the fixed test clip through the presigned POST
 (signed fields first, file last), then polls the status until `done` or `failed`. Per-job times go
 to JOBS_CSV (columns of experiment-2 jobs.csv); Locust's own --csv files hold the request stats.
-Environment: CLIP (default data/videos/_test_clips/clip_15s.mp4), BURST_SIZE, JOBS_CSV.
+Environment: CLIP (the test video, required), BURST_SIZE, JOBS_CSV.
 """
 
 import csv
@@ -21,7 +21,9 @@ from pathlib import Path
 from locust import HttpUser, between, task
 from locust.exception import StopUser
 
-CLIP = Path(os.environ.get("CLIP", "data/videos/_test_clips/clip_15s.mp4"))
+if not os.environ.get("CLIP"):
+    raise SystemExit("Set CLIP to the test video, e.g. CLIP=data/videos/<clip>.mp4")
+CLIP = Path(os.environ["CLIP"])
 BURST_SIZE = os.environ.get("BURST_SIZE", "")
 JOBS_CSV = Path(os.environ.get("JOBS_CSV", "jobs.csv"))
 POLL_SECONDS = 5
