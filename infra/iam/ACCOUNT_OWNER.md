@@ -87,13 +87,12 @@ Open https://us-east-1.console.aws.amazon.com/billing/home#/credits. For each cr
 details and check the applicable products include SageMaker, Bedrock, Lambda, RDS (Aurora), S3 and
 CloudFront.
 
-Tell Josh the remaining amount and expiry date. If one of those six is missing, tell him before he
-deploys: that usage would be charged to your card.
+If one of those six is missing, tell Josh before he deploys: that usage would be charged to your
+card.
 
 ## 6. Done
 
-Send Josh the access key privately, and tell him the credit amount and expiry date (and anything
-from step 5 that isn't covered).
+Send Josh the access key privately.
 
 ## 7. When the course ends
 
