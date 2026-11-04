@@ -1,0 +1,26 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "RequestSageMakerAndLambdaQuotasInUsEast1",
+      "Effect": "Allow",
+      "Action": [
+        "servicequotas:RequestServiceQuotaIncrease"
+      ],
+      "Resource": [
+        "arn:aws:servicequotas:us-east-1:*:sagemaker/*",
+        "arn:aws:servicequotas:us-east-1:*:lambda/*"
+      ]
+    },
+    {
+      "Sid": "SeeQuotaRequestStatus",
+      "Effect": "Allow",
+      "Action": [
+        "servicequotas:GetRequestedServiceQuotaChange",
+        "servicequotas:ListRequestedServiceQuotaChangeHistory",
+        "servicequotas:ListRequestedServiceQuotaChangeHistoryByQuota"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
