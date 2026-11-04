@@ -24,7 +24,7 @@ function makeForm() {
       'Looked at a sample video',
       'Uploaded a video (my own or one from the booth)',
       'Found where the brain response peaks or drops',
-      'Compared two ads',
+      'Compared two videos',
       'Read the AI report',
     ])
     .setRequired(true);
@@ -50,20 +50,20 @@ function makeForm() {
   form.addGridItem()
     .setTitle('How much do you agree?')
     .setRows([
-      'The chart helped me understand the ad.',
+      'The chart helped me understand the video.',
       'I trust the predictions.',
-      'I would use this when editing an ad.',
+      'I would use this when editing a video.',
     ])
     .setColumns(agree)
     .setRequired(true);
 
   form.addMultipleChoiceItem()
-    .setTitle('Did NeuroLens show you something about the ad you hadn\'t noticed yourself?')
+    .setTitle('Did NeuroLens show you something about the video you hadn\'t noticed yourself?')
     .setChoiceValues(['Yes', 'No', 'Not sure'])
     .setRequired(true);
 
   form.addMultipleChoiceItem()
-    .setTitle('Would you pay $1.00 to analyse a 30-second ad?')
+    .setTitle('If NeuroLens were a paid service, would you pay $1.00 to analyse a 30-second video?')
     .setChoiceValues(['Yes', 'Maybe', 'No'])
     .setRequired(true);
 
@@ -72,7 +72,7 @@ function makeForm() {
 
   form.addMultipleChoiceItem()
     .setTitle('Which describes you best?')
-    .setChoiceValues(['Student', 'I work in marketing, advertising or media', 'Other']);
+    .setChoiceValues(['Student', 'I make videos or social content', 'I work in marketing, advertising or media', 'Other']);
 
   Logger.log('Share this link: ' + form.getPublishedUrl());
   Logger.log('Edit the form here: ' + form.getEditUrl());

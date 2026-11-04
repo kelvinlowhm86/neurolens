@@ -19,7 +19,7 @@ Form settings: "Collect email addresses" off; "Limit to 1 response" off (that wo
 - Looked at a sample video
 - Uploaded a video (my own or one from the booth)
 - Found where the brain response peaks or drops
-- Compared two ads
+- Compared two videos
 - Read the AI report
 
 **2. How much do you agree with each statement?** (grid, required in each row; columns 1 Strongly disagree, 2, 3, 4, 5 Strongly agree)
@@ -35,16 +35,16 @@ Form settings: "Collect email addresses" off; "Limit to 1 response" off (that wo
 10. I needed to learn a lot of things before I could get going with this system.
 
 **3. How much do you agree?** (grid, required in each row; same columns)
-1. The chart helped me understand the ad.
+1. The chart helped me understand the video.
 2. I trust the predictions.
-3. I would use this when editing an ad.
+3. I would use this when editing a video.
 
-**4. Did NeuroLens show you something about the ad you hadn't noticed yourself?** (multiple choice, required)
+**4. Did NeuroLens show you something about the video you hadn't noticed yourself?** (multiple choice, required)
 - Yes
 - No
 - Not sure
 
-**5. Would you pay $1.00 to analyse a 30-second ad?** (multiple choice, required)
+**5. If NeuroLens were a paid service, would you pay $1.00 to analyse a 30-second video?** (multiple choice, required)
 - Yes
 - Maybe
 - No
@@ -55,6 +55,7 @@ Form settings: "Collect email addresses" off; "Limit to 1 response" off (that wo
 
 **7. Which describes you best?** (multiple choice, optional)
 - Student
+- I make videos or social content
 - I work in marketing, advertising or media
 - Other
 
@@ -64,4 +65,4 @@ Form settings: "Collect email addresses" off; "Limit to 1 response" off (that wo
 
 Question 2 is the System Usability Scale (SUS; Brooke, 1996), wording unchanged. Per person: odd rows score (answer - 1), even rows score (5 - answer); the sum times 2.5 gives 0 to 100. About 68 is a typical product. Report the mean, the spread and the number of answers.
 
-Question 3 answers the usefulness and trust question: report each row's median and the share answering 4 or 5. Question 4 is a light, self-reported baseline (the tool against the visitor's own judgement); the report says it is self-reported. Question 1 splits the results by task. Questions 5b and 6 supply quotes and future work.
+Question 3 answers the usefulness and trust question: report each row's median and the share answering 4 or 5. Question 4 is a light, self-reported baseline (the tool against the visitor's own judgement); the report says it is self-reported. Question 1 splits the results by task. Question 5 is hypothetical: the model's licence is non-commercial, so NeuroLens is never sold; report it as a hint of perceived value only. Questions 5b and 6 supply quotes and future work.
