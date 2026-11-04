@@ -15,7 +15,7 @@ import uuid
 from datetime import timedelta
 
 import pytest
-from conftest import WEB_USER_ID
+from conftest import MIGRATIONS, WEB_USER_ID
 from neurolens import billing, pricing, results, storage
 
 STARTER_CENTS = 10_000
@@ -108,6 +108,31 @@ def snapshot_rows(pg, job_id):
     return pg.rows(
         "SELECT * FROM retention_snapshots WHERE job_id = %s::uuid ORDER BY added_at", job_id
     )
+
+
+def stop_sharing_and_purge(aws, db, job_id):
+    """The Stop-sharing route's two steps (M3f §5c)."""
+    assert billing.mark_dataset_removed(db, job_id, "stopped", user_id=WEB_USER_ID) is True
+    billing.purge_job_files(db, aws.s3, aws.bucket, job_id)
+
+
+def delete_and_purge(aws, db, job_id):
+    """The job-delete route's two steps (M3f §5c)."""
+    assert billing.delete_job(db, WEB_USER_ID, job_id) is True
+    billing.purge_job_files(db, aws.s3, aws.bucket, job_id)
+
+
+def migration_013_update():
+    """The backfill UPDATE from migration 013, split as conftest splits migrations (M3a §3c)."""
+    statements = []
+    current = []
+    for line in (MIGRATIONS / "013_curve_reward_ref.sql").read_text().splitlines():
+        current.append(line)
+        if line.rstrip().endswith(";"):
+            statements.append("\n".join(current).strip())
+            current = []
+    [update] = [statement for statement in statements if "UPDATE JOBS" in statement.upper()]
+    return update
 
 
 def reward_date(pg, job_id, days=REWARD_MIN_DAYS):
@@ -407,6 +432,143 @@ def test_a_second_link_on_a_job_that_already_has_one_is_video_link_changed(db, p
     assert str(exc.value) == "This analysis is already linked to another video."
     assert pg.snapshot() == before
     assert len(snapshot_rows(pg, job_id)) == 1
+
+
+# ---------------------------------------------------------------- add_curve: reward outlives copy
+
+
+def test_a_link_rewarded_before_stop_sharing_cannot_be_rewarded_again_on_a_reencoded_upload(
+    aws, db, pg
+):
+    first, _ = make_job(db, sha="video-one")
+    pg.age(first, created_s=8 * DAY_S)
+    billing.grant_credit(db, f"{WEB_USER_ID}@example.com", 100)
+    before = billing.add_curve(db, WEB_USER_ID, first, **curve_args(first, video_ref=YOUTUBE_REF))
+    assert before["rewarded_cents"] == PRICE_CENTS
+
+    stop_sharing_and_purge(aws, db, first)
+    assert snapshot_rows(pg, first) == []
+
+    second, _ = make_job(db, sha="video-two")
+    pg.age(second, created_s=8 * DAY_S)
+    balance = pg.balance(WEB_USER_ID)
+
+    after = billing.add_curve(
+        db,
+        WEB_USER_ID,
+        second,
+        **curve_args(second, sha="b" * 64, points=curve(last=0.6), video_ref=YOUTUBE_REF),
+    )
+
+    assert after["rewarded_cents"] == 0
+    assert after["reason"] == "already_rewarded"
+    assert pg.balance(WEB_USER_ID) == balance
+    offer = billing.curve_offer(
+        db,
+        WEB_USER_ID,
+        second,
+        YOUTUBE_REF,
+        None,
+        reward_cap=5,
+        reward_window_days=30,
+        reward_min_days=REWARD_MIN_DAYS,
+        length_tolerance_s=2,
+    )
+    assert offer[2] == "already_rewarded"
+
+
+def test_a_link_rewarded_before_the_job_is_deleted_cannot_be_rewarded_again_on_a_reencoded_upload(
+    aws, db, pg
+):
+    first, _ = make_job(db, sha="video-one")
+    pg.age(first, created_s=8 * DAY_S)
+    billing.grant_credit(db, f"{WEB_USER_ID}@example.com", 100)
+    before = billing.add_curve(db, WEB_USER_ID, first, **curve_args(first, video_ref=YOUTUBE_REF))
+    assert before["rewarded_cents"] == PRICE_CENTS
+
+    delete_and_purge(aws, db, first)
+    assert snapshot_rows(pg, first) == []
+
+    second, _ = make_job(db, sha="video-two")
+    pg.age(second, created_s=8 * DAY_S)
+    balance = pg.balance(WEB_USER_ID)
+
+    after = billing.add_curve(
+        db,
+        WEB_USER_ID,
+        second,
+        **curve_args(second, sha="b" * 64, points=curve(last=0.6), video_ref=YOUTUBE_REF),
+    )
+
+    assert after["rewarded_cents"] == 0
+    assert after["reason"] == "already_rewarded"
+    assert pg.balance(WEB_USER_ID) == balance
+    offer = billing.curve_offer(
+        db,
+        WEB_USER_ID,
+        second,
+        YOUTUBE_REF,
+        None,
+        reward_cap=5,
+        reward_window_days=30,
+        reward_min_days=REWARD_MIN_DAYS,
+        length_tolerance_s=2,
+    )
+    assert offer[2] == "already_rewarded"
+
+
+# ---------------------------------------------------------------- migration 013
+
+
+def test_migration_013_backfills_curve_reward_ref_from_rewarded_snapshots(db, pg):
+    update = migration_013_update()
+    rewarded, _ = make_job(db, sha="video-one")
+    unrewarded, _ = make_job(db, sha="video-two")
+    rewarded_ref = "youtube:aaaaaaaaaaa"
+    pg.conn.execute(
+        "INSERT INTO retention_snapshots "
+        "(snapshot_id, job_id, curve_sha256, video_ref, rewarded_cents) VALUES "
+        "(%s::uuid, %s::uuid, %s, %s, %s), (%s::uuid, %s::uuid, %s, %s, 0)",
+        (
+            str(uuid.uuid4()),
+            rewarded,
+            "a" * 64,
+            rewarded_ref,
+            PRICE_CENTS,
+            str(uuid.uuid4()),
+            unrewarded,
+            "b" * 64,
+            "youtube:bbbbbbbbbbb",
+        ),
+    )
+    pg.conn.execute("UPDATE jobs SET curve_reward_ref = NULL")
+
+    pg.conn.execute(update)
+
+    assert pg.job(rewarded)["curve_reward_ref"] == rewarded_ref
+    assert pg.job(unrewarded)["curve_reward_ref"] is None
+
+
+def test_the_database_refuses_two_jobs_with_the_same_rewarded_link(db, pg):
+    from psycopg.errors import UniqueViolation
+
+    first, _ = make_job(db, sha="video-one")
+    second, _ = make_job(db, sha="video-two")
+    pg.conn.execute(
+        "UPDATE jobs SET curve_reward_ref = %s WHERE job_id = %s::uuid", (YOUTUBE_REF, first)
+    )
+
+    with pytest.raises(UniqueViolation):
+        pg.conn.execute(
+            "UPDATE jobs SET curve_reward_ref = %s WHERE job_id = %s::uuid", (YOUTUBE_REF, second)
+        )
+
+    pg.conn.execute(
+        "UPDATE jobs SET curve_reward_ref = NULL WHERE job_id IN (%s::uuid, %s::uuid)",
+        (first, second),
+    )
+    assert pg.job(first)["curve_reward_ref"] is None
+    assert pg.job(second)["curve_reward_ref"] is None
 
 
 # ---------------------------------------------------------------- list_jobs: the reward date
