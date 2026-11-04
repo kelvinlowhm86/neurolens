@@ -524,6 +524,9 @@
     .privacy-note { display: none; }
     .privacy-note.page-end { display: block; }
   }
+  /* The home chooser has its own upload (or sign-in) box, so the header button returns with a
+     player or a report. */
+  body:has(#appShell.view-chooser) #topUpload { display: none; }
   @media (max-width: 600px) {
     .credit-held { display: none; }
     .account-email { display: none; }
@@ -531,7 +534,6 @@
     .account::after { content: none; }
     .account-icon { display: block; }
     .bar-hide-sm { display: none; }
-    body:has(#appShell.view-chooser) #topUpload { display: none; }
     .samples-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px 14px; }
     .timeline { grid-template-columns: auto 1fr auto; }
     .tl-track { grid-column: 1 / -1; grid-row: 1; }
