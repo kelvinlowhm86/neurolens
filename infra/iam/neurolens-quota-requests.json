@@ -13,6 +13,13 @@
       ]
     },
     {
+      "Sid": "QuotaHelperRoleThatOpensTheSupportCase",
+      "Effect": "Allow",
+      "Action": "iam:CreateServiceLinkedRole",
+      "Resource": "arn:aws:iam::*:role/aws-service-role/servicequotas.amazonaws.com/*",
+      "Condition": {"StringEquals": {"iam:AWSServiceName": "servicequotas.amazonaws.com"}}
+    },
+    {
       "Sid": "SeeQuotaRequestStatus",
       "Effect": "Allow",
       "Action": [
