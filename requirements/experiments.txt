@@ -1,5 +1,4 @@
-# Experiment scripts (experiments/, including locustfile.py) and M4's consolidation. Not needed on the
-# web server or the GPU worker.
+# Experiment scripts (experiments/, including locustfile.py). Not needed on the web server or the
+# GPU worker.
 locust>=2.20
-matplotlib>=3.7.0
 requests>=2.31
