@@ -139,6 +139,8 @@
   .access-label { display: block; font-size: 13px; color: var(--muted); }
   .access-value { display: block; margin-top: 8px; font: 600 24px/1.1 var(--display); color: var(--text); letter-spacing: -0.02em; }
   .access-col p { margin-top: 10px; font-size: 13.5px; line-height: 1.5; color: var(--muted); }
+  .access-btn { margin-top: 12px; }
+  .access-note { grid-column: 1 / -1; margin-top: 18px; font-size: 12px; color: var(--muted); }
 
   .closing { max-width: 1120px; margin: 0 auto 72px; padding: 40px 64px; background: var(--panel); border: 1px solid var(--line); border-radius: 3px; display: flex; align-items: center; gap: 24px; flex-wrap: wrap; }
   .closing h2 { margin-right: auto; }
@@ -350,14 +352,16 @@
       </div>
       <div class="access-col">
         <span class="access-label">Your videos</span>
-        <span class="access-value">Invited</span>
-        <p>5 minutes of free analysis for invited creators, marketers, teachers and researchers.</p>
+        <span class="access-value">Free to try</span>
+        <p>Creators and marketers get 5 free minutes.*</p>
+        <a class="btn-line access-btn" href="/login">Get free minutes</a>
       </div>
       <div class="access-col">
         <span class="access-label">Shared</span>
-        <span class="access-value">Free</span>
-        <p>Share a video, add its retention curve once it's been public a week, and get its credit back.</p>
+        <span class="access-value">Keep going</span>
+        <p>Add a video's retention curve and earn its credit back.</p>
       </div>
+      <p class="access-note">*For channels with 1,000+ followers.</p>
     </div>
   </section>
 

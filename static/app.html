@@ -86,6 +86,10 @@
   .box h2 { font: 600 16px/1.25 var(--display); }
   .box p { font-size: 12.5px; color: var(--muted); line-height: 1.5; }
   .box p.error { color: var(--danger); }
+  .access-form { display: flex; flex-direction: column; gap: 8px; }
+  .access-field { display: flex; flex-direction: column; gap: 4px; }
+  .access-field span { font-size: 12px; color: var(--muted); }
+  .access-field .curve-link, .access-field .curve-report { margin-top: 0; }
   #startupPanel.active { animation: wake-in var(--t-enter) var(--ease-out) 500ms both; }
   @keyframes wake-in { from { opacity: 0; } }
   .startup-trace { width: 168px; height: 26px; margin-top: 4px; color: var(--muted); }
@@ -605,7 +609,31 @@
           <span class="up-title" id="uploadZoneTitle">Drop videos or click to choose</span>
           <span class="up-sub" id="limitsText">MP4, MOV or WebM</span>
         </button>
-        <div class="box" id="noCreditPanel"><p id="noCreditText">You don't have enough credit for a video. Ask the NeuroLens team for more.</p></div>
+        <div class="box" id="noCreditPanel">
+          <div id="accessFunded" hidden>
+            <p>You've used your credit. Add a shared video's retention curve to get its credit back, or ask the NeuroLens team for more.</p>
+          </div>
+          <div id="accessWaiting" hidden>
+            <p>Request received. We'll look at your channel and add your minutes here.</p>
+          </div>
+          <div id="accessDeclined" hidden>
+            <p>Thanks for asking. Free minutes are for channels with 1,000+ followers for now.</p>
+          </div>
+          <div id="accessRequest" hidden>
+            <h2 id="accessTitle">Get free minutes</h2>
+            <p>For creators and marketers with 1,000+ followers. We look at each channel by hand.</p>
+            <form class="access-form" id="accessForm">
+              <label class="access-field" for="accessChannel"><span>Channel link</span>
+                <input class="curve-link" id="accessChannel" name="channel_url" type="url" autocomplete="url" required>
+              </label>
+              <label class="access-field" for="accessNote"><span>Anything else? (optional)</span>
+                <textarea class="curve-report" id="accessNote" name="note" rows="2" maxlength="500"></textarea>
+              </label>
+              <p class="error" id="accessError" hidden></p>
+              <div class="actions"><button class="btn-white" type="submit" id="accessSubmit">Ask for minutes</button></div>
+            </form>
+          </div>
+        </div>
 
         <div class="box" id="historyPanel">
           <div class="panel-head"><span>Your videos</span><span class="spacer"></span><span class="mono" id="historyCount"></span></div>
@@ -1281,11 +1309,61 @@ function setViewName(name) {
   $('appShell').classList.toggle('view-chooser', !player);
 }
 
+function accessState() {
+  const access = (me && me.access) || {};
+  if (access.funded || access.request === 'granted') return 'funded';
+  if (access.request === 'waiting') return 'waiting';
+  if (access.request === 'declined') return 'declined';
+  return 'request';
+}
+
 function updateNoCreditPanel() {
   const price = estimateCostCents(1);
-  if (price == null) { $('noCreditPanel').classList.remove('active'); return; }
-  $('noCreditPanel').classList.toggle('active', me.balance.available_cents < price);
+  if (price == null || !me || !me.balance) { $('noCreditPanel').classList.remove('active'); return; }
+  const show = me.balance.available_cents < price;
+  $('noCreditPanel').classList.toggle('active', show);
+  if (!show) return;
+  const state = accessState();
+  $('accessRequest').hidden = state !== 'request';
+  $('accessWaiting').hidden = state !== 'waiting';
+  $('accessDeclined').hidden = state !== 'declined';
+  $('accessFunded').hidden = state !== 'funded';
+  if (state === 'request' && limits && Number.isFinite(limits.invite_seconds)) {
+    const minutes = limits.invite_seconds / 60;
+    $('accessTitle').textContent = `Get ${Number.isInteger(minutes) ? minutes : minutes.toFixed(1)} free minutes`;
+  }
 }
+
+async function sendAccessRequest(event) {
+  event.preventDefault();
+  const error = $('accessError');
+  const submit = $('accessSubmit');
+  error.hidden = true;
+  submit.disabled = true;
+  try {
+    const note = $('accessNote').value.trim();
+    const res = await postJSON('/api/access-request', {
+      channel_url: $('accessChannel').value.trim(),
+      note: note || null,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.status === 401) return window.location.reload();
+    if (res.ok) {
+      me.access = { ...(me.access || {}), request: 'waiting' };
+      updateNoCreditPanel();
+      return;
+    }
+    error.textContent = data.message || "Couldn't send your request. Please try again.";
+    error.hidden = false;
+  } catch (e) {
+    error.textContent = "Couldn't reach the server. Please try again.";
+    error.hidden = false;
+  } finally {
+    submit.disabled = false;
+  }
+}
+$('accessChannel').placeholder = 'https://www.youtube.com/@yourchannel';
+$('accessForm').addEventListener('submit', sendAccessRequest);
 
 function renderBalance(available) {
   const b = me.balance;
@@ -1936,7 +2014,6 @@ async function loadLimits() {
     const block = limits.price && limits.price.block_seconds > 0 ? ` · credit used in ${minSec(limits.price.block_seconds).text} steps` : '';
     $('limitsText').textContent = `MP4, MOV or WebM · up to ${minSec(limits.max_video_duration_seconds).text}${block}`;
     if (creditWords(0) == null) console.error('No usable price in /api/limits: credit is hidden', limits.price);
-    else $('noCreditText').textContent = `You need at least ${creditWords(estimateCostCents(1))} of credit to analyse a video. Ask the NeuroLens team for more.`;
     if (signedIn && me) showBalance();
     return limits;
   } catch (e) { console.error("Couldn't load /api/limits: credit is hidden", e); return null; }
@@ -3459,6 +3536,24 @@ function curveBackText(rewardCents) {
   return amount ? `get ${amount} back` : 'get its credit back';
 }
 
+function curveCount(value) {
+  return Number(value).toLocaleString('en-US');
+}
+
+function curveTooFewViewsLine(data) {
+  const views = data.checked_views == null ? null : curveCount(data.checked_views);
+  const minViews = data.min_views == null ? null : curveCount(data.min_views);
+  if (views == null || minViews == null) {
+    return "This video has too few views. Its curve is welcome, but this one won't get credit back yet.";
+  }
+  const from = data.reward_from ? rewardDateText(new Date(data.reward_from)) : null;
+  if (from) {
+    const when = data.published_on ? 'it went public' : 'your analysis';
+    return `This video has ${views} views. Add its curve once it has ${minViews} views, from ${from} (a week after ${when}), and ${curveBackText(data.reward_cents)}.`;
+  }
+  return `This video has ${views} views. Add its curve once it has ${minViews} and ${curveBackText(data.reward_cents)}.`;
+}
+
 function curveCheckLine(data) {
   if (data.reason === null || data.reason === undefined) {
     const amount = creditWords(data.reward_cents || 0);
@@ -3476,6 +3571,9 @@ function curveCheckLine(data) {
       ? `This video is ${data.video_seconds} s; the one you analysed is ${data.analysed_seconds} s.`
       : "This video's length differs from the one you analysed.";
     return `${lengths} Its curve is welcome, but only the analysed video's curve gets credit back.`;
+  }
+  if (data.reason === 'too_few_views') {
+    return curveTooFewViewsLine(data);
   }
   if (data.reason === 'cap_reached') {
     return "You've had 5 rewards in the last 30 days. Its curve is still welcome.";

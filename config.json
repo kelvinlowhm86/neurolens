@@ -18,7 +18,8 @@
     "curve_reward_window_days": 30,
     "no_curve_days": 90,
     "curve_reward_min_days": 7,
-    "curve_length_tolerance_s": 2
+    "curve_length_tolerance_s": 2,
+    "curve_min_views": 1000
   },
   "response": {
     "colour_range": 0.5

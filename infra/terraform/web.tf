@@ -231,6 +231,19 @@ locals {
   }
 }
 
+# Someone asked for free minutes (M3k §9): the database holds the request, this topic only emails
+# Josh. Confirm the subscription email once after apply. No standing cost.
+resource "aws_sns_topic" "access_requests" {
+  name = "neurolens-access-requests"
+  tags = { Milestone = "M3k" }
+}
+
+resource "aws_sns_topic_subscription" "access_requests_email" {
+  topic_arn = aws_sns_topic.access_requests.arn
+  protocol  = "email"
+  endpoint  = var.alert_email
+}
+
 # CloudFront's address, and the Cognito client whose callback address contains it, cannot be
 # environment variables of the function CloudFront fronts (its URL is CloudFront's origin: a
 # cycle), so the web function reads them from here at startup.
@@ -238,6 +251,7 @@ resource "aws_ssm_parameter" "web_deployment" {
   for_each = {
     public_base_url   = local.public_base_url
     cognito_client_id = aws_cognito_user_pool_client.web.id
+    request_topic_arn = aws_sns_topic.access_requests.arn
   }
 
   name  = "/neurolens/web/${each.key}"

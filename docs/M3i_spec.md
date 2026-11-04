@@ -1,4 +1,4 @@
-# NeuroLens — M3i Implementation Spec: curve collection (week-old curves, video links, Facebook, invite credit)
+# NeuroLens — M3i Implementation Spec: curve collection (week-old curves, video links, Facebook, free minutes by request)
 
 Status: current design. Builds on M3f §5 (research sharing and curves). Where this spec and an older
 one disagree, this one wins, and the older section is updated to match (§10).
@@ -16,8 +16,9 @@ one disagree, this one wins, and the older section is updated to match (§10).
 - Facebook Page videos are a second curve source, beside YouTube. Built from Meta's documentation
   only; no real report has been seen yet, so the check is strict and a mismatch is refused loudly.
   Meta ad curves and Facebook/Instagram Reels are left out until a real report is seen.
-- Invited users get a standard 5 minutes of credit (enough for a brand team to compare two cuts of
-  two or three 30–60 s ads).
+- Creators and marketers with a channel of 1,000+ followers ask for free minutes inside the app;
+  Josh screens each channel by hand and grants the standard 5 minutes of credit (enough for a brand
+  team to compare two cuts of two or three 30–60 s ads) or declines (M3k §8-§9).
 - A rewarded curve gets a small celebration (a short confetti burst, the credit counting up); the
   page stays clean, modern and light: the form's new questions are compact one-tap rows.
 - The upload dialog's "Add audience retention" link is removed: with the 7-day rule a curve added
@@ -33,7 +34,8 @@ Instagram, Vimeo, reminders or email when the 7 days are up.
 ## 2. Settings (`config.json`)
 - `research.curve_reward_min_days`: 7. A starting value, adjusted from data later.
 - `billing.invite_cents`: 1000 (5 min at today's price, `pricing.CENTS_PER_BLOCK` 100 per 30 s).
-  `billing.starter_cents` stays 0: credit comes only by invitation.
+  `billing.starter_cents` stays 0: credit comes only from a request granted by the team (M3k §8-§9).
+- `research.curve_min_views`: 1000, the view minimum for a checked YouTube curve (M3k §7).
 
 ## 3. Video link (`neurolens/results.py`, pure)
 `parse_video_link(text) -> (platform, video_id)`, `platform` `"youtube"` or `"facebook"`; raises
@@ -85,26 +87,28 @@ date when we can check it, and the link is checked before any work. The link rul
   the facts are unknown; with facts they must be absent or null) → the existing S3 writes →
   quality flags → `billing.add_curve`, passing the facts. A link or report refusal stores nothing.
 - `POST /api/jobs/<id>/retention/check` takes `{video_url}` and returns the same job checks, the
-  same link facts, and `{platform, video_id, reward_cents, reward_from, reason, published_on}`
-  from `billing.curve_offer`, writing nothing (M3j §6). Its `VideoTaken` / `VideoLinkChanged`
-  refusals are the save's 409s.
-- `billing.add_curve` gains `video_ref`, `same_cut`, `source`, `reward_min_days`, `facts` and
-  `length_tolerance_s`, and in its transaction, after the existing job checks and before the
-  duplicate-curve check:
+  same link facts, and `{platform, video_id, reward_cents, reward_from, reason, published_on,
+  video_seconds, analysed_seconds, checked_views, min_views}` from `billing.curve_offer`, writing
+  nothing (M3j §6, M3k §7). Its `VideoTaken` / `VideoLinkChanged` refusals are the save's 409s.
+- `billing.add_curve` gains `video_ref`, `same_cut`, `source`, `reward_min_days`, `facts`,
+  `length_tolerance_s` and `min_views`, and in its transaction, after the existing job checks and
+  before the duplicate-curve check:
   - another snapshot with the same `video_ref` on a job of a different user → `VideoTaken`
     (409 `video_link_taken`, "This video is linked to another account.");
   - the job already has a snapshot with a different non-null `video_ref` → `VideoLinkChanged`
     (409 `video_link_changed`, "This analysis is already linked to another video.").
-  - The reward rules are M3j §5: the date is `published_at + reward_min_days` when facts are
-    known, else `created_at + reward_min_days`; the length must match the analysed video within
-    `length_tolerance_s` when it can be checked; and no snapshot with the same `video_ref` has
-    `rewarded_cents > 0`. It returns `reason` (the first unmet condition) and `reward_from` only
-    with `too_early`.
+  - The reward rules are M3j §5 and M3k §7: the date is `published_at + reward_min_days` when
+    facts are known, else `created_at + reward_min_days`; the length must match the analysed video
+    within `length_tolerance_s` when it can be checked; a checked view count must be at least
+    `research.curve_min_views` (1,000), while a hidden or unknown count pays as before; and no
+    snapshot with the same `video_ref` has `rewarded_cents > 0`. It returns `reason` (the first
+    unmet condition) and `reward_from` only with `too_early`, or with `too_few_views` when the
+    date is also still ahead.
 - `billing.curve_offer` shares the job checks, the link refusals and `_curve_reward` with
   `add_curve`, so the check and the save cannot disagree.
 - `list_jobs` drops `curve_reward_from`: before a link there is no date to promise.
-  `curve_reward_cents` keeps meaning "what a valid curve would give", ignoring the date, the link
-  and the length.
+  `curve_reward_cents` keeps meaning "what a valid curve would give", ignoring the date, the link,
+  the length and the views.
 
 ## 7. Page (`static/app.html`)
 No date is promised before the form names a link (M3j §5).
@@ -115,9 +119,10 @@ No date is promised before the form names a link (M3j §5).
   add its retention curve: see real viewers beside the prediction and get X back."
 - **Form, step 1:** the video name and a "Video link" field only. On a valid-looking link
   (debounced about 400 ms, and on paste) the page calls `/retention/check` and shows one line:
-  pays now, `too_early` (with the date, or "a week after your analysis" when facts are unknown),
-  `length_mismatch`, `cap_reached`, or the other-reason line (M3j §8). A refusal shows the
-  server's message and keeps step 2 hidden.
+  pays now, `length_mismatch`, `too_few_views` (with the checked view count and the minimum),
+  `too_early` (with the date, or "a week after your analysis" when facts are unknown),
+  `cap_reached`, or the other-reason line (M3j §8, M3k §8). A refusal shows the server's message
+  and keeps step 2 hidden.
 - **Form, step 2** (after a non-refused check): the guide link for that link, one report box
   "Paste the reply here" with a small "or choose a file" link, the promoted row and "Published
   video" ("Same as analysed", "Lightly edited", "Re-cut"), and views and published only when the
@@ -138,26 +143,29 @@ No date is promised before the form names a link (M3j §5).
   = today in the viewer's time zone, filters `video==<v>`), each with a Copy button; with Facebook
   it fills the query with the id and a Copy button. Without values, as now. The steps say to paste
   the reply into NeuroLens (no saving a file), and both sections end "Add it once the video has
-  been public a week to get its credit back."
+  been public a week (and, on YouTube, has 1,000+ views) to get its credit back."
 - **Privacy (`static/privacy.html#sharing`, with the old `#research` anchor still landing there):**
   the section is "Sharing a video". Its purpose is to help improve NeuroLens by building and
   testing its own engagement models, which may later be a paid product (notice first); the course
   study and its copy are removed. What is kept adds the checked publish date, length and view
-  count. Reward rules: "public at least 7 days (7 days after the analysis when we can't check the
-  publish date)" and "the same length as the analysed video, give or take 2 seconds, when we can
-  check it". The test that keeps these numbers equal to `config.json` covers 7 and 2.
-- **Landing (`static/index.html`), Early access:** Invited: "5 minutes of free analysis for invited
-  creators, marketers, teachers and researchers."; Shared: "Share a video, add its retention curve
-  once it's been public a week, and get its credit back." A test keeps "5 minutes" equal to
-  `billing.invite_cents` at the current price.
+  count, and an access request's channel link and note (emailed to the team through AWS, kept until
+  the account is deleted). Reward rules: "public at least 7 days (7 days after the analysis when
+  we can't check the publish date)", "the same length as the analysed video, give or take 2
+  seconds, when we can check it", and "when we can check it, has at least 1,000 views". The test
+  that keeps these numbers equal to `config.json` covers 7, 2 and 1,000.
+- **Landing (`static/index.html`), Early access:** "Samples" "Open" "Explore every sample without an
+  account."; "Your videos" "Free to try" "Creators and marketers get 5 free minutes.*" with a
+  button "Get free minutes" to `/login`; "Shared" "Keep going" "Add a video's retention curve and
+  earn its credit back."; under the columns, small: "*For channels with 1,000+ followers." A test
+  keeps "5 free minutes" equal to `billing.invite_cents` at the current price.
 - **Consent:** the wording shown changes, so `billing.CONSENT_VERSION` becomes `"2026-11-03"` with
   the page's text (M3f §5a rule).
 
-## 9. Invite credit (`infra/grant_credit.py`)
+## 9. Free minutes (`infra/grant_credit.py`)
 The amount becomes optional: with none, it grants `billing.invite_cents` from `config.json` and the
 confirm line reads "Grant $10.00 (5 min, the invite credit) to <email>?". With an amount, as now.
-The grant is a `grant` ledger row as now, so invited users count as funded for curve rewards
-(M3f §5d).
+The grant is a `grant` ledger row as now, so users granted free minutes count as funded for curve
+rewards (M3f §5d). A grant also marks the user's access request granted (M3k §4).
 
 ## 10. Older specs updated with this build
 - M3f §1 out of scope: Meta Ads → "Meta ad curves" (Facebook Page videos are in, M3i).

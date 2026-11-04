@@ -96,6 +96,13 @@ locals {
         Action   = "lambda:InvokeFunction"
         Resource = aws_lambda_function.report.arn
       },
+      {
+        # Email Josh when someone asks for free minutes (M3k §9).
+        Sid      = "NotifyAccessRequests"
+        Effect   = "Allow"
+        Action   = "sns:Publish"
+        Resource = aws_sns_topic.access_requests.arn
+      },
     ]
   }
 }

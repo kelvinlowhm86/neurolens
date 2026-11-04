@@ -24,6 +24,7 @@ DEPLOYMENT_PARAMETERS = {
     "/neurolens/web/public_base_url": (None, "public_base_url"),
     "/neurolens/web/cognito_client_id": ("auth", "cognito_client_id"),
     "/neurolens/web/youtube_api_key": (None, "youtube_api_key"),
+    "/neurolens/web/request_topic_arn": (None, "request_topic_arn"),
 }
 _handler = None
 logger = logging.getLogger("neurolens")

@@ -265,6 +265,15 @@ class LocalSageMaker:
         return {"ResponseMetadata": {"HTTPStatusCode": 202}}
 
 
+def _console_notifier(request, email):
+    """Show an access request on a laptop instead of emailing it (M3k §5)."""
+    note = request.get("note") or "-"
+    print(
+        f"Access request from {email}: {request['platform']} {request['channel_url']} "
+        f"(note: {note})"
+    )
+
+
 def _grant(db, cfg, email, dollars):
     from neurolens import billing
 
@@ -383,7 +392,13 @@ def main(argv=None):
         sqs = boto3.client("sqs")
         _make_s3(s3)
         queue_url = _make_queue(sqs, s3)
-        app = create_app(cfg=cfg, db=db, s3_client=s3, report_starter=_report_starter(s3, db, cfg))
+        app = create_app(
+            cfg=cfg,
+            db=db,
+            s3_client=s3,
+            report_starter=_report_starter(s3, db, cfg),
+            notify=_console_notifier,
+        )
         web_server, web_thread = _serve_web(app)
         print(
             f"NeuroLens is at http://127.0.0.1:{WEB_PORT} "

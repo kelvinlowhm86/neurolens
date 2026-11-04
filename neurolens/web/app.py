@@ -21,8 +21,21 @@ from urllib.parse import quote
 from flask import Flask, jsonify, redirect, request, send_from_directory, session
 from werkzeug.exceptions import HTTPException
 
-from neurolens import billing, pricing, report_prompt, results, scaling, settings, storage, youtube
+from neurolens import (
+    access,
+    billing,
+    pricing,
+    report_prompt,
+    results,
+    scaling,
+    settings,
+    storage,
+    youtube,
+)
 from neurolens import db as dbmod
+from neurolens import (
+    notify as notify_module,
+)
 from neurolens.web import auth
 
 logger = logging.getLogger("neurolens")
@@ -130,7 +143,14 @@ def _s3_client(cfg):
 
 
 def create_app(
-    *, cfg=None, data_dir=None, db=None, s3_client=None, ssm_client=None, report_starter=None
+    *,
+    cfg=None,
+    data_dir=None,
+    db=None,
+    s3_client=None,
+    ssm_client=None,
+    report_starter=None,
+    notify=None,
 ):
     """Build the Flask app.
 
@@ -150,6 +170,19 @@ def create_app(
     if cognito and not gpu_endpoint:
         raise ValueError("Missing required setting in Cognito mode: aws.gpu_endpoint")
     region = (cfg.get("aws") or {}).get("region")
+    if notify is None:
+        topic_arn = cfg.get("request_topic_arn")
+        if cognito:
+            if not topic_arn:
+                raise ValueError("Missing required setting in Cognito mode: request_topic_arn")
+            notify = notify_module.sns_notifier(region, topic_arn)
+        else:
+
+            def notify(request, email):
+                logger.info(
+                    f"access request from user {request['user_id']} (not emailed: dev mode)"
+                )
+
     if cognito and ssm_client is None:
         import boto3
 
@@ -177,6 +210,7 @@ def create_app(
         db = dbmod.from_config(cfg, resume_wait_s=WEB_RESUME_WAIT_S)
     bucket = (cfg.get("aws") or {}).get("s3_bucket")
     starter_cents = (cfg.get("billing") or {}).get("starter_cents", DEFAULT_STARTER_CENTS)
+    invite_cents = (cfg.get("billing") or {}).get("invite_cents", 0)
     max_bytes = cfg.get("max_upload_bytes")
     max_seconds = settings.max_duration(cfg or None)
     upload_cfg = cfg.get("upload") or {}
@@ -189,6 +223,7 @@ def create_app(
     length_tolerance_s = research_cfg.get(
         "curve_length_tolerance_s", billing.DEFAULT_LENGTH_TOLERANCE_S
     )
+    curve_min_views = research_cfg.get("curve_min_views", billing.DEFAULT_MIN_VIEWS)
     static_dir = root / "static"
     autoscaling = None
     if gpu_endpoint:
@@ -326,6 +361,7 @@ def create_app(
             "max_video_duration_seconds": max_seconds,
             "max_upload_bytes": max_bytes,
             "colour_range": (response_cfg or {}).get("colour_range"),
+            "invite_seconds": invite_cents * pricing.BLOCK_SECONDS / pricing.CENTS_PER_BLOCK,
             "price": {
                 "cents_per_block": pricing.CENTS_PER_BLOCK,
                 "block_seconds": pricing.BLOCK_SECONDS,
@@ -357,8 +393,41 @@ def create_app(
                 "user_id": user_id,
                 "email": email,
                 "balance": billing.get_balance(db, user_id),
+                "access": {
+                    "funded": billing.is_funded(db, user_id),
+                    "request": access.request_status(db, user_id),
+                },
             }
         )
+
+    @app.route("/api/access-request", methods=["POST"])
+    def access_request():
+        """Ask for free minutes with a channel link (M3k §6).
+
+        The row is committed before the email is sent, because the table is the list of requests:
+        a failed notification is logged without the requester's details and still answers 201.
+        """
+        if db is None:
+            return _not_configured()
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict):
+            return _error("invalid_request", "The request body must be a JSON object.")
+        user_id, email = signed_in_user()
+        try:
+            stored = access.add_request(db, user_id, data.get("channel_url"), data.get("note"))
+        except ValueError as err:
+            return _error("bad_request", str(err))
+        except access.AlreadyRequested:
+            return _error(
+                "already_requested",
+                "You have already asked for free minutes.",
+                status=409,
+            )
+        try:
+            notify(stored, email)
+        except Exception as err:
+            logger.error(f"access request email failed for user {user_id}: {type(err).__name__}")
+        return jsonify({"request": "waiting"}), 201
 
     @app.route("/api/uploads/presign", methods=["POST"])
     def presign():
@@ -815,6 +884,7 @@ def create_app(
                 reward_window_days,
                 reward_min_days,
                 length_tolerance_s,
+                min_views=curve_min_views,
             )
         except billing.CurveRefused as err:
             return _error(err.code, err.message, status=err.status)
@@ -825,6 +895,8 @@ def create_app(
                 "reward_cents": cents,
                 "reward_from": reward_from,
                 "reason": reason,
+                "checked_views": facts.views if facts else None,
+                "min_views": curve_min_views,
                 "published_on": facts.published_at.date().isoformat() if facts else None,
                 "video_seconds": facts.duration_s if facts else None,
                 "analysed_seconds": round(job["verified_duration_ms"] / 1000)
@@ -953,6 +1025,7 @@ def create_app(
                 reward_min_days=reward_min_days,
                 facts=facts,
                 length_tolerance_s=length_tolerance_s,
+                min_views=curve_min_views,
             )
         except (billing.DuplicateCurve, dbmod.DuplicateCurveViolation):
             _delete_curve_files(s3, bucket, [raw_key, csv_key], job["job_id"])

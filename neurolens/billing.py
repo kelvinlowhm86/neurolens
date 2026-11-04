@@ -39,6 +39,7 @@ DEFAULT_REWARD_CAP = 5
 DEFAULT_REWARD_WINDOW_DAYS = 30
 DEFAULT_REWARD_MIN_DAYS = 7
 DEFAULT_LENGTH_TOLERANCE_S = 2
+DEFAULT_MIN_VIEWS = 1000
 
 CURVE_REMOVED_MESSAGES = {
     "stopped": "You stopped sharing this video.",
@@ -270,7 +271,8 @@ def user_by_email(db, email):
 
 def grant_credit(db, email, cents):
     """Add credit to the user with this email (any letter case), with a `grant` ledger row
-    (M3b §7a). Returns the user ID."""
+    (M3b §7a). A waiting or declined access request is marked granted in the same transaction
+    (M3k §4). Returns the user ID."""
     if not isinstance(cents, int) or isinstance(cents, bool) or cents <= 0:
         raise ValueError(f"cents must be a positive whole number, not {cents!r}")
     with db.transaction() as tx:
@@ -278,7 +280,29 @@ def grant_credit(db, email, cents):
         if user_id is None:
             raise LookupError(f"no user with email {email!r}")
         _move(tx, user_id, None, "grant", cents, 0)
+        tx.execute(
+            "UPDATE access_requests SET status = :granted, decided_at = now() "
+            "WHERE user_id = :user_id AND status <> :granted",
+            {"user_id": user_id, "granted": "granted"},
+        )
     return user_id
+
+
+def _has_funding(tx, user_id):
+    """True when the account has had credit beyond the starter (M3k §6)."""
+    return bool(
+        tx.execute(
+            "SELECT 1 AS present FROM ledger WHERE user_id = :user_id "
+            "AND (kind = :grant OR kind = :topup) LIMIT 1",
+            {"user_id": user_id, "grant": "grant", "topup": "test_topup"},
+        )
+    )
+
+
+def is_funded(db, user_id):
+    """Whether the account has had credit beyond the starter (M3k §6), shared with /api/me."""
+    with db.transaction() as tx:
+        return _has_funding(tx, user_id)
 
 
 def _reward_status(tx, user_id, reward_cap, reward_window_days):
@@ -288,13 +312,7 @@ def _reward_status(tx, user_id, reward_cap, reward_window_days):
     `reward_cap` rewards in the window. Shared by `add_curve`, `curve_offer` and `list_jobs`, so
     the preview cannot drift from the payment and each refusal can name its own reason.
     """
-    funded = bool(
-        tx.execute(
-            "SELECT 1 AS present FROM ledger WHERE user_id = :user_id "
-            "AND (kind = :grant OR kind = :topup) LIMIT 1",
-            {"user_id": user_id, "grant": "grant", "topup": "test_topup"},
-        )
-    )
+    funded = _has_funding(tx, user_id)
     if not funded:
         return False, False
     recent = tx.execute(
@@ -317,6 +335,7 @@ def _curve_reward(
     facts=None,
     reward_min_days=DEFAULT_REWARD_MIN_DAYS,
     length_tolerance_s=DEFAULT_LENGTH_TOLERANCE_S,
+    min_views=DEFAULT_MIN_VIEWS,
     preview=False,
     now=None,
 ):
@@ -324,10 +343,11 @@ def _curve_reward(
 
     Conditions run in the spec's order: invalid (quality flags, save only), not_charged,
     already_rewarded (this job, the same video hash, or the same video link), not_funded,
-    cap_reached, length_mismatch, too_early. `reward_from` is the publish date plus the minimum
-    days when facts are known, else the analysis date plus them, and is returned only with
-    too_early. `cents` is what the curve would pay now or from `reward_from` (0 when it cannot),
-    so the check can promise the amount while the save pays only when `reason` is None.
+    cap_reached, length_mismatch, too_few_views, too_early (M3k §7). `reward_from` is the
+    publish date plus the minimum days when facts are known, else the analysis date plus them,
+    and is returned with too_early, or with too_few_views when the date is also still ahead.
+    `cents` is what the curve would pay now or from `reward_from` (0 when it cannot), so the
+    check can promise the amount while the save pays only when `reason` is None.
 
     `preview` ignores the date, the link and the length, which is what `list_jobs` shows before
     the form is filled in. `now` is the database's clock (`add_curve` and `curve_offer` read it
@@ -361,6 +381,8 @@ def _curve_reward(
         analysed_ms = job["verified_duration_ms"]
         if analysed_ms is None or abs(facts.duration_s - analysed_ms / 1000) > length_tolerance_s:
             return refuse("length_mismatch")
+    if facts is not None and facts.views is not None and facts.views < min_views:
+        return cents, (reward_from if now < reward_from_at else None), "too_few_views"
     if now < reward_from_at:
         return cents, reward_from, "too_early"
     return cents, None, None
@@ -563,8 +585,9 @@ def delete_account(db, user_id):
     Lock order: every caller takes the balance row before job rows. Here the balance row is
     locked first, so a racing `reserve` either wins before the mark or is refused after it. The
     email is replaced at once, and the sessions and identities are gone, so every tab is signed
-    out and signing in again makes a new, empty account. `remove_deleted_account` deletes the
-    rows once every job's files are purged (M3f §5c).
+    out and signing in again makes a new, empty account. The access request is deleted too: it
+    holds only a channel link and a note (M3k §4). `remove_deleted_account` deletes the rows
+    once every job's files are purged (M3f §5c).
     """
     with db.transaction() as tx:
         locked = tx.execute(
@@ -589,6 +612,7 @@ def delete_account(db, user_id):
             "WHERE user_id = :user_id",
             {"user_id": user_id},
         )
+        tx.execute("DELETE FROM access_requests WHERE user_id = :user_id", {"user_id": user_id})
         tx.execute("DELETE FROM sessions WHERE user_id = :user_id", {"user_id": user_id})
         identities = tx.execute(
             "DELETE FROM identities WHERE user_id = :user_id RETURNING issuer, subject",
@@ -1135,6 +1159,7 @@ def curve_offer(
     reward_window_days,
     reward_min_days,
     length_tolerance_s,
+    min_views=DEFAULT_MIN_VIEWS,
 ):
     """What `add_curve` would pay for this link, without writing anything (M3j §5-§6).
 
@@ -1153,6 +1178,7 @@ def curve_offer(
             facts=facts,
             reward_min_days=reward_min_days,
             length_tolerance_s=length_tolerance_s,
+            min_views=min_views,
             now=job["db_now"],
         )
 
@@ -1178,6 +1204,7 @@ def add_curve(
     reward_min_days,
     facts=None,
     length_tolerance_s=DEFAULT_LENGTH_TOLERANCE_S,
+    min_views=DEFAULT_MIN_VIEWS,
 ):
     """Store one retention snapshot and reward the analysis when all the rules allow it.
 
@@ -1186,11 +1213,11 @@ def add_curve(
     stored under the same hash, on any job or account, raises DuplicateCurve and stores nothing.
     A valid curve of a charged job returns the captured price once, when the reward rules allow
     it: at least `reward_min_days` after the publish date when facts are known, else after the
-    analysis, with the video's length within `length_tolerance_s` when it can be checked, and
-    when neither the video hash nor the published link has been rewarded, by an account that has
-    had credit beyond the starter and below the per-window cap. The checked facts (views, publish
-    date, length) are stored too. All checks run before anything is written, so a refusal stores
-    nothing.
+    analysis, with the video's length within `length_tolerance_s` when it can be checked and at
+    least `min_views` checked views when the count is known (M3k §7), when neither the video hash
+    nor the published link has been rewarded, by an account that has had credit beyond the
+    starter and below the per-window cap. The checked facts (views, publish date, length) are
+    stored too. All checks run before anything is written, so a refusal stores nothing.
     """
     with db.transaction() as tx:
         _lock_balance(tx, user_id)
@@ -1213,6 +1240,7 @@ def add_curve(
             facts=facts,
             reward_min_days=reward_min_days,
             length_tolerance_s=length_tolerance_s,
+            min_views=min_views,
             now=job["db_now"],
         )
         reward = cents if reason is None else 0
