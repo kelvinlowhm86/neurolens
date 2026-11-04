@@ -43,7 +43,7 @@ Edits later: open the policy, Edit, paste the new file. AWS keeps up to five ver
 ## New account: what the account owner does
 
 The account owner follows [ACCOUNT_OWNER.md](ACCOUNT_OWNER.md) (create the five policies, attach
-four, make an access key, switch on Claude, check the credits). The deployer then requests quotas
+four, make an access key, switch on Claude). The deployer then requests quotas
 himself with the `neurolens-quota-requests` policy.
 
 ## Check (with the `neurolens` profile)

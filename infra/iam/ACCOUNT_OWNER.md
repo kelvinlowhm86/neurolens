@@ -80,20 +80,11 @@ Then click **Open in playground** (or Playground, then Chat, and pick Claude Son
 `hi`, and send. Why: the first message switches the model on for the whole account, and Josh's
 limited user is not allowed to do that switch.
 
-## 5. Check the credits cover it
-
-Open https://us-east-1.console.aws.amazon.com/billing/home#/credits. For each credit, open its
-details and check the applicable products include SageMaker, Bedrock, Lambda, RDS (Aurora), S3 and
-CloudFront.
-
-If one of those six is missing, tell Josh before he deploys: that usage would be charged to your
-card.
-
-## 6. Done
+## 5. Done
 
 Send Josh the access key privately.
 
-## 7. When the course ends
+## 6. When the course ends
 
 Once NeuroLens has been taken down, delete the user **Josh** (IAM, Users) and the five `neurolens-`
 policies (IAM, Policies, search `neurolens`).
