@@ -20,7 +20,7 @@ So a role can never do more than read and write NeuroLens storage and queues, us
 database through the Data API, read `/neurolens/` parameters, pull and push the worker image,
 resize only the NeuroLens endpoint, start only the report function, call only Claude Sonnet 4.6 on
 Bedrock through its US inference profile, publish to NeuroLens SNS topics, publish SageMaker endpoint instance metrics, write its own Lambda,
-SageMaker and CodeBuild logs, and delete logins from our Cognito pool. No role may end a
+SageMaker and CodeBuild logs, and delete logins only from a Cognito pool tagged `Project=neurolens` (no pool ID, so the same files work in any account; the deploy user cannot tag another project's pool). No role may end a
 machine or change the endpoint's scaling target.
 
 Terraform sets `permissions_boundary` on every role it creates, or AWS refuses the call.
@@ -74,9 +74,5 @@ Edits later: open the policy, Edit, paste the new file. AWS keeps up to five ver
 - Application Auto Scaling's `DescribeScalableTargets` and Cloud Control's operations cannot be
   limited to one resource, so those read/Cloud-Control actions are account-wide. The write actions
   (registering targets, policies, scheduled actions) are limited to the `neurolens` endpoint.
-- The boundary names our Cognito user pool by its ID (`DeleteCognitoLoginsInOurPool`), so deleting
-  an account can never remove logins from another project's pool. If the pool is ever recreated,
-  put the new ID there and re-apply; until then account deletion fails to remove logins and the
-  `COGNITO_DELETE_FAILED` alarm emails.
 - The policies are managed policies: each stays under IAM's 6,144-character limit (without
   whitespace). Adding many more actions needs another policy file.

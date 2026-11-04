@@ -125,7 +125,7 @@ Marking first means no curve can be added while the purge runs. A failed purge l
   - `s3:DeleteObject` on `uploads/*`, `results/*` and `dataset/*`;
   - `s3:PutObject` on `dataset/*/retention/*` (the raw report and parsed CSV of each snapshot);
   - `cognito-idp:ListUsers` and `cognito-idp:AdminDeleteUser` on our pool only.
-- **Role boundary:** `infra/iam/neurolens-role-boundary.json` gains a statement allowing those two actions on our user pool in us-east-1. The boundary caps every role, so without this the web role's grant would be denied. Josh applies the boundary change (a paste, like earlier IAM policy edits).
+- **Role boundary:** `infra/iam/neurolens-role-boundary.json` gains a statement allowing those two actions on a us-east-1 user pool tagged `Project=neurolens` (matched by tag, not pool ID, so the file works unchanged in any account). The boundary caps every role, so without this the web role's grant would be denied. Josh applies the boundary change (a paste, like earlier IAM policy edits).
 - **Alarm:** a CloudWatch log metric filter on `COGNITO_DELETE_FAILED` in the web function's log group, plus the alarm `neurolens-cognito-delete-failed` (count at least 1 in 5 minutes, emails the existing alarm topic).
 - **Worker:** the worker role already has `s3:GetObject` on `uploads/*`, which `copy_object` needs as its source.
 
