@@ -89,12 +89,11 @@ def test_a_link_longer_than_300_characters_is_refused():
 def test_a_valid_request_is_stored_as_waiting(db):
     user_id = billing.sign_in(db, ISSUER, "sub-ann", "ann@example.com", 0)
 
-    stored = access.add_request(db, user_id, CHANNEL, "creator", f"  {NOTE}  ")
+    stored = access.add_request(db, user_id, CHANNEL, f"  {NOTE}  ")
 
     assert stored["user_id"] == user_id
     assert stored["channel_url"] == CHANNEL
     assert stored["platform"] == "youtube"
-    assert stored["role"] == "creator"
     assert stored["note"] == NOTE
     assert stored["status"] == "waiting"
     assert access.request_status(db, user_id) == "waiting"
@@ -103,39 +102,37 @@ def test_a_valid_request_is_stored_as_waiting(db):
 def test_a_blank_note_is_stored_as_null(db):
     user_id = billing.sign_in(db, ISSUER, "sub-blank", "blank@example.com", 0)
 
-    stored = access.add_request(db, user_id, CHANNEL, "marketer", "   ")
+    stored = access.add_request(db, user_id, CHANNEL, "   ")
 
     assert stored["note"] is None
 
 
 @pytest.mark.parametrize(
-    ("channel_url", "role", "note"),
+    ("channel_url", "note"),
     [
-        ("https://vimeo.com/anncreates", "creator", None),
-        (CHANNEL, "fan", None),
-        (CHANNEL, "other", "x" * 501),
+        ("https://vimeo.com/anncreates", None),
+        (CHANNEL, "x" * 501),
     ],
-    ids=["bad-link", "bad-role", "long-note"],
+    ids=["bad-link", "long-note"],
 )
-def test_a_bad_request_is_refused_and_nothing_is_stored(db, channel_url, role, note):
+def test_a_bad_request_is_refused_and_nothing_is_stored(db, channel_url, note):
     user_id = billing.sign_in(db, ISSUER, "sub-bad", "bad@example.com", 0)
 
     with pytest.raises(ValueError):
-        access.add_request(db, user_id, channel_url, role, note)
+        access.add_request(db, user_id, channel_url, note)
 
     assert access.request_status(db, user_id) is None
 
 
 def test_a_second_request_is_refused_and_keeps_the_first(db, pg):
     user_id = billing.sign_in(db, ISSUER, "sub-once", "once@example.com", 0)
-    access.add_request(db, user_id, CHANNEL, "creator", None)
+    access.add_request(db, user_id, CHANNEL, None)
 
     with pytest.raises(access.AlreadyRequested):
-        access.add_request(db, user_id, OTHER_CHANNEL, "marketer", None)
+        access.add_request(db, user_id, OTHER_CHANNEL, None)
 
     [row] = pg.rows("SELECT * FROM access_requests WHERE user_id = %s", user_id)
     assert row["channel_url"] == CHANNEL
-    assert row["role"] == "creator"
 
 
 # ---------------------------------------------------------------- granting and declining
@@ -145,7 +142,7 @@ def test_a_second_request_is_refused_and_keeps_the_first(db, pg):
 def test_a_grant_marks_a_request_granted_and_leaves_no_request_alone(db, pg, state):
     user_id = billing.sign_in(db, ISSUER, f"sub-{state}", f"{state}@example.com", 0)
     if state != "none":
-        access.add_request(db, user_id, CHANNEL, "creator", None)
+        access.add_request(db, user_id, CHANNEL, None)
     if state == "declined":
         assert access.decline(db, f"{state}@example.com") is True
 
@@ -161,7 +158,7 @@ def test_a_grant_marks_a_request_granted_and_leaves_no_request_alone(db, pg, sta
 
 def test_declining_a_waiting_request_records_the_decision(db):
     user_id = billing.sign_in(db, ISSUER, "sub-decline", "decline@example.com", 0)
-    access.add_request(db, user_id, CHANNEL, "creator", None)
+    access.add_request(db, user_id, CHANNEL, None)
 
     assert access.decline(db, "decline@example.com") is True
 
@@ -170,7 +167,7 @@ def test_declining_a_waiting_request_records_the_decision(db):
 
 def test_decline_changes_only_a_waiting_request(db):
     user_id = billing.sign_in(db, ISSUER, "sub-granted", "granted@example.com", 0)
-    access.add_request(db, user_id, CHANNEL, "creator", None)
+    access.add_request(db, user_id, CHANNEL, None)
     billing.grant_credit(db, "granted@example.com", 100)
 
     assert access.decline(db, "granted@example.com") is False
@@ -182,9 +179,9 @@ def test_the_operator_list_holds_only_waiting_requests_oldest_first(db, pg):
     first = billing.sign_in(db, ISSUER, "sub-old", "old@example.com", 0)
     second = billing.sign_in(db, ISSUER, "sub-new", "new@example.com", 0)
     granted = billing.sign_in(db, ISSUER, "sub-done", "done@example.com", 0)
-    access.add_request(db, first, CHANNEL, "creator", "old request")
-    access.add_request(db, second, OTHER_CHANNEL, "marketer", "new request")
-    access.add_request(db, granted, CHANNEL, "creator", None)
+    access.add_request(db, first, CHANNEL, "old request")
+    access.add_request(db, second, OTHER_CHANNEL, "new request")
+    access.add_request(db, granted, CHANNEL, None)
     billing.grant_credit(db, "done@example.com", 100)
     pg.conn.execute(
         "UPDATE access_requests SET created_at = now() - interval '1 hour' WHERE user_id = %s",
@@ -195,13 +192,12 @@ def test_the_operator_list_holds_only_waiting_requests_oldest_first(db, pg):
 
     assert [row["email"] for row in rows] == ["old@example.com", "new@example.com"]
     assert rows[0]["channel_url"] == CHANNEL
-    assert rows[0]["role"] == "creator"
     assert rows[0]["note"] == "old request"
 
 
 def test_deleting_the_account_removes_its_access_request(db, pg):
     user_id = billing.sign_in(db, ISSUER, "sub-delete", "delete@example.com", 0)
-    access.add_request(db, user_id, CHANNEL, "creator", NOTE)
+    access.add_request(db, user_id, CHANNEL, NOTE)
 
     billing.delete_account(db, user_id)
 
@@ -220,7 +216,7 @@ class RecordingNotifier:
 
 
 def raising_notifier(request, email):
-    raise RuntimeError("SES is unavailable")
+    raise RuntimeError("SNS is unavailable")
 
 
 def dev_client(aws, db, make_cfg, tmp_path, *, notify=None):
@@ -242,7 +238,7 @@ def dev_client(aws, db, make_cfg, tmp_path, *, notify=None):
 
 
 def request_body(**overrides):
-    body = {"channel_url": CHANNEL, "role": "creator", "note": NOTE}
+    body = {"channel_url": CHANNEL, "note": NOTE}
     body.update(overrides)
     return body
 
@@ -270,10 +266,9 @@ def test_a_valid_request_is_waiting_committed_and_emailed_once(db, pg, aws, make
     "body",
     [
         request_body(channel_url="https://vimeo.com/anncreates"),
-        request_body(role="fan"),
         request_body(note="x" * 501),
     ],
-    ids=["bad-link", "bad-role", "long-note"],
+    ids=["bad-link", "long-note"],
 )
 def test_a_bad_request_is_400_and_nothing_is_stored(db, aws, make_cfg, tmp_path, body):
     client = dev_client(aws, db, make_cfg, tmp_path)
@@ -298,7 +293,7 @@ def test_a_second_request_is_409(db, aws, make_cfg, tmp_path):
 
 
 def test_a_signed_out_user_cannot_ask(cognito_app, db):
-    client = cognito_app(request_email="josh@example.com").test_client()
+    client = cognito_app().test_client()
 
     resp = client.post("/api/access-request", json=request_body())
 
@@ -345,7 +340,7 @@ def test_me_reports_funding_and_the_request_status(
     client = dev_client(aws, db, make_cfg, tmp_path)
     billing.ensure_user(db, WEB_USER_ID, WEB_USER_EMAIL, STARTER_CENTS)
     if state != "none":
-        access.add_request(db, WEB_USER_ID, CHANNEL, "creator", None)
+        access.add_request(db, WEB_USER_ID, CHANNEL, None)
     if state == "granted":
         billing.grant_credit(db, WEB_USER_EMAIL, 100)
     elif state == "declined":
@@ -360,7 +355,7 @@ def test_me_reports_funding_and_the_request_status(
 # ---------------------------------------------------------------- the deployed launcher
 
 
-def test_the_deployed_launcher_fails_to_start_without_the_request_email(lambda_env, ssm):
+def test_the_deployed_launcher_fails_to_start_without_the_request_topic_arn(lambda_env, ssm):
     ssm.put_parameter(
         Name="/neurolens/web/youtube_api_key", Value="the-video-key", Type="SecureString"
     )
@@ -370,4 +365,4 @@ def test_the_deployed_launcher_fails_to_start_without_the_request_email(lambda_e
         module._load_settings()
 
     assert exc.value.response["Error"]["Code"] == "ParameterNotFound"
-    assert "/neurolens/web/request_email" in exc.value.response["Error"]["Message"]
+    assert "/neurolens/web/request_topic_arn" in exc.value.response["Error"]["Message"]

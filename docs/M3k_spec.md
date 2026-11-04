@@ -139,8 +139,8 @@ The no-credit panel (shown when the credit is below one video's price) shows one
   Granting stays `grant_credit.py`.
 - **Terraform:** the topic and its email subscription (Josh clicks the one confirmation email
   once after apply); the web app function's role gets `sns:Publish` on that topic only; the
-  `/neurolens/web/request_topic_arn` parameter (§2). The deploy policy in `infra/iam/` covers it
-  if its SNS statement already allows `neurolens-*` topics (the alarms'); otherwise it gains that.
+  `/neurolens/web/request_topic_arn` parameter (§2). The deploy policy and role boundary in
+  `infra/iam/` already allow `neurolens-*` topics: no change there.
   No standing cost; the first 1,000 emails a month are free.
 
 ## 10. Older specs updated with this build

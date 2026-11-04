@@ -570,6 +570,7 @@ def cognito_cfg(make_cfg):
             "public_base_url": PUBLIC_BASE_URL,
             "deployed": True,
             "db": {"backend": "data_api"},
+            "request_topic_arn": "arn:aws:sns:us-east-1:123456789012:neurolens-access-requests",
         }
         settings_.update(overrides)
         cfg = make_cfg(**settings_)

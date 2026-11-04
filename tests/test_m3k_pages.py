@@ -1,9 +1,10 @@
 """M3k's page copy and operator script (docs/M3k_spec.md §8-§9, §11).
 
 The free minutes come from `billing.invite_cents` and the view minimum from
-`research.curve_min_views`; neither number is typed into a page. The request panel tells a
-creator which of the four states they are in, and the operator can list waiting requests and
-decline one only after confirming.
+`research.curve_min_views`; neither number is typed into a page. The "1,000+ followers"
+screening bar is plain copy, not tied to that setting. The request panel tells a user which of
+the four states they are in, and the operator can list waiting requests and decline one only
+after confirming.
 """
 
 import importlib.util
@@ -44,7 +45,6 @@ def test_the_landing_page_offers_the_configured_free_minutes():
 
 
 def test_the_landing_page_names_the_three_ways_in():
-    _, min_views = config_numbers()
     text = page_text("index.html")
     html = (REPO_ROOT / "static" / "index.html").read_text()
 
@@ -58,7 +58,7 @@ def test_the_landing_page_names_the_three_ways_in():
         "Keep going",
         "Add a video's retention curve and earn its credit back.",
         "Get free minutes",
-        f"For channels with {min_views:,}+ followers.",
+        "For channels with 1,000+ followers.",
     ):
         assert phrase in text
     assert re.search(r'<a[^>]*href="/login"[^>]*>.*?Get free minutes.*?</a>', html, re.S)
@@ -67,7 +67,7 @@ def test_the_landing_page_names_the_three_ways_in():
 # ---------------------------------------------------------------- the configured minimum
 
 
-@pytest.mark.parametrize("name", ["index.html", "retention_guide.html", "privacy.html", "app.html"])
+@pytest.mark.parametrize("name", ["retention_guide.html", "privacy.html", "app.html"])
 def test_each_page_shows_the_configured_view_minimum(name):
     _, min_views = config_numbers()
     assert min_views == 1000
@@ -94,7 +94,7 @@ def test_the_privacy_page_names_the_access_request_data():
     text = page_text("privacy.html")
 
     assert "An access request, if you ask for free minutes" in text
-    assert "your channel link, what you make and any note" in text
+    assert "your channel link and any note" in text
     assert "It is emailed to the NeuroLens team (through Amazon Web Services)" in text
     assert "kept until you delete your account" in text
 
@@ -110,21 +110,15 @@ def test_the_privacy_page_states_the_view_rule():
 # ---------------------------------------------------------------- the request panel
 
 
-def test_the_panel_asks_for_a_channel_and_a_role():
-    _, min_views = config_numbers()
+def test_the_panel_asks_for_a_channel_and_a_note():
     text = page_text("app.html")
 
     assert (
-        f"For creators and marketers with {min_views:,}+ followers. "
-        "We look at each channel by hand."
+        "For creators and marketers with 1,000+ followers. We look at each channel by hand."
     ) in text
     for phrase in (
         "Channel link",
         "https://www.youtube.com/@yourchannel",
-        "You are",
-        "Creator",
-        "Marketer",
-        "Other",
         "Anything else? (optional)",
         "Ask for minutes",
     ):
@@ -138,10 +132,8 @@ def test_the_panel_tells_a_requester_they_are_waiting():
 
 
 def test_the_panel_explains_a_decline():
-    _, min_views = config_numbers()
-
     assert (
-        f"Thanks for asking. Free minutes are for channels with {min_views:,}+ followers for now."
+        "Thanks for asking. Free minutes are for channels with 1,000+ followers for now."
         in page_text("app.html")
     )
 
@@ -191,9 +183,9 @@ def test_the_script_lists_waiting_requests_oldest_first(db, pg, capsys):
     first = billing.sign_in(db, ISSUER, "sub-old", "old@example.com", 0)
     second = billing.sign_in(db, ISSUER, "sub-new", "new@example.com", 0)
     granted = billing.sign_in(db, ISSUER, "sub-done", "done@example.com", 0)
-    access.add_request(db, first, CHANNEL, "creator", "old request")
-    access.add_request(db, second, OTHER_CHANNEL, "marketer", "new request")
-    access.add_request(db, granted, CHANNEL, "creator", None)
+    access.add_request(db, first, CHANNEL, "old request")
+    access.add_request(db, second, OTHER_CHANNEL, "new request")
+    access.add_request(db, granted, CHANNEL, None)
     billing.grant_credit(db, "done@example.com", 100)
     pg.conn.execute(
         "UPDATE access_requests SET created_at = now() - interval '1 hour' WHERE user_id = %s",
@@ -216,7 +208,7 @@ def test_the_script_declines_nothing_without_a_yes(db):
 
     module = load_script()
     user_id = billing.sign_in(db, ISSUER, "sub-decline", "decline@example.com", 0)
-    access.add_request(db, user_id, CHANNEL, "creator", None)
+    access.add_request(db, user_id, CHANNEL, None)
 
     module.main(
         ["decline", "--backend", "postgres"],
