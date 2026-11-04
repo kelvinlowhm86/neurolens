@@ -13,6 +13,11 @@ def youtube_key_parameter(ssm):
     ssm.put_parameter(
         Name="/neurolens/web/youtube_api_key", Value="test-youtube-key", Type="SecureString"
     )
+    ssm.put_parameter(
+        Name="/neurolens/web/request_topic_arn",
+        Value="arn:aws:sns:us-east-1:123456789012:neurolens-access-requests",
+        Type="String",
+    )
 
 
 def test_each_request_logs_method_path_and_status_but_not_the_query(

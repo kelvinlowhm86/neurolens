@@ -200,6 +200,7 @@ def test_me_returns_email_and_balance(client):
         "user_id": WEB_USER_ID,
         "email": WEB_USER_EMAIL,
         "balance": {"available_cents": STARTER_CENTS, "reserved_cents": 0},
+        "access": {"funded": False, "request": None},
     }
 
 
@@ -218,6 +219,7 @@ def test_me_uses_create_apps_built_in_dev_user_without_a_cfg(aws, db, tmp_path):
         "user_id": "dev-user",
         "email": "dev@localhost",
         "balance": {"available_cents": 500, "reserved_cents": 0},
+        "access": {"funded": False, "request": None},
     }
 
 

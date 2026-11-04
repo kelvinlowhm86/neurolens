@@ -31,6 +31,7 @@ def test_returns_the_upload_limits_and_the_colour_range(get_limits, make_cfg):
         "max_video_duration_seconds": 120,
         "max_upload_bytes": 300000000,
         "colour_range": 0.5,
+        "invite_seconds": 0.0,
         "price": _price(),
     }
 
@@ -45,6 +46,7 @@ def test_changing_the_config_changes_the_answer(get_limits, make_cfg):
         "max_video_duration_seconds": 45,
         "max_upload_bytes": 5000,
         "colour_range": 0.7,
+        "invite_seconds": 0.0,
         "price": _price(),
     }
 
@@ -59,6 +61,7 @@ def test_upload_bytes_is_null_when_config_has_none(get_limits, make_cfg):
         "max_video_duration_seconds",
         "max_upload_bytes",
         "colour_range",
+        "invite_seconds",
         "price",
     }
     assert data["max_upload_bytes"] is None
@@ -82,6 +85,7 @@ def test_needs_no_aws_block(get_limits, make_cfg):
         "max_video_duration_seconds": 120,
         "max_upload_bytes": 300000000,
         "colour_range": 0.5,
+        "invite_seconds": 0.0,
         "price": _price(),
     }
 

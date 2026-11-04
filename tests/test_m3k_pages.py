@@ -80,14 +80,24 @@ def test_no_page_still_calls_access_invited(name):
     assert "invited" not in page_text(name).lower()
 
 
-def test_the_guide_gives_the_new_rule_for_both_platforms():
+def test_the_guide_gives_the_views_line_on_youtube_and_the_plain_line_on_facebook():
     _, min_views = config_numbers()
-    line = (
+    html = (REPO_ROOT / "static" / "retention_guide.html").read_text()
+    youtube = html.split('id="youtube"', 1)[1].split("<h2", 1)[0]
+    facebook = html.split('id="facebook"', 1)[1].split("<h2", 1)[0]
+
+    def text(fragment):
+        return " ".join(re.sub(r"<[^>]+>", " ", fragment).split())
+
+    youtube_line = (
         "Add it once the video has been public a week "
         f"(and, on YouTube, has {min_views:,}+ views) to get its credit back."
     )
+    plain_line = "Add it once the video has been public a week to get its credit back."
 
-    assert page_text("retention_guide.html").count(line) == 2
+    assert youtube_line in text(youtube)
+    assert plain_line in text(facebook)
+    assert "views" not in text(facebook)
 
 
 def test_the_privacy_page_names_the_access_request_data():

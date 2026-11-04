@@ -127,8 +127,8 @@ The no-credit panel (shown when the credit is below one video's price) shows one
   an account."; "Your videos" "Free to try" "Creators and marketers get 5 free minutes.*" with a
   button "Get free minutes" to `/login`; "Shared" "Keep going" "Add a video's retention curve and
   earn its credit back."; under the columns, small: "*For channels with 1,000+ followers."
-- **Guide (`static/retention_guide.html`):** both "Add it once..." lines become "Add it once the
-  video has been public a week (and, on YouTube, has 1,000+ views) to get its credit back."
+- **Guide (`static/retention_guide.html`):** the YouTube section's line gains "(and has 1,000+
+  views)"; the Facebook line is unchanged.
 - **Privacy (`static/privacy.html`):** "What we collect" adds "An access request, if you ask for
   free minutes: your channel link and any note. It is emailed to the NeuroLens team (through
   Amazon Web Services) and kept until you delete your account." The reward rules

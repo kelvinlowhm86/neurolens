@@ -318,6 +318,7 @@ def test_limits_answer_signed_out_and_signed_in(cognito_client, idp):
         "max_video_duration_seconds": 120,
         "max_upload_bytes": 300000000,
         "colour_range": 0.5,
+        "invite_seconds": 0.0,
         "price": {
             "cents_per_block": pricing.CENTS_PER_BLOCK,
             "block_seconds": pricing.BLOCK_SECONDS,

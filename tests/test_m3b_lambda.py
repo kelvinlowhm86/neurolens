@@ -34,6 +34,11 @@ def youtube_key_parameter(ssm):
     ssm.put_parameter(
         Name="/neurolens/web/youtube_api_key", Value="test-youtube-key", Type="SecureString"
     )
+    ssm.put_parameter(
+        Name="/neurolens/web/request_topic_arn",
+        Value="arn:aws:sns:us-east-1:123456789012:neurolens-access-requests",
+        Type="String",
+    )
 
 
 @pytest.fixture

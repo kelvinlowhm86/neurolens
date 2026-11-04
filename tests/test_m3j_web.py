@@ -537,6 +537,11 @@ def test_the_deployed_launcher_reads_the_youtube_key_from_parameter_store(
     ssm.put_parameter(
         Name="/neurolens/web/youtube_api_key", Value="the-video-key", Type="SecureString"
     )
+    ssm.put_parameter(
+        Name="/neurolens/web/request_topic_arn",
+        Value="arn:aws:sns:us-east-1:123456789012:neurolens-access-requests",
+        Type="String",
+    )
     module = fresh_import("neurolens.web.lambda_handler")
 
     cfg = module._load_settings()
