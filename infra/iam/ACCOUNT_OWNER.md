@@ -74,8 +74,7 @@ https://us-east-1.console.aws.amazon.com/bedrock/home?region=us-east-1#/model-ca
 `Claude Sonnet 4.6` (made by Anthropic) and open it.
 
 If it asks for use-case details, fill the short form: company/use = university course project
-(NUS); use case = writes a short text summary of a video analysis, for course testers and visitors
-to a course exhibition.
+(NUS); use case = writes a short text summary of a video analysis; internal users only.
 
 Then click **Open in playground** (or Playground, then Chat, and pick Claude Sonnet 4.6), type
 `hi`, and send. Why: the first message switches the model on for the whole account, and Josh's
