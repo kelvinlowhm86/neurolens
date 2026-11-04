@@ -7,12 +7,13 @@ Only step 4's test message costs money, a fraction of a cent.
 **Safe to know.** Josh's user can only create or change things named `neurolens-...`. It cannot
 open or change anything else in the account, start ordinary servers, or change billing. It can read
 a few account-wide lists: service limits, GPU availability, and the activity log, which also lists
-other projects' events. You can remove his access
-at any time by deleting his access key (step 3's Security credentials page).
+other projects' events. You can remove his access at any time by deleting his access key (step 3's
+Security credentials page).
 
 ## 1. Create the five policies
 
-A **policy** is a list of what a user or a machine may do. Open
+A **policy** is a list of what a user or a machine may do. These five spell out exactly what
+NeuroLens may use in your account. Open
 https://us-east-1.console.aws.amazon.com/iam/home#/policies/create in your browser.
 
 For each file in the table below:
@@ -24,17 +25,19 @@ For each file in the table below:
 5. Click **Next**. Under **Policy name**, type the name from the table exactly.
 6. Click **Create policy**.
 
-| File to open | Name to type |
-|---|---|
-| https://raw.githubusercontent.com/kelvinlowhm86/neurolens/aws-josh/infra/iam/neurolens-role-boundary.json | `neurolens-role-boundary` |
-| https://raw.githubusercontent.com/kelvinlowhm86/neurolens/aws-josh/infra/iam/neurolens-deploy-services.json | `neurolens-deploy-services` |
-| https://raw.githubusercontent.com/kelvinlowhm86/neurolens/aws-josh/infra/iam/neurolens-deploy-compute.json | `neurolens-deploy-compute` |
-| https://raw.githubusercontent.com/kelvinlowhm86/neurolens/aws-josh/infra/iam/neurolens-deploy-web.json | `neurolens-deploy-web` |
-| https://raw.githubusercontent.com/kelvinlowhm86/neurolens/aws-josh/infra/iam/neurolens-quota-requests.json | `neurolens-quota-requests` |
+| File to open | Name to type | What it covers |
+|---|---|---|
+| https://raw.githubusercontent.com/kelvinlowhm86/neurolens/aws-josh/infra/iam/neurolens-role-boundary.json | `neurolens-role-boundary` | A safety ceiling: the most the app's own parts may ever do |
+| https://raw.githubusercontent.com/kelvinlowhm86/neurolens/aws-josh/infra/iam/neurolens-deploy-services.json | `neurolens-deploy-services` | Storage, queues, database, alerts and the GPU server |
+| https://raw.githubusercontent.com/kelvinlowhm86/neurolens/aws-josh/infra/iam/neurolens-deploy-compute.json | `neurolens-deploy-compute` | The app's private network and its parts' permissions |
+| https://raw.githubusercontent.com/kelvinlowhm86/neurolens/aws-josh/infra/iam/neurolens-deploy-web.json | `neurolens-deploy-web` | The website and its sign-in |
+| https://raw.githubusercontent.com/kelvinlowhm86/neurolens/aws-josh/infra/iam/neurolens-quota-requests.json | `neurolens-quota-requests` | Asking AWS to raise NeuroLens's limits, e.g. GPUs (free) |
 
 Tip: if a red error appears after pasting, the copy missed part of the text. Copy it again.
 
 ## 2. Give Josh's user four of them
+
+This is what lets Josh's user do the NeuroLens setup.
 
 Open https://us-east-1.console.aws.amazon.com/iam/home#/users and click the user **Josh**.
 
@@ -46,13 +49,16 @@ Open https://us-east-1.console.aws.amazon.com/iam/home#/users and click the user
    `neurolens-deploy-web`, `neurolens-quota-requests`.
 6. Click **Next**, then **Add permissions**.
 
-Do **not** tick `neurolens-role-boundary`. It is a ceiling for the machines Josh's setup creates,
-never attached to a user.
+Do **not** tick `neurolens-role-boundary`. It is a ceiling for the app's own parts that the setup
+creates, never attached to a user.
 
 Check: the Permissions tab now lists exactly those four and nothing broad such as
 AdministratorAccess.
 
 ## 3. Make an access key for Josh
+
+An **access key** is a password for command-line tools: Josh's laptop uses it to run the setup as
+his user.
 
 Still on Josh's page (Users, Josh):
 
@@ -80,11 +86,7 @@ Then click **Open in playground** (or Playground, then Chat, and pick Claude Son
 `hi`, and send. Why: the first message switches the model on for the whole account, and Josh's
 limited user is not allowed to do that switch.
 
-## 5. Done
-
-Send Josh the access key privately.
-
-## 6. When the course ends
+## 5. When the course ends
 
 Once NeuroLens has been taken down, delete the user **Josh** (IAM, Users) and the five `neurolens-`
 policies (IAM, Policies, search `neurolens`).
