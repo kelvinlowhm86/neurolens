@@ -87,18 +87,12 @@ CloudFront.
 Tell Josh the remaining amount and expiry date. If one of those six is missing, tell him before he
 deploys: that usage would be charged to your card.
 
-## 6. Tell Josh you are done
+## 6. Done
 
-Send him, privately, a short checklist:
+Send Josh the access key privately, and tell him the credit amount and expiry date (and anything
+from step 5 that isn't covered).
 
-- the access key (Access key ID and Secret access key);
-- "Claude replied" (step 4 worked);
-- the credit amount and expiry date;
-- whether all six products are covered.
+## 7. When the course ends
 
-## 7. At the end of the project
-
-Josh will say when, after he has taken NeuroLens down:
-
-1. IAM, Users, **Josh**, **Delete**.
-2. IAM, Policies, search `neurolens`, and delete each of the five policies.
+Once NeuroLens has been taken down, delete the user **Josh** (IAM, Users) and the five `neurolens-`
+policies (IAM, Policies, search `neurolens`).
