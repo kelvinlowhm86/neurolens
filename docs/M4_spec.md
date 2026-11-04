@@ -95,6 +95,11 @@ Nothing is deleted on a date. In order, each step checked before the next:
 6. Outside AWS: delete the Google OAuth client, revoke the HuggingFace token, and delete the
    Google Form once the report is graded.
 7. Check that nothing tagged `Project=neurolens` is left.
+8. Last, as part of the same teardown: delete the deploy user's access keys (in a borrowed
+   account, the account owner deletes the user and the five `neurolens-*` policies), and remove
+   that account's profile from the laptop's `~/.aws/credentials` and `~/.aws/config`.
+
+Run all eight steps in every AWS account that holds a NeuroLens deployment.
 
 ## 7. Acceptance criteria
 1. The booth ran, and its survey responses are exported and summarised in the report.
