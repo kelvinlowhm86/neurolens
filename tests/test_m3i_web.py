@@ -399,11 +399,9 @@ def test_the_landing_page_offers_five_minutes_from_the_configured_credit():
     html = (REPO_ROOT / "static" / "index.html").read_text()
     text = " ".join(re.sub(r"<[^>]+>", " ", html).split())
 
-    assert (
-        "5 minutes of free analysis for invited creators, marketers, teachers and researchers."
-        in text
-    )
-    assert "add its retention curve once it's been public a week" in text
+    assert "Creators and marketers get 5 free minutes" in text
+    assert "For channels with 1,000+ followers." in text
+    assert "Add a video's retention curve and earn its credit back." in text
 
 
 def _section_text(html, anchor):

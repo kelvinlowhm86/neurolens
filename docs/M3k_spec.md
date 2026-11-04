@@ -7,12 +7,16 @@ section is updated to match (§10).
 ## Decisions (4 Nov, Josh)
 - Free credit goes to people who bring data: short-form creators and marketers with a channel of
   1,000+ followers on YouTube, Facebook, TikTok or Instagram. Not open to the general public; no
-  separate path for teachers or researchers (one with a channel applies as "other").
+  separate path for teachers or researchers.
 - A signed-in user asks inside the app; Josh screens each channel by hand and grants with
   `infra/grant_credit.py` (unchanged amount: `billing.invite_cents`, 5 minutes) or declines.
   Every request has a status the user sees: waiting, granted or declined. Nobody waits forever.
-- The request is saved first, then emailed to Josh (AWS SES, starter mode, only to his own
-  verified address). A failed email is logged as an error; the request stays saved.
+- The request is saved first, then Josh is notified by email through an SNS topic (the service
+  that already emails him the alarms; SES would send "from" his Gmail address and risk spam, and we
+  have no domain). A failed notification is logged as an error; the request stays saved. The
+  database table, not the email, is the list of requests.
+- The form asks only for the channel link and an optional note: Josh screens by opening the link,
+  so a "creator / marketer" question adds nothing.
 - New reward condition: when the server checked the video's view count (a YouTube lookup that
   answered and showed the count), it must be at least `research.curve_min_views` (1,000). Unknown
   views (Facebook, a failed lookup, a hidden count) pay as before: those users were screened, and
@@ -26,17 +30,17 @@ section is updated to match (§10).
 ### In scope
 §2–§9, their tests (§11), the docs (§10).
 ### Out of scope
-TikTok/Instagram curve input; re-requesting after a decline; emailing the requester (SES starter
-mode cannot); a way to take credit back or block an account (build only if someone cheats); an
+TikTok/Instagram curve input; re-requesting after a decline; emailing the requester (needs SES and a domain); a way to take credit back or block an account (build only if someone cheats); an
 admin web page.
 
 ## 2. Settings
 - `config.json` `research.curve_min_views`: 1000.
-- The recipient: Terraform's existing `var.alert_email` (Josh's address, in the git-ignored
-  `terraform.tfvars`), published as Parameter Store String `/neurolens/web/request_email` (one more
-  entry in `aws_ssm_parameter.web_deployment`). `web/lambda_handler.DEPLOYMENT_PARAMETERS` gains
-  `"/neurolens/web/request_email": (None, "request_email")`, so a deployed function without it
-  fails to start. The address is never in `config.json`, a reply, the page or a log line.
+- The topic: Terraform's `aws_sns_topic.access_requests` (`neurolens-access-requests`), with an
+  email subscription to the existing `var.alert_email` (Josh's address, in the git-ignored
+  `terraform.tfvars`). Its ARN is published as Parameter Store String
+  `/neurolens/web/request_topic_arn` (one more entry in `aws_ssm_parameter.web_deployment`).
+  `web/lambda_handler.DEPLOYMENT_PARAMETERS` gains `"/neurolens/web/request_topic_arn": (None,
+  "request_topic_arn")`, so a deployed function without it fails to start.
 
 ## 3. Migration 012 (`infra/migrations/012_access_requests.sql`)
 ```sql
@@ -44,7 +48,6 @@ CREATE TABLE access_requests (
   user_id     TEXT PRIMARY KEY REFERENCES users(user_id),
   channel_url TEXT NOT NULL,
   platform    TEXT NOT NULL CHECK (platform IN ('youtube','facebook','tiktok','instagram')),
-  role        TEXT NOT NULL CHECK (role IN ('creator','marketer','other')),
   note        TEXT,
   status      TEXT NOT NULL DEFAULT 'waiting' CHECK (status IN ('waiting','granted','declined')),
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -58,8 +61,7 @@ One row per account (the primary key).
   `www.` or `m.` removed, must be `youtube.com`, `facebook.com`, `tiktok.com` or `instagram.com`,
   and the path must not be empty or `/`. Anything else raises `ValueError` with "Paste your
   YouTube, Facebook, TikTok or Instagram channel link." Length at most 300 characters.
-- `add_request(db, user_id, channel_url, role, note)`: validates (role one of the three; note
-  stripped, empty → null, at most 500 characters), then `INSERT ... ON CONFLICT DO NOTHING
+- `add_request(db, user_id, channel_url, note)`: validates (note stripped, empty → null, at most 500 characters), then `INSERT ... ON CONFLICT DO NOTHING
   RETURNING`. An existing row raises `AlreadyRequested`. Returns the stored request (no email).
 - `request_status(db, user_id) -> 'waiting' | 'granted' | 'declined' | None`.
 - `waiting_requests(db)`: rows with the user's email, oldest first, for the operator script.
@@ -72,12 +74,12 @@ One row per account (the primary key).
   a channel link and a note; nothing financial is lost). `remove_deleted_account` needs no change.
 
 ## 5. Notifying Josh (`neurolens/notify.py`)
-- `ses_notifier(region, address) -> callable(request, email)`: boto3 `sesv2.send_email`, from
-  and to `address`, subject "NeuroLens access request (<platform>)", plain text: the requester's
-  email, channel link, role, note, and the line `python infra/grant_credit.py --backend data_api`
-  (amount omitted: the invite credit).
-- `create_app` gains `notify=None`. In Cognito mode with no `notify` it builds `ses_notifier`
-  from `cfg["request_email"]` (missing → `ValueError` at start). Otherwise (dev mode, tests) the
+- `sns_notifier(region, topic_arn) -> callable(request, email)`: boto3 `sns.publish` to the
+  topic, subject "NeuroLens access request (<platform>)", plain text: the requester's email,
+  channel link, note, and the lines `python infra/access_requests.py list --backend data_api` and
+  `python infra/grant_credit.py --backend data_api` (amount omitted: the invite credit).
+- `create_app` gains `notify=None`. In Cognito mode with no `notify` it builds `sns_notifier`
+  from `cfg["request_topic_arn"]` (missing → `ValueError` at start). Otherwise (dev mode, tests) the
   default logs "access request from user <user_id> (not emailed: dev mode)" at INFO.
 - `infra/local_stack.py` passes a notifier that prints the request to the console.
 - boto3 is imported inside the function, as elsewhere in `web/`.
@@ -86,8 +88,8 @@ One row per account (the primary key).
 - `GET /api/me` adds `"access": {"funded": bool, "request": <request_status>}`. `funded` is the
   same "has had credit beyond the starter" fact the reward rule uses (one shared helper in
   `billing`, not a copy).
-- `POST /api/access-request`, body `{channel_url, role, note?}`, signed in:
-  - bad link or role or note → 400 `{error: "bad_request", message}`;
+- `POST /api/access-request`, body `{channel_url, note?}`, signed in:
+  - bad link or note → 400 `{error: "bad_request", message}`;
   - `AlreadyRequested` → 409 `already_requested`;
   - else 201 `{request: "waiting"}`. The row is committed before `notify` runs; a `notify`
     exception is caught, `logger.error("access request email failed for user <user_id>: <type>")`
@@ -109,8 +111,7 @@ One row per account (the primary key).
 The no-credit panel (shown when the credit is below one video's price) shows one of:
 - **not funded, no request:** heading "Get 5 free minutes", line "For creators and marketers
   with 1,000+ followers. We look at each channel by hand.", fields "Channel link" (placeholder
-  `https://www.youtube.com/@yourchannel`), "You are" (Creator / Marketer / Other) and "Anything
-  else? (optional)", button "Ask for minutes". Errors show the server's message under the form.
+  `https://www.youtube.com/@yourchannel`) and "Anything else? (optional)", button "Ask for minutes". Errors show the server's message under the form.
   The 5 comes from `billing.invite_cents` via `/api/limits` (`invite_seconds`), never typed in.
 - **waiting:** "Request received. We'll look at your channel and add your minutes here."
 - **declined:** "Thanks for asking. Free minutes are for channels with 1,000+ followers for now."
@@ -129,18 +130,18 @@ The no-credit panel (shown when the credit is below one video's price) shows one
 - **Guide (`static/retention_guide.html`):** both "Add it once..." lines become "Add it once the
   video has been public a week (and, on YouTube, has 1,000+ views) to get its credit back."
 - **Privacy (`static/privacy.html`):** "What we collect" adds "An access request, if you ask for
-  free minutes: your channel link, what you make and any note. It is emailed to the NeuroLens
-  team (through Amazon Web Services) and kept until you delete your account." The reward rules
+  free minutes: your channel link and any note. It is emailed to the NeuroLens team (through
+  Amazon Web Services) and kept until you delete your account." The reward rules
   add "and, when we can check it, has at least 1,000 views".
 - **`infra/access_requests.py`** (`--backend data_api|postgres`, like `grant_credit.py`):
-  `list` prints waiting requests (date, email, platform, role, channel link, note), oldest first;
+  `list` prints waiting requests (date, email, platform, channel link, note), oldest first;
   `decline` asks for the email at a prompt, shows the request, asks to confirm, then declines.
   Granting stays `grant_credit.py`.
-- **Terraform:** `aws_sesv2_email_identity` for `var.alert_email` (Josh clicks the one
-  verification email once after apply); the web app function's role gets `ses:SendEmail` on that
-  identity's ARN only; the `/neurolens/web/request_email` parameter (§2). The deploy policy in
-  `infra/iam/` gains the `ses:*EmailIdentity*` and tagging actions Terraform needs, on
-  `neurolens`-account identities only. No standing cost; about $0.10 per 1,000 emails.
+- **Terraform:** the topic and its email subscription (Josh clicks the one confirmation email
+  once after apply); the web app function's role gets `sns:Publish` on that topic only; the
+  `/neurolens/web/request_topic_arn` parameter (§2). The deploy policy in `infra/iam/` covers it
+  if its SNS statement already allows `neurolens-*` topics (the alarms'); otherwise it gains that.
+  No standing cost; the first 1,000 emails a month are free.
 
 ## 10. Older specs updated with this build
 M3d §8b (landing Early access copy), M3i (invite wording, reward conditions), M3j §5 (condition
@@ -154,15 +155,16 @@ Full treatment for the reward rule and the grant; light for the rest. Behaviour,
   unknown facts (Facebook, failed lookup) → rewarded as before; few views and too early →
   `too_few_views` with `reward_from`; few views but length mismatch → `length_mismatch`; the check
   and the save agree on every case; the existing M3f/M3i/M3j reward tests still pass.
-- **Requests:** a valid request is stored as waiting; each bad link/role/long note → 400 and
+- **Requests:** a valid request is stored as waiting; each bad link/long note → 400 and
   nothing stored; a second request → 409; not signed in → refused; `/api/me` reports funded and
   each status; `grant_credit` marks a waiting and a declined request granted and leaves no
   request alone; `decline` changes only a waiting request; deleting the account removes the row.
 - **Email:** the notifier is called once with the stored request; a raising notifier still gives
   201, keeps the row and logs an error that holds no email address, link or note; the deployed
-  launcher fails to start without `/neurolens/web/request_email`.
+  launcher fails to start without `/neurolens/web/request_topic_arn`.
 - **Copy:** the landing page's "5 free minutes" equals `invite_cents` at today's price; the
-  1,000 on the landing, guide, privacy and app pages equals `research.curve_min_views`; no page
+  1,000 *views* on the guide, privacy and app pages equals `research.curve_min_views` (the
+  "1,000+ followers" screening bar is plain copy, not tied to that setting); no page
   says "Invited". (`tests/test_m3i_web.py`'s pinned "invited creators..." wording changes on
   purpose; the commit says so.)
 - **Script:** `access_requests.py list` shows waiting requests only; `decline` without "y"
