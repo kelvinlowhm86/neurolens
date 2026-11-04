@@ -49,7 +49,7 @@ Migration 003; consent at upload; the shared copy in the worker (the video under
 
 ### 3c. Retention curve
 - Source: the video owner's audience-retention report from the YouTube Analytics API (`reports.query`, docs updated 15 Oct 2026), saved as a file exactly as the API returns it. The API answers only in JSON, so the upload takes that JSON as is: nobody has to convert it.
-- Route: `POST /api/jobs/<job_id>/retention`. The JSON body contains `report` (the file's text), the required `views` and `published` choices, and boolean `promoted` (M3f §5d). The report text is at most 64 KiB (65,536 bytes); a longer text → 413. Sending JSON keeps the app's one rule, that every `/api/*` POST is JSON, which is its cross-site form protection (`api_rules`). The page reads the chosen file and sends its text with those choices.
+- Route: `POST /api/jobs/<job_id>/retention`. The JSON body contains `report` (the file's text), the required `video_url` and `same_cut`, and boolean `promoted`; `views` and `published` are optional and are rejected when the server already knows the facts (M3f §5d, M3j §5-§8). The report text is at most 64 KiB (65,536 bytes); a longer text → 413. Sending JSON keeps the app's one rule, that every `/api/*` POST is JSON, which is its cross-site form protection (`api_rules`). The page reads the chosen file and sends its text with those choices.
 - Conditions:
   - The job must be owned by the user and not deleted (otherwise 404, like `owned_job`).
   - The job must be `done` (otherwise 409 `job_not_done`).

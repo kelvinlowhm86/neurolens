@@ -49,7 +49,7 @@ Each run writes `experiments/<experiment>/<run_id>/` in the bucket with a `manif
 - **Experiment 1 (latency):** on a warm GPU (`start_work.sh --keep-warm`, then one warm-up job),
   `experiments/latency_run.py` runs each clip as a browser would and appends a row to
   `experiment-1/<run_id>/runs.csv`; 3 runs per clip. `experiments/latency_breakdown.py` gives the
-  mean time per stage and clip length. Client render time is read on 3 runs per length from
+  median, minimum and maximum time per stage and clip length. Client render time is read on 3 runs per length from
   `window.neurolensTimings.render_ms` in the browser and added by hand.
 - **Experiment 2 (load bursts):** `experiments/locustfile.py` sends bursts of simultaneous jobs
   (proposed 1, 5, 10, 20; open: the GPU quota allows at most 2 machines, `max_instances = 2`

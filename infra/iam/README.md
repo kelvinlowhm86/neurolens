@@ -6,7 +6,7 @@ AWS account (other projects' buckets or machines, for example). Four policy file
 | File | Attached to | What it allows |
 |---|---|---|
 | `neurolens-deploy-services.json` | the deploy user | S3 buckets and SQS queues named `neurolens-*`; alarms (and their history) and email topics named `neurolens-*`; Lambda functions, EventBridge rules and Lambda log groups named `neurolens-*` and the queue trigger of a `neurolens-*` function; the SageMaker endpoint, endpoint configurations and models named `neurolens-*`; the `neurolens-*` ECR repository and CodeBuild project; the Cloud Control actions the awscc provider uses for the endpoint configuration; the `neurolens-*` Aurora database, its RDS-created password secret and the Data API; Parameter Store under `/neurolens/` |
-| `neurolens-deploy-compute.json` | the deploy user | VPC, subnets and security groups, all tagged `Project=neurolens`; roles named `neurolens-*`; handing roles only to SageMaker, CodeBuild, Lambda (and only inside the boundary, below); service-linked roles for SageMaker, CodeBuild, SageMaker endpoint scaling and RDS; Application Auto Scaling only on scaling targets tagged `Project=neurolens` (their ARNs carry a random id, so a name cannot scope them). It cannot launch EC2 instances. Decoding an access-denied error (read-only). Reading GPU spare-capacity scores and service quotas in any region (read-only, for choosing a region). Reading the account's CloudTrail event history (read-only; it cannot be scoped to NeuroLens, so it also shows other projects' events): the experiments read every GPU start and stop request from it. |
+| `neurolens-deploy-compute.json` | the deploy user | VPC, subnets and security groups, all tagged `Project=neurolens`; roles named `neurolens-*`; handing roles only to SageMaker, CodeBuild, Lambda (and only inside the boundary, below); service-linked roles for SageMaker, CodeBuild, SageMaker endpoint scaling and RDS; Application Auto Scaling only on scaling targets tagged `Project=neurolens` (their ARNs carry a random id, so a name cannot scope them). It cannot launch EC2 instances. Decoding an access-denied error (read-only). Reading GPU spare-capacity scores and service quotas in any region (read-only, for choosing a region). Reading the account's CloudTrail event history (read-only; it cannot be scoped to NeuroLens, so it also shows other projects' events). |
 | `neurolens-deploy-web.json` | the deploy user | M3b's website: Cognito user pools and CloudFront distributions may be created only tagged `Project=neurolens` and changed only when so tagged; CloudFront's origin signing settings and AWS's managed cache policies (untaggable, harmless alone); reading the account's Lambda limits |
 | `neurolens-role-boundary.json` | nobody directly (a *permissions boundary*) | The most any `neurolens-*` role may ever do, whatever is written into it |
 
@@ -20,7 +20,7 @@ database through the Data API, read `/neurolens/` parameters, pull and push the 
 resize only the NeuroLens endpoint, start only the report function, call only Claude Sonnet 4.6 on
 Bedrock through its US inference profile, publish to NeuroLens SNS topics, publish SageMaker endpoint instance metrics, write its own Lambda,
 SageMaker and CodeBuild logs, and delete logins from our Cognito pool. No role may end a
-machine or change an Auto Scaling group.
+machine or change the endpoint's scaling target.
 
 Terraform sets `permissions_boundary` on every role it creates, or AWS refuses the call.
 

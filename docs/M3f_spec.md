@@ -24,8 +24,8 @@ place in line among other users, waking the database from the landing page.
 ## 2. Batch upload
 ### 2a. Dialog
 - Choosing or dropping files (the upload box, or "Upload" in the top bar) opens one dialog over
-  whatever is on screen. On touch screens the box reads "Choose a video"; elsewhere "Drop videos or
-  click to choose". The file input accepts several files.
+  whatever is on screen. On touch screens the box reads "Tap to choose a video" and the dialog
+  "Choose videos"; elsewhere "Drop videos or click to choose". The file input accepts several files.
 - **Sign-in first:** picking files calls `/api/me`. A 401 shows "You've been signed out." with a
   "Sign in" button (to `/login`) in the dialog, before any file is checked.
 - One row per file: a frame from the file (taken locally), the name, its length and its price, and
@@ -76,9 +76,9 @@ place in line among other users, waking the database from the landing page.
   "1:01 · uses 1 min 30 s". Until the price has loaded (or if it fails, logged to the console) the
   credit is hidden rather than shown in another unit, and amounts drop out of messages; History
   loads after the price. Grants stay typed in dollars ($1 = 30 s, M3b §7a).
-- The "no credit" note ("You need at least 30 s of credit to analyse a video. Ask the NeuroLens
-  team for more.") shows whenever the available credit is below the price of the shortest
-  allowed video, not only at none.
+- The no-credit panel shows the current access state instead: the "Get free minutes" request form,
+  the waiting note, the declined note, or the funded note (M3k §9). It shows whenever the available
+  credit is below the price of the shortest allowed video, not only at none.
 - Delete account names the credit that will be lost: "…every video, analysis and login, and your
   4 min 30 s of credit." (no credit part at none).
 
@@ -108,9 +108,8 @@ place in line among other users, waking the database from the landing page.
    "Upload".
 2. **Landing hero:** the video keeps its own 16:9 height and the brain panel takes the rest of the
    column, so nothing covers the video or its sound button. Check at 1280×720 and 1440×900.
-3. **Sound share at 0:** the line reads "Responds as strongly with the sound off". In the compare
-   table the cell shows "—" with that text on hover. Values unchanged. While comparing, the line is
-   hidden (the table row has it).
+3. **Sound share at 0:** the line reads "Responds as strongly with the sound off". Values
+   unchanged; the line stays visible while comparing.
 4. **Results opened from History** get moment pictures while the video route can serve the video
    (the upload for 30 days, or the shared research copy while the result is still available): the
    player's video element uses `crossOrigin="anonymous"` (the bucket's CORS already allows GET) and
@@ -120,7 +119,8 @@ place in line among other users, waking the database from the landing page.
    "Didn't finish in time", "Failed", "Upload didn't finish", "Video too long", "Not enough credit",
    "Video replaced after checking", "Processing paused". A cancelled job is not listed (`list_jobs`
    leaves out `error_code = 'cancelled'`). "Deleted in 3 days" shows only in a result's last 7 days.
-   The cost stays on done rows.
+   Done rows show the date and length, and "free" once a curve returned the credit; the captured
+   price is not shown.
 6. **Samples in the empty report area:** when no result is open, the right side shows "Samples"
    with the sample cards. The "Your analyses / Samples" tabs, the placeholder sentence and the
    signed-out left grid are removed. Signed out, the left column is the sign-in box.
@@ -129,14 +129,15 @@ place in line among other users, waking the database from the landing page.
    non-ASCII names; a missing name falls back to "NeuroLens result.csv").
 8. **A failed or unknown job from a link** (`?job=`) opens History, not the player; the row shows the
    reason.
-9. **Phone results:** the moments sit as two rows of two pictures under their label; the scrubber
-   has its own full-width line above the buttons.
+9. **Phone results:** the report moments are text buttons; the filmstrip is one 40 px row; the
+   scrubber has its own full-width line above the buttons.
 10. **Retention on a result:** the thank-you card (§5d), no box or title.
 11. **Privacy page and retention guide** use the app's dark look and font, plain words ("up to 31
     days", not S3 rule wording) and the contact address joshualumzy@gmail.com as a mailto link.
-12. **Landing:** "How it works" step 2 ends "A result takes about 10 minutes."; a gap between "How it
-    works" and the closing band; the sample credit only in the footer.
-13. Start-up text: "Starting up; this can take up to a minute."
+12. **Landing:** "How it works" step 2 ends "It takes a few minutes, and you can watch its
+    progress."; a gap between "How it works" and the closing band; the sample credit only in the
+    footer.
+13. Start-up text: "Waking up" with "Usually under a minute."
 14. The 3D brain stops drawing while the player is hidden.
 15. `docs/M3d_spec.md` §8: the `deadline_passed` History label is the short "Didn't finish in time"
     (item 5).
@@ -145,9 +146,8 @@ place in line among other users, waking the database from the landing page.
     retrying silently.
 17. **Results page from a `?job=` link:** its title and "Add audience retention" link are re-checked
     once History has loaded (the job may not be in the first list).
-18. A row's curve-failure note clears when a later send for that job succeeds; "Show if muted" is
-    enabled again when a comparison is cleared; a job the page itself cancels leaves the tab title's
-    count.
+18. A row's curve-failure note clears when a later send for that job succeeds; a job the page
+    itself cancels leaves the tab title's count.
 
 ## 5. Research sharing
 ### 5a. Consent
@@ -218,13 +218,13 @@ place in line among other users, waking the database from the landing page.
   copy is no longer used and the reaper finishes the delete) and logs an error. A queued
   or processing job → 409 `job_active`; not shared or already removed → 409 `not_shared`. The user's
   own result, brain and thumbnail are untouched. History's "⋯" menu shows "Stop sharing" on done,
-  shared rows (`list_jobs` `sharing` requires status done), with a one-line confirm ("Stop sharing this video? Its research copy is deleted now.").
+  shared rows (`list_jobs` `sharing` requires status done), with a one-line confirm ("Stop sharing this video? Its shared copy is deleted now.").
 - **No curve after 90 days:** the reaper's clean-up (M3e §7) uses `config.json`
   `research.no_curve_days` (90), deletes the prefix and sets reason `'no_curve'`. It counts from
   `created_at` and skips jobs with any snapshot.
 - Job delete and account delete delete the `dataset/` prefix (replacing the fixed dataset key list).
 - A refused curve upload on a removed copy says why: "You stopped sharing this video." or "This
-  video's research copy was deleted after 90 days without a curve."
+  video's shared copy was deleted after 90 days without a curve."
 
 ### 5d. Adding a curve
 M3j §5-§8 supersedes the reward date, the form and the replies; this section keeps the rules that

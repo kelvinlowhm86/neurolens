@@ -529,8 +529,8 @@ resource "aws_lambda_function" "report" {
   tags       = { Milestone = "M3g" }
 }
 
-# A queued request older than 4 min is dropped: started by then, it ends within the 5-min timeout,
-# before the 10-min stale point lets the user claim again, so two runs never overlap.
+# A queued request older than 4 min is dropped. The function's timeout is 900 s and
+# report.stale_minutes (16) is above it, so a live run is never treated as stale.
 resource "aws_lambda_function_event_invoke_config" "report" {
   function_name                = aws_lambda_function.report.function_name
   maximum_retry_attempts       = 0

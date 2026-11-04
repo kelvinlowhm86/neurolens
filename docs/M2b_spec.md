@@ -18,7 +18,7 @@ Only the parts of this milestone still in use are described here; the rest is in
 
 ### 2e. Demo routine (also goes into the README)
 1. The day before (the week before for the TA demo): one full dry run of steps 2–5.
-2. 45–60 minutes before: `start_work.sh --keep-warm --hours 3` (demo length + early start + margin). Starting early leaves time to fall back to the no-AWS backup (M4) if no GPU is free.
+2. 45–60 minutes before: `start_work.sh --keep-warm --hours 3` (demo length + early start + margin).
 3. Wait for the container to be ready (the CloudWatch log, or the result of step 4).
 4. One warm-up job: upload a short sample clip, so the first-job costs are paid before the audience arrives and the whole chain is proven that day.
 5. Demo. If it overruns the hold, run step 2 again.
@@ -32,7 +32,7 @@ Cost: about 1.5–2 hours of GPU, roughly $3–4.
 ## 4. Job status tracking
 The job's state (`queued`, `processing`, `done`, `failed`), its current `stage` and its `stages` history live in the `jobs` row in Aurora (M3a §3c, §4a); there are no status objects in S3. A `stages` entry is `{"stage": "transcribing", "at": "2026-10-14T03:22:10Z"}`, and each attempt starts with an empty list.
 - The stage names, in order: `transcribing` (`build_events`, where WhisperX runs), `inference_full`, `inference_noaudio`, `extracting_roi`, then the result-writing stages (M3c §3b, M3d §5). The worker sets each one with `billing.set_stage` as the step begins. Experiment 1 reads `stages`.
-- Write order: `put_result` first. Only if it returns `True`, settle the job (`done`, M3a §4a). If it returns `False`, return `DUPLICATE`: the other worker's result is the one charged.
+- Write order: `put_result` first, then settle the job (`done`, M3a §4a) whatever `put_result` returned. A duplicate is still settled, so the finished result is charged once. If `put_result` returned `False`, return `DUPLICATE` after settling: the other worker's result is left unchanged.
 - **Failures:** a failure after the claim refunds the job at once (`processing_failed`) and deletes its files; there is no automatic GPU retry (M3e §4c, §5). A job whose container dies is refunded by the SageMaker error handler, with the reaper as backstop (M3e §5). A rejection is final: the job is refunded with a plain reason ("The video is longer than 120 seconds.", "The file is not a readable video.", "The file is larger than the upload limit."). The dead-letter handler refunds a job the dispatcher could not finish (M3a §7). Error text is short and user-facing (at most 200 characters, no traceback); the full traceback goes to the worker log.
 
 ## 9. 4K downscale test

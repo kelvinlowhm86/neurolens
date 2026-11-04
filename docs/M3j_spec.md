@@ -141,8 +141,9 @@ all nullable.
   earlier start is harmless and YouTube's days are Pacific time; endDate = today in the viewer's
   time zone; filters `video==<v>`), each with a Copy button; with Facebook, the query with the id
   filled in and a Copy button. Without values, as now. The last steps say "paste the reply into
-  NeuroLens" (no saving a file), and both sections end "Add it once the video has been public a
-  week (and, on YouTube, has 1,000+ views) to get its credit back."
+  NeuroLens" (no saving a file). The YouTube section ends "Add it once the video has been public a
+  week (and, on YouTube, has 1,000+ views) to get its credit back."; the Facebook section ends the
+  same way without the view clause.
 - **Privacy (`static/privacy.html`):** the section is "Sharing a video" (anchor `#sharing`, with
   the old `#research` anchor kept so old links land). Purpose: help improve NeuroLens, by building
   and testing its own engagement models, which may later be a paid product (notice first). The

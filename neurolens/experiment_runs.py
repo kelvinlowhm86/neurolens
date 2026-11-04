@@ -12,7 +12,7 @@ from botocore.exceptions import ClientError
 
 from neurolens import storage
 
-# The files each experiment must have before its manifest may be written (§10).
+# The files each experiment must have before its manifest may be written (M4 §3).
 EXPERIMENT_FILES = {
     "experiment-1": ["runs.csv"],
     "experiment-2": [

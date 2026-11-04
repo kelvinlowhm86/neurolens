@@ -33,7 +33,7 @@
 - Deleting the scaffolding before `aws-josh` is merged into `main` (§10)
 
 ### Out of scope (M4)
-The usability study itself, the participant withdrawal script (built nearer the study), the results consolidation script, and final teardown.
+The usability study itself, the participant withdrawal script (built nearer the study), and final teardown.
 
 ## 2. Sign-in (`neurolens/web/auth.py`)
 ### 2a. Cognito (Terraform)
@@ -86,7 +86,7 @@ The usability study itself, the participant withdrawal script (built nearer the 
 ### 3c. Deploying
 `infra/deploy_web.sh` (refuses uncommitted changes):
 1. builds the Lambda zip and ships it to `neurolens-web` with `aws lambda update-function-code`, waiting until the update is live. Terraform uploads the zip only when it creates the function and ignores its code afterwards, so an apply for anything else never needs a build or changes the running code; build the zip once before the first apply, and
-2. syncs the site files: `static/index.html` → `site/index.html` and `static/app.html` → `site/app` (both uploaded with `Cache-Control: no-cache`, so a browser checks for a new page on every load instead of running an old one after a deploy), `static/` → `site/static/`, and `site/data/samples.json` holding **only the samples whose clip is listed in `data/videos/SOURCES.md`** (open-licensed; third-party ads are never published), with only those samples' videos, thumbnails and results; then invalidates the CloudFront cache (`/*`). Both current samples are listed, so the public list is not empty. The laptop keeps the same samples.
+2. syncs the site files: `static/index.html` → `site/index.html` and `static/app.html` → `site/app` (both uploaded with `Cache-Control: no-cache`, so a browser checks for a new page on every load instead of running an old one after a deploy), `static/` → `site/static/`, and `site/data/samples.json` holding **only the samples whose clip is listed in `data/videos/SOURCES.md`** (open-licensed, or a third-party clip the owner has cleared for this project), with only those samples' videos, thumbnails and results; then invalidates the CloudFront cache (`/*`). Both current samples are listed, so the public list is not empty. The laptop keeps the same samples.
 
 ## 4. The page, history and messages
 ### 4a. Endpoints
@@ -95,7 +95,7 @@ The usability study itself, the participant withdrawal script (built nearer the 
 - `GET /api/jobs/<job_id>/result.csv`: the same ownership check as `/result` (404 for others, no S3 call first). Columns in order: `t, faces, bodies, scenes, visual, sound, speech, social, see, hear, understand, overall, muted_faces, muted_bodies, muted_scenes, muted_visual, muted_sound, muted_speech, muted_social, muted_see, muted_hear, muted_understand, muted_overall`, one row per timestep, `None` as an empty cell (and a muted cell beyond the shared length), numbers exactly as stored in the result JSON. `Content-Disposition: attachment; filename="<video name> - NeuroLens.csv"`, with the full name in RFC 5987's `filename*` (`NeuroLens result.csv` when the job has no filename). Results use format 2 (signed signals, no 0-1 rescaling) from `extract_response`, see `docs/M3d_spec.md` §2-§3 and §7.
 - `/result` and `/result.csv` serve the result for a `done` job only (M3e §8). Not-available cases: another user's or unknown job → 404 `not_found`; a `failed` job → 404 `not_found` (even if a late worker wrote a result); `queued`/`processing` → 404 `result_not_ready`; a `done` job whose result object is gone (the 30-day expiry) → 404 `result_expired`.
 - `POST /api/uploads/presign` gains one check, **before reserving any credit**: when the SageMaker endpoint's scaling maximum is 0 (GPU work stopped by `stop_work.sh`), it returns **503** `{"error": "processing_paused"}` and reserves nothing. It reads the endpoint's scalable target itself (`aws.gpu_endpoint`), not a separate flag, so the two can never disagree. If the read fails, it refuses with `presign_failed` (fails closed). In dev mode (no endpoint) there is no check. Known limitation: jobs already waiting when GPU work stops wait until it restarts or the 4-hour deadline refunds them (M3e §5); the user can cancel a waiting job (M3d §7).
-- `GET /api/samples` is **removed** (the page reads `/data/samples.json`). `GET /api/limits` stays and is the one `/api/*` route open signed out (it holds no user data; M3d §6 needs `colour_range` to colour samples' brains); every other `/api/*` route needs sign-in.
+- `GET /api/samples` is **removed** (the page reads `/data/samples.json`). `GET /api/limits` and `POST /api/wake` stay open signed out (`/api/limits` holds no user data; M3d §6 needs `colour_range` to colour samples' brains); every other `/api/*` route needs sign-in.
 
 ### 4b. Frontend
 - **Start-up:** the page calls `/api/me` once: **200** → the app (then `/api/limits`); **401** → the sign-in screen; **503 `database_waking`** → "Starting up…" with retries; **anything else** → "Something went wrong. Please try again in a minute." with a retry button.
@@ -244,4 +244,4 @@ tests/                             MODIFIED: §11
 - Experiment 3: no new GPU time (the cloud leg reuses Experiment 1).
 
 ## 15. Explicitly not in this milestone
-No live payments, subscriptions, saved cards or card data. No study consent, event logging or consolidation (M4). No load balancer or web servers.
+No live payments, subscriptions, saved cards or card data. No study consent or event logging (M4). No load balancer or web servers.

@@ -1,4 +1,4 @@
-"""Check the database code on the real database (M3a §3d, M3b §7c): throwaway jobs and sign-ins.
+"""Check the database code on the real database (M3a §3d, M3b §7b): throwaway jobs and sign-ins.
 
     python infra/check_aurora.py --backend data_api   # Aurora (NEUROLENS_DB_* in .env)
     python infra/check_aurora.py --backend postgres   # local PostgreSQL (NEUROLENS_DB_DSN in .env)

@@ -1,4 +1,4 @@
-"""Tests for neurolens.pricing. Written from docs/M1_spec.md sections 1 and 6a.
+"""Tests for neurolens.pricing. Written from docs/M3a_spec.md §3b (prices).
 
 The formula is CENTS_PER_BLOCK * max(1, ceil((d - ALLOWANCE_SECONDS) / BLOCK_SECONDS)) cents:
 $1.00 per started 30-second block today, with a half-second allowance. The module constants are the

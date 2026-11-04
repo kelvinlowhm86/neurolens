@@ -1,6 +1,6 @@
 # Evidence: Spot versus on-demand for the GPU workers
 
-Raw data behind the choice of on-demand `g6e` workers (M2a spec §4b). Saved on 2026-10-03, because AWS keeps Spot price history for only 90 days and Auto Scaling activity for only 6 weeks.
+Raw data behind the choice of on-demand `g6e` workers. Saved on 2026-10-03, because AWS keeps Spot price history for only 90 days and Auto Scaling activity for only 6 weeks.
 
 ## `spot_price_history_g6e_us-east-1.tsv`
 Every Spot price change for `g6e.xlarge` and `g6e.2xlarge` (Linux) in us-east-1a-d, 2026-07-05 to 2026-10-03. The price is in USD per hour, and each row holds until the next row for the same type and zone.

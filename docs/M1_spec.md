@@ -10,7 +10,7 @@ Only the parts of this milestone still in use are described here; the rest is in
 ## 2. Configuration: shared settings in `config.json`, secrets and identifiers in `.env`
 One rule: **behaviour settings are shared; anything specific to a person or a deployment is not.**
 - **`config.json`** is committed, holds no secrets, and teammates may edit it: paths, model names, limits, timeouts and behaviour switches. See the committed file for the current set.
-- **`.env`** is gitignored and per person (`.env.example` is committed, with placeholders). `KEY=VALUE` lines; blank lines and `#` comments ignored; one pair of surrounding quotes around a value is removed. It holds `HF_TOKEN`, `NEUROLENS_S3_BUCKET` and `NEUROLENS_AWS_REGION`; later milestones add their deployment-specific identifiers here (and to `env.conf` on AWS).
+- **`.env`** is gitignored and per person (`.env.example` is committed, with placeholders). `KEY=VALUE` lines; blank lines and `#` comments ignored; one pair of surrounding quotes around a value is removed. It holds `HF_TOKEN`, `NEUROLENS_S3_BUCKET` and `NEUROLENS_AWS_REGION`; later milestones add their deployment-specific identifiers here (and, on AWS, to the SageMaker model and Lambda environments).
 
 **Loading (`neurolens.settings`).** Entry points (the launcher `app.py`, the GPU container's start-up, and `inference.load_model(cfg=None)`) call `load_settings`; `load_config` stays file-only.
 - `load_dotenv(root=None) -> None`: reads `<root>/.env` if it exists (no file is not an error) and sets each variable in `os.environ` **only if it is not already set**, so a real environment variable always wins over the file.

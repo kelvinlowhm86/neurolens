@@ -1,4 +1,4 @@
-"""Tests for GET /api/limits (Flask test client). docs/M1_spec.md 4 and 6a, M3d §6."""
+"""Tests for GET /api/limits (Flask test client). M3b §4a, M3d §6."""
 
 import pytest
 from neurolens import pricing

@@ -1,4 +1,4 @@
-"""Tests for POST /api/uploads/presign (Flask test client + moto). docs/M1_spec.md 4 and 4a.
+"""Tests for POST /api/uploads/presign (Flask test client + moto).
 
 Updated for docs/M3a_spec.md §6 (a spec'd change): the app gets a PostgreSQL database (the route
 reserves credit first) and the key is under the development user's folder,

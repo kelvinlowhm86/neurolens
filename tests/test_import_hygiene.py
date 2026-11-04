@@ -45,7 +45,7 @@ def test_all_four_together_pull_in_no_heavy_modules():
     assert json.loads(proc.stdout.strip().splitlines()[-1]) == []
 
 
-# ---- Added in M1 (docs/M1_spec.md section 6a): the new light modules stay light.
+# ---- Added in M1 (docs/M1_spec.md §7): the new light modules stay light.
 M1_MODULES = ["neurolens.storage", "neurolens.pricing", "neurolens.worker"]
 
 

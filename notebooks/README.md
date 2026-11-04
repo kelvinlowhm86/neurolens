@@ -28,7 +28,6 @@ It runs the prototype's pipeline end to end on a sample video. Its outputs use t
 
 ```bash
 # 1. From the repository root
-cd neurolens
 
 # 2. Create a virtual environment (Python 3.12)
 python3.12 -m venv .venv

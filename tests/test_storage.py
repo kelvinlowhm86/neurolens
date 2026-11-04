@@ -1,4 +1,4 @@
-"""Tests for neurolens.storage (moto, no real AWS). Written from docs/M1_spec.md 1, 4a, 6a.
+"""Tests for neurolens.storage (moto, no real AWS).
 
 The presign tests follow the M3a interface (docs/M3a_spec.md §6, a spec'd change): the key comes
 from `object_key(user_id, job_id, content_type)` (uploads/{user_id}/{job_id}{ext}, retiring
@@ -150,7 +150,7 @@ def test_presign_upload_is_a_post_policy_with_the_size_cap(aws):
     """Only what our code controls: the policy we generate carries the size cap.
 
     moto-limited: moto does not enforce content-length-range when a file is uploaded, so
-    real enforcement by S3 is checked by hand in chunk E (M1 spec section 9, item 11).
+    real enforcement by S3 is checked by hand.
     """
     out = presign_upload(aws.s3, BUCKET, new_object_key(), 12345)
     assert "policy" in out["fields"]

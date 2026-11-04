@@ -142,8 +142,9 @@ No date is promised before the form names a link (M3j §5).
   address. With YouTube values it fills the six values (startDate = the day before `start`, endDate
   = today in the viewer's time zone, filters `video==<v>`), each with a Copy button; with Facebook
   it fills the query with the id and a Copy button. Without values, as now. The steps say to paste
-  the reply into NeuroLens (no saving a file), and both sections end "Add it once the video has
-  been public a week (and, on YouTube, has 1,000+ views) to get its credit back."
+  the reply into NeuroLens (no saving a file). The YouTube section ends "Add it once the video has
+  been public a week (and, on YouTube, has 1,000+ views) to get its credit back."; the Facebook
+  section ends the same way without the view clause.
 - **Privacy (`static/privacy.html#sharing`, with the old `#research` anchor still landing there):**
   the section is "Sharing a video". Its purpose is to help improve NeuroLens by building and
   testing its own engagement models, which may later be a paid product (notice first); the course
@@ -193,7 +194,7 @@ Full treatment (money). Behaviour, not call details.
     the same user's jobs → both stored, only the first eligible one rewarded;
   - a second link on a job that already has one → `VideoLinkChanged`;
   - the existing M3f reward tests still pass with curves added after day 7.
-- `list_jobs`: `curve_reward_from` is `created_at + 7 days`; absent when no reward is possible.
+- `list_jobs`: has no `curve_reward_from`; `curve_reward_cents` previews the reward without a date.
 - Route: missing or bad `video_url`/`same_cut` → 400 and nothing in S3; a Facebook report whose id
   differs from the link → 400; a Facebook curve saves with `source = 'facebook_api'`.
 - `grant_credit.py` with no amount grants 1000 cents; with an amount, as now.

@@ -1,4 +1,4 @@
-"""Shared fixtures for the M1 tests (docs/M1_spec.md section 6a).
+"""Shared fixtures for the M1 tests.
 
 Everything AWS-related runs against moto, an in-memory fake of S3. Fake credentials
 are set for every test so that an accidental real AWS call fails instead of costing money.

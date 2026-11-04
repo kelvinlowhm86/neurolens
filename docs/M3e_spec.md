@@ -20,7 +20,7 @@ The dispatcher Lambda; the container (`neurolens/worker.py` rewritten), its imag
 
 ### Out of scope
 - Running more than one GPU at a time (`max_instances` stays 1; quota is 2). Experiment 2's burst run is redesigned with M4.
-- The teardown script and the account-switch kit (their own plan steps). `docs/M4_spec.md` §1 and §7 are updated to the new resources in the M4 rewrite (plan step 7), not here.
+- The teardown script and the account-switch kit (their own plan steps). `docs/M4_spec.md` §1 and §6 are updated to the new resources in the M4 rewrite (plan step 7), not here.
 - Drawing the real retention curve next to the predicted one.
 
 ## 2. How a job flows
@@ -278,7 +278,7 @@ behaviour remains below.
   - the architecture page master copy (`docs/architecture.local.html`), at the milestone close-out.
 
 ## 11. Tests (written first; PostgreSQL for billing)
-- **Interfaces the tests pin:** `dispatcher.dispatch(bucket, key, *, s3, sagemaker, db, endpoint, max_upload_bytes, max_duration_s)` → `"invoked"`/`"skipped"`/`"refunded"`, calling the module-level `probe_duration`; `lambdas.sagemaker_runtime_client()` (the dispatcher's, for InvokeEndpointAsync), `lambdas.sagemaker_client()` (the guard's) and `lambdas.finish_job`; `worker.handle_job(..., keep_alive=None)` returns an `Outcome` (`DONE, DUPLICATE, REJECTED, SKIPPED, FAILED, LOST_CLAIM`) and never raises after the claim (`not_verified` and `unreadable_video` are `REJECTED`); `worker.make_server(host, port, *, s3, db, cfg, roi_masks)`; `verify_queued` on an unknown job → `"not_queued"`.
+- **Interfaces the tests pin:** `dispatcher.dispatch(bucket, key, *, s3, sagemaker, appscaling, db, endpoint, max_upload_bytes, max_duration_s)` → `"invoked"`/`"skipped"`/`"refunded"`, calling the module-level `probe_duration`; `lambdas.sagemaker_runtime_client()` (the dispatcher's, for InvokeEndpointAsync), `lambdas.sagemaker_client()` (the guard's) and `lambdas.finish_job`; `worker.handle_job(..., keep_alive=None)` returns an `Outcome` (`DONE, DUPLICATE, REJECTED, SKIPPED, FAILED, LOST_CLAIM`) and never raises after the claim (`not_verified` and `unreadable_video` are `REJECTED`); `worker.make_server(host, port, *, s3, db, cfg, roi_masks, feature_cache=None)`; `verify_queued` on an unknown job → `"not_queued"`.
 - **Dispatcher:**
   - each refusal (missing, too large, unreadable, too long, short credit) refunds, deletes the upload where §3 says, and never invokes;
   - a cancelled or processing job is not invoked;

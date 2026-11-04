@@ -6,7 +6,7 @@ job to the end and add one row to experiment-1/<run_id>/runs.csv in S3.
 
 Needs the web app running (`python app.py`) and a warm endpoint (`infra/start_work.sh --keep-warm`,
 then one warm-up job). The stage times come from the status endpoint's `stages`, which it keeps
-for a finished job (docs/M3a_spec.md §5); the job's end is its `updated_at`. Stage times have
+for a finished job (docs/M3e_spec.md §8); the job's end is its `updated_at`. Stage times have
 one-second resolution, so the stage columns are whole seconds. `render_ms` is left empty: read
 window.neurolensTimings.render_ms in the browser console on 3 runs per clip length and add it by
 hand.

@@ -1,5 +1,5 @@
-"""probe_duration measures a video from its contents, not its header (docs/M1_spec.md §1
-`probe_duration` and §6a "Worker handling"): the span from the earliest packet start to the
+"""probe_duration measures a video from its contents, not its header (docs/M3e_spec.md §3
+`media.probe_duration`): the span from the earliest packet start to the
 latest packet end (pts_time + duration_time) over every stream. A header is written by whoever
 made the file, so an edited one could understate the length, pass the length limit and be
 charged for less than the GPU then analyses.

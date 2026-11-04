@@ -50,7 +50,7 @@ Each signal is the mean over its area's points; each group is the mean of its si
  "job_id": ..., "processing_time_seconds": ..., "gpu"?: ..., "fake_inference"?: true}
 ```
 
-Series order: faces, bodies, scenes, visual, sound, speech, social, see, hear, understand, overall. Values are rounded to 3 decimals. The web app adds a `summary` (opening, strongest and weakest moments, audio dependence) when it serves a result; it is never stored. Results without `"format": 2` are answered with 410 ("upload the video again").
+Series order: faces, bodies, scenes, visual, sound, speech, social, see, hear, understand, overall. Values are rounded to 3 decimals. The web app adds a `summary` (the sound share, `audio_dependence`) when it serves a result; it is never stored. Results without `"format": 2` are answered with 410 ("upload the video again").
 
 **Raw brain file** (`results/<job_id>.brain`): the with-audio predictions as float16, shape (T, 20484), no header. The 3D map reads it, and later changes to the signals need no GPU rerun.
 
@@ -88,7 +88,7 @@ The dependency lists live in `requirements/`, one file per machine type (`AGENTS
 | `lambdas.txt` | the report Lambda's Anthropic SDK layer |
 | `dev.txt` | laptop and CI: tests and lint (pytest, ruff, moto, psycopg, responses, joserfc, scikit-image) |
 
-`ffmpeg`/`ffprobe` are system tools (the container ships its own static ffprobe in a Lambda layer).
+`ffmpeg`/`ffprobe` are system tools (the worker image installs `ffmpeg`; the dispatcher Lambda uses a static `ffprobe` layer).
 
 ## Gated Model Access
 
