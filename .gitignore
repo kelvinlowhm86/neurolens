@@ -71,9 +71,10 @@ Thumbs.db
 .vscode/
 .idea/
 
-# ─── Personal files (Claude Code instructions, AI-use log, study pages) ────
+# ─── Personal files (Claude Code instructions and settings, plans, logs, pages) ─
 *.local.md
 *.local.html
+.claude/settings.local.json
 
 # ─── Tooling caches & build output ─────────────────────────────────────────
 .ruff_cache/
@@ -82,7 +83,7 @@ Thumbs.db
 dist/
 build/
 
-# ─── Terraform (later milestones) ──────────────────────────────────────────
+# ─── Terraform ─────────────────────────────────────────────────────────────
 *.tfstate*
 .terraform/
 terraform.tfvars
