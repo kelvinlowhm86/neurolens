@@ -38,6 +38,7 @@ ASSUMPTIONS = {
         "fixed_usd_per_month": entry(10),
     },
     "on_prem": {
+        "gpu_name": entry("NVIDIA A100 40GB"),
         "gpu_price_usd": entry(3600),
         "host_price_usd": entry(0),
         "amortisation_months": entry(36),
@@ -83,6 +84,34 @@ def test_breakeven_value(tco):
     assert row["capacity_warning"] is False
 
 
+def test_matching_gpu_name_compares(tco):
+    rows, skipped = tco.compare(ASSUMPTIONS, [cloud_row(60, 60)], [onprem_row(60, 60)])
+
+    assert skipped == []
+    assert rows[0]["clip_seconds"] == 60
+
+
+def test_different_gpu_name_is_rejected(tco):
+    row = {**onprem_row(60, 60), "gpu_name": "NVIDIA RTX 4090"}
+
+    with pytest.raises(ValueError, match="NVIDIA RTX 4090") as err:
+        tco.compare(ASSUMPTIONS, [cloud_row(60, 60)], [row])
+
+    assert "NVIDIA A100 40GB" in str(err.value)
+
+
+def test_missing_gpu_name_assumption_is_rejected(tco):
+    assumptions = {
+        "cloud": ASSUMPTIONS["cloud"],
+        "on_prem": {
+            name: value for name, value in ASSUMPTIONS["on_prem"].items() if name != "gpu_name"
+        },
+    }
+
+    with pytest.raises(ValueError):
+        tco.compare(assumptions, [cloud_row(60, 60)], [onprem_row(60, 60)])
+
+
 def test_no_breakeven_when_cloud_is_cheaper_per_video(tco):
     assert tco.breakeven_videos(0.05, 0.06, 10, 1000) is None
     assert tco.breakeven_videos(0.05, 0.05, 10, 1000) is None
@@ -105,6 +134,7 @@ def test_capacity_warning_when_breakeven_exceeds_one_gpu(tco):
             "fixed_usd_per_month": entry(0),
         },
         "on_prem": {
+            "gpu_name": entry("NVIDIA A100 40GB"),
             "gpu_price_usd": entry(36000),
             "host_price_usd": entry(0),
             "amortisation_months": entry(36),

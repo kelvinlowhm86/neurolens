@@ -49,6 +49,32 @@ def _number(assumptions, group, name):
         ) from err
 
 
+def _expected_gpu_name(assumptions):
+    try:
+        name = assumptions["on_prem"]["gpu_name"]["value"]
+    except (KeyError, TypeError):
+        name = None
+    if not isinstance(name, str) or not name.strip():
+        raise ValueError(
+            "Assumption on_prem.gpu_name must be the GPU name torch reports; update gpu_name, "
+            "gpu_price_usd and gpu_tdp_watts (with sources) in experiments/tco_assumptions.json"
+        )
+    return name.strip()
+
+
+def _check_gpu_name(assumptions, onprem_rows):
+    expected = _expected_gpu_name(assumptions)
+    for row in onprem_rows:
+        actual = row.get("gpu_name")
+        actual = actual.strip() if isinstance(actual, str) else actual
+        if actual != expected:
+            raise ValueError(
+                f"On-prem CSV GPU {actual!r} does not match the assumptions GPU {expected!r}; "
+                "update gpu_name, gpu_price_usd and gpu_tdp_watts (with sources) in "
+                "experiments/tco_assumptions.json"
+            )
+
+
 def _clip_length(value):
     try:
         return int(round(float(value)))
@@ -131,6 +157,7 @@ def onprem_capacity(assumptions, mean_run_seconds):
 
 def compare(assumptions, cloud_rows, onprem_rows):
     """One row per clip length present in both inputs, plus the lengths that were skipped."""
+    _check_gpu_name(assumptions, onprem_rows)
     cloud = cloud_means(cloud_rows)
     onprem = onprem_means(onprem_rows)
     cloud_fixed = cloud_fixed_monthly(assumptions)

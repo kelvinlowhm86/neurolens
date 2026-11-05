@@ -33,6 +33,10 @@ Each run writes `experiments/<experiment>/<run_id>/` in the S3 bucket; `finish_r
 - `tco_compare.py --cloud-csv ... --onprem-csv ...` — combines Experiment 1's rows and the on-prem
   CSV with `tco_assumptions.json`; writes `exp3_tco.csv` and `exp3_tco.md`.
 
+The on-prem GPU's name, price and power draw in `tco_assumptions.json` start empty: fill them in for
+the card the benchmark actually ran on. The compare script stops while they are empty or when the
+CSV's `gpu_name` names a different card.
+
 ### All report experiments
 
 - `finish_run.py <experiment> <run_id> ...` — writes a run's `manifest.json`, refusing if a required

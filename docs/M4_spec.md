@@ -5,6 +5,9 @@ STePS is on 11 Nov; the final report is due 13 Nov 23:59).
 of credit, M3b/M3c; early access by request, M3k), and the experiment scripts in `experiments/`
 (`experiments/README.md`).
 
+**A proposal:** the team running M4 may change any part of it; the report states what was
+actually done.
+
 **Ground rules:** region `us-east-1`, `neurolens` CLI profile. **No new product features:**
 problems the booth or the experiments find go in the report as future work. Every GPU session's
 cost estimate is stated, and agreed by the team, before it starts; every session ends with
@@ -45,10 +48,11 @@ Each run writes `experiments/<experiment>/<run_id>/` in the bucket with a `manif
 (`experiments/finish_run.py`, given the live image's digest).
 - **Clips:** the team supplies them: one fixed set for all three experiments; open-licensed, listed in
   `data/videos/SOURCES.md`; with sound, some clear English speech, some without speech; H.264/AAC,
-  720p or less, at most 120 s. Proposed lengths 15, 30 and 60 s, 3 clips each (120 s: open).
+  720p or less, at most 120 s. Proposed lengths 15, 30 and 60 s, 3 clips each, as in the preliminary report (no 120 s).
 - **Experiment 1 (latency):** on a warm GPU (`start_work.sh --keep-warm`, then one warm-up job),
   `experiments/latency_run.py` runs each clip as a browser would and appends a row to
-  `experiment-1/<run_id>/runs.csv`; 3 runs per clip. `experiments/latency_breakdown.py` gives the
+  `experiment-1/<run_id>/runs.csv`; 5 runs per clip (15 per length, as the preliminary report
+  promised). `experiments/latency_breakdown.py` gives the
   median, minimum and maximum time per stage and clip length. Client render time is read on 3 runs per length from
   `window.neurolensTimings.render_ms` in the browser and added by hand.
 - **Experiment 2 (load bursts):** `experiments/locustfile.py` sends bursts of simultaneous jobs
@@ -60,12 +64,13 @@ Each run writes `experiments/<experiment>/<run_id>/` in the bucket with a `manif
 - **Experiment 3 (cloud vs on-premise cost, an estimate):** the on-premise leg runs
   `experiments/tco_benchmark.py` on a teammate's own computer if its GPU has at least 24 GB of
   memory (the model peaks at about 20 GB), else on the school's Slurm GPU (`tco_benchmark.sbatch`).
-  `experiments/tco_assumptions.json` is set for an A100 40 GB: on another GPU, change its
-  `gpu_price_usd` and `gpu_tdp_watts` (with sources) to that card's; the cloud leg
+  5 runs per clip, the same clips. The on-premise GPU's name, price and power draw in
+  `experiments/tco_assumptions.json` are left empty: fill them in for the card that ran (with
+  sources); `tco_compare.py` refuses to run while they are empty or name a different card; the cloud leg
   reuses Experiment 1's runs. `experiments/tco_compare.py` turns both, with the prices in
   `experiments/tco_assumptions.json`, into cost per video and a break-even volume, labelled as
   estimates from measured run times and stated assumptions.
-- **Cost (estimate):** Experiment 1 about $6, Experiment 2 about $5–8, Experiment 3 $0 (own computer or Slurm; the cloud leg reuses Experiment 1): about $12–20 in total. Flag each session before it
+- **Cost (estimate):** Experiment 1 about $10, Experiment 2 about $5–8, Experiment 3 $0 (own computer or Slurm; the cloud leg reuses Experiment 1): about $15–18 in total. Flag each session before it
   starts.
 
 ## 4. What the report takes from this

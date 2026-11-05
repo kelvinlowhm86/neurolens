@@ -32,10 +32,16 @@
     }
   },
   "on_prem": {
+    "gpu_name": {
+      "value": null,
+      "unit": "name",
+      "source": "Fill in: the exact name in the gpu_name column of the on-prem CSV (the card the benchmark ran on); tco_compare.py refuses to run while it is empty or names a different card",
+      "estimate": false
+    },
     "gpu_price_usd": {
-      "value": 5000,
+      "value": null,
       "unit": "USD",
-      "source": "NVIDIA A100 40 GB PCIe new; sources range $5,000-8,000 (used $2,000-4,000)",
+      "source": "Fill in: that card's purchase price, with its source (new or used)",
       "estimate": true
     },
     "host_price_usd": {
@@ -51,9 +57,9 @@
       "estimate": true
     },
     "gpu_tdp_watts": {
-      "value": 250,
+      "value": null,
       "unit": "watts",
-      "source": "NVIDIA A100 40 GB PCIe TDP",
+      "source": "Fill in: that card's TDP from the maker's spec sheet",
       "estimate": false
     },
     "host_idle_watts": {
