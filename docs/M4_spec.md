@@ -14,8 +14,7 @@ cost estimate is stated, and agreed by the team, before it starts; every session
 `infra/stop_work.sh` (`docs/session_checklist.md`).
 
 ## 1. Scope
-**In scope:** the booth at STePS and its anonymous survey (§2); Experiments 1–3 with the existing
-scripts (§3); what the report takes from them (§4); merging `aws-josh` into `main` (§5); teardown when the team
+**In scope:** the booth at STePS and its anonymous survey (§2); Experiments 1–3 (§3); what the report takes from them (§4); merging `aws-josh` into `main` (§5); teardown when the team
 decides (§6).
 
 **Out of scope:** in-app study code (consent screens, participant flags, timing); study scripts
@@ -42,36 +41,11 @@ A drop-in table at STePS: visitors try NeuroLens on a team laptop, then fill in 
   about $11.
 
 ## 3. Experiments
-The run layout, file columns and manifests are fixed by the scripts themselves
-(`neurolens/experiment_runs.py` and each script's docstring); `experiments/README.md` lists them.
-Each run writes `experiments/<experiment>/<run_id>/` in the bucket with a `manifest.json`
-(`experiments/finish_run.py`, given the live image's digest).
-- **Clips:** the team supplies them: one fixed set for all three experiments; open-licensed, listed in
-  `data/videos/SOURCES.md`; with sound, some clear English speech, some without speech; H.264/AAC,
-  720p or less, at most 120 s. Proposed lengths 15, 30 and 60 s, 3 clips each, as in the preliminary report (no 120 s).
-- **Experiment 1 (latency):** on a warm GPU (`start_work.sh --keep-warm`, then one warm-up job),
-  `experiments/latency_run.py` runs each clip as a browser would and appends a row to
-  `experiment-1/<run_id>/runs.csv`; 5 runs per clip (15 per length, as the preliminary report
-  promised). `experiments/latency_breakdown.py` gives the
-  median, minimum and maximum time per stage and clip length. Client render time is read on 3 runs per length from
-  `window.neurolensTimings.render_ms` in the browser and added by hand.
-- **Experiment 2 (load bursts):** `experiments/locustfile.py` sends bursts of simultaneous jobs
-  (proposed 1, 5, 10, 20; open: the GPU quota allows at most 2 machines, `max_instances = 2`
-  for this session only, then back to 1). The first burst starts from zero GPUs so it includes a
-  cold start, as the GPU now starts when a job is dispatched (M3f §6a), a start never timed yet.
-  `experiments/export_cloudwatch.py` saves the one-minute backlog and instance series and
-  `experiments/cold_start.py` the cold-start breakdown.
-- **Experiment 3 (cloud vs on-premise cost, an estimate):** the on-premise leg runs
-  `experiments/tco_benchmark.py` on a teammate's own computer if its GPU has at least 24 GB of
-  memory (the model peaks at about 20 GB), else on the school's Slurm GPU (`tco_benchmark.sbatch`).
-  5 runs per clip, the same clips. The on-premise GPU's name, price and power draw in
-  `experiments/tco_assumptions.json` are left empty: fill them in for the card that ran (with
-  sources); `tco_compare.py` refuses to run while they are empty or name a different card; the cloud leg
-  reuses Experiment 1's runs. `experiments/tco_compare.py` turns both, with the prices in
-  `experiments/tco_assumptions.json`, into cost per video and a break-even volume, labelled as
-  estimates from measured run times and stated assumptions.
-- **Cost (estimate):** Experiment 1 about $10, Experiment 2 about $5–8, Experiment 3 $0 (own computer or Slurm; the cloud leg reuses Experiment 1): about $15–18 in total. Flag each session before it
-  starts.
+Experiments 1–3 as in the preliminary report (`docs/course/Preliminary.tex` §5.1): latency
+breakdown, scaling under load, and cloud vs on-premise cost. The team decides the clips, run
+counts and method. Ready-made, tested scripts for all three are in `experiments/`
+(`experiments/README.md`); use, change or replace them. State each GPU session's cost estimate
+before it starts.
 
 ## 4. What the report takes from this
 What this milestone hands to the final report:
@@ -112,7 +86,7 @@ Run all eight steps in every AWS account that holds a NeuroLens deployment.
 
 ## 7. Acceptance criteria
 1. The STePS booth ran, and its survey responses are exported and summarised.
-2. Experiments 1–3 each have at least one complete run with a manifest.
+2. Experiments 1–3 each have at least one complete run.
 3. No committed file holds an email, name, user ID, job ID or a visitor's free-text answer.
 4. `aws-josh` is merged into `main` and CI passes there.
 5. After each session, `stop_work.sh` printed ALL STOPPED.
