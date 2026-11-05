@@ -1,6 +1,6 @@
 # NeuroLens — M4 Spec
-**Milestone:** the booth study, Experiments 1–3, the final report, the merge into `main`, and
-teardown (5 – 13 Nov; the booth is on 11 Nov; the final report and slides are due 13 Nov 23:59).
+**Milestone:** the STePS booth, Experiments 1–3, the merge into `main`, and teardown (5 – 13 Nov;
+STePS is on 11 Nov; the final report, written separately by the team, is due 13 Nov 23:59).
 **Builds on:** M3: the complete product on demand (SageMaker async GPU, M3e; sign-in and minutes
 of credit, M3b/M3c; early access by request, M3k), and the experiment scripts in `experiments/`
 (`experiments/README.md`).
@@ -11,15 +11,15 @@ cost estimate is stated, and agreed by the team, before it starts; every session
 `infra/stop_work.sh` (`docs/session_checklist.md`).
 
 ## 1. Scope
-**In scope:** the drop-in booth and its anonymous survey (§2); Experiments 1–3 with the existing
-scripts (§3); the report material (§4); merging `aws-josh` into `main` (§5); teardown when the team
+**In scope:** the booth at STePS and its anonymous survey (§2); Experiments 1–3 with the existing
+scripts (§3); what the report takes from them (§4); merging `aws-josh` into `main` (§5); teardown when the team
 decides (§6).
 
 **Out of scope:** in-app study code (consent screens, participant flags, timing); study scripts
 beyond the survey form; new experiment tooling unless an experiment cannot be run without it.
 
-## 2. Booth study (11 Nov, about 3 hours)
-A drop-in table: visitors try NeuroLens on a team laptop, then fill in a short anonymous survey.
+## 2. STePS booth (11 Nov, about 3 hours)
+A drop-in table at STePS: visitors try NeuroLens on a team laptop, then fill in a short anonymous survey.
 - **Survey:** `docs/study/questionnaire.md` is the form's text and settings; `docs/study/make_form.gs`
   builds it in Google Forms (keep the two in step). It collects no email or name. It asks for
   consent (a required tick), what the visitor did, the 10 SUS items in the standard order,
@@ -66,14 +66,11 @@ Each run writes `experiments/<experiment>/<run_id>/` in the bucket with a `manif
   free; the cloud leg reuses Experiment 1): about $12–20 in total. Flag each session before it
   starts.
 
-## 4. Report handoff
-- Every number, chart and table in the final report comes from §2's survey export or §3's
-  outputs, and the report says how many runs and responses each rests on.
-- The preliminary report in `docs/course/` is submitted and never edited; the final report and
-  slides are added there.
-- The report links the GitHub repository, which stays reachable until marks are released. It says
-  the service ran on demand and was shut down after evaluation.
-- The AI-use declaration covers the deployment work with this paragraph (add the report's own AI use):
+## 4. What the report takes from this
+The report itself is written separately; this milestone only hands it the results.
+- The survey summary (§2) and the experiment outputs (§3), each with how many responses or runs
+  it rests on. The GitHub repository stays reachable until marks are released.
+- The AI-use declaration for the deployment work (add the report's own AI use):
   > AI coding assistants (Claude Code, with DeepSeek and others for first drafts) helped plan,
   > build, test and document the AWS deployment, and explained AWS concepts along the way. Every
   > change was checked by automated tests and reviewed; all design decisions, spending and
@@ -107,9 +104,8 @@ Nothing is deleted on a date. In order, each step checked before the next:
 Run all eight steps in every AWS account that holds a NeuroLens deployment.
 
 ## 7. Acceptance criteria
-1. The booth ran, and its survey responses are exported and summarised in the report.
-2. Experiments 1–3 each have at least one complete run with a manifest, and every report figure
-   traces to one of them.
+1. The STePS booth ran, and its survey responses are exported and summarised.
+2. Experiments 1–3 each have at least one complete run with a manifest.
 3. No committed file holds an email, name, user ID, job ID or a visitor's free-text answer.
 4. `aws-josh` is merged into `main` and CI passes there.
 5. After each session, `stop_work.sh` printed ALL STOPPED.
