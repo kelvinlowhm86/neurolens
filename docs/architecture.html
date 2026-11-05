@@ -1,0 +1,2047 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NeuroLens on AWS</title>
+<style>
+/* A short walkthrough first; component details stay beside the diagram. */
+:root {
+  --bg: #f5f6f8;
+  --panel: #ffffff;
+  --ink: #18202b;
+  --muted: #5a6574;
+  --line: #c3cad5;
+  --edge: #6b7686;
+  --region: #fafbfc;
+  --vpc: #ecf1f8;
+  --public: #f6f1e6;
+  --private: #e8f1ec;
+  --accent: #d2470f;
+  --accent-soft: #fbe3d8;
+  --shadow: rgba(24, 32, 43, 0.18);
+  --font-display: "IBM Plex Sans Condensed", "Arial Narrow", system-ui, sans-serif;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #11151b; --panel: #181e26; --ink: #e5e9ef; --muted: #9ba5b3; --line: #3a4452; --edge: #8995a6;
+    --region: #151a21; --vpc: #18212d; --public: #231f17; --private: #16221c;
+    --accent: #ff7d4a; --accent-soft: #3a2116; --shadow: rgba(0, 0, 0, 0.55);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #11151b; --panel: #181e26; --ink: #e5e9ef; --muted: #9ba5b3; --line: #3a4452; --edge: #8995a6;
+  --region: #151a21; --vpc: #18212d; --public: #231f17; --private: #16221c;
+  --accent: #ff7d4a; --accent-soft: #3a2116; --shadow: rgba(0, 0, 0, 0.55);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.55; }
+.wrap { grid-template-columns: minmax(0, 1fr); max-width: 1680px; margin: 0 auto; padding-inline: 20px; padding-block: 28px 56px; display: grid; gap: 20px; }
+header h1 { font-family: var(--font-display); font-weight: 600; font-size: 30px; margin: 0; letter-spacing: 0.01em; text-wrap: balance; }
+header p { margin: 4px 0 0; color: var(--muted); max-width: 72ch; }
+.tabs { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.picker { display: flex; flex-wrap: wrap; gap: 6px; }
+.pick { font-size: 13px; padding: 6px 12px; }
+.view { margin-left: auto; display: flex; gap: 6px; align-items: center; color: var(--muted); font-size: 13px; }
+.tab, .seg, .pick { font: 500 14px var(--font-body); color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 7px 14px; cursor: pointer; }
+.tab[aria-pressed="true"], .seg[aria-pressed="true"], .pick[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.tab:focus-visible, .seg:focus-visible, .pick:focus-visible, .card-close:focus-visible, .btn:focus-visible, .node:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.flowbar { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 16px; display: grid; grid-template-columns: auto 1fr auto; gap: 16px; align-items: center; min-height: 74px; }
+.flowbar .count { font: 500 13px var(--font-mono); color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.flowbar .caption { margin: 0; min-width: 0; max-width: 95ch; }
+.controls { display: flex; gap: 6px; }
+.btn { font: 500 13px var(--font-body); color: var(--ink); background: transparent; border: 1px solid var(--line); border-radius: 6px; padding: 6px 12px; cursor: pointer; }
+.btn:disabled { opacity: 0.4; cursor: default; }
+.btn.primary { border-color: var(--accent); color: var(--accent); }
+@media (max-width: 720px) { .flowbar { grid-template-columns: 1fr; } }
+.main { min-width: 0; display: grid; gap: 20px; grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 1380px) { .main { grid-template-columns: minmax(0, 1fr) 360px; align-items: start; } .card { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 16px); } }
+.diagram { min-width: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; overflow-x: auto; padding: 8px; }
+.diagram svg { display: block; width: 100%; min-width: 920px; height: auto; }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 22px; font-size: 13px; color: var(--muted); padding: 10px 6px 4px; }
+.legend span { min-width: 0; display: inline-flex; align-items: center; gap: 8px; }
+.legend svg { flex-shrink: 0; width: 34px; min-width: 0; height: 12px; display: inline-block; }
+.dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+.card { position: relative; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 18px 20px; min-width: 0; }
+.card-close { position: absolute; top: 10px; right: 10px; width: 32px; height: 32px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--ink); font: 500 18px/1 var(--font-body); cursor: pointer; }
+.card-close:hover { border-color: var(--accent); color: var(--accent); }
+@media (max-width: 1379px) {
+  .card.floating { position: fixed; z-index: 10; top: calc(env(safe-area-inset-top, 0px) + 16px); right: 16px; width: min(380px, calc(100vw - 32px)); max-height: calc(100dvh - 32px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)); overflow-y: auto; box-shadow: 0 14px 36px var(--shadow); }
+}
+.card h2 { font-family: var(--font-display); font-weight: 600; font-size: 22px; margin: 0 0 6px; }
+.chip { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
+.card h3 { font: 600 12px var(--font-body); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); margin: 16px 0 4px; }
+.card p { margin: 0; }
+.card ul, .card ol { margin: 6px 0 0; padding-left: 20px; display: grid; gap: 8px; }
+.card p + p { margin-top: 8px; }
+.card .core { font-size: 16px; font-weight: 600; line-height: 1.45; }
+code, .mono { font-family: var(--font-mono); font-size: 0.9em; }
+.principles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.principle { text-align: left; font: inherit; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 12px 14px; cursor: pointer; }
+.principle strong { display: block; font-size: 15px; line-height: 1.35; margin-bottom: 4px; }
+.principle span { display: block; color: var(--muted); font-size: 13px; }
+.principle[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
+.principle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.card details { margin-top: 8px; font-size: 13px; }
+.card summary { cursor: pointer; color: var(--muted); }
+.card details[open] summary { margin-bottom: 6px; color: var(--accent); }
+.card h2 { padding-right: 28px; }
+.card h3 { letter-spacing: 0; text-transform: none; font-size: 13px; }
+.pan-hint { display: none; margin: 0 0 6px; color: var(--muted); font-size: 12px; }
+@media (max-width: 720px) {
+  .wrap { padding: 20px 14px 36px; gap: 14px; }
+  .principles { grid-template-columns: 1fr; gap: 6px; }
+  .principle { padding: 9px 12px; }
+  .principle strong { font-size: 14px; }
+  .view { margin-left: 0; flex-wrap: wrap; }
+  .tab, .seg { padding: 7px 10px; font-size: 13px; }
+  .flowbar { gap: 8px; padding: 10px 12px; }
+  .pan-hint { display: block; }
+}
+
+/* SVG */
+.zone { stroke: var(--line); stroke-width: 1; }
+.zone-region { fill: var(--region); }
+.zone-vpc { fill: var(--vpc); }
+.zone-public { fill: var(--public); }
+.zone-private { fill: var(--private); }
+.zlabel { font: 600 11px var(--font-body); letter-spacing: 0.08em; text-transform: uppercase; fill: var(--muted); }
+.node rect { fill: var(--panel); stroke: var(--edge); stroke-width: 1.2; transition: stroke 0.2s, opacity 0.2s; }
+.node { cursor: pointer; transition: opacity 0.25s; }
+.node:hover rect { stroke: var(--accent); }
+.node .t { font: 600 13px var(--font-body); fill: var(--ink); }
+.node .s { font: 400 11px var(--font-mono); fill: var(--muted); }
+.edge path.ln { fill: none; stroke: var(--edge); stroke-width: 1.4; transition: stroke 0.2s, opacity 0.25s; }
+.edge path.hop { fill: none; stroke: var(--region); stroke-width: 7; }
+.edge.dashed path.ln { stroke-dasharray: 5 4; }
+.edge.main path.ln { stroke-width: 1.9; }
+svg.core .node.support:not(.on) { opacity: 0.2; }
+svg.core .edge.support:not(.on) { opacity: 0.08; }
+.edge text { font: 400 11px var(--font-body); fill: var(--muted); paint-order: stroke; stroke: var(--panel); stroke-width: 4px; stroke-linejoin: round; transition: opacity 0.25s; }
+.mk { fill: var(--edge); }
+.mk-on { fill: var(--accent); }
+svg.focus .edge:not(.on) { opacity: 0.18; }
+svg.focus .node:not(.on) { opacity: 0.35; }
+.edge.on path.ln { stroke: var(--accent); stroke-width: 2.2; }
+.edge.on text { fill: var(--ink); font-weight: 500; }
+.node.on rect { stroke: var(--accent); stroke-width: 2; }
+.node.sel rect { fill: var(--accent-soft); }
+#packet { fill: var(--accent); stroke: var(--panel); stroke-width: 2.5; }
+@media (prefers-reduced-motion: reduce) { .node, .edge path.ln, .node rect { transition: none; } }
+</style>
+</head><body>
+
+<div class="wrap">
+  <header>
+    <h1>NeuroLens on AWS</h1>
+    <p>A website on Lambda handles sign-in and credit; a SageMaker GPU starts only when a video waits.</p>
+  </header>
+
+  <section aria-label="Design principles">
+    <div class="principles">
+      <button class="principle" data-principle="pay" aria-pressed="false"><strong>Pay only while working</strong><span>The GPU starts when a video waits and stops after 7 idle minutes. The catch: the first video after a quiet spell waits about 10 minutes.</span></button>
+      <button class="principle" data-principle="once" aria-pressed="false"><strong>Every video is charged or refunded exactly once</strong><span>One job claim; every balance change recorded.</span></button>
+      <button class="principle" data-principle="private" aria-pressed="false"><strong>Nothing exposed</strong><span>Three guarded entrances; no database network entrance.</span></button>
+    </div>
+  </section>
+
+  <div class="tabs" role="group" aria-label="Walkthroughs">
+    <button class="tab" id="tab-explore" data-flow="explore" aria-pressed="true">Explore</button>
+    <button class="tab" id="tab-video" data-flow="video" aria-pressed="false">Follow a video</button>
+    <button class="tab" id="tab-fail" data-flow="fail" aria-pressed="false">When things break</button>
+    <div class="view" role="group" aria-label="Which parts to show">Show
+      <button class="seg" id="view-main" data-view="main" aria-pressed="true">Main path</button>
+      <button class="seg" id="view-all" data-view="all" aria-pressed="false">Everything</button>
+    </div>
+  </div>
+
+  <div class="flowbar" id="flowbar">
+    <span class="count" id="count">Step 1 of 10</span>
+    <p class="caption" id="caption">Arrows show who talks to whom. Click a box for details; click empty space or press Esc to clear.</p>
+    <div class="controls" id="controls" hidden>
+      <button class="btn" id="prev">Back</button>
+      <button class="btn primary" id="next">Next</button>
+      <button class="btn" id="auto" aria-pressed="false">Play all</button>
+    </div>
+  </div>
+
+  <div class="picker" id="picker" role="group" aria-label="Pick one" hidden></div>
+
+  <div class="main">
+    <div class="diagram">
+      <p class="pan-hint">Swipe the diagram sideways to see every box.</p>
+      <svg id="arch" class="core" viewBox="0 0 1240 1160" role="img" aria-label="NeuroLens architecture: CloudFront serves the page from S3 and forwards API calls to Flask on Lambda. Cognito handles sign-in with Google. Uploads go straight to S3, then SQS triggers the dispatcher to check and price the video before sending it to SageMaker Asynchronous Inference. Scaling alarms start at most one GPU and stop it after seven idle minutes. The container claims jobs, saves results and charges or refunds. An SNS error notification reaches the error handler. A GPU guard and hourly reaper cover missed failures. Aurora alone sits in the private network, reached only through the Data API."></svg>
+      <div class="legend">
+        <span><svg viewBox="0 0 34 12" aria-hidden="true"><line x1="1" y1="6" x2="33" y2="6" stroke="currentColor" stroke-width="1.5"/></svg>request or data</span>
+        <span><svg viewBox="0 0 34 12" aria-hidden="true"><line x1="1" y1="6" x2="33" y2="6" stroke="currentColor" stroke-width="1.5" stroke-dasharray="5 4"/></svg>control signal</span>
+        <span><i class="dot" style="background: var(--private); border: 1px solid var(--edge)"></i>compute free at rest · requests and storage can bill</span>
+        <span><i class="dot" style="background: var(--accent)"></i>GPU bills by the hour while on</span>
+      </div>
+    </div>
+    <aside class="card" id="card" aria-live="polite"></aside>
+  </div>
+
+
+</div>
+
+<script>
+(function () {
+  const NS = "http://www.w3.org/2000/svg";
+  const svg = document.getElementById("arch");
+
+  // ---- Data ---------------------------------------------------------------
+  const NODES = {
+  "browser": {
+    "x": 30,
+    "y": 320,
+    "w": 170,
+    "h": 64,
+    "t": "Your browser",
+    "s": "page · chart · upload"
+  },
+  "google": {
+    "x": 30,
+    "y": 175,
+    "w": 170,
+    "h": 56,
+    "t": "Google",
+    "s": "sign-in provider"
+  },
+  "cf": {
+    "x": 250,
+    "y": 320,
+    "w": 150,
+    "h": 64,
+    "t": "CloudFront",
+    "s": "page + API address"
+  },
+  "cognito": {
+    "x": 450,
+    "y": 175,
+    "w": 210,
+    "h": 64,
+    "t": "Cognito",
+    "s": "sign-in · Google or email"
+  },
+  "webfn": {
+    "x": 450,
+    "y": 320,
+    "w": 210,
+    "h": 64,
+    "t": "Web app",
+    "s": "Lambda · Flask",
+    "s2": "database sessions · 30 days"
+  },
+  "dispatcher": {
+    "x": 450,
+    "y": 520,
+    "w": 210,
+    "h": 84,
+    "t": "Dispatcher",
+    "s": "Lambda · check + price",
+    "s2": "before a GPU starts"
+  },
+  "dlq": {
+    "x": 450,
+    "y": 680,
+    "w": 210,
+    "h": 64,
+    "t": "Dead-letter queue",
+    "s": "SQS · failed twice",
+    "s2": "handler refunds"
+  },
+  "reaper": {
+    "x": 450,
+    "y": 860,
+    "w": 210,
+    "h": 84,
+    "t": "Reaper",
+    "s": "Lambda · hourly",
+    "s2": "refund · delete · clean up"
+  },
+  "s3": {
+    "x": 710,
+    "y": 100,
+    "w": 220,
+    "h": 125,
+    "t": "S3 bucket",
+    "s": "uploads: deleted after job",
+    "s2": "results: 30d · shared: 3y"
+  },
+  "sqs": {
+    "x": 710,
+    "y": 320,
+    "w": 220,
+    "h": 64,
+    "t": "Job queue",
+    "s": "SQS · upload notices"
+  },
+  "gpu": {
+    "x": 710,
+    "y": 520,
+    "w": 220,
+    "h": 90,
+    "t": "GPU",
+    "s": "SageMaker Async · g6e L40S",
+    "s2": "own queue · at most one GPU"
+  },
+  "errorsns": {
+    "x": 710,
+    "y": 680,
+    "w": 220,
+    "h": 56,
+    "t": "Failure notifications",
+    "s": "SNS · failed or expired"
+  },
+  "errorhandler": {
+    "x": 710,
+    "y": 790,
+    "w": 220,
+    "h": 64,
+    "t": "Error handler",
+    "s": "Lambda · settle or refund"
+  },
+  "aurora": {
+    "x": 710,
+    "y": 960,
+    "w": 220,
+    "h": 64,
+    "t": "Aurora database",
+    "s": "Serverless v2 · Data API"
+  },
+  "build": {
+    "x": 980,
+    "y": 100,
+    "w": 220,
+    "h": 64,
+    "t": "Image build",
+    "s": "CodeBuild"
+  },
+  "ecr": {
+    "x": 980,
+    "y": 225,
+    "w": 220,
+    "h": 64,
+    "t": "Container registry",
+    "s": "ECR · image storage"
+  },
+  "cw": {
+    "x": 980,
+    "y": 520,
+    "w": 220,
+    "h": 64,
+    "t": "Scaling alarms",
+    "s": "CloudWatch · start / stop"
+  },
+  "guard": {
+    "x": 980,
+    "y": 790,
+    "w": 220,
+    "h": 84,
+    "t": "GPU guard",
+    "s": "Lambda · every 10 minutes",
+    "s2": "database checks · stop idle GPU"
+  },
+  "sns": {
+    "x": 980,
+    "y": 960,
+    "w": 220,
+    "h": 64,
+    "t": "Email alert",
+    "s": "SNS email"
+  },
+  "secrets": {
+    "x": 980,
+    "y": 1060,
+    "w": 220,
+    "h": 56,
+    "t": "Secrets",
+    "s": "Secrets Manager · DB password"
+  }
+};
+
+  const EDGES = [
+  {
+    "id": "e_cf",
+    "from": "browser",
+    "to": "cf",
+    "p": [
+      [
+        200,
+        352
+      ],
+      [
+        250,
+        352
+      ]
+    ],
+    "l": [
+      [
+        "HTTPS",
+        225,
+        344,
+        "middle"
+      ]
+    ]
+  },
+  {
+    "id": "e_site",
+    "from": "cf",
+    "to": "s3",
+    "p": [
+      [
+        325,
+        320
+      ],
+      [
+        325,
+        65
+      ],
+      [
+        775,
+        65
+      ],
+      [
+        775,
+        100
+      ]
+    ],
+    "l": [
+      [
+        "page and samples",
+        540,
+        58,
+        "middle"
+      ]
+    ]
+  },
+  {
+    "id": "e_up",
+    "from": "browser",
+    "to": "s3",
+    "p": [
+      [
+        100,
+        320
+      ],
+      [
+        100,
+        280
+      ],
+      [
+        20,
+        280
+      ],
+      [
+        20,
+        35
+      ],
+      [
+        875,
+        35
+      ],
+      [
+        875,
+        100
+      ]
+    ],
+    "l": [
+      [
+        "permitted upload",
+        580,
+        28,
+        "middle"
+      ]
+    ]
+  },
+  {
+    "id": "e_signin",
+    "from": "browser",
+    "to": "cognito",
+    "p": [
+      [
+        175,
+        320
+      ],
+      [
+        175,
+        260
+      ],
+      [
+        480,
+        260
+      ],
+      [
+        480,
+        239
+      ]
+    ],
+    "l": [
+      [
+        "sign in",
+        300,
+        253,
+        "middle"
+      ]
+    ]
+  },
+  {
+    "id": "e_google",
+    "from": "cognito",
+    "to": "google",
+    "p": [
+      [
+        450,
+        203
+      ],
+      [
+        200,
+        203
+      ]
+    ],
+    "l": [
+      [
+        "Google option",
+        320,
+        195,
+        "middle"
+      ]
+    ]
+  },
+  {
+    "id": "e_api",
+    "from": "cf",
+    "to": "webfn",
+    "p": [
+      [
+        400,
+        352
+      ],
+      [
+        450,
+        352
+      ]
+    ],
+    "l": []
+  },
+  {
+    "id": "e_token",
+    "from": "webfn",
+    "to": "cognito",
+    "p": [
+      [
+        555,
+        320
+      ],
+      [
+        555,
+        239
+      ]
+    ],
+    "l": [
+      [
+        "checks sign-in",
+        563,
+        285,
+        "start"
+      ]
+    ]
+  },
+  {
+    "id": "e_webdb",
+    "from": "webfn",
+    "to": "aurora",
+    "p": [
+      [
+        475,
+        384
+      ],
+      [
+        475,
+        440
+      ],
+      [
+        690,
+        440
+      ],
+      [
+        690,
+        990
+      ],
+      [
+        710,
+        990
+      ]
+    ],
+    "l": [
+      [
+        "sessions + credit",
+        520,
+        433,
+        "start"
+      ]
+    ]
+  },
+  {
+    "id": "e_notice",
+    "from": "s3",
+    "to": "sqs",
+    "p": [
+      [
+        820,
+        225
+      ],
+      [
+        820,
+        320
+      ]
+    ],
+    "l": [
+      [
+        "new upload",
+        828,
+        280,
+        "start"
+      ]
+    ]
+  },
+  {
+    "id": "e_dispatch",
+    "from": "sqs",
+    "to": "dispatcher",
+    "p": [
+      [
+        710,
+        352
+      ],
+      [
+        680,
+        352
+      ],
+      [
+        680,
+        490
+      ],
+      [
+        555,
+        490
+      ],
+      [
+        555,
+        520
+      ]
+    ],
+    "l": [
+      [
+        "triggers",
+        600,
+        483,
+        "middle"
+      ]
+    ]
+  },
+  {
+    "id": "e_probe",
+    "from": "dispatcher",
+    "to": "s3",
+    "p": [
+      [
+        660,
+        545
+      ],
+      [
+        670,
+        545
+      ],
+      [
+        670,
+        85
+      ],
+      [
+        735,
+        85
+      ],
+      [
+        735,
+        100
+      ]
+    ],
+    "l": [],
+    "dashed": true
+  },
+  {
+    "id": "e_ddb",
+    "from": "dispatcher",
+    "to": "aurora",
+    "p": [
+      [
+        490,
+        604
+      ],
+      [
+        490,
+        645
+      ],
+      [
+        675,
+        645
+      ],
+      [
+        675,
+        1008
+      ],
+      [
+        710,
+        1008
+      ]
+    ],
+    "l": [],
+    "dashed": true
+  },
+  {
+    "id": "e_invoke",
+    "from": "dispatcher",
+    "to": "gpu",
+    "p": [
+      [
+        660,
+        575
+      ],
+      [
+        710,
+        575
+      ]
+    ],
+    "l": [
+      [
+        "submit",
+        685,
+        568,
+        "middle"
+      ]
+    ]
+  },
+  {
+    "id": "e_s3gpu",
+    "from": "gpu",
+    "to": "s3",
+    "p": [
+      [
+        930,
+        535
+      ],
+      [
+        945,
+        535
+      ],
+      [
+        945,
+        180
+      ],
+      [
+        930,
+        180
+      ]
+    ],
+    "l": [
+      [
+        "files + weights",
+        953,
+        400,
+        "start"
+      ]
+    ],
+    "both": true
+  },
+  {
+    "id": "e_gpudb",
+    "from": "gpu",
+    "to": "aurora",
+    "p": [
+      [
+        735,
+        610
+      ],
+      [
+        700,
+        610
+      ],
+      [
+        700,
+        974
+      ],
+      [
+        710,
+        974
+      ]
+    ],
+    "l": [
+      [
+        "claim + settle",
+        708,
+        909,
+        "start"
+      ]
+    ]
+  },
+  {
+    "id": "e_dlq",
+    "from": "sqs",
+    "to": "dlq",
+    "p": [
+      [
+        735,
+        384
+      ],
+      [
+        735,
+        420
+      ],
+      [
+        435,
+        420
+      ],
+      [
+        435,
+        712
+      ],
+      [
+        450,
+        712
+      ]
+    ],
+    "l": [
+      [
+        "failed twice",
+        530,
+        413,
+        "middle"
+      ]
+    ],
+    "dashed": true
+  },
+  {
+    "id": "e_dlqdb",
+    "from": "dlq",
+    "to": "aurora",
+    "p": [
+      [
+        555,
+        744
+      ],
+      [
+        555,
+        775
+      ],
+      [
+        665,
+        775
+      ],
+      [
+        665,
+        1020
+      ],
+      [
+        710,
+        1020
+      ]
+    ],
+    "l": [
+      [
+        "handler refunds",
+        560,
+        768,
+        "middle"
+      ]
+    ],
+    "dashed": true
+  },
+  {
+    "id": "e_scale",
+    "from": "cw",
+    "to": "gpu",
+    "p": [
+      [
+        980,
+        552
+      ],
+      [
+        930,
+        552
+      ]
+    ],
+    "l": [
+      [
+        "0 ↔ 1",
+        955,
+        545,
+        "middle"
+      ]
+    ],
+    "dashed": true
+  },
+  {
+    "id": "e_backlog",
+    "from": "gpu",
+    "to": "cw",
+    "p": [
+      [
+        900,
+        610
+      ],
+      [
+        900,
+        635
+      ],
+      [
+        1090,
+        635
+      ],
+      [
+        1090,
+        584
+      ]
+    ],
+    "l": [
+      [
+        "waiting work",
+        1010,
+        650,
+        "middle"
+      ]
+    ],
+    "dashed": true
+  },
+  {
+    "id": "e_failure",
+    "from": "gpu",
+    "to": "errorsns",
+    "p": [
+      [
+        820,
+        610
+      ],
+      [
+        820,
+        680
+      ]
+    ],
+    "l": [
+      [
+        "failed / expired",
+        828,
+        665,
+        "start"
+      ]
+    ],
+    "dashed": true
+  },
+  {
+    "id": "e_error",
+    "from": "errorsns",
+    "to": "errorhandler",
+    "p": [
+      [
+        820,
+        736
+      ],
+      [
+        820,
+        790
+      ]
+    ],
+    "l": [
+      [
+        "notifies",
+        828,
+        765,
+        "start"
+      ]
+    ],
+    "dashed": true
+  },
+  {
+    "id": "e_errdb",
+    "from": "errorhandler",
+    "to": "aurora",
+    "p": [
+      [
+        790,
+        854
+      ],
+      [
+        790,
+        960
+      ]
+    ],
+    "l": [
+      [
+        "settle / refund",
+        798,
+        913,
+        "start"
+      ]
+    ]
+  },
+  {
+    "id": "e_reapdb",
+    "from": "reaper",
+    "to": "aurora",
+    "p": [
+      [
+        555,
+        944
+      ],
+      [
+        555,
+        992
+      ],
+      [
+        710,
+        992
+      ]
+    ],
+    "l": [
+      [
+        "stale jobs",
+        620,
+        984,
+        "middle"
+      ]
+    ]
+  },
+  {
+    "id": "e_reaps3",
+    "from": "reaper",
+    "to": "s3",
+    "p": [
+      [
+        450,
+        900
+      ],
+      [
+        415,
+        900
+      ],
+      [
+        415,
+        82
+      ],
+      [
+        750,
+        82
+      ],
+      [
+        750,
+        100
+      ]
+    ],
+    "l": [],
+    "dashed": true
+  },
+  {
+    "id": "e_guarddb",
+    "from": "guard",
+    "to": "aurora",
+    "p": [
+      [
+        1030,
+        874
+      ],
+      [
+        1030,
+        915
+      ],
+      [
+        850,
+        915
+      ],
+      [
+        850,
+        960
+      ]
+    ],
+    "l": [
+      [
+        "reads job state",
+        950,
+        908,
+        "middle"
+      ]
+    ],
+    "dashed": true
+  },
+  {
+    "id": "e_guardstop",
+    "from": "guard",
+    "to": "gpu",
+    "p": [
+      [
+        1005,
+        790
+      ],
+      [
+        1005,
+        755
+      ],
+      [
+        955,
+        755
+      ],
+      [
+        955,
+        595
+      ],
+      [
+        930,
+        595
+      ]
+    ],
+    "l": [
+      [
+        "stop if idle",
+        963,
+        740,
+        "start"
+      ]
+    ],
+    "dashed": true
+  },
+  {
+    "id": "e_guardalert",
+    "from": "guard",
+    "to": "sns",
+    "p": [
+      [
+        1130,
+        874
+      ],
+      [
+        1130,
+        960
+      ]
+    ],
+    "l": [
+      [
+        "email alert",
+        1138,
+        924,
+        "start"
+      ]
+    ],
+    "dashed": true
+  },
+  {
+    "id": "e_alert",
+    "from": "cw",
+    "to": "sns",
+    "p": [
+      [
+        1200,
+        552
+      ],
+      [
+        1210,
+        552
+      ],
+      [
+        1210,
+        992
+      ],
+      [
+        1200,
+        992
+      ]
+    ],
+    "l": [],
+    "dashed": true
+  },
+  {
+    "id": "e_build",
+    "from": "build",
+    "to": "ecr",
+    "p": [
+      [
+        1090,
+        164
+      ],
+      [
+        1090,
+        225
+      ]
+    ],
+    "l": [
+      [
+        "builds image",
+        1098,
+        198,
+        "start"
+      ]
+    ]
+  },
+  {
+    "id": "e_image",
+    "from": "ecr",
+    "to": "gpu",
+    "p": [
+      [
+        1090,
+        289
+      ],
+      [
+        1090,
+        465
+      ],
+      [
+        850,
+        465
+      ],
+      [
+        850,
+        520
+      ]
+    ],
+    "l": [
+      [
+        "image at start",
+        1015,
+        458,
+        "middle"
+      ]
+    ]
+  },
+  {
+    "id": "e_secret",
+    "from": "secrets",
+    "to": "aurora",
+    "p": [
+      [
+        980,
+        1088
+      ],
+      [
+        820,
+        1088
+      ],
+      [
+        820,
+        1024
+      ]
+    ],
+    "l": [
+      [
+        "DB password",
+        835,
+        1080,
+        "middle"
+      ]
+    ],
+    "dashed": true
+  }
+];
+  const EDGE = Object.fromEntries(EDGES.map(e => [e.id, e]));
+  const SUPPORT = new Set(["google", "dlq", "reaper", "errorsns", "errorhandler", "build", "ecr", "cw", "guard", "sns", "secrets"]);
+
+  const CARDS = {
+  "browser": {
+    "core": "Lets you upload a video and read its brain-response chart.",
+    "here": [
+      "Uploads straight to S3 with a short-lived permit after credit is reserved.",
+      "Offers sharing at upload and an audience-retention curve later. <details><summary>Sharing rules</summary>The first valid YouTube curve for a shared video makes its analysis free once. Stopping sharing starts deletion; the reaper retries unfinished deletes.</details>"
+    ],
+    "cost": "$0 of AWS compute runs in the browser.",
+    "what": "Your web browser: displays the page and sends requests."
+  },
+  "google": {
+    "core": "Lets people use an existing Google account to sign in.",
+    "here": [
+      "Cognito handles the exchange; our app receives a verified sign-in from Cognito."
+    ],
+    "cost": "$0 per Google sign-in in this design.",
+    "what": "An account provider: confirms who you are to another service."
+  },
+  "cf": {
+    "core": "Gives the page and API one HTTPS address.",
+    "here": [
+      "Serves S3 page files and forwards API calls under one HTTPS address.",
+      "Signs origin requests; the web app refuses calls that bypass CloudFront."
+    ],
+    "cost": "$0 while no requests or transfers occur.",
+    "what": "CloudFront is AWS’s front door for delivering pages and API calls."
+  },
+  "cognito": {
+    "core": "Handles passwords and sign-in without storing passwords in our app.",
+    "here": [
+      "Offers a managed sign-in page for email or Google; fits our AWS permissions.",
+      "The web app verifies the signed result and checks for sign-in replay. <details><summary>Sessions and access</summary>It stores a hash of a random session token in Aurora. A new account has no credit; a copied token stops working when the row is deleted or expires.</details>"
+    ],
+    "cost": "$0 for inactive users; sign-ins may bill.",
+    "alt": [
+      "Google-only sign-in uses Google as the sole account provider, excluding people without an account. It suits internal tools where everyone already uses Google.",
+      "Auth0 manages sign-in with extensive business login features we do not need. It suits products with many enterprise account providers."
+    ],
+    "what": "Cognito is AWS’s managed sign-in service."
+  },
+  "webfn": {
+    "core": "Checks identity and ownership before reserving credit or showing a job.",
+    "here": [
+      "Flask on Lambda serves short bursts; checks sessions and job ownership. The team grants credit with a script.",
+      "Sessions last 30 days of inactivity; sign-out deletes the row immediately. <details><summary>Limited permissions</summary>An account without credit cannot submit paid work; job lookups show only its own jobs. Each Lambda has a role limited to its task; none has general administration rights. A browser session gives no AWS permission to invoke SageMaker or query Aurora directly.</details>"
+    ],
+    "cost": "$0 compute while no requests run.",
+    "alt": [
+      "An always-on server runs the app continuously, billing through our quiet gaps. It suits steady traffic needing predictable latency.",
+      "ECS on Fargate runs managed containers, but a web task still bills while idle. It suits several long-running services."
+    ],
+    "what": "Lambda runs a function on demand; Flask handles our web requests."
+  },
+  "dispatcher": {
+    "core": "Rejects bad files and insufficient credit before any GPU starts.",
+    "here": [
+      "SQS triggers size checks, ffprobe duration measurement and price verification.",
+      "Accepted jobs enter SageMaker’s queue; this Lambda does not start the GPU. <details><summary>Who can submit</summary>The GPU has no public application entrance: invoking SageMaker requires the dispatcher’s AWS role. Internal Lambdas run through service triggers and roles.</details>"
+    ],
+    "cost": "$0 compute between invocations.",
+    "what": "Lambda runs short pieces of code when a message or request arrives."
+  },
+  "dlq": {
+    "core": "Parks a message after two failed dispatcher deliveries.",
+    "here": [
+      "Its Lambda handler checks for a saved result: settle once, otherwise refund."
+    ],
+    "cost": "$0 while empty and unused.",
+    "what": "SQS is AWS’s message queue: holds messages until a program takes them."
+  },
+  "reaper": {
+    "core": "Finishes jobs and deletions that other paths leave open.",
+    "here": [
+      "Hourly: settles an existing result or refunds jobs still open 4 hours after creation.",
+      "Retries eligible file and account deletes; expires sessions. <details><summary>Sharing cleanup</summary>Shared copies without a retention curve are deleted after 90 days. Stopping sharing starts deletion; unfinished deletes are retried.</details>"
+    ],
+    "cost": "$0 Lambda compute between runs; database wake-ups still bill.",
+    "what": "A scheduled Lambda: runs a short cleanup program at set times."
+  },
+  "s3": {
+    "core": "Stores uploads, results and shared research files.",
+    "here": [
+      "Uploads are deleted after the job; results stay 30 days. Page files and model weights also live here. <details><summary>Upload permit</summary>The bucket blocks public access. A presigned POST allows one exact key, an allowed type and capped size for 5 minutes. The uploader can replace their own object while it lasts; the dispatcher checks the file before GPU submission.</details>",
+      "Shared videos and curves go to <code>dataset/</code>; course analysis goes to <code>academic/</code>. <details><summary>Retention and training</summary>Only dataset/ feeds model training. Both folders expire after 3 years; shared copies without a curve are deleted after 90 days.</details>"
+    ],
+    "cost": "$0.023 per GB-month for standard storage (estimate).",
+    "what": "S3 is AWS’s file store: saves objects in named folders inside a bucket."
+  },
+  "sqs": {
+    "core": "Keeps upload notices until the dispatcher can handle them.",
+    "here": [
+      "S3 upload notices trigger the dispatcher; accepted jobs wait in SageMaker’s separate queue. Notices wait without keeping a process running.",
+      "Messages may repeat; database state checks prevent duplicate work or charges."
+    ],
+    "cost": "$0 while empty and unused.",
+    "alt": [
+      "A database jobs table holds work too, but polling would wake Aurora during quiet spells. It suits custom priorities or linked scheduling."
+    ],
+    "what": "SQS is AWS’s message queue: holds messages until a program takes them."
+  },
+  "gpu": {
+    "core": "Runs the model on demand and returns to zero when idle.",
+    "here": [
+      "Runs our container on at most one g6e L40S; cold upload-to-start takes 9–12 minutes.",
+      "Claims a job, saves results, then charges or refunds. <details><summary>One owner, limited access</summary>Only one container can hold a database claim. Publishing a result and ending a job check whether it already finished; every balance change has a ledger row. Loaded weights serve consecutive videos. The container role can access only required S3 folders and authorized Data API calls; it cannot change roles or scaling policies.</details>"
+    ],
+    "cost": "$2.64 per GPU-hour on g6e (estimate).",
+    "alt": [
+      "An EC2 GPU group with Auto Scaling starts and stops machines we manage, adding scaling and recovery work. It suits steady traffic that keeps a GPU busy.",
+      "AWS Batch schedules containers as jobs, but a fresh container per video reloads the model. It suits long training or processing jobs."
+    ],
+    "what": "SageMaker Async queues model requests and runs them on managed machines."
+  },
+  "errorsns": {
+    "core": "Carries SageMaker’s failed or expired request notices.",
+    "here": [
+      "Sends the job identifier to the error-handler Lambda."
+    ],
+    "cost": "$0 while no notifications are sent.",
+    "what": "SNS is AWS’s notification service: delivers messages to subscribers."
+  },
+  "errorhandler": {
+    "core": "Resolves a request that never returned successfully.",
+    "here": [
+      "SageMaker notifies it through SNS after a crash, timeout or queue expiry.",
+      "Checks whether a result exists: settles that result, otherwise refunds the job."
+    ],
+    "cost": "$0 compute between notifications.",
+    "what": "Lambda runs a function when a notification arrives."
+  },
+  "aurora": {
+    "core": "Keeps credit and job changes consistent in database transactions.",
+    "here": [
+      "Pauses when idle; holds accounts, ledger entries, jobs and sessions in PostgreSQL.",
+      "Our only resource in the private network; only authorized HTTPS Data API calls reach it. <details><summary>No database port</summary>Calls are encrypted and checked against AWS roles, with the password in Secrets Manager. Neither Lambda nor the container has a direct network connection to the database.</details>"
+    ],
+    "cost": "$0 compute while paused; database storage still bills.",
+    "alt": [
+      "Standard PostgreSQL on RDS stays available, with idle compute costs and direct connections that do not fit our quiet gaps. It suits a database used throughout the day.",
+      "DynamoDB is a managed key-value database with transactions; our linked accounts, ledger and jobs fit SQL more directly. It suits high-volume access through a few fixed keys."
+    ],
+    "what": "Aurora is AWS’s managed SQL database; Serverless v2 adjusts its compute."
+  },
+  "build": {
+    "core": "Builds the container image without a build server to maintain.",
+    "here": [
+      "CodeBuild packages our application and libraries into an image, then publishes it to ECR.",
+      "Model weights stay in S3 and are copied in at GPU start."
+    ],
+    "cost": "$0 build compute between builds.",
+    "what": "CodeBuild runs software builds without a permanent build server."
+  },
+  "ecr": {
+    "core": "Keeps the container image ready for SageMaker to start.",
+    "here": [
+      "Stores the image produced by CodeBuild; SageMaker pulls it when starting a GPU."
+    ],
+    "cost": "$0.10 per GB-month of image storage (estimate).",
+    "what": "ECR stores container images: packaged programs and their libraries."
+  },
+  "cw": {
+    "core": "Starts a GPU for waiting work and stops it after seven idle minutes.",
+    "here": [
+      "Backlog without capacity starts a GPU; an empty backlog for 7 minutes requests zero.",
+      "Backlog data arrives about 3 minutes late; a shutdown race adds about 10 minutes."
+    ],
+    "cost": "$0.10 per standard alarm-month (estimate).",
+    "what": "CloudWatch watches measurements and triggers actions at set thresholds."
+  },
+  "guard": {
+    "core": "Stops an idle GPU if normal scale-down fails.",
+    "here": [
+      "Every 10 minutes, checks live claims, dispatched work and recent database activity.",
+      "After a quiet period, requests zero capacity and emails; independent of scaling metrics. <details><summary>Narrow permissions</summary>Its SageMaker actions can inspect and stop only this endpoint. An upload racing the final check stays queued; it may cause another cold start but is charged at most once.</details>"
+    ],
+    "cost": "$0 Lambda compute between checks; database wake-ups still bill.",
+    "what": "A scheduled Lambda: runs a short checking program at set times."
+  },
+  "sns": {
+    "core": "Emails when a problem needs a person to look.",
+    "here": [
+      "Carries alarm messages, including a GPU-guard stop and failed cleanup runs."
+    ],
+    "cost": "$0 while no alerts are sent.",
+    "what": "SNS is AWS’s notification service; a subscriber can be an email address."
+  },
+  "secrets": {
+    "core": "Keeps the database password outside code and images.",
+    "here": [
+      "Secrets Manager supplies the password for authorized Data API calls; each role gets only the access it needs."
+    ],
+    "cost": "$0.40 per secret-month (estimate).",
+    "what": "Secrets Manager stores passwords and controls who can read them."
+  }
+};
+
+  const FLOWS = {
+  "video": [
+    {
+      "e": [
+        "e_cf",
+        "e_site"
+      ],
+      "n": [
+        "browser"
+      ],
+      "c": "Open the site. CloudFront serves the page and samples from S3."
+    },
+    {
+      "e": [
+        "e_signin",
+        "e_google",
+        "e_api",
+        "e_token",
+        "e_webdb"
+      ],
+      "c": "Sign in with Google or email through Cognito. The web app stores a session lasting 30 days of inactivity."
+    },
+    {
+      "e": [
+        "e_cf",
+        "e_api",
+        "e_webdb"
+      ],
+      "c": "Pick a video; optionally share it. The web app reserves estimated credit and gives a 5-minute upload permit. The team grants credit with a script."
+    },
+    {
+      "e": [
+        "e_up",
+        "e_notice"
+      ],
+      "c": "Upload straight to S3. S3 sends a notice to the SQS job queue."
+    },
+    {
+      "e": [
+        "e_dispatch",
+        "e_probe",
+        "e_ddb"
+      ],
+      "c": "The dispatcher checks size, duration (ffprobe) and price. Unreadable or overlong videos and insufficient credit are refunded before a GPU starts."
+    },
+    {
+      "e": [
+        "e_invoke",
+        "e_backlog",
+        "e_scale"
+      ],
+      "c": "Accepted work enters SageMaker’s queue. An alarm starts a GPU; cold upload-to-start takes about 9–12 minutes."
+    },
+    {
+      "e": [
+        "e_image",
+        [
+          "e_s3gpu",
+          true
+        ],
+        "e_gpudb"
+      ],
+      "c": "SageMaker starts the container and copies S3 model weights. The container claims the job in Aurora, then runs the model."
+    },
+    {
+      "e": [
+        "e_s3gpu",
+        "e_gpudb"
+      ],
+      "c": "The container saves results, charges and deletes the upload. Shared videos go to dataset/; their analysis goes to academic/."
+    },
+    {
+      "e": [
+        "e_cf",
+        "e_api",
+        "e_webdb"
+      ],
+      "n": [
+        "s3"
+      ],
+      "c": "Read the result and balance. The first valid YouTube retention curve for a shared video makes its analysis free once."
+    },
+    {
+      "e": [
+        "e_backlog",
+        "e_scale"
+      ],
+      "c": "After 7 idle minutes, an alarm stops the GPU. The guard checks independently every 10 minutes if normal stopping fails."
+    }
+  ]
+};
+
+  const FAILS = [
+  {
+    "name": "The database is asleep",
+    "e": [
+      "e_webdb",
+      "e_gpudb"
+    ],
+    "n": [
+      "aurora"
+    ],
+    "what": "The first visit after a quiet spell finds Aurora paused.",
+    "caught": "The first Data API call reports resuming. Waking takes about 15–20 seconds; callers and the page retry, showing “Starting up” if needed.",
+    "result": "Work waits; jobs and credit stay recorded. Closing the page does not stop submitted work; sign in again to see it. <details><summary>Other access delays</summary>CloudFront outages make the page or API unreachable until service returns. If Google sign-in fails, email sign-in remains. A Cognito outage blocks new sign-ins; existing database sessions can continue. Temporary web failures are retried; jobs run independently. A missing or denied database secret blocks operations until access returns, without opening a database port.</details>"
+  },
+  {
+    "name": "No GPU of our type is free",
+    "e": [
+      "e_invoke",
+      "e_scale",
+      "e_reapdb"
+    ],
+    "n": [
+      "gpu",
+      "reaper"
+    ],
+    "what": "Seen in real runs: SageMaker falls back or the request waits for capacity.",
+    "caught": "SageMaker’s queue allows at most 2 hours of waiting. An expiry notice may arrive only when an instance next takes the request.",
+    "result": "The hourly reaper refunds any job still open 4 hours after creation, even without an expiry notice. No credit is lost. <details><summary>Other startup blocks</summary>If ECR cannot supply the container image, a new GPU cannot start until it returns. A failed CodeBuild build leaves the existing image available; it does not replace it.</details>"
+  },
+  {
+    "name": "A video arrives as the GPU shuts down",
+    "e": [
+      "e_backlog",
+      "e_scale",
+      "e_guardstop"
+    ],
+    "n": [
+      "gpu",
+      "guard"
+    ],
+    "what": "A fresh request arrives while the scaling alarm or guard is stopping an idle GPU.",
+    "caught": "Backlog data is about 3 minutes late. The waiting request triggers another GPU start.",
+    "result": "An extra cold start adds about 10 minutes. No work is lost; database checks prevent a second charge."
+  },
+  {
+    "name": "A video can’t be processed",
+    "e": [
+      "e_dispatch",
+      "e_invoke",
+      "e_gpudb",
+      "e_dlq",
+      "e_dlqdb"
+    ],
+    "n": [
+      "gpu",
+      "dispatcher"
+    ],
+    "what": "The file is unreadable, too long, short of credit, or fails on the GPU.",
+    "caught": "The dispatcher checks before GPU submission; the container catches analysis errors. <details><summary>File and delivery failures</summary>Failed S3 reads or writes also end the job with a refund; failed deletes are retried. After two failed dispatcher deliveries, SQS moves the notice to the dead-letter queue. Its handler checks for an existing result; repeated delivery cannot charge twice.</details>",
+    "result": "Refunded at once, with no automatic GPU retry; the user can upload again. For a dead-letter message, settle an existing result once or refund. A failed handler alerts; the reaper covers any open job."
+  },
+  {
+    "name": "The GPU crashes or hangs",
+    "e": [
+      "e_failure",
+      "e_error",
+      "e_errdb",
+      "e_guarddb",
+      "e_guardstop",
+      "e_guardalert",
+      "e_reapdb"
+    ],
+    "n": [
+      "gpu",
+      "guard",
+      "reaper"
+    ],
+    "what": "The container crashes, stops responding, or leaves a GPU running without work.",
+    "caught": "SageMaker reports failures and timeouts; a request can run for at most 60 minutes. The guard checks the database every 10 minutes for an idle GPU.",
+    "result": "The error handler settles a saved result once or refunds; transient errors retry. The guard stops idle compute and emails without interrupting a live claim. The hourly reaper is the last backstop. <details><summary>If a safety net fails</summary>A lost error notice still leaves the job for the reaper, which catches jobs open after 4 hours. It retries file cleanup and account deletions. Every Lambda emails on failed runs; a failed reaper alarms and cleanup waits for its next successful run. A failed or missing guard run alerts; normal scaling remains the first stop path. If SNS email fails, settlement continues but people may learn of problems later.</details>"
+  }
+];
+
+  const PRINCIPLES = {
+  "pay": {
+    "title": "Pay only while working",
+    "e": [
+      "e_dispatch",
+      "e_probe",
+      "e_ddb",
+      "e_invoke",
+      "e_backlog",
+      "e_scale",
+      "e_guarddb",
+      "e_guardstop",
+      "e_webdb"
+    ],
+    "n": [
+      "dispatcher",
+      "gpu",
+      "cw",
+      "guard",
+      "webfn",
+      "aurora"
+    ],
+    "core": "Check cheaply first; wake compute only for work.",
+    "points": [
+      "The dispatcher checks the file and price before the GPU wakes. A waiting video starts it; 7 idle minutes stop it.",
+      "Lambda and queues have no idle compute cost; Aurora pauses. Storage, requests, alarms and scheduled database wake-ups can still bill."
+    ]
+  },
+  "once": {
+    "title": "Every video is charged or refunded exactly once",
+    "e": [
+      "e_gpudb",
+      "e_error",
+      "e_errdb",
+      "e_dlq",
+      "e_dlqdb",
+      "e_reapdb"
+    ],
+    "n": [
+      "gpu",
+      "errorhandler",
+      "dlq",
+      "reaper"
+    ],
+    "core": "Every recovery path checks the same job state.",
+    "points": [
+      "A database claim gives one container the job. Saving a result and ending the job both check whether it already finished.",
+      "Success charges; failure refunds. Error and dead-letter handlers and the reaper settle a saved result once or refund; every balance change has a ledger row."
+    ]
+  },
+  "private": {
+    "title": "Nothing exposed",
+    "e": [
+      "e_cf",
+      "e_site",
+      "e_api",
+      "e_up",
+      "e_signin",
+      "e_google",
+      "e_token",
+      "e_webdb",
+      "e_secret"
+    ],
+    "n": [
+      "cf",
+      "s3",
+      "cognito",
+      "aurora"
+    ],
+    "core": "Only three ways in; no database network entrance.",
+    "points": [
+      "CloudFront serves the page and API; S3 accepts a permitted upload; Cognito handles sign-in.",
+      "AWS roles limit internal actions. Only authorized, encrypted Data API calls reach Aurora; neither Lambda nor the container connects to a database port."
+    ]
+  }
+};
+
+  // ---- Render -------------------------------------------------------------
+  function el(name, attrs, parent) {
+    const n = document.createElementNS(NS, name);
+    for (const k in attrs) n.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(n);
+    return n;
+  }
+  function text(parent, str, x, y, cls, anchor) {
+    const t = el("text", { x, y, class: cls, "text-anchor": anchor || "start" }, parent);
+    t.textContent = str;
+    return t;
+  }
+  const pathD = pts => "M" + pts.map(p => p.join(",")).join(" L");
+
+  const defs = el("defs", {}, svg);
+  for (const [id, cls] of [["arw", "mk"], ["arw-on", "mk-on"]]) {
+    const m = el("marker", { id, viewBox: "0 0 10 10", refX: "9", refY: "5", markerWidth: "7", markerHeight: "7", orient: "auto-start-reverse" }, defs);
+    el("path", { d: "M0,0 L10,5 L0,10 z", class: cls }, m);
+  }
+
+  // Zones: only Aurora is in our private network.
+  const zones = el("g", {}, svg);
+  el("rect", { x: 430, y: 70, width: 790, height: 1070, rx: 14, class: "zone zone-region" }, zones);
+  el("rect", { x: 695, y: 930, width: 250, height: 120, rx: 10, class: "zone zone-vpc" }, zones);
+  text(zones, "VPC · private network", 708, 948, "zlabel");
+  text(zones, "Data API only · no network path", 708, 1041, "zlabel");
+  text(zones, "Lambda · managed services", 450, 1125, "zlabel");
+  text(zones, "AWS region", 1205, 1125, "zlabel", "end");
+  text(zones, "Internet", 30, 430, "zlabel");
+  text(zones, "AWS edge", 325, 410, "zlabel", "middle");
+
+  // Edges
+  const edgeLayer = el("g", {}, svg);
+  const edgeEls = {};
+  for (const e of EDGES) {
+    const side = SUPPORT.has(e.from) || SUPPORT.has(e.to) ? " support" : " main";
+    const g = el("g", { id: e.id, class: "edge" + (e.dashed ? " dashed" : "") + side }, edgeLayer);
+    if (e.hop) el("path", { d: pathD(e.p), class: "hop" }, g);
+    const ln = el("path", { d: pathD(e.p), class: "ln", "marker-end": "url(#arw)" }, g);
+    if (e.both) ln.setAttribute("marker-start", "url(#arw)");
+    for (const [str, x, y, a] of e.l) text(g, str, x, y, "", a);
+    edgeEls[e.id] = { g, ln, both: !!e.both };
+  }
+
+  // Nodes
+  const nodeLayer = el("g", {}, svg);
+  const nodeEls = {};
+  for (const id in NODES) {
+    const n = NODES[id];
+    const g = el("g", { id: "node-" + id, class: "node" + (SUPPORT.has(id) ? " support" : ""), tabindex: "0", role: "button", "aria-label": n.t + ": show details" }, nodeLayer);
+    el("rect", { x: n.x, y: n.y, width: n.w, height: n.h, rx: 6 }, g);
+    if (["webfn", "dispatcher", "reaper", "errorhandler", "build", "guard", "gpu"].includes(id)) {
+      el("circle", { cx: n.x + 10, cy: n.y + 10, r: 3.5, fill: id === "gpu" ? "var(--accent)" : "var(--private)", stroke: "var(--edge)", "stroke-width": 1 }, g);
+    }
+    const cx = n.x + n.w / 2;
+    if (!n.s) {
+      text(g, n.t, cx, n.y + n.h / 2 + 4.5, "t", "middle");
+    } else if (id === "s3") {
+      text(g, n.t, cx, n.y + 28, "t", "middle");
+      text(g, n.s, cx, n.y + 58, "s", "middle");
+      text(g, n.s2, cx, n.y + 78, "s", "middle");
+      text(g, "dataset/ + academic/", cx, n.y + 102, "s", "middle");
+    } else if (n.s2) {
+      const mid = n.y + n.h / 2;
+      text(g, n.t, cx, mid - 16, "t", "middle");
+      text(g, n.s, cx, mid + 4, "s", "middle");
+      text(g, n.s2, cx, mid + 22, "s", "middle");
+    } else {
+      const mid = n.y + n.h / 2;
+      text(g, n.t, cx, mid - 3, "t", "middle");
+      text(g, n.s, cx, mid + 14, "s", "middle");
+    }
+    g.addEventListener("click", () => selectNode(id));
+    g.addEventListener("keydown", ev => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); selectNode(id); } });
+    nodeEls[id] = g;
+  }
+
+  const packet = el("circle", { id: "packet", r: 6.5, cx: -20, cy: -20 }, svg);
+  packet.style.display = "none";
+
+  // ---- Highlighting -------------------------------------------------------
+  function clearHighlight() {
+    svg.classList.remove("focus");
+    for (const id in edgeEls) setEdgeOn(id, false);
+    for (const id in nodeEls) nodeEls[id].classList.remove("on", "sel");
+  }
+  function setEdgeOn(id, on) {
+    const { g, ln, both } = edgeEls[id];
+    g.classList.toggle("on", on);
+    const m = on ? "url(#arw-on)" : "url(#arw)";
+    ln.setAttribute("marker-end", m);
+    if (both) ln.setAttribute("marker-start", m);
+  }
+  function highlight(edgeIds, nodeIds) {
+    clearHighlight();
+    svg.classList.add("focus");
+    for (const id of edgeIds) {
+      setEdgeOn(id, true);
+      nodeEls[EDGE[id].from].classList.add("on");
+      nodeEls[EDGE[id].to].classList.add("on");
+    }
+    for (const id of nodeIds || []) nodeEls[id].classList.add("on");
+  }
+
+  // ---- Card ---------------------------------------------------------------
+  const card = document.getElementById("card");
+  function renderCard(id) {
+    if (!id) {
+      card.innerHTML = '<h2>Click a box to dig in</h2><p>See what it is, how we use it, alternatives and cost.</p><h3>See why it’s built this way</h3><p>Click a principle above to highlight its parts. Esc or empty space clears it.</p>';
+      return;
+    }
+    const n = NODES[id], c = CARDS[id];
+    card.innerHTML =
+      '<button class="card-close" id="cardClose" aria-label="Close">×</button>' +
+      '<h2>' + n.t + '</h2>' +
+      '<p class="core"><strong>' + c.core + '</strong></p>' +
+      '<h3>What it is</h3><p>' + c.what + '</p>' +
+      "<h3>How it's used here</h3><ul>" + c.here.map(x => '<li>' + x + '</li>').join('') + '</ul>' +
+      (c.alt ? '<h3>Why not something else?</h3>' + c.alt.map(x => '<p>' + x + '</p>').join('') : '') +
+      '<h3>Cost</h3><p>' + c.cost + '</p>';
+  }
+  let activePrinciple = null;
+  function resetPrinciple() {
+    activePrinciple = null;
+    document.querySelectorAll('.principle').forEach(b => b.setAttribute('aria-pressed', 'false'));
+  }
+  function showPrinciple(id) {
+    token++;
+    setAuto(false);
+    packet.style.display = 'none';
+    selected = null;
+    activePrinciple = id;
+    const p = PRINCIPLES[id];
+    document.querySelectorAll('.principle').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.principle === id)));
+    highlight(p.e, p.n);
+    card.innerHTML = '<button class="card-close" id="cardClose" aria-label="Close">×</button><h2>' + p.title + '</h2><p class="core">' + p.core + '</p><ul>' + p.points.map(x => '<li>' + x + '</li>').join('') + '</ul>';
+    card.classList.add('floating');
+    document.getElementById('cardClose').addEventListener('click', clearSelection);
+  }
+  function clearSelection() {
+    token++;
+    setAuto(false);
+    packet.style.display = 'none';
+    resetPrinciple();
+    selected = null;
+    clearHighlight();
+    card.classList.remove('floating');
+    renderCard(null);
+  }
+  document.querySelectorAll('.principle').forEach(b => b.addEventListener('click', () => {
+    if (activePrinciple === b.dataset.principle) clearSelection();
+    else showPrinciple(b.dataset.principle);
+  }));
+  let selected = null;
+  function selectNode(id) {
+    if (activePrinciple) { resetPrinciple(); clearHighlight(); }
+    selected = id;
+    renderCard(id);
+    card.classList.add("floating");  // floats over the diagram on screens too narrow for a side column
+    document.getElementById("cardClose").addEventListener("click", closeCard);
+    if (mode === "explore") {
+      const ids = EDGES.filter(e => e.from === id || e.to === id).map(e => e.id);
+      highlight(ids, [id]);
+    }
+    for (const k in nodeEls) nodeEls[k].classList.toggle("sel", k === id);
+  }
+  function closeCard() {
+    const was = selected;
+    selected = null;
+    card.classList.remove("floating");
+    renderCard(null);
+    for (const k in nodeEls) nodeEls[k].classList.remove("sel");
+    if (mode === "explore") clearHighlight();
+    if (was) nodeEls[was].focus();
+  }
+  document.addEventListener("keydown", ev => {
+    if (ev.key !== "Escape") return;
+    if (activePrinciple) clearSelection();
+    else if (PICKS[mode]) card.classList.remove("floating");
+    else if (selected) closeCard();
+  });
+  svg.addEventListener("click", ev => {
+    if (ev.target.closest(".node")) return;
+    if (activePrinciple) clearSelection();
+    else if (mode === "explore" && selected) closeCard();
+  });
+
+  document.addEventListener("click", ev => {
+    if (activePrinciple && !ev.target.closest("button, .node, .card")) clearSelection();
+  });
+
+  document.querySelectorAll(".seg").forEach(b => b.addEventListener("click", () => {
+    svg.classList.toggle("core", b.dataset.view === "main");
+    document.querySelectorAll(".seg").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
+  }));
+
+  // ---- Flows --------------------------------------------------------------
+  const reduced = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const countEl = document.getElementById("count");
+  const captionEl = document.getElementById("caption");
+  const controls = document.getElementById("controls");
+  const prevBtn = document.getElementById("prev");
+  const nextBtn = document.getElementById("next");
+  const autoBtn = document.getElementById("auto");
+  const exploreCaption = captionEl.textContent;
+  let mode = "explore", step = 0, token = 0, autoplay = false;
+
+  function animateAlong(pts, tok) {
+    return new Promise(resolve => {
+      const segs = [];
+      let total = 0;
+      for (let i = 1; i < pts.length; i++) {
+        const len = Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
+        segs.push([pts[i - 1], pts[i], len]);
+        total += len;
+      }
+      const speed = 300; // px per second
+      const start = performance.now();
+      packet.style.display = "";
+      function frame(now) {
+        if (tok !== token) return resolve(false);
+        let d = Math.min(((now - start) / 1000) * speed, total);
+        for (const [a, b, len] of segs) {
+          if (d <= len || len === 0) {
+            const f = len ? d / len : 1;
+            packet.setAttribute("cx", a[0] + (b[0] - a[0]) * f);
+            packet.setAttribute("cy", a[1] + (b[1] - a[1]) * f);
+            break;
+          }
+          d -= len;
+        }
+        if (((now - start) / 1000) * speed < total) requestAnimationFrame(frame);
+        else resolve(true);
+      }
+      requestAnimationFrame(frame);
+    });
+  }
+  const wait = ms => new Promise(r => setTimeout(r, ms));
+
+  async function runStep() {
+    resetPrinciple();
+    if (!PICKS[mode] && !selected) { renderCard(null); card.classList.remove("floating"); }
+    const tok = ++token;
+    const pick = PICKS[mode];
+    const flow = pick ? pick.items : FLOWS[mode];
+    const s = flow[step];
+    const items = s.e.map(x => Array.isArray(x) ? { id: x[0], rev: x[1] } : { id: x, rev: false });
+    highlight([...new Set(items.map(i => i.id))], s.n);
+    if (pick) {
+      countEl.textContent = pick.label + " " + (step + 1) + " of " + flow.length;
+      captionEl.textContent = pick.caption;
+      renderPick(pick, s);
+      picker.querySelectorAll(".pick").forEach((b, i) => b.setAttribute("aria-pressed", String(i === step)));
+    } else {
+      countEl.textContent = "Step " + (step + 1) + " of " + flow.length;
+      captionEl.textContent = s.c;
+    }
+    prevBtn.disabled = step === 0;
+    nextBtn.disabled = step === flow.length - 1;
+    // The step's path loops until the viewer moves on. With "Play all", one pass then the next step.
+    const animate = items.length > 0 && !reduced();
+    while (tok === token) {
+      if (animate) {
+        for (const it of items) {
+          const pts = it.rev ? [...EDGE[it.id].p].reverse() : EDGE[it.id].p;
+          if (!(await animateAlong(pts, tok))) return;
+          await wait(120);
+        }
+        packet.style.display = "none";
+      }
+      if (autoplay) {
+        await wait(animate ? 1800 : 4500);
+        if (tok !== token || !autoplay) return;
+        if (step < flow.length - 1) { step++; runStep(); }
+        else { setAuto(false); runStep(); }
+        return;
+      }
+      if (!animate) return;
+      await wait(900);
+    }
+  }
+  // Failure cases can be picked in any order.
+  const PICKS = {
+    fail: { items: FAILS, label: "Case", chip: "When things break",
+      caption: "Pick a case: what happens, how it’s caught, and what happens to the job and money.",
+      fields: [["How it’s caught", "caught"], ["The job and the money", "result"]] }
+  };
+  const picker = document.getElementById("picker");
+  function buildPicker(m) {
+    picker.innerHTML = "";
+    PICKS[m].items.forEach((f, i) => {
+      const b = document.createElement("button");
+      b.className = "pick";
+      b.textContent = f.name;
+      b.setAttribute("aria-pressed", "false");
+      b.addEventListener("click", () => { step = i; runStep(); });
+      picker.appendChild(b);
+    });
+  }
+  function renderPick(cfg, f) {
+    card.innerHTML =
+      '<button class="card-close" id="cardClose" aria-label="Close">×</button>' +
+      '<span class="chip"><i class="dot" style="background: var(--accent)"></i>' + cfg.chip + '</span>' +
+      '<h2>' + f.name + '</h2>' +
+      '<p class="core">' + f.what + '</p>' +
+      cfg.fields.map(([h, k]) => '<h3>' + h + '</h3><div class="case-answer">' + f[k] + '</div>').join('');
+    card.classList.add("floating");
+    document.getElementById("cardClose").addEventListener("click", () => card.classList.remove("floating"));
+  }
+  function setAuto(on) {
+    autoplay = on;
+    autoBtn.setAttribute("aria-pressed", String(on));
+    autoBtn.textContent = on ? "Pause" : "Play all";
+  }
+  function setMode(m) {
+    resetPrinciple();
+    mode = m;
+    token++;
+    setAuto(false);
+    packet.style.display = "none";
+    document.querySelectorAll(".tab").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.flow === m)));
+    picker.hidden = !PICKS[m];
+    if (PICKS[m]) buildPicker(m);
+    else {  // the card goes back to the selected box, or the overview
+      if (selected) selectNode(selected);
+      else { renderCard(null); card.classList.remove("floating"); }
+    }
+    if (m === "explore") {
+      controls.hidden = true;
+      countEl.textContent = "Explore";
+      captionEl.textContent = exploreCaption;
+      clearHighlight();
+      if (selected) selectNode(selected);
+    } else {
+      controls.hidden = !!PICKS[m];  // Failure cases are picked in any order.
+      step = 0;
+      runStep();
+    }
+  }
+
+  document.querySelectorAll(".tab").forEach(b => b.addEventListener("click", () => setMode(b.dataset.flow)));
+  prevBtn.addEventListener("click", () => { if (step > 0) { step--; runStep(); } });
+  nextBtn.addEventListener("click", () => { if (step < FLOWS[mode].length - 1) { step++; runStep(); } });
+  autoBtn.addEventListener("click", () => {
+    if (autoplay) { setAuto(false); runStep(); return; }
+    setAuto(true);
+    if (step === FLOWS[mode].length - 1) step = 0;
+    runStep();
+  });
+
+  setMode("explore");
+})();
+</script>
+</body></html>
