@@ -55,6 +55,7 @@ EXPECTED_TYPES = {
     "consented_at": OPTIONAL_DATETIME,
     "video_sha256": OPTIONAL_STR,
     "curve_rewarded_at": OPTIONAL_DATETIME,
+    "curve_reward_ref": OPTIONAL_STR,
     "dataset_purged_at": OPTIONAL_DATETIME,
     "dataset_removed_reason": OPTIONAL_STR,
     "report_state": OPTIONAL_STR,
@@ -155,8 +156,8 @@ def smoke(db):
         if not billing.issue_refund(db, refunded, "presign_failed", queued=True):
             problems.append("issue_refund returned False")
         balance = billing.get_balance(db, user_id)
-        if balance != {"available_cents": 230, "reserved_cents": 0}:
-            problems.append(f"balance {balance} after reserving {price}, capturing 270, refunding")
+        if balance != {"available_cents": 200, "reserved_cents": 0}:
+            problems.append(f"balance {balance} after reserving {price}, capturing 300, refunding")
         problems += check_invariant(db, user_id)
         with db.transaction() as tx:
             [row] = tx.execute(
