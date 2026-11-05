@@ -693,7 +693,14 @@ def create_app(
             for key, value in job.items()
             if key not in hidden and (key != "research_consent" or job["status"] == billing.DONE)
         }
-        return jsonify({**public, "updated_at": storage.utc_text(job["updated_at"])})
+        return jsonify(
+            {
+                **public,
+                "cancellable": job["status"] == billing.QUEUED
+                and job["verified_duration_ms"] is None,
+                "updated_at": storage.utc_text(job["updated_at"]),
+            }
+        )
 
     @app.route("/api/jobs/<job_id>/result")
     def job_result(job_id):

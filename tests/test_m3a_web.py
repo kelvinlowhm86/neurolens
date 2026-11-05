@@ -23,6 +23,7 @@ STATUS_KEYS = {
     "updated_at",
     "error_code",
     "error_message",
+    "cancellable",
 }
 
 

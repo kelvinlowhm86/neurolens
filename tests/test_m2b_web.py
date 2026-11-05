@@ -112,6 +112,27 @@ def test_status_returns_the_jobs_state_when_there_is_no_result(client, db, owned
     assert data["error_code"] is None
 
 
+def test_status_of_a_queued_undispatched_job_is_cancellable(client, db, owned):
+    job_id = owned()
+    data = client.get(f"/api/jobs/{job_id}/status").get_json()
+    assert data["cancellable"] is True
+
+
+def test_status_of_a_queued_dispatched_job_is_not_cancellable(client, db, owned):
+    job_id = owned()
+    assert billing.verify_queued(db, job_id, 27400, 120) == "ok"
+    data = client.get(f"/api/jobs/{job_id}/status").get_json()
+    assert data["cancellable"] is False
+    assert "verified_duration_ms" not in data
+
+
+def test_status_of_a_processing_job_is_not_cancellable(client, db, owned):
+    job_id = owned()
+    assert billing.claim(db, job_id) == 1
+    data = client.get(f"/api/jobs/{job_id}/status").get_json()
+    assert data["cancellable"] is False
+
+
 def test_status_of_a_rejected_job_is_failed_with_its_reason(client, db, owned):
     job_id = owned()
     attempt = billing.claim(db, job_id)
