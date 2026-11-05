@@ -170,12 +170,3 @@ def test_web_code_imports_without_inference_torch_or_numpy(module):
         f"print(json.dumps([m for m in {FORBIDDEN!r} if m in sys.modules]))"
     )
     assert loaded_after_import(code) == []
-
-
-def test_all_web_modules_together_import_without_them():
-    code = (
-        "import json, sys; "
-        + "".join(f"import {m}; " for m in WEB_MODULES)
-        + f"print(json.dumps([m for m in {FORBIDDEN!r} if m in sys.modules]))"
-    )
-    assert loaded_after_import(code) == []

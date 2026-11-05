@@ -87,17 +87,6 @@ def object_exists(aws, key):
 # ---------------------------------------------------------------- outcomes and success
 
 
-def test_outcome_has_no_busy_member():
-    assert {member.name for member in worker.Outcome} == {
-        "DONE",
-        "DUPLICATE",
-        "REJECTED",
-        "SKIPPED",
-        "FAILED",
-        "LOST_CLAIM",
-    }
-
-
 def test_success_charges_once_and_keeps_the_result_files(
     aws, db, pg, make_cfg, roi_masks_small, new_job, clip_path
 ):

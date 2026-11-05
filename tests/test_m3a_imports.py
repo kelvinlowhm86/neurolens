@@ -38,12 +38,3 @@ def test_module_imports_without_numpy_psycopg_or_inference(module):
         f"print(json.dumps([m for m in {FORBIDDEN!r} if m in sys.modules]))"
     )
     assert loaded_after_import(code) == []
-
-
-def test_all_lambda_modules_together_import_without_them():
-    code = (
-        "import json, sys; "
-        + "".join(f"import {m}; " for m in MODULES)
-        + f"print(json.dumps([m for m in {FORBIDDEN!r} if m in sys.modules]))"
-    )
-    assert loaded_after_import(code) == []

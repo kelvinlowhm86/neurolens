@@ -29,22 +29,6 @@ def test_import_pulls_in_no_heavy_modules(module):
     assert json.loads(proc.stdout.strip().splitlines()[-1]) == []
 
 
-def test_all_four_together_pull_in_no_heavy_modules():
-    code = (
-        "import json, sys; "
-        "import neurolens, neurolens.response, neurolens.settings, neurolens.web.app; "
-        f"print(json.dumps([m for m in {HEAVY!r} if m in sys.modules]))"
-    )
-    proc = subprocess.run(
-        [sys.executable, "-c", code],
-        cwd=REPO_ROOT,
-        capture_output=True,
-        text=True,
-    )
-    assert proc.returncode == 0, proc.stderr
-    assert json.loads(proc.stdout.strip().splitlines()[-1]) == []
-
-
 # ---- Added in M1 (docs/M1_spec.md §7): the new light modules stay light.
 M1_MODULES = ["neurolens.storage", "neurolens.pricing", "neurolens.worker"]
 

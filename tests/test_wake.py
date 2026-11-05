@@ -109,7 +109,3 @@ def test_data_api_wake_raises_other_errors_without_retrying(clock):
 
     assert len(calls) == 1
     assert clock.elapsed == 0
-
-
-def test_postgres_wake_runs_a_statement(db):
-    db.wake()

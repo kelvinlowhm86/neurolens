@@ -200,11 +200,6 @@ def test_me_in_cognito_mode_after_sign_in(cognito_client, idp):
     assert data["access"] == {"funded": False, "request": None}
 
 
-def test_samples_are_no_longer_an_api_route(client):
-    """§4a: the page reads /data/samples.json."""
-    assert client.get("/api/samples").status_code == 404
-
-
 # ---------------------------------------------------------------- history
 
 

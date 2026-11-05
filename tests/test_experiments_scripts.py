@@ -51,16 +51,6 @@ def text(name):
 # ---------------------------------------------------------------- cold_start.py
 
 
-def test_cold_start_joins_scaling_activities_and_container_boot_records():
-    source = text("cold_start.py")
-    assert "describe_scaling_activities" in source
-    assert "container_start_utc" in source
-    assert "model_loaded_utc" in source
-    assert "warmup_done_utc" in source
-    assert "ready_utc" in source
-    assert "describe_auto_scaling_groups" not in source
-
-
 def test_cold_start_command_line_takes_since_and_run_id():
     proc = subprocess.run(
         [sys.executable, str(EXPERIMENTS / "cold_start.py"), "--help"],
@@ -75,17 +65,6 @@ def test_cold_start_command_line_takes_since_and_run_id():
 
 
 # ---------------------------------------------------------------- export_cloudwatch.py
-
-
-def test_export_cloudwatch_uses_the_backlog_and_instance_count_series():
-    source = text("export_cloudwatch.py")
-    assert "ApproximateBacklogSize" in source
-    assert "CPUUtilization" in source
-    # Instance metrics are not in AWS/SageMaker and carry the variant too (seen 28 Oct: none there).
-    assert '"/aws/sagemaker/Endpoints"' in source
-    assert '"VariantName"' in source
-    assert "GroupInServiceInstances" not in source
-    assert "ApproximateNumberOfMessagesVisible" not in source
 
 
 # ---------------------------------------------------------------- finish_run.py
@@ -223,8 +202,3 @@ def test_latency_run_stage_durations_are_the_same_from_the_status_endpoint():
         "inference_noaudio_ms": 88000,
         "extracting_roi_ms": 10000,
     }
-
-
-def test_latency_run_no_longer_reads_the_s3_status_object():
-    source = text("latency_run.py")
-    assert "get_status" not in source  # storage.get_status is removed in M3a

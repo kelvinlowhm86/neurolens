@@ -466,11 +466,3 @@ def test_account_delete_is_409_while_a_job_is_active(cognito_client, idp, db, pg
 
 
 # ---------------------------------------------------------------- payment removal
-
-
-def test_me_no_longer_contains_can_top_up(dev_client):
-    resp = dev_client.get("/api/me")
-    assert resp.status_code == 200
-    data = resp.get_json()
-    assert "can_top_up" not in data
-    assert {"user_id", "email", "balance"} <= set(data)

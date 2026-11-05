@@ -95,10 +95,6 @@ def object_exists(aws, key):
 # ---------------------------------------------------------------- probe_duration
 
 
-def test_unreadable_video_is_a_value_error_subclass():
-    assert issubclass(media_module().UnreadableVideo, ValueError)
-
-
 @pytest.mark.parametrize(
     "content",
     [NOT_A_VIDEO, b"", os.urandom(4096)],

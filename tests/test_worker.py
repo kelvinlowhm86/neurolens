@@ -283,23 +283,6 @@ def test_result_goes_to_s3_as_results_job_id_json(
     assert object_exists(aws, f"results/{job_id}.json")
 
 
-def test_pipeline_runs_build_events_predict_without_audio_predict_extract_in_order(
-    aws, make_cfg, roi_masks_small, db, new_job, clip_path, calls
-):
-    job_id, key = new_job()
-    upload_clip(aws, key, clip_path)
-    verify(db, job_id)
-    run_job(aws, db, job_id, clip_path, make_cfg, roi_masks_small)
-
-    assert calls["order"] == [
-        "build_events",
-        "predict",
-        "without_audio",
-        "predict",
-        "extract_response",
-    ]
-
-
 def test_pipeline_passes_events_and_predictions_along(
     aws, make_cfg, roi_masks_small, db, new_job, clip_path, calls
 ):

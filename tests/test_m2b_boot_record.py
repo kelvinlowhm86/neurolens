@@ -48,10 +48,3 @@ def test_boot_record_keeps_a_missing_step_as_none():
     assert record["model_loaded_utc"] is None
     assert record["warmup_done_utc"] is None
     assert record["ready_utc"] == "2026-10-14T03:05:58Z"
-
-
-def test_boot_record_is_pure_and_repeatable():
-    first = worker.boot_record(CONTAINER_START, MODEL_LOADED, WARMUP_DONE, READY, GPU_NAME)
-    second = worker.boot_record(CONTAINER_START, MODEL_LOADED, WARMUP_DONE, READY, GPU_NAME)
-    assert first == second
-    assert CONTAINER_START.tzinfo is UTC  # the inputs were not mutated

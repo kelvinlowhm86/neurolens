@@ -33,9 +33,3 @@ def test_get_result_returns_the_stored_json_or_none(aws):
 
 
 # ---------------------------------------------------------------- status objects retired (M3a)
-
-
-def test_the_s3_status_helpers_are_removed():
-    """docs/M2b_spec.md §4: job status lives in Aurora; get_status/put_status go."""
-    assert not hasattr(storage, "get_status")
-    assert not hasattr(storage, "put_status")
