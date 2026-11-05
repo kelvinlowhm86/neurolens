@@ -49,31 +49,66 @@ down.
 
 1. Terraform 1.10 or newer: `brew tap hashicorp/tap && brew install hashicorp/tap/terraform`.
 2. The AWS command-line tool (`aws --version`).
-3. A named AWS profile `neurolens` in `~/.aws` (`aws configure --profile neurolens`). **Never
-   paste keys into chat, git or a Docker image.**
-4. Python 3.12 for the repo (`AGENTS.md`) and `git`.
+3. A named AWS profile in `~/.aws` (`aws configure --profile neurolens`). For Brandon's account,
+   use the profile `neurolens-brandon`. **Never paste keys into chat, git or a Docker image.**
+4. Python 3.12 for the repo (`AGENTS.md`) and `git`. Set up the repo's virtual environment (the
+   operator scripts `apply_schema.py`, `grant_credit.py` and the others use it), from the repo
+   root:
+   ```bash
+   python3.12 -m venv .venv && source .venv/bin/activate && pip install -e . -r requirements/dev.txt
+   ```
 5. Quotas and accounts (console; quota requests can take days):
    - SageMaker endpoint quota for `ml.g6e.xlarge` (1 is enough: the app runs one GPU at a time).
    - Lambda concurrency: if the account's limit is well below 1,000, request 1,000 (free).
    - A HuggingFace read token for the model weights (it goes in the repo's git-ignored `.env`
-     as `HF_TOKEN`, see `.env.example`) and a Google OAuth client for sign-in.
-6. Secrets in Parameter Store (`SecureString`, never in git or Terraform files):
-   `/neurolens/terraform/google_client_secret`,
-   `/neurolens/web/flask_secret_key` (at least 32 random bytes) and
-   `/neurolens/web/youtube_api_key` (a YouTube Data API v3 key, restricted to that API, no
-   billing; the site does not start without it).
+     as `HF_TOKEN`, see `.env.example`).
+   - A Google OAuth client for sign-in: in the Google Cloud console, set up the OAuth consent
+     screen first if asked, then APIs & Services > Credentials > Create OAuth client ID > type
+     "Web application". This gives `google_client_id`; its secret is stored in item 6. The
+     redirect URI is added after the first apply (§2f).
+   - A YouTube Data API v3 key: in the same Google Cloud project, enable "YouTube Data API v3",
+     then Credentials > Create API key and restrict the key to that API. No billing is needed.
+     The key is stored in item 6.
+6. Secrets in Parameter Store (`SecureString`, never in git or Terraform files). Run each command
+   from the repo root with the profile variables below exported; the value is not echoed.
+
+   Google OAuth client secret (from item 5):
+   ```bash
+   read -rs S && aws ssm put-parameter --name /neurolens/terraform/google_client_secret \
+     --type SecureString --value "$S" --overwrite && unset S
+   ```
+
+   Flask session key (generated, at least 32 random bytes):
+   ```bash
+   python3 -c "import secrets; print(secrets.token_hex(32))" | {
+     read -r S && aws ssm put-parameter --name /neurolens/web/flask_secret_key \
+       --type SecureString --value "$S" --overwrite
+   }
+   ```
+
+   YouTube Data API v3 key (from item 5; the site does not start without it):
+   ```bash
+   read -rs S && aws ssm put-parameter --name /neurolens/web/youtube_api_key \
+     --type SecureString --value "$S" --overwrite && unset S
+   ```
 7. Optional: an AWS Budget alert (Billing, Budgets), at an amount the account owner chooses.
 8. In the console, with the region set to us-east-1, open Bedrock and submit Anthropic's
    use-case form if asked; Claude Sonnet 4.6 must answer in the playground.
 
-Every command runs with this profile:
+Every command runs with these three variables exported. `AWS_PROFILE` is read by `aws` and
+`terraform`; `NEUROLENS_AWS_PROFILE` is read only by the `infra/*.sh` scripts (they ignore
+`.env`); `AWS_REGION` is the region. Use the same profile name for the first two:
 
 ```bash
-export AWS_PROFILE=neurolens
+export AWS_PROFILE=neurolens              # e.g. neurolens-brandon for Brandon's account
+export NEUROLENS_AWS_PROFILE=neurolens    # the same value: infra/*.sh read only this
+export AWS_REGION=us-east-1
 aws sts get-caller-identity      # check the account ID before anything else
 ```
 
 ## 1. Create the state bucket (once, by hand)
+
+From the repo root:
 
 ```bash
 ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
@@ -85,37 +120,56 @@ aws s3api put-public-access-block --bucket "$STATE_BUCKET" \
   BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
 ```
 
-Copy `backend.hcl.example` to `backend.hcl` and put that bucket name in it.
+Copy the backend example and put that bucket name in it (from the repo root):
+
+```bash
+cp infra/terraform/backend.hcl.example infra/terraform/backend.hcl
+```
 
 ## 2. Create the resources
 
+From the repo root:
+
 ```bash
-cd infra/terraform
-cp terraform.tfvars.example terraform.tfvars    # bucket_name, region, zones, alert_email, auth, google
-../build_web_lambda.sh                          # the web function's zip: the first apply needs it
-../build_ffprobe_layer.sh                       # the dispatcher's ffprobe layer: so does it
-../build_report_layer.sh                        # the report function's Anthropic SDK layer: so does it
-terraform init -backend-config=backend.hcl
-terraform plan                                  # read it: only creates on an empty account
-terraform apply
-terraform apply                                 # again: should report "No changes"
+cp infra/terraform/terraform.tfvars.example infra/terraform/terraform.tfvars
+infra/build_web_lambda.sh                       # the web function's zip: the first apply needs it
+infra/build_ffprobe_layer.sh                    # the dispatcher's ffprobe layer: so does it
+infra/build_report_layer.sh                     # the report function's Anthropic SDK layer: so does it
+terraform -chdir=infra/terraform init -backend-config=backend.hcl
+terraform -chdir=infra/terraform plan           # read it: only creates on an empty account
+terraform -chdir=infra/terraform apply
+terraform -chdir=infra/terraform apply          # again: should report "No changes"
 ```
 
-`zones` are the private subnets for Aurora (at least two). `alert_email` receives the alarms;
-click the confirmation email AWS sends or no alarm can reach you.
+`zones` are the private subnets for Aurora (at least two). `alert_email` receives the alarms and
+early-access notices; AWS sends two confirmation emails after the first apply (one per topic,
+`alarm.tf` and `web.tf`). Click both, or alarms and early-access notices are silently dropped.
 
-`terraform output` prints `region`, `bucket_name`, `gpu_endpoint` and the database
-values. Put them in the git-ignored `.env` at the repo root as `NEUROLENS_AWS_REGION`,
+`terraform -chdir=infra/terraform output` prints `region`, `bucket_name`, `gpu_endpoint` and the
+database values. Put them in the git-ignored `.env` at the repo root as `NEUROLENS_AWS_REGION`,
 `NEUROLENS_S3_BUCKET`, `NEUROLENS_GPU_ENDPOINT`,
 `NEUROLENS_DB_CLUSTER_ARN`, `NEUROLENS_DB_SECRET_ARN` and `NEUROLENS_DB_NAME`
 (see `.env.example`).
 
 ## 2f. Sign-in (M3b)
 
+Run §2e first: sign-in writes to its tables.
+
 After the first apply:
 
-1. Add `google_redirect_uri` as an authorised redirect URI in the Google OAuth client.
-2. Copy the Cognito app client's secret into `/neurolens/web/cognito_client_secret`.
+1. Add `google_redirect_uri` (from `terraform -chdir=infra/terraform output -raw google_redirect_uri`)
+   as an authorised redirect URI in the Google OAuth client.
+2. Store the Cognito app client's secret in Parameter Store. Find it in the Cognito console (user
+   pool, App integration, App clients, the client, "Client secret"), or with
+   `aws cognito-idp describe-user-pool-client --user-pool-id <pool id> --client-id <client id>
+   --query UserPoolClient.ClientSecret --output text`: the pool ID is the last part of
+   `terraform -chdir=infra/terraform output -raw cognito_issuer`, the client ID is
+   `terraform -chdir=infra/terraform output -raw cognito_client_id`. From the repo
+   root:
+   ```bash
+   read -rs S && aws ssm put-parameter --name /neurolens/web/cognito_client_secret \
+     --type SecureString --value "$S" --overwrite && unset S
+   ```
 3. `infra/deploy_web.sh` publishes the site; open `sign_in_test_url` and sign in once with Google
    and once with email and password.
 
@@ -124,18 +178,43 @@ After the first apply:
 `infra/worker_image/Dockerfile` pins AWS's PyTorch base image by digest. To move to a newer one,
 look up its digest (the deploy user may read that repository) and replace tag and digest there:
 
+From the repo root:
+
 ```bash
 aws ecr batch-get-image --region us-east-1 --registry-id 763104351884 \
   --repository-name pytorch-inference --image-ids imageTag=2.6.0-gpu-py312-cu124-ubuntu22.04-sagemaker \
   --query 'images[0].imageId.imageDigest' --output text
 ```
 
-Then, from the repo root:
+### Model files in a new account
+
+A new account's bucket has no `models/` prefix, so `make_model_data.sh` cannot run there. Instead
+copy `model-data/` from an existing deployment's bucket, server-side.
+
+The new bucket exists only after the first apply, and the GPU endpoint (created when
+`worker_image` is set) reads `model-data/` whenever an instance starts. So: first apply with
+`worker_image` empty (no endpoint; `sagemaker.tf`), copy the files, then build the image and apply
+again with `worker_image` set.
+
+1. The owner of the existing bucket temporarily allows the new account's deploy user to read
+   `model-data/`: add a bucket policy statement granting `s3:ListBucket` on the bucket with
+   prefix `model-data/` and `s3:GetObject` on `model-data/*`, with Principal = the new deploy
+   user's ARN.
+2. With the NEW account's profile, from the repo root, sync and check that the object counts and
+   total sizes match:
+   ```bash
+   aws s3 sync s3://<old-bucket>/model-data/ s3://<new-bucket>/model-data/
+   aws s3 ls s3://<old-bucket>/model-data/ --recursive --summarize
+   aws s3 ls s3://<new-bucket>/model-data/ --recursive --summarize
+   ```
+3. Remove the temporary statement at once.
+
+Then, from the repo root (an existing deployment, whose bucket already has `models/`):
 
 ```bash
 infra/make_model_data.sh        # once: copies models/ to model-data/ without blobs/, checks counts
 infra/build_image.sh            # zips HEAD, builds in CodeBuild, prints the image digest
-# put the digest in terraform.tfvars as worker_image = "sha256:..."
+# put the digest in infra/terraform/terraform.tfvars as worker_image = "sha256:..."
 terraform -chdir=infra/terraform apply
 ```
 
@@ -151,10 +230,12 @@ The container's logs are in CloudWatch at `/aws/sagemaker/Endpoints/neurolens`; 
 pauses 5 minutes after its last use and wakes in about 15 s on the next call. Everything reaches it
 through the RDS Data API; the password lives in Secrets Manager.
 
-After the first apply:
+After the first apply, from the repo root:
 
 ```bash
-terraform -chdir=infra/terraform output db_cluster_arn db_secret_arn db_name
+terraform -chdir=infra/terraform output -raw db_cluster_arn
+terraform -chdir=infra/terraform output -raw db_secret_arn
+terraform -chdir=infra/terraform output -raw db_name
 # copy the three into .env as NEUROLENS_DB_CLUSTER_ARN, NEUROLENS_DB_SECRET_ARN, NEUROLENS_DB_NAME
 python infra/apply_schema.py --backend data_api
 python infra/check_aurora.py --backend data_api     # PASS expected
@@ -162,16 +243,19 @@ python infra/check_aurora.py --backend data_api     # PASS expected
 
 ## 2c. Applying a saved plan
 
+From the repo root:
+
 ```bash
-cd infra/terraform
-terraform plan -out=tfplan
-terraform apply tfplan
-rm tfplan
+terraform -chdir=infra/terraform plan -out=tfplan
+terraform -chdir=infra/terraform apply tfplan
+rm infra/terraform/tfplan
 ```
 
 `terraform validate` checks the files are well formed and costs nothing.
 
 ## 3. Check it
+
+Any directory (no repo files needed):
 
 ```bash
 aws s3api get-bucket-lifecycle-configuration --bucket <bucket_name>
@@ -185,12 +269,13 @@ The dashboard is CloudWatch > Dashboards > neurolens (free for the first 3 dashb
 
 ## 4. Add a browser address later
 
-Add it to `allowed_origins` in `terraform.tfvars` and `terraform apply`.
+Add it to `allowed_origins` in `infra/terraform/terraform.tfvars` and run
+`terraform -chdir=infra/terraform apply`.
 
 ## 5. A work session: start and stop
 
 Nothing runs between sessions. The endpoint's normal state is max 1; an upload starts a GPU by
-itself and it stops 7 idle minutes after the last job.
+itself and it stops 7 idle minutes after the last job. From the repo root:
 
 ```bash
 infra/start_work.sh                     # normal state: max 1, scale out on demand
@@ -212,4 +297,4 @@ A running job dies and is refunded. `start_work.sh` puts the maximum back to 1.
 
 ## 6. Tear down
 
-Follow `docs/M4_spec.md` §6 (nine steps, in order, in every account that holds a deployment).
+Follow `docs/M4_spec.md` §6 for the steps, their order, and which steps run in each account.

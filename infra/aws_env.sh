@@ -15,3 +15,10 @@ case "$NEUROLENS_AWS_REGION" in
      exit 1 ;;
 esac
 export AWS_REGION="$NEUROLENS_AWS_REGION"
+if ! AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text 2>/dev/null) \
+   || [ -z "$AWS_ACCOUNT_ID" ]; then
+  echo "Cannot read the AWS account for profile '$AWS_PROFILE'. Check that the profile exists and its credentials work:" >&2
+  echo "  AWS_PROFILE=$AWS_PROFILE aws sts get-caller-identity" >&2
+  exit 1
+fi
+echo "AWS profile $AWS_PROFILE, account $AWS_ACCOUNT_ID, region $AWS_REGION" >&2

@@ -1,7 +1,8 @@
 # Experiments
 
 The report experiments and the side trials. Each script's docstring has its columns and options.
-Experiments 1–3 have not been run yet. The side trials' results are local under
+Run them from the repo root with the profile variables from `infra/terraform/README.md` §0
+exported. Experiments 1–3 have not been run yet. The side trials' results are local under
 `data/experiment_results/` (git-ignored).
 
 ## Report experiments
@@ -18,9 +19,14 @@ Each run writes `experiments/<experiment>/<run_id>/` in the S3 bucket; `finish_r
 
 ### Experiment 2 — load bursts (laptop; AWS for the series)
 
-- `locustfile.py` — Locust load generator; `CLIP` is required. Each user does one job, so a burst
-  of N users is N simultaneous jobs. Writes per-job times to `JOBS_CSV` and request stats to
-  Locust's `--csv` files.
+- `locustfile.py` — Locust load generator; `CLIP` is required. Install with
+  `pip install -r requirements/experiments.txt`. Each user does one job, so a burst of N users is
+  N simultaneous jobs. Writes per-job times to `JOBS_CSV` and request stats to Locust's `--csv`
+  files. Example:
+  ```bash
+  CLIP=data/videos/<clip>.mp4 BURST_SIZE=5 JOBS_CSV=jobs.csv locust -f experiments/locustfile.py \
+      --headless -u 5 -r 5 --host http://localhost:5003 --csv locust --run-time 3h
+  ```
 - `export_cloudwatch.py <run_id> --start ... --end ...` — writes the one-minute backlog and
   instance-count series to `experiment-2/<run_id>/cloudwatch.csv`.
 - `cold_start.py --since ... --run-id ... --instance-type ...` — joins the workers' boot records
@@ -44,12 +50,15 @@ CSV's `gpu_name` names a different card.
 
 ## Side trials (local)
 
-- `crop_vs_pad.py CLIP [CLIP ...]` — compares cropped with letterboxed frames; `crop_vs_pad.sbatch`
-  runs it on Slurm. Reads `data/videos/gaze/*.mp4`, writes `data/experiment_results/crop_vs_pad/`.
-- `gaze_trial.py CLIP [CLIP ...]` — ViNet-S saliency heatmaps; `gaze_trial.sbatch` runs it on Slurm
-  and fetches the model. Reads `data/videos/gaze/*.mp4`, writes `data/experiment_results/gaze_trial/`.
-- `run_clips.py CLIP [CLIP ...]` — brain response for local clips; `run_clips.sbatch` runs it on
-  Slurm, and it also works on a laptop with `FAKE_INFERENCE=1`. Reads `data/videos/cerave_*.mp4`,
-  writes `data/experiment_results/run_clips_cerave/`.
+- `crop_vs_pad.py CLIP [CLIP ...] --out data/experiment_results/crop_vs_pad` — compares cropped
+  with letterboxed frames; `crop_vs_pad.sbatch` runs it on Slurm. Reads `data/videos/gaze/*.mp4`,
+  writes `data/experiment_results/crop_vs_pad/`.
+- `gaze_trial.py CLIP [CLIP ...] --out data/experiment_results/gaze_trial` — ViNet-S saliency
+  heatmaps; `gaze_trial.sbatch` runs it on Slurm and fetches the model. Reads
+  `data/videos/gaze/*.mp4`, writes `data/experiment_results/gaze_trial/`.
+- `run_clips.py CLIP [CLIP ...] --out data/experiment_results/run_clips_cerave` — brain response
+  for local clips; `run_clips.sbatch` runs it on Slurm, and it also works on a laptop with
+  `FAKE_INFERENCE=1`. Reads `data/videos/cerave_*.mp4`, writes
+  `data/experiment_results/run_clips_cerave/`.
 
 The `*.sbatch` files are Slurm submission scripts; submit them from the repo root.

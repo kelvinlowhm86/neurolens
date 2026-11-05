@@ -33,8 +33,8 @@ A drop-in table at STePS: visitors try NeuroLens on a team laptop, then fill in 
   questions. `docs/study/booth_survey_qr.svg` (and `.png`) is the form's QR code for the table card;
   the site's "Give feedback" link opens the same form.
 - **Account:** one booth account, signed in on the booth laptop, given enough minutes beforehand with
-  `infra/grant_credit.py`. Visitors use the samples or upload a short clip from the team's devices or
-  their own.
+  `infra/grant_credit.py <dollars> --backend data_api`. Visitors use the samples or upload a short
+  clip from the team's devices or their own.
 - **GPU:** `infra/start_work.sh --keep-warm --hours 4` at least 15 minutes before opening (a cold
   GPU takes about 10 minutes), then one short warm-up upload. `infra/stop_work.sh` at closing.
 - **After the booth:** delete the booth account's jobs from History (or the account itself), so
@@ -71,28 +71,45 @@ conflicts with the teammate who changed the file, and check that `pytest` passes
 ## 6. Teardown (only when the team decides)
 Nothing is deleted on a date. In order, each step checked before the next:
 1. `infra/stop_work.sh` prints ALL STOPPED.
-2. Copy anything the report still needs from `s3://<bucket>/experiments/` to the laptop, then
-   empty the bucket.
-3. Delete the images in the `neurolens-worker` ECR repository (Terraform cannot delete a
-   repository that still holds images).
+2. Delete every image in the `neurolens-worker` ECR repository, tagged and untagged
+   (`aws ecr list-images --repository-name neurolens-worker --filter tagStatus=ANY`, then
+   `aws ecr batch-delete-image`). Terraform cannot delete a repository that still holds images.
+3. Copy anything the report still needs from `s3://<bucket>/experiments/` to the laptop. Then
+   empty the bucket and abort incomplete multipart uploads (`aws s3api list-multipart-uploads` /
+   `aws s3api abort-multipart-upload`). Do this just before `terraform destroy`: the site keeps
+   writing until then.
 4. `terraform destroy` in `infra/terraform/`. This removes the database (no final snapshot), the
    sign-in user pool and its emails, the GPU endpoint, the Lambdas and the site.
 5. Delete the Parameter Store entries made by hand (Terraform does not remove them):
    `/neurolens/terraform/google_client_secret`, `/neurolens/web/flask_secret_key`,
    `/neurolens/web/cognito_client_secret` and `/neurolens/web/youtube_api_key`; then check that
-   nothing under `/neurolens/` is left, and delete the Terraform state bucket.
+   nothing under `/neurolens/` is left. The Terraform state bucket is versioned: delete every
+   object version and delete marker first (`aws s3api list-object-versions` + `delete-objects`,
+   repeat until empty), then delete the bucket. It holds old Terraform state (secrets included),
+   so this matters.
 6. Outside AWS: delete the Google OAuth client, revoke the HuggingFace token, delete the YouTube
    API key (or its Google Cloud project), and delete the Google Form once the report is graded.
-7. Check that nothing tagged `Project=neurolens` is left.
-8. Last, as part of the same teardown: delete the deploy user's access keys (in a borrowed
-   account, the account owner deletes the user and the five `neurolens-*` policies), and remove
-   that account's profile from the laptop's `~/.aws/credentials` and `~/.aws/config`.
+   Also delete the form's linked response Sheet and any downloaded exports, and the Apps Script
+   project that built the form (`docs/study/make_form.gs`).
+7. Check that nothing tagged `Project=neurolens` is left
+   (`aws resourcegroupstaggingapi get-resources --tag-filters Key=Project,Values=neurolens`). The
+   tag check misses some resources, so also check explicitly: Secrets Manager has no
+   `rds!cluster-*` secret left (RDS deletes its own secret with the cluster; delete one that
+   remains with `--force-delete-without-recovery`); no SageMaker endpoint configurations or models
+   named `neurolens*`; nothing in Parameter Store under `/neurolens/`; and no `neurolens-*` IAM
+   roles.
+8. Last, as part of the same teardown, the ACCOUNT OWNER (the deploy user cannot delete itself)
+   deletes the deploy user and the five `neurolens-*` policies. In a borrowed account the owner
+   does this; in Josh's own account Josh does the same as owner. Remove the deployer's profile
+   from every laptop that used it (`~/.aws/credentials` and `~/.aws/config`).
 9. On every laptop that deployed: delete `.env` (it holds the revoked tokens), and
    `infra/terraform/backend.hcl`, `terraform.tfvars` and `.terraform/` (they name the deleted
-   account and state bucket); remove the local test database container if one was made
-   (`docker rm -f neurolens-test-pg`).
+   account and state bucket); remove the local test database container and its data with
+   `docker rm -fv neurolens-test-pg`; and delete a stored HuggingFace login token if one exists
+   (`~/.cache/huggingface/token`). The team's own sample videos and `data/output/` may be kept.
 
-Run all nine steps in both accounts, Brandon's and Josh's backup, when the course ends.
+Run steps 1-5, 7 and 8 in each account (Brandon's, then Josh's backup), step 6 once, and step 9 on
+every laptop that deployed.
 
 ## 7. Acceptance criteria
 1. The STePS booth ran, and its survey responses are exported and summarised.

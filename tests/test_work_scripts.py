@@ -141,6 +141,8 @@ if key == "sagemaker describe-endpoint":
         else:
             status = w.get("status", "InService")
         out(f"{status}\t{w.get('desired', w['instances'])}\t{w['instances']}")
+if key == "sts get-caller-identity":
+    out("123456789012")
 print("fake aws: unexpected call: " + " ".join(args), file=sys.stderr)
 sys.exit(99)
 """

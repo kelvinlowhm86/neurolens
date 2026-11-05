@@ -1,13 +1,14 @@
 # Infra
 
-Operator scripts and the AWS resources they drive. AWS commands run with the `neurolens` profile.
+Operator scripts and the AWS resources they drive. AWS commands run with the profile from
+`terraform/README.md` §0 (`neurolens`, or `neurolens-brandon` for Brandon's account).
 
 ## Every work session
 
 - `start_work.sh` — starts processing: normal on-demand state, or `--keep-warm [--hours 1-4]` for one GPU now.
 - `stop_work.sh` — emergency pause: no GPU may start or stay on; prints ALL STOPPED only when proven.
-- `grant_credit.py` — gives a user credit by email (the email is asked for at a prompt).
-- `access_requests.py` — lists or declines early-access requests by email.
+- `grant_credit.py 5 --backend data_api` — gives a user credit by email (the email is asked for at a prompt); the amount is dollars.
+- `access_requests.py list --backend data_api` — lists or declines early-access requests by email.
 - `check_aurora.py` — checks the database code on the real database with throwaway jobs and sign-ins.
 - `aws_env.sh` — sourced by the AWS scripts; sets the profile and region from Terraform.
 

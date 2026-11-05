@@ -13,16 +13,18 @@ zones  = ["us-east-1a", "us-east-1b", "us-east-1c", "us-east-1d"]
 # Where the GPU and Lambda alarms email you.
 alert_email = "you@example.com"
 
-# From M3e the GPU is a SageMaker endpoint. Build the image first (infra/build_image.sh prints
-# its digest), then put the digest here and apply again. Empty: no endpoint is created.
+# From M3e the GPU is a SageMaker endpoint. In a new account, copy model-data/ first
+# (infra/terraform/README.md §2b, "Model files in a new account"): apply with this empty, copy,
+# then build and apply with the digest. Build the image with infra/build_image.sh (it prints its
+# digest), then put the digest here and apply again. Empty: no endpoint is created.
 # worker_image   = "sha256:REPLACE-WITH-THE-BUILT-IMAGE-DIGEST"
 # max_instances  = 1          # stays 1: the app runs one GPU at a time
 # log_retention_days = 90     # while developing; 14 once live
 
-# M3b sign-in (§2a). The Cognito page prefix (unique in the region, lowercase, no "aws",
-# "amazon" or "cognito"), e.g. "neurolens-<something of yours>":
-# auth_domain_prefix = "neurolens-REPLACE-ME"
-# The Google OAuth client's ID (not secret). Its secret lives in Parameter Store, stored once:
-#   read -rs S && aws ssm put-parameter --name /neurolens/terraform/google_client_secret \
-#     --type SecureString --value "$S" --overwrite && unset S
-# google_client_id = "1234567890-abc.apps.googleusercontent.com"
+# Required: M3b sign-in (§2a).
+# The Cognito page prefix (unique in the region, lowercase, no "aws", "amazon" or "cognito"),
+# e.g. "neurolens-<something of yours>":
+auth_domain_prefix = "neurolens-REPLACE-ME"
+# The Google OAuth client's ID (not secret). Its secret lives in Parameter Store, stored once
+# (infra/terraform/README.md §0):
+google_client_id = "1234567890-abc.apps.googleusercontent.com"
