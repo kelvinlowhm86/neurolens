@@ -171,7 +171,7 @@ svg.focus .node:not(.on) { opacity: 0.35; }
   <div class="main">
     <div class="diagram">
       <p class="pan-hint">Swipe the diagram sideways to see every box.</p>
-      <svg id="arch" class="core" viewBox="0 0 1240 1160" role="img" aria-label="NeuroLens architecture: CloudFront serves the page from S3 and forwards API calls to Flask on Lambda. Cognito handles sign-in with Google. Uploads go straight to S3, then SQS triggers the dispatcher to check and price the video before sending it to SageMaker Asynchronous Inference. Scaling alarms start at most one GPU and stop it after seven idle minutes. The container claims jobs, saves results and charges or refunds. An SNS error notification reaches the error handler. A GPU guard and hourly reaper cover missed failures. Aurora alone sits in the private network, reached only through the Data API."></svg>
+      <svg id="arch" class="core" viewBox="0 0 1240 1160" role="img" aria-label="NeuroLens architecture: CloudFront serves the page from S3 and forwards API calls to Flask on Lambda. Cognito handles sign-in with Google. Uploads go straight to S3, then SQS triggers the dispatcher to check and price the video before sending it to SageMaker Asynchronous Inference and starting the GPU. Scaling alarms and the guard stop it after seven idle minutes. The container claims jobs, saves results and charges or refunds. A report Lambda sends the result's frames and numbers to Claude on Bedrock when asked. An SNS error notification reaches the error handler. A GPU guard and a reaper every three hours cover missed failures. Aurora alone sits in the private network, reached only through the Data API."></svg>
       <div class="legend">
         <span><svg viewBox="0 0 34 12" aria-hidden="true"><line x1="1" y1="6" x2="33" y2="6" stroke="currentColor" stroke-width="1.5"/></svg>request or data</span>
         <span><svg viewBox="0 0 34 12" aria-hidden="true"><line x1="1" y1="6" x2="33" y2="6" stroke="currentColor" stroke-width="1.5" stroke-dasharray="5 4"/></svg>control signal</span>
@@ -257,7 +257,7 @@ svg.focus .node:not(.on) { opacity: 0.35; }
     "w": 210,
     "h": 84,
     "t": "Reaper",
-    "s": "Lambda · hourly",
+    "s": "Lambda · every 3 hours",
     "s2": "refund · delete · clean up"
   },
   "s3": {
@@ -266,8 +266,8 @@ svg.focus .node:not(.on) { opacity: 0.35; }
     "w": 220,
     "h": 125,
     "t": "S3 bucket",
-    "s": "uploads: deleted after job",
-    "s2": "results: 30d · shared: 3y"
+    "s": "uploads + results: 30d",
+    "s2": "shared copies: 3y"
   },
   "sqs": {
     "x": 710,
@@ -284,7 +284,7 @@ svg.focus .node:not(.on) { opacity: 0.35; }
     "h": 90,
     "t": "GPU",
     "s": "SageMaker Async · g6e L40S",
-    "s2": "own queue · at most one GPU"
+    "s2": "fallback GPUs · at most one"
   },
   "errorsns": {
     "x": 710,
@@ -333,6 +333,15 @@ svg.focus .node:not(.on) { opacity: 0.35; }
     "h": 64,
     "t": "Scaling alarms",
     "s": "CloudWatch · start / stop"
+  },
+  "report": {
+    "x": 980,
+    "y": 350,
+    "w": 220,
+    "h": 84,
+    "t": "AI report",
+    "s": "Lambda · Bedrock",
+    "s2": "Claude reads frames + numbers"
   },
   "guard": {
     "x": 980,
@@ -1190,7 +1199,11 @@ svg.focus .node:not(.on) { opacity: 0.35; }
         289
       ],
       [
-        1090,
+        1205,
+        289
+      ],
+      [
+        1205,
         465
       ],
       [
@@ -1210,6 +1223,109 @@ svg.focus .node:not(.on) { opacity: 0.35; }
         "middle"
       ]
     ]
+  },
+  {
+    "id": "e_report",
+    "from": "webfn",
+    "to": "report",
+    "p": [
+      [
+        660,
+        352
+      ],
+      [
+        680,
+        352
+      ],
+      [
+        680,
+        300
+      ],
+      [
+        1090,
+        300
+      ],
+      [
+        1090,
+        350
+      ]
+    ],
+    "l": [
+      [
+        "asks for a report",
+        800,
+        293,
+        "middle"
+      ]
+    ]
+  },
+  {
+    "id": "e_reportdb",
+    "from": "report",
+    "to": "aurora",
+    "p": [
+      [
+        1080,
+        434
+      ],
+      [
+        1080,
+        450
+      ],
+      [
+        960,
+        450
+      ],
+      [
+        960,
+        990
+      ],
+      [
+        930,
+        990
+      ]
+    ],
+    "l": [
+      [
+        "report state",
+        966,
+        490,
+        "start"
+      ]
+    ],
+    "dashed": true
+  },
+  {
+    "id": "e_report_s3",
+    "from": "report",
+    "to": "s3",
+    "p": [
+      [
+        980,
+        392
+      ],
+      [
+        965,
+        392
+      ],
+      [
+        965,
+        210
+      ],
+      [
+        930,
+        210
+      ]
+    ],
+    "l": [
+      [
+        "frames + report",
+        958,
+        280,
+        "end"
+      ]
+    ],
+    "both": true
   },
   {
     "id": "e_secret",
@@ -1241,14 +1357,14 @@ svg.focus .node:not(.on) { opacity: 0.35; }
   }
 ];
   const EDGE = Object.fromEntries(EDGES.map(e => [e.id, e]));
-  const SUPPORT = new Set(["google", "dlq", "reaper", "errorsns", "errorhandler", "build", "ecr", "cw", "guard", "sns", "secrets"]);
+  const SUPPORT = new Set(["google", "dlq", "reaper", "errorsns", "errorhandler", "build", "ecr", "cw", "report", "guard", "sns", "secrets"]);
 
   const CARDS = {
   "browser": {
     "core": "Lets you upload a video and read its brain-response chart.",
     "here": [
       "Uploads straight to S3 with a short-lived permit after credit is reserved.",
-      "Offers sharing at upload and an audience-retention curve later. <details><summary>Sharing rules</summary>The first valid YouTube curve for a shared video makes its analysis free once. Stopping sharing starts deletion; the reaper retries unfinished deletes.</details>"
+      "Offers sharing at upload and an audience-retention curve later. <details><summary>Sharing rules</summary>A valid curve returns the video’s credit once, if it has been public 7 days and meets the length and 1,000-view checks when we can check them. Stopping sharing starts deletion; the reaper retries unfinished deletes.</details>"
     ],
     "cost": "$0 of AWS compute runs in the browser.",
     "what": "Your web browser: displays the page and sends requests."
@@ -1300,7 +1416,7 @@ svg.focus .node:not(.on) { opacity: 0.35; }
     "core": "Rejects bad files and insufficient credit before any GPU starts.",
     "here": [
       "SQS triggers size checks, ffprobe duration measurement and price verification.",
-      "Accepted jobs enter SageMaker’s queue; this Lambda does not start the GPU. <details><summary>Who can submit</summary>The GPU has no public application entrance: invoking SageMaker requires the dispatcher’s AWS role. Internal Lambdas run through service triggers and roles.</details>"
+      "Accepted jobs enter SageMaker’s queue, and this Lambda starts the GPU; the backlog alarm is a backup. <details><summary>Who can submit</summary>The GPU has no public application entrance: invoking SageMaker requires the dispatcher’s AWS role. Internal Lambdas run through service triggers and roles.</details>"
     ],
     "cost": "$0 compute between invocations.",
     "what": "Lambda runs short pieces of code when a message or request arrives."
@@ -1316,7 +1432,7 @@ svg.focus .node:not(.on) { opacity: 0.35; }
   "reaper": {
     "core": "Finishes jobs and deletions that other paths leave open.",
     "here": [
-      "Hourly: settles an existing result or refunds jobs still open 4 hours after creation.",
+      "Every 3 hours: settles an existing result or refunds jobs still open 4 hours after creation.",
       "Retries eligible file and account deletes; expires sessions. <details><summary>Sharing cleanup</summary>Shared copies without a retention curve are deleted after 90 days. Stopping sharing starts deletion; unfinished deletes are retried.</details>"
     ],
     "cost": "$0 Lambda compute between runs; database wake-ups still bill.",
@@ -1325,8 +1441,8 @@ svg.focus .node:not(.on) { opacity: 0.35; }
   "s3": {
     "core": "Stores uploads, results and shared research files.",
     "here": [
-      "Uploads are deleted after the job; results stay 30 days. Page files and model weights also live here. <details><summary>Upload permit</summary>The bucket blocks public access. A presigned POST allows one exact key, an allowed type and capped size for 5 minutes. The uploader can replace their own object while it lasts; the dispatcher checks the file before GPU submission.</details>",
-      "Shared videos and curves go to <code>dataset/</code>; course analysis goes to <code>academic/</code>. <details><summary>Retention and training</summary>Only dataset/ feeds model training. Both folders expire after 3 years; shared copies without a curve are deleted after 90 days.</details>"
+      "Uploads and results stay 30 days; a refund or cancel deletes the upload at once. Page files and model weights also live here. <details><summary>Upload permit</summary>The bucket blocks public access. A presigned POST allows one exact key, an allowed type and capped size for 5 minutes. The uploader can replace their own object while it lasts; the dispatcher checks the file before GPU submission.</details>",
+      "Shared videos and curves go to <code>dataset/</code>. <details><summary>Retention and training</summary>Only dataset/ feeds model training. Shared copies expire after 3 years (1095 days); shared copies without a curve are deleted after 90 days.</details>"
     ],
     "cost": "$0.023 per GB-month for standard storage (estimate).",
     "what": "S3 is AWS’s file store: saves objects in named folders inside a bucket."
@@ -1346,10 +1462,10 @@ svg.focus .node:not(.on) { opacity: 0.35; }
   "gpu": {
     "core": "Runs the model on demand and returns to zero when idle.",
     "here": [
-      "Runs our container on at most one g6e L40S; cold upload-to-start takes 9–12 minutes.",
+      "Runs our container on at most one GPU (g6e L40S first, then fallback types); cold upload-to-start takes about 10 minutes.",
       "Claims a job, saves results, then charges or refunds. <details><summary>One owner, limited access</summary>Only one container can hold a database claim. Publishing a result and ending a job check whether it already finished; every balance change has a ledger row. Loaded weights serve consecutive videos. The container role can access only required S3 folders and authorized Data API calls; it cannot change roles or scaling policies.</details>"
     ],
-    "cost": "$2.64 per GPU-hour on g6e (estimate).",
+    "cost": "$2.61 per GPU-hour on g6e (estimate).",
     "alt": [
       "An EC2 GPU group with Auto Scaling starts and stops machines we manage, adding scaling and recovery work. It suits steady traffic that keeps a GPU busy.",
       "AWS Batch schedules containers as jobs, but a fresh container per video reloads the model. It suits long training or processing jobs."
@@ -1404,13 +1520,22 @@ svg.focus .node:not(.on) { opacity: 0.35; }
     "what": "ECR stores container images: packaged programs and their libraries."
   },
   "cw": {
-    "core": "Starts a GPU for waiting work and stops it after seven idle minutes.",
+    "core": "Starts a GPU if the dispatcher’s start failed, and stops it after seven idle minutes.",
     "here": [
-      "Backlog without capacity starts a GPU; an empty backlog for 7 minutes requests zero.",
+      "Backlog without capacity starts a GPU as a backup; an empty backlog for 7 minutes requests zero.",
       "Backlog data arrives about 3 minutes late; a shutdown race adds about 10 minutes."
     ],
     "cost": "$0.10 per standard alarm-month (estimate).",
     "what": "CloudWatch watches measurements and triggers actions at set thresholds."
+  },
+  "report": {
+    "core": "Writes a short AI reading of a video’s result when the viewer asks.",
+    "here": [
+      "The web app starts the report Lambda; it claims the job and reads the frames and brain numbers from S3.",
+      "It sends them to Claude on Amazon Bedrock and saves the report with the result. <details><summary>One report per video</summary>At most one finished report per video; a failed run can be retried. Comparing two videos uses the same Lambda.</details>"
+    ],
+    "cost": "$0 until asked; the report’s cost is inside the video price (about 14 cents for a 2-minute video, estimate).",
+    "what": "Bedrock runs Anthropic’s Claude models; the report Lambda calls one to write the report."
   },
   "guard": {
     "core": "Stops an idle GPU if normal scale-down fails.",
@@ -1490,7 +1615,7 @@ svg.focus .node:not(.on) { opacity: 0.35; }
         "e_backlog",
         "e_scale"
       ],
-      "c": "Accepted work enters SageMaker’s queue. An alarm starts a GPU; cold upload-to-start takes about 9–12 minutes."
+      "c": "Accepted work enters SageMaker’s queue, and the dispatcher starts the GPU; the backlog alarm is a backup. Cold upload-to-start takes about 10 minutes."
     },
     {
       "e": [
@@ -1508,7 +1633,7 @@ svg.focus .node:not(.on) { opacity: 0.35; }
         "e_s3gpu",
         "e_gpudb"
       ],
-      "c": "The container saves results, charges and deletes the upload. Shared videos go to dataset/; their analysis goes to academic/."
+      "c": "The container saves results and charges. Uploads and results stay 30 days; shared videos go to dataset/."
     },
     {
       "e": [
@@ -1519,7 +1644,15 @@ svg.focus .node:not(.on) { opacity: 0.35; }
       "n": [
         "s3"
       ],
-      "c": "Read the result and balance. The first valid YouTube retention curve for a shared video makes its analysis free once."
+      "c": "Read the result and balance. A valid audience-retention curve returns the video’s credit once, within the reward limits."
+    },
+    {
+      "e": [
+        "e_report",
+        "e_reportdb",
+        "e_report_s3"
+      ],
+      "c": "Optionally ask for an AI report. The report Lambda claims it and sends the frames and brain numbers to Claude on Bedrock; the report is saved with the result."
     },
     {
       "e": [
@@ -1558,7 +1691,7 @@ svg.focus .node:not(.on) { opacity: 0.35; }
     ],
     "what": "Seen in real runs: SageMaker falls back or the request waits for capacity.",
     "caught": "SageMaker’s queue allows at most 2 hours of waiting. An expiry notice may arrive only when an instance next takes the request.",
-    "result": "The hourly reaper refunds any job still open 4 hours after creation, even without an expiry notice. No credit is lost. <details><summary>Other startup blocks</summary>If ECR cannot supply the container image, a new GPU cannot start until it returns. A failed CodeBuild build leaves the existing image available; it does not replace it.</details>"
+    "result": "The reaper, every 3 hours, refunds any job still open 4 hours after creation, even without an expiry notice. No credit is lost. <details><summary>Other startup blocks</summary>If ECR cannot supply the container image, a new GPU cannot start until it returns. A failed CodeBuild build leaves the existing image available; it does not replace it.</details>"
   },
   {
     "name": "A video arrives as the GPU shuts down",
@@ -1610,7 +1743,7 @@ svg.focus .node:not(.on) { opacity: 0.35; }
     ],
     "what": "The container crashes, stops responding, or leaves a GPU running without work.",
     "caught": "SageMaker reports failures and timeouts; a request can run for at most 60 minutes. The guard checks the database every 10 minutes for an idle GPU.",
-    "result": "The error handler settles a saved result once or refunds; transient errors retry. The guard stops idle compute and emails without interrupting a live claim. The hourly reaper is the last backstop. <details><summary>If a safety net fails</summary>A lost error notice still leaves the job for the reaper, which catches jobs open after 4 hours. It retries file cleanup and account deletions. Every Lambda emails on failed runs; a failed reaper alarms and cleanup waits for its next successful run. A failed or missing guard run alerts; normal scaling remains the first stop path. If SNS email fails, settlement continues but people may learn of problems later.</details>"
+    "result": "The error handler settles a saved result once or refunds; transient errors retry. The guard stops idle compute and emails without interrupting a live claim. The reaper is the last backstop. <details><summary>If a safety net fails</summary>A lost error notice still leaves the job for the reaper, which catches jobs open after 4 hours. It retries file cleanup and account deletions. Every Lambda emails on failed runs; a failed reaper alarms and cleanup waits for its next successful run. A failed or missing guard run alerts; normal scaling remains the first stop path. If SNS email fails, settlement continues but people may learn of problems later.</details>"
   }
 ];
 
@@ -1742,7 +1875,7 @@ svg.focus .node:not(.on) { opacity: 0.35; }
     const n = NODES[id];
     const g = el("g", { id: "node-" + id, class: "node" + (SUPPORT.has(id) ? " support" : ""), tabindex: "0", role: "button", "aria-label": n.t + ": show details" }, nodeLayer);
     el("rect", { x: n.x, y: n.y, width: n.w, height: n.h, rx: 6 }, g);
-    if (["webfn", "dispatcher", "reaper", "errorhandler", "build", "guard", "gpu"].includes(id)) {
+    if (["webfn", "dispatcher", "reaper", "errorhandler", "build", "report", "guard", "gpu"].includes(id)) {
       el("circle", { cx: n.x + 10, cy: n.y + 10, r: 3.5, fill: id === "gpu" ? "var(--accent)" : "var(--private)", stroke: "var(--edge)", "stroke-width": 1 }, g);
     }
     const cx = n.x + n.w / 2;
@@ -1752,7 +1885,7 @@ svg.focus .node:not(.on) { opacity: 0.35; }
       text(g, n.t, cx, n.y + 28, "t", "middle");
       text(g, n.s, cx, n.y + 58, "s", "middle");
       text(g, n.s2, cx, n.y + 78, "s", "middle");
-      text(g, "dataset/ + academic/", cx, n.y + 102, "s", "middle");
+      text(g, "dataset/", cx, n.y + 102, "s", "middle");
     } else if (n.s2) {
       const mid = n.y + n.h / 2;
       text(g, n.t, cx, mid - 16, "t", "middle");
