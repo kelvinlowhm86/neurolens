@@ -8,7 +8,11 @@ of credit, M3b/M3c; early access by request, M3k), and the experiment scripts in
 **A proposal:** the team running M4 may change any part of it; the report states what was
 actually done.
 
-**Ground rules:** region `us-east-1`, `neurolens` CLI profile. **No new product features:**
+**Accounts:** the live app runs in Brandon's AWS account (Josh's CLI profile for it:
+`neurolens-brandon`). Josh's own account (profile `neurolens`) keeps a second, complete copy as a
+backup until the course ends.
+
+**Ground rules:** region `us-east-1`, the CLI profile of the account in use. **No new product features:**
 problems the booth or the experiments find go in the report as future work. Every GPU session's
 cost estimate is stated, and agreed by the team, before it starts; every session ends with
 `infra/stop_work.sh` (`docs/session_checklist.md`).
@@ -86,7 +90,7 @@ Nothing is deleted on a date. In order, each step checked before the next:
    account and state bucket); remove the local test database container if one was made
    (`docker rm -f neurolens-test-pg`).
 
-Run all nine steps in every AWS account that holds a NeuroLens deployment.
+Run all nine steps in both accounts, Brandon's and Josh's backup, when the course ends.
 
 ## 7. Acceptance criteria
 1. The STePS booth ran, and its survey responses are exported and summarised.

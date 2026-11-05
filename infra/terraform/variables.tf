@@ -59,7 +59,7 @@ variable "worker_image" {
 }
 
 variable "max_instances" {
-  description = "Most GPUs the endpoint may run. Stays 1; the account's GPU quota is 2 (M3e §1)."
+  description = "Most GPUs the endpoint may run. Stays 1 (M3e §1); 2 only if the account's GPU quota allows it."
   type        = number
   default     = 1
 

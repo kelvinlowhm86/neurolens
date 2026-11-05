@@ -53,14 +53,15 @@ down.
    paste keys into chat, git or a Docker image.**
 4. Python 3.12 for the repo (`AGENTS.md`) and `git`.
 5. Quotas and accounts (console; quota requests can take days):
-   - SageMaker endpoint quota for `ml.g6e.xlarge` (one instance is enough; the account's GPU quota
-     is 2).
+   - SageMaker endpoint quota for `ml.g6e.xlarge` (1 is enough: the app runs one GPU at a time).
    - Lambda concurrency: if the account's limit is well below 1,000, request 1,000 (free).
    - A HuggingFace read token for the model weights (it goes in the repo's git-ignored `.env`
      as `HF_TOKEN`, see `.env.example`) and a Google OAuth client for sign-in.
 6. Secrets in Parameter Store (`SecureString`, never in git or Terraform files):
-   `/neurolens/terraform/google_client_secret` and
-   `/neurolens/web/flask_secret_key` (at least 32 random bytes).
+   `/neurolens/terraform/google_client_secret`,
+   `/neurolens/web/flask_secret_key` (at least 32 random bytes) and
+   `/neurolens/web/youtube_api_key` (a YouTube Data API v3 key, restricted to that API, no
+   billing; the site does not start without it).
 7. Confirm the $40/month AWS Budget alerts still exist (Billing, Budgets).
 8. In the console, with the region set to us-east-1, open Bedrock and submit Anthropic's
    use-case form if asked; Claude Sonnet 4.6 must answer in the playground.
