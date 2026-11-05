@@ -58,12 +58,14 @@ Each run writes `experiments/<experiment>/<run_id>/` in the bucket with a `manif
   `experiments/export_cloudwatch.py` saves the one-minute backlog and instance series and
   `experiments/cold_start.py` the cold-start breakdown.
 - **Experiment 3 (cloud vs on-premise cost, an estimate):** the on-premise leg runs
-  `experiments/tco_benchmark.py` on the school's Slurm GPU (`tco_benchmark.sbatch`); the cloud leg
+  `experiments/tco_benchmark.py` on a teammate's own computer if its GPU has at least 24 GB of
+  memory (the model peaks at about 20 GB), else on the school's Slurm GPU (`tco_benchmark.sbatch`).
+  `experiments/tco_assumptions.json` is set for an A100 40 GB: on another GPU, change its
+  `gpu_price_usd` and `gpu_tdp_watts` (with sources) to that card's; the cloud leg
   reuses Experiment 1's runs. `experiments/tco_compare.py` turns both, with the prices in
   `experiments/tco_assumptions.json`, into cost per video and a break-even volume, labelled as
   estimates from measured run times and stated assumptions.
-- **Cost (estimate):** Experiment 1 about $6, Experiment 2 about $5–8, Experiment 3 $0 (Slurm is
-  free; the cloud leg reuses Experiment 1): about $12–20 in total. Flag each session before it
+- **Cost (estimate):** Experiment 1 about $6, Experiment 2 about $5–8, Experiment 3 $0 (own computer or Slurm; the cloud leg reuses Experiment 1): about $12–20 in total. Flag each session before it
   starts.
 
 ## 4. What the report takes from this
