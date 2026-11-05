@@ -170,7 +170,9 @@ After the first apply:
    read -rs S && aws ssm put-parameter --name /neurolens/web/cognito_client_secret \
      --type SecureString --value "$S" --overwrite && unset S
    ```
-3. `infra/deploy_web.sh` publishes the site; open `sign_in_test_url` and sign in once with Google
+3. `infra/deploy_web.sh` publishes the site. It also publishes the public samples, whose videos and
+   `data/output/<id>/` files are git-ignored: on a fresh clone, copy them in first from a checkout
+   that has them (`data/videos/README.md`), or the script stops at the missing file. Then open `sign_in_test_url` and sign in once with Google
    and once with email and password.
 
 ## 2b. The GPU image and endpoint (M3e)
