@@ -73,7 +73,16 @@ Each run writes `experiments/<experiment>/<run_id>/` in the bucket with a `manif
   slides are added there.
 - The report links the GitHub repository, which stays reachable until marks are released. It says
   the service ran on demand and was shut down after evaluation.
-- The AI-use declaration draws on `docs/ai_log.local.md`.
+- The AI-use declaration covers the deployment work with this paragraph (add the report's own AI use):
+  > The AWS deployment was built with AI coding assistants under the team's direction. Claude Code
+  > (Anthropic's Claude Opus and Sonnet) helped review the specifications, plan each milestone, check
+  > AWS prices, and write code, tests and documentation; DeepSeek V4.1 Flash (with GLM, Gemini and
+  > Codex as fall-backs) wrote first-pass tests, code and reviews, which Claude and the team then
+  > checked. Every change ran against the automated test suite, and the credit, billing and sign-in
+  > code also had its tests written before the code and was deliberately broken to prove the tests
+  > catch mistakes. It also explained each AWS concept as it came up, which is how the team learned
+  > cloud deployment. All design decisions, spending and deployments were made and run by the team.
+  > Separately, the product itself uses Claude Sonnet 4.6 on Amazon Bedrock to write each video's AI report.
 - After the last experiment, set `log_retention_days = 14` in `terraform.tfvars` and apply
   (90 days are kept until then for the run timings).
 
