@@ -77,8 +77,10 @@ Nothing is deleted on a date. In order, each step checked before the next:
    repository that still holds images).
 4. `terraform destroy` in `infra/terraform/`. This removes the database (no final snapshot), the
    sign-in user pool and its emails, the GPU endpoint, the Lambdas and the site.
-5. Delete the Parameter Store entry `/neurolens/terraform/google_client_secret` (made by hand, not
-   by Terraform), then the Terraform state bucket.
+5. Delete the Parameter Store entries made by hand (Terraform does not remove them):
+   `/neurolens/terraform/google_client_secret`, `/neurolens/web/flask_secret_key`,
+   `/neurolens/web/cognito_client_secret` and `/neurolens/web/youtube_api_key`; then check that
+   nothing under `/neurolens/` is left, and delete the Terraform state bucket.
 6. Outside AWS: delete the Google OAuth client, revoke the HuggingFace token, delete the YouTube
    API key (or its Google Cloud project), and delete the Google Form once the report is graded.
 7. Check that nothing tagged `Project=neurolens` is left.
