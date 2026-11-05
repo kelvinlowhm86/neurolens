@@ -62,7 +62,7 @@ down.
    `/neurolens/web/flask_secret_key` (at least 32 random bytes) and
    `/neurolens/web/youtube_api_key` (a YouTube Data API v3 key, restricted to that API, no
    billing; the site does not start without it).
-7. Confirm the $40/month AWS Budget alerts still exist (Billing, Budgets).
+7. Optional: an AWS Budget alert (Billing, Budgets), at an amount the account owner chooses.
 8. In the console, with the region set to us-east-1, open Bedrock and submit Anthropic's
    use-case form if asked; Claude Sonnet 4.6 must answer in the playground.
 
@@ -212,14 +212,4 @@ A running job dies and is refunded. `start_work.sh` puts the maximum back to 1.
 
 ## 6. Tear down
 
-`terraform destroy` deletes the database, its backups, its secret, the endpoint, the Lambdas and
-the queue. Empty the bucket first (S3 refuses to delete a non-empty bucket), and delete the images
-in ECR by hand:
-
-```bash
-aws s3 rm s3://<bucket_name> --recursive
-terraform destroy
-```
-
-The state bucket stays (a few kilobytes). Remove it by hand at the very end, with the Parameter
-Store secrets and the Google OAuth client.
+Follow `docs/M4_spec.md` §6 (nine steps, in order, in every account that holds a deployment).

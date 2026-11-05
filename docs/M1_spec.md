@@ -26,7 +26,7 @@ The fake-model switch is an environment variable, not a config field, so a real 
 ## 3. AWS resource provisioning (Terraform)
 Create `infra/terraform/` — a Terraform configuration using the AWS provider in `us-east-1`, with `default_tags` `Project=neurolens`. Terraform tracks what exists, so running `terraform apply` twice is safe by design and `terraform destroy` removes everything it created.
 
-**Budget guardrail.** An account-wide AWS Budget of $40/month with email alerts at 50%, 80% and 100% of actual spend already exists (created by hand, not by Terraform). Confirm it is still there before the first `terraform apply`.
+**Budget guardrail (Josh's account).** An account-wide AWS Budget of $40/month with email alerts at 50%, 80% and 100% of actual spend already exists (created by hand, not by Terraform). Confirm it is still there before the first `terraform apply`.
 
 **Remote state.** Terraform's record of what exists (its *state*) must not live on one laptop, or teammates will clash. Store it in a separate, small S3 bucket (e.g. `neurolens-tfstate-<account-id>`) with versioning on, using the S3 backend with S3-native locking (`use_lockfile = true`). Create that one bucket once, by hand or with a tiny `infra/terraform/bootstrap/` configuration, and document the step in `infra/terraform/README.md`. The state bucket is never destroyed by `terraform destroy`.
 
