@@ -75,14 +75,18 @@ Nothing is deleted on a date. In order, each step checked before the next:
    sign-in user pool and its emails, the GPU endpoint, the Lambdas and the site.
 5. Delete the Parameter Store entry `/neurolens/terraform/google_client_secret` (made by hand, not
    by Terraform), then the Terraform state bucket.
-6. Outside AWS: delete the Google OAuth client, revoke the HuggingFace token, and delete the
-   Google Form once the report is graded.
+6. Outside AWS: delete the Google OAuth client, revoke the HuggingFace token, delete the YouTube
+   API key (or its Google Cloud project), and delete the Google Form once the report is graded.
 7. Check that nothing tagged `Project=neurolens` is left.
 8. Last, as part of the same teardown: delete the deploy user's access keys (in a borrowed
    account, the account owner deletes the user and the five `neurolens-*` policies), and remove
    that account's profile from the laptop's `~/.aws/credentials` and `~/.aws/config`.
+9. On every laptop that deployed: delete `.env` (it holds the revoked tokens), and
+   `infra/terraform/backend.hcl`, `terraform.tfvars` and `.terraform/` (they name the deleted
+   account and state bucket); remove the local test database container if one was made
+   (`docker rm -f neurolens-test-pg`).
 
-Run all eight steps in every AWS account that holds a NeuroLens deployment.
+Run all nine steps in every AWS account that holds a NeuroLens deployment.
 
 ## 7. Acceptance criteria
 1. The STePS booth ran, and its survey responses are exported and summarised.
