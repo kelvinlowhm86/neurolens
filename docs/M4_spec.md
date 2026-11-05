@@ -35,8 +35,8 @@ A drop-in table: visitors try NeuroLens on Josh's laptop, then fill in a short a
   visitors' uploads do not stay. Download the form responses as CSV; keep it local (git-ignored,
   `*.local.*` name) and use only totals and short anonymous quotes in the report. SUS score per
   response: odd items `answer − 1`, even items `5 − answer`, sum × 2.5 (0–100).
-- **Cost (estimate):** 4 GPU hours on `ml.g6e.xlarge` at about $1.86 an hour plus Aurora awake:
-  about $8.
+- **Cost (estimate):** 4 GPU hours on `ml.g6e.xlarge` at about $2.61 an hour (SageMaker price) plus Aurora awake:
+  about $11.
 
 ## 3. Experiments
 The run layout, file columns and manifests are fixed by the scripts themselves

@@ -133,7 +133,7 @@ place in line among other users, waking the database from the landing page.
    scrubber has its own full-width line above the buttons.
 10. **Retention on a result:** the thank-you card (ยง5d), no box or title.
 11. **Privacy page and retention guide** use the app's dark look and font, plain words ("up to 31
-    days", not S3 rule wording) and the contact address joshualumzy@gmail.com as a mailto link.
+    days", not S3 rule wording) and the contact address e0297372@u.nus.edu as a mailto link.
 12. **Landing:** "How it works" step 2 ends "It takes a few minutes, and you can watch its
     progress."; a gap between "How it works" and the closing band; the sample credit only in the
     footer.
@@ -359,7 +359,7 @@ alarms and the GPU guard). We own no off-switch. Expected cold start: about 13 โ
   is not set (checked after `.env` is loaded), with the message "python app.py runs only against the local fake stack: python
   infra/local_stack.py. The real .env is for the admin scripts." Nothing else reads this rule.
 - `python infra/local_stack.py` runs the whole product on the laptop with no real AWS: it requires a
-  local PostgreSQL DSN (host `localhost` or `127.0.0.1`, no `host`/`hostaddr` query parameters) (`--dsn`, default `postgresql://postgres@localhost:55432/postgres`), starts
+  local PostgreSQL DSN (host `localhost` or `127.0.0.1`, no `host`/`hostaddr` query parameters) (`--dsn`, default `postgresql://postgres:test@localhost:55432/postgres`, the same database the tests use), starts
   moto's server on port 5005, removes every inherited `AWS_*` variable and uses throwaway test credentials,
   region and endpoint in its own environment (never the real profile), creates the bucket (with the page's CORS) and the jobs queue and
   notification, applies the schema, then runs the web app on 5003 (Postgres backend) and a loop that

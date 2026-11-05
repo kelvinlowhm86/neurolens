@@ -3,7 +3,7 @@
     python infra/local_stack.py
     python infra/local_stack.py --grant you@example.com 5
 
-It needs a local PostgreSQL (default postgresql://postgres@localhost:55432/postgres), starts
+It needs a local PostgreSQL (default postgresql://postgres:test@localhost:55432/postgres), starts
 moto's S3/SQS server on port 5005, applies the schema, then serves the web app on 5003 and passes
 each queued upload through the real dispatcher into fake-mode analysis.
 """
@@ -21,7 +21,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
-DEFAULT_DSN = "postgresql://postgres@localhost:55432/postgres"
+DEFAULT_DSN = "postgresql://postgres:test@localhost:55432/postgres"
 LOCAL_BUCKET = "neurolens-local"
 LOCAL_QUEUE = "neurolens-local-jobs"
 MOTO_PORT = 5005

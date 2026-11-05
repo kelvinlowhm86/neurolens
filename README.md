@@ -17,7 +17,9 @@ It is a virtual pre-test, not a prediction of views, retention or sales, and not
 - `infra/` — Terraform, IAM policies, migrations, the worker image and the operator scripts. See `infra/README.md`.
 - `experiments/` — the report experiments and side trials. See `experiments/README.md`.
 - `notebooks/` — the original local prototype notebooks. See `notebooks/README.md`.
-- `tests/` — pytest. `docs/` — specs, evidence, study materials and the submitted course documents. See `docs/README.md`.
+- `tests/` — pytest; `.github/workflows/ci.yml` runs them on every push. `docs/` — specs, evidence, study materials and the submitted course documents. See `docs/README.md`.
+- `docs/architecture.html` — the architecture page: one clickable diagram of how it runs on AWS (download the repo and open it in a browser; GitHub shows it as code).
+- `trailer/` — the launch video, made with Remotion; separate from the product. See `trailer/README.md`.
 
 ---
 
@@ -58,12 +60,21 @@ Series order: faces, bodies, scenes, visual, sound, speech, social, see, hear, u
 
 ## Run it on a laptop
 
+No GPU, model or AWS account needed. Python 3.12 and Docker (for the database).
+
 ```bash
-python infra/local_stack.py                     # whole product on a laptop: local PostgreSQL, fake S3/SQS, web on http://127.0.0.1:5003 (--grant <email> <dollars> adds credit)
-FAKE_INFERENCE=1 python worker.py serve         # the SageMaker container on a laptop (fake model; real model needs a GPU)
-pip install -e . -r requirements/dev.txt        # laptop: tests and lint only, no GPU or model needed
-pytest && ruff check . && ruff format --check .
+python3.12 -m venv .venv && source .venv/bin/activate
+pip install -e . -r requirements/dev.txt
+
+# A local PostgreSQL on port 55432, used by the tests and the local stack (once; afterwards `docker start neurolens-test-pg`)
+docker run -d --name neurolens-test-pg -e POSTGRES_PASSWORD=test -p 55432:5432 postgres:16
+export NEUROLENS_TEST_DSN=postgresql://postgres:test@localhost:55432/postgres
+
+python infra/local_stack.py                     # whole product, fake S3/SQS and fake analysis: http://127.0.0.1:5003 (--grant <email> <dollars> adds credit)
+FAKE_INFERENCE=1 python worker.py serve         # only the GPU container, with a fake model
 ```
+
+**Tests.** While working, run the file for the part you changed (`pytest tests/test_m3i_curves.py`, seconds). The whole suite (`pytest && ruff check . && ruff format --check .`, about 6 minutes) runs on GitHub on every push and pull request (`.github/workflows/ci.yml`). Without `NEUROLENS_TEST_DSN` the database tests are skipped, not failed, so set it before trusting a local run.
 
 ---
 
@@ -104,7 +115,7 @@ TRIBE v2 itself (`facebook/tribev2`) is freely downloadable under CC BY-NC 4.0.
 
 ## Deploying on AWS
 
-The GPU runs in a SageMaker asynchronous endpoint. A deploy is three steps:
+The GPU runs in a SageMaker asynchronous endpoint. After the first-time setup (`infra/terraform/README.md`), shipping a new GPU image is three steps:
 
 ```bash
 infra/build_image.sh                 # builds the image in CodeBuild and prints its digest

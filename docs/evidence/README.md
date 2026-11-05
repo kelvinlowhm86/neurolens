@@ -115,6 +115,8 @@ aws application-autoscaling describe-scaling-activities --service-namespace sage
   --query 'ScalingActivities[].[StartTime,EndTime,StatusCode,Description,StatusMessage]' --output text | sort
 ```
 
+`spot_placement_scores.tsv` (3 Oct): the first, single snapshot of the same scores for `g6e.xlarge` in each region (all 1), behind the M2a move from Spot to on-demand.
+
 `spot_placement_scores_2026-10-28.tsv`: EC2 Spot placement scores (1 = least likely to get capacity, 10 = most) every 30 minutes from 11:41 to 19:34 SGT, for each of our four GPU types alone and for any of them (`ALL`), in five regions. A hint about EC2 capacity, not proof of SageMaker capacity (SageMaker draws on its own pool). Averages for `ALL`: us-east-1 6.5, us-west-2 5.9, eu-central-1 5.5, ap-northeast-1 3.0, us-east-2 2.0; `g6e.xlarge` alone scored 1 in every region all day.
 
 What it means: L40S GPUs were scarce everywhere that day, us-east-1 was no worse than the alternatives, and the fallback types are what kept the service working. Availability changes from day to day, so a cold start can take minutes or close to an hour.
