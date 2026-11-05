@@ -198,8 +198,9 @@ again with `worker_image` set.
 
 1. The owner of the existing bucket temporarily allows the new account's deploy user to read
    `model-data/`: add a bucket policy statement granting `s3:ListBucket` on the bucket with
-   prefix `model-data/` and `s3:GetObject` on `model-data/*`, with Principal = the new deploy
-   user's ARN.
+   prefix `model-data/` and `s3:GetObject` plus `s3:GetObjectTagging` on `model-data/*`, with
+   Principal = the new deploy user's ARN (large files are copied in parts, and that reads their
+   tags; without it they fail with AccessDenied on GetObjectTagging).
 2. With the NEW account's profile, from the repo root, sync and check that the object counts and
    total sizes match:
    ```bash
