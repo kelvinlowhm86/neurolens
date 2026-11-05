@@ -1,6 +1,6 @@
 # NeuroLens — M4 Spec
 **Milestone:** the STePS booth, Experiments 1–3, the merge into `main`, and teardown (5 – 13 Nov;
-STePS is on 11 Nov; the final report, written separately by the team, is due 13 Nov 23:59).
+STePS is on 11 Nov; the final report is due 13 Nov 23:59).
 **Builds on:** M3: the complete product on demand (SageMaker async GPU, M3e; sign-in and minutes
 of credit, M3b/M3c; early access by request, M3k), and the experiment scripts in `experiments/`
 (`experiments/README.md`).
@@ -67,7 +67,7 @@ Each run writes `experiments/<experiment>/<run_id>/` in the bucket with a `manif
   starts.
 
 ## 4. What the report takes from this
-The report itself is written separately; this milestone only hands it the results.
+What this milestone hands to the final report:
 - The survey summary (§2) and the experiment outputs (§3), each with how many responses or runs
   it rests on. The GitHub repository stays reachable until marks are released.
 - The AI-use declaration for the deployment work (add the report's own AI use):
