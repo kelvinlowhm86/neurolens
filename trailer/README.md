@@ -41,23 +41,23 @@ Music and sound effects (impact, scribble) made with ElevenLabs; the mute chime 
 
 | Frames | Shot |
 | --- | --- |
-| 0–90 | Big Buck Bunny (source frames 153–242, smiling close-up; the shot runs 153–246), full-bleed. “You made a video.” |
-| 90–180 | Sintel (source 12 s), full-bleed. “Will it grab them?” |
-| 180–548 | One continuous `Scanner` push from 6 to 18.25 s: steady camera speed first, then a smooth rise into the rush through the open bore. “The real answer is in the brain.” / “A lab.” / “A scanner.” / “Weeks.” / “What if all you needed” |
-| 548–600 | Black at the stop. “was the video?” It shatters on the drop. |
-| 600–720 | `BrainHero` on the drop. “Meet NeuroLens.” |
-| 720–840 | Hooked: full-bleed clip with the overall chart and peak marker. |
-| 840–960 | Drift: full-bleed clip with the overall chart and trough marker. |
-| 960–1,080 | Seven signal names (no values), one per beat from 32.0 s; this scene fills 32–36 s until stage 2 adds the groups. |
-| 1,080–1,200 | Groups: three columns with their names and charts. |
-| 1,200–1,380 | Mute: Big Buck Bunny (source 18–24 s), full-bleed, overall and muted overall on one chart, muffled music. “Still works on mute?”; “Yes.” lands on the music stop. |
-| 1,380–1,620 | Compare: Sintel’s two openings side by side with one shared chart: A (source 1–9 s, left) and B (source 22–30 s, right). “Which opening wins?” |
-| 1,620–1,740 | `BrainHero`. “Built on a model trained on real brain scans.” |
-| 1,740–1,830 | Drained `Scanner` placeholder with “Weeks”; stage 2 adds the counter, scribble and fade. |
-| 1,830–2,048 | `BrainHero` and “Minutes.” |
-| 2,048–2,093 | Black through the silence; the Minutes scene and brain fade out by 68.25 s. |
-| 2,093–2,160 | “NeuroLens” appears on the final hit on plain black with a flash and a warm glow that fades back to white, then “Watch a brain watch your video.” (the site's headline) |
-| 2,160–2,250 | Three credit lines and a fade to black over the last 16 frames. |
+| 0-90 | Big Buck Bunny (source frames 153-242, smiling close-up; the shot runs 153-246), full-bleed. "You made a video." |
+| 90-180 | Sintel (source 12 s), full-bleed. "Will it grab them?" |
+| 180-548 | One continuous `Scanner` push from 6 to 18.25 s: steady camera speed first, then a smooth rise into the rush through the open bore. "The real answer is in the brain." / "A lab." / "A scanner." / "Weeks." / "What if all you needed" |
+| 548-600 | Black at the stop. "was the video?" It shatters on the drop. |
+| 600-720 | `BrainHero` on the drop. "Meet NeuroLens." |
+| 720-840 | Hooked: full-bleed clip with the overall chart and peak marker. |
+| 840-960 | Drift: full-bleed clip with the overall chart and trough marker. |
+| 960-1,080 | Seven signal names (no values), one per beat from 32.0 s; this scene fills 32-36 s until stage 2 adds the groups. |
+| 1,080-1,200 | Groups: three columns with their names and charts. |
+| 1,200-1,380 | Mute: Big Buck Bunny (source 18-24 s), full-bleed, overall and muted overall on one chart, muffled music. "Still works on mute?"; "Yes." lands on the music stop. |
+| 1,380-1,620 | Compare: Sintel's two openings side by side with one shared chart: A (source 1-9 s, left) and B (source 22-30 s, right). "Which opening wins?" |
+| 1,620-1,740 | `BrainHero`. "Built on a model trained on real brain scans." |
+| 1,740-1,830 | Drained `Scanner` placeholder with "Weeks"; stage 2 adds the counter, scribble and fade. |
+| 1,830-2,048 | `BrainHero` and "Minutes." |
+| 2,048-2,093 | Black through the silence; the Minutes scene and brain fade out by 68.25 s. |
+| 2,093-2,160 | "NeuroLens" appears on the final hit on plain black with a flash and a warm glow that fades back to white, then "Watch a brain watch your video." (the site's headline) |
+| 2,160-2,250 | Three credit lines and a fade to black over the last 16 frames. |
 
 ## Data fidelity
 

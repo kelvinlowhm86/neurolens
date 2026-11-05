@@ -7,7 +7,7 @@ record of what it created, so running `apply` twice is safe (the second run repo
 and `destroy` removes everything it created. The region is one setting (`region` in
 `terraform.tfvars`, default `us-east-1`).
 
-**What it creates**
+What it creates
 
 - One S3 bucket: public access blocked, encrypted, HTTPS-only, ACLs disabled, browser upload
   (CORS) from `allowed_origins`, and prefix-scoped expiry (`uploads/` and `results/` after 30 days,
@@ -35,14 +35,14 @@ and `destroy` removes everything it created. The region is one setting (`region`
 
 The endpoint only exists once `worker_image` is set: build the image first (§2b).
 
-**Cost:** with everything stopped, the running cost is the stored image, the ECR repository,
+Cost: with everything stopped, the running cost is the stored image, the ECR repository,
 Aurora storage and the S3 files, a few dollars a month (the reaper waking Aurora every 3 hours is
 about $3). A GPU bills only while it runs: about $2.61/h for `ml.g6e.xlarge`, $1.22/h for
 `ml.g6.2xlarge` (L4), $1.52/h for `ml.g5.2xlarge` (A10G) and $2.80/h for `ml.g6e.2xlarge` (SageMaker prices, us-east-1), and it stops
 itself 7 idle minutes after the last job. A deploy starts one
-instance for about 7 minutes (roughly $0.50–0.80).
+instance for about 7 minutes (roughly $0.50-0.80).
 
-**From an empty account:** §0, §1, §2, §2e (database tables), §2f, §2b; then §5 for each work session and §6 to tear
+From an empty account: §0, §1, §2, §2e (database tables), §2f, §2b; then §5 for each work session and §6 to tear
 down.
 
 ## 0. Before you start (once)
@@ -226,7 +226,7 @@ The container's logs are in CloudWatch at `/aws/sagemaker/Endpoints/neurolens`; 
 
 ## 2e. The database
 
-`database.tf` creates Aurora PostgreSQL (Serverless v2, 0–1 ACU): users, credit and job state. It
+`database.tf` creates Aurora PostgreSQL (Serverless v2, 0-1 ACU): users, credit and job state. It
 pauses 5 minutes after its last use and wakes in about 15 s on the next call. Everything reaches it
 through the RDS Data API; the password lives in Secrets Manager.
 
@@ -290,7 +290,7 @@ A running job dies and is refunded. `start_work.sh` puts the maximum back to 1.
 ## 5b. Demo routine
 
 1. The day before (a week before for the TA demo): one full dry run.
-2. 45–60 minutes before: `infra/start_work.sh --keep-warm --hours 3`.
+2. 45-60 minutes before: `infra/start_work.sh --keep-warm --hours 3`.
 3. One short warm-up job, so the first-job costs are paid before the audience arrives.
 4. Demo. If it overruns, run step 2 again (it moves the end).
 5. Straight after: `infra/stop_work.sh`, and wait for **ALL STOPPED**.

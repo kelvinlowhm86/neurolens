@@ -4,7 +4,7 @@ This guide gives Josh his own login (an AWS "user") inside your account, allowed
 and nothing else. Do it once, about 20 minutes, signed in as the account owner (root) or an admin.
 Only step 4's test message costs money, a fraction of a cent.
 
-**Safe to know.** Josh's user can only create or change things named `neurolens-...`. It cannot
+Josh's user can only create or change things named `neurolens-...`. It cannot
 open or change anything else in the account, start ordinary servers, or change billing. It can read
 a few account-wide lists: service limits, GPU availability, and the activity log, which also lists
 other projects' events. You can remove his access at any time by deleting his access key (step 3's
@@ -12,7 +12,7 @@ Security credentials page).
 
 ## 1. Create the five policies
 
-A **policy** is a list of what a user or a machine may do. These five spell out exactly what
+A policy is a list of what a user or a machine may do. These five spell out exactly what
 NeuroLens may use in your account. Open
 https://us-east-1.console.aws.amazon.com/iam/home#/policies/create in your browser.
 
@@ -49,7 +49,7 @@ Open https://us-east-1.console.aws.amazon.com/iam/home#/users and click the user
    `neurolens-deploy-web`, `neurolens-quota-requests`.
 6. Click **Next**, then **Add permissions**.
 
-Do **not** tick `neurolens-role-boundary`. It is a ceiling for the app's own parts that the setup
+Do not tick `neurolens-role-boundary`. It is a ceiling for the app's own parts that the setup
 creates, never attached to a user.
 
 Check: the Permissions tab now lists exactly those four and nothing broad such as
@@ -57,7 +57,7 @@ AdministratorAccess.
 
 ## 3. Make an access key for Josh
 
-An **access key** is a password for command-line tools: Josh's laptop uses it to run the setup as
+An access key is a password for command-line tools: Josh's laptop uses it to run the setup as
 his user.
 
 Still on Josh's page (Users, Josh):

@@ -1,12 +1,12 @@
 # Notebooks
 
 These are a teammate's original local prototype (Destrieux atlas, five regions and engagement
-scores rescaled to 0–1). They need their own GPU and model weights and are not part of the AWS app.
+scores rescaled to 0-1). They need their own GPU and model weights and are not part of the AWS app.
 
-- `explore.ipynb` — loads TRIBE v2, runs one clip with and without audio, extracts per-region
+- `explore.ipynb`: loads TRIBE v2, runs one clip with and without audio, extracts per-region
   engagement, plots the charts and writes `data/output/neurolens_output.png` and
   `data/output/neurolens_output.json`.
-- `batch_process.ipynb` — runs several local videos and appends them to its own sample list,
+- `batch_process.ipynb`: runs several local videos and appends them to its own sample list,
   `data/output/prototype_samples.json` (`timesteps` with `engagement_overall` and five regions).
   The app does not read it: the app's samples (`data/samples.json`) are made by
   `infra/make_sample.py`.
@@ -59,30 +59,30 @@ The notebook runs 21 code cells in sequence (the last one is empty):
 | 1 | GPU check | instant |
 | 2 | Locate the project root, load `config.json` | instant |
 | 3 | NumPy version check | instant |
-| 4–5 | HuggingFace auth, pre-download LLaMA 3.2-3B | ~5 min (first run, 6 GB download) |
+| 4-5 | HuggingFace auth, pre-download LLaMA 3.2-3B | ~5 min (first run, 6 GB download) |
 | 6 | Load TRIBE v2 checkpoint | ~10 sec |
 | 7 | Set the sample video path (`VIDEO_PATH`) and probe it | ~5 sec |
-| 8 | Build events, run full inference (video + audio) | ~2–5 min (first run loads V-JEPA2 ~14 GB) |
-| 9–10 | Inspect raw `(T, 20484)` output and the segment list | instant |
-| 11–12 | Load Destrieux atlas, map Destrieux labels to the ROIs | ~5 sec |
+| 8 | Build events, run full inference (video + audio) | ~2-5 min (first run loads V-JEPA2 ~14 GB) |
+| 9-10 | Inspect raw `(T, 20484)` output and the segment list | instant |
+| 11-12 | Load Destrieux atlas, map Destrieux labels to the ROIs | ~5 sec |
 | 13 | Extract per-region engagement timeseries | instant |
-| 14–15 | Strip audio, re-run inference (video-only) | ~2–5 min |
+| 14-15 | Strip audio, re-run inference (video-only) | ~2-5 min |
 | 16 | Compute audio contribution delta | instant |
-| 17 | Normalise all scores to 0–1 | instant |
+| 17 | Normalise all scores to 0-1 | instant |
 | 18 | Plot 6-panel engagement chart, save PNG | instant |
 | 19 | Export structured JSON output | instant |
 | 20 | Print per-GPU VRAM use | instant |
-| 21 | (empty) | — |
+| 21 | (empty) | - |
 
-**Total first-run time:** approximately 15–20 minutes (dominated by model downloads).  
-**Subsequent runs:** approximately 5–10 minutes (inference only, models cached).
+Total first-run time: approximately 15-20 minutes, mostly model downloads.
+Subsequent runs take approximately 5-10 minutes (inference only, models cached).
 
 ### Expected outputs
 
 After running all cells, you'll have two files in `data/output/`:
 
-- `neurolens_output.png` — a 6-panel dark-theme chart showing overall engagement, per-ROI activation, and audio contribution over the video timeline
-- `neurolens_output.json` — the prototype's JSON, with per-second engagement scores for all five regions (the app's own result format is in `docs/M3d_spec.md`)
+- `neurolens_output.png`: a 6-panel dark-theme chart showing overall engagement, per-ROI activation, and audio contribution over the video timeline
+- `neurolens_output.json`: the prototype's JSON, with per-second engagement scores for all five regions (the app's own result format is in `docs/M3d_spec.md`)
 
 ### GPU notes
 
@@ -95,5 +95,5 @@ TRIBE v2 runs on one GPU and peaks at about 20 GB of GPU memory, so a 24 GB card
 | `ImportError: cannot import name '_center'` | An older tribev2 with a newer NumPy | The repo pins `numpy==2.2.6` in `requirements/base.txt`, the version the pinned tribev2 uses; reinstall from `requirements/` then restart the kernel |
 | `ReadTimeout` during `model.predict()` | LLaMA download times out | Run the pre-download cell (Cell 5) first |
 | `CUDA out of memory` on `predict()` | Insufficient VRAM | The model peaks at about 20 GB; free that much VRAM |
-| `ValueError` on `get_events_dataframe()` | Temp file not flushed | The notebook handles this — don't modify file I/O |
+| `ValueError` on `get_events_dataframe()` | Temp file not flushed | The notebook handles this; don't modify file I/O |
 | `401 Unauthorized` | LLaMA license not accepted | Visit [meta-llama/Llama-3.2-3B](https://huggingface.co/meta-llama/Llama-3.2-3B) and accept |

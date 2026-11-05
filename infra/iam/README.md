@@ -11,7 +11,7 @@ AWS account (other projects' buckets or machines, for example). Five policy file
 | `neurolens-quota-requests.json` | the deploy user | Asking AWS for higher SageMaker and Lambda quotas in us-east-1, and seeing those requests' status; on the first request, creating the AWS helper role through which Service Quotas opens the support case. A quota is only a ceiling and costs nothing; the other policies still limit what may run |
 | `neurolens-role-boundary.json` | nobody directly (a *permissions boundary*) | The most any `neurolens-*` role may ever do, whatever is written into it |
 
-**Why the boundary.** The deploy user creates the roles that machines and Lambdas use. Without a
+Why the boundary exists. The deploy user creates the roles that machines and Lambdas use. Without a
 limit, someone holding the deploy user's keys could create a `neurolens-` role with full account
 access, start a machine with it, and escape every other restriction here. A permissions boundary is
 a ceiling AWS checks on top of a role's own policy: the compute policy only lets the deploy user
@@ -44,7 +44,7 @@ Edits later: open the policy, Edit, paste the new file. AWS keeps up to five ver
 
 The account owner follows [ACCOUNT_OWNER.md](ACCOUNT_OWNER.md) (create the five policies, attach
 four, make an access key, switch on Claude). The deployer then requests quotas
-himself with the `neurolens-quota-requests` policy.
+with the `neurolens-quota-requests` policy.
 
 ## Check (with the `neurolens` profile)
 

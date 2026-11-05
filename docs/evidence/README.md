@@ -43,10 +43,10 @@ Spot saved 1-9% a month and was often unavailable. Spot capacity is AWS's unused
 ## Candidates
 Every GPU instance type in us-east-1 (AWS price list and `aws ec2 describe-instance-types`, 2026-10-03), filtered by four requirements:
 
-1. **GPU memory of at least about 22 GB usable.** The real pipeline peaked at 19.8 GB of GPU memory on a 119 s clip (first GPU run, 2026-10-03, `nvidia-smi` total including WhisperX). This holds because the sound goes to the audio model in pieces of at most 60 s (equal pieces since commit `4ce57b0`). Before that, a 60-90 s video went as one piece: a 76 s video ran out of memory on an L4 (job `6fa47f14`, 2026-10-29) and on a GPU capped at 21.95 GiB (Slurm job 1036282). With equal pieces, the 76 s video and the 119 s clip peaked at 19.88 GB under the same cap (Slurm job 1037606, 2026-10-30).
-2. **Runs our software:** x86 processor and a GPU that PyTorch below 2.7 supports (tribev2 requires `torch<2.7`).
-3. **One GPU:** tribev2 runs on a single GPU. A multi-GPU machine could run several jobs side by side, but per GPU it costs more than the single-GPU types (for example 4 x L4 in `g6.12xlarge` is about $1.15 per GPU-hour against $0.98 for `g6.2xlarge`; 4 x A10G about $1.42 against $1.21).
-4. **Smallest size with at least 32 GB RAM** (peak 13.7 GB). Larger sizes have the same GPU; the GPU was about 90% busy during video encoding, so extra CPU and RAM would not help. This is a judgment (keep about 4 GB free; running out of RAM kills the job), not a measurement: the 16 GB `xlarge` sizes would leave about 2 GB.
+1. GPU memory of at least about 22 GB usable. The real pipeline peaked at 19.8 GB of GPU memory on a 119 s clip (first GPU run, 2026-10-03, `nvidia-smi` total including WhisperX). The requirement holds because the sound goes to the audio model in pieces of at most 60 s (equal pieces since commit `4ce57b0`). Before that, a 60-90 s video went as one piece: a 76 s video ran out of memory on an L4 (job `6fa47f14`, 2026-10-29) and on a GPU capped at 21.95 GiB (Slurm job 1036282). With equal pieces, the 76 s video and the 119 s clip peaked at 19.88 GB under the same cap (Slurm job 1037606, 2026-10-30).
+2. Runs our software: x86 processor and a GPU that PyTorch below 2.7 supports (tribev2 requires `torch<2.7`).
+3. One GPU: tribev2 runs on a single GPU. A multi-GPU machine could run several jobs side by side, but per GPU it costs more than the single-GPU types (for example 4 x L4 in `g6.12xlarge` is about $1.15 per GPU-hour against $0.98 for `g6.2xlarge`; 4 x A10G about $1.42 against $1.21).
+4. Smallest size with at least 32 GB RAM (peak 13.7 GB). Larger sizes have the same GPU; the GPU was about 90% busy during video encoding, so extra CPU and RAM would not help. This is a judgment (keep about 4 GB free; running out of RAM kills the job), not a measurement: the 16 GB `xlarge` sizes would leave about 2 GB.
 
 | Type | GPU | GPU memory usable | RAM | On-demand $/h | Result |
 |---|---|---|---|---|---|
@@ -96,13 +96,13 @@ One run per clip per type, in us-east-1. "Warm" leaves out the one-time WhisperX
 | `g6e.2xlarge` (fallback, same L40S, $2.24/h) | 119 s loop 485 s (code `b1fb933`, image v1): 1-3% faster than `xlarge`, about $0.30 a job (17-19% more) | | |
 | First job of a worker (119 s) | | 1,528 s | 1,880 s (over the 1,800 s queue timeout) |
 
-**First-job warm-up (2026-10-03).** The one-time WhisperX environment set-up on a worker's first job took 5 min 41 s on the v2 image (8 min 3 s on v1); later jobs on the same worker take about 14 s. It is included in the first-job and cold-start figures, not in the warm job times above.
+First-job warm-up (2026-10-03). The one-time WhisperX environment set-up on a worker's first job took 5 min 41 s on the v2 image (8 min 3 s on v1); later jobs on the same worker take about 14 s. It is included in the first-job and cold-start figures, not in the warm job times above.
 
-**Decision: `g6e.xlarge` stays.** When it is unavailable the endpoint tries the next pool in `infra/terraform/sagemaker.tf`: `ml.g6.2xlarge`, then `ml.g5.2xlarge`, then `ml.g6e.2xlarge`. The two cheaper GPUs cost 1.3-1.6 times more per video and make people wait 2.3-3.2 times longer. The best cheaper type (A10G) is 31-57% dearer per video than `g6e`, outside the 20% re-run band, so no re-run was needed.
+Decision: `g6e.xlarge` stays. When it is unavailable the endpoint tries the next pool in `infra/terraform/sagemaker.tf`: `ml.g6.2xlarge`, then `ml.g5.2xlarge`, then `ml.g6e.2xlarge`. The two cheaper GPUs cost 1.3-1.6 times more per video and make people wait 2.3-3.2 times longer. The best cheaper type (A10G) is 31-57% dearer per video than `g6e`, outside the 20% re-run band, so no re-run was needed.
 
-**What limits the job:** video encoding on the A10G (same 32-bit compute as the L4, twice its memory bandwidth) was 2.4 times slower than on the L40S, close to the compute ratio (2.9) and far from the bandwidth ratio (1.4), so encoding is mainly limited by compute. The L4 alone could not show this: it trails the L40S by about 3 times on both.
+What limits the job: video encoding on the A10G (same 32-bit compute as the L4, twice its memory bandwidth) was 2.4 times slower than on the L40S, close to the compute ratio (2.9) and far from the bandwidth ratio (1.4), so encoding is mainly limited by compute. The L4 alone could not show this: it trails the L40S by about 3 times on both.
 
-**As fallbacks when `g6e` is sold out:** the endpoint's pools are, in order, `ml.g6.2xlarge`, `ml.g5.2xlarge` and `ml.g6e.2xlarge` (`infra/terraform/sagemaker.tf`). They fit and give the same results, but the two cheaper GPUs are slower and dearer per video; they are kept because they keep the service working when L40S capacity is unavailable (28 Oct, below). The L4's first 119 s job also took longer than the queue's 1,800 s visibility timeout.
+As fallbacks when `g6e` is sold out: the endpoint's pools are, in order, `ml.g6.2xlarge`, `ml.g5.2xlarge` and `ml.g6e.2xlarge` (`infra/terraform/sagemaker.tf`). They fit and give the same results, but the two cheaper GPUs are slower and dearer per video; they are kept because they keep the service working when L40S capacity is unavailable (28 Oct, below). The L4's first 119 s job also took longer than the queue's 1,800 s visibility timeout.
 
 ## GPU availability on 28 Oct (SageMaker endpoint, us-east-1)
 Saved on 2026-10-28, because Application Auto Scaling keeps activity history for only 6 weeks.
@@ -144,8 +144,8 @@ twice per job before the fix and once after. Peak GPU memory was 19.8 GB before 
 
 ## First-job warm-up
 
-- **2026-10-03:** WhisperX's one-time set-up on a worker's first job took 8 min 3 s on v1 and
+- 2026-10-03: WhisperX's one-time set-up on a worker's first job took 8 min 3 s on v1 and
   5 min 41 s on v2; later jobs on the same worker take about 14 s.
-- **2026-10-05 (CPU worker, fresh from the v2 image):** a cold `uvx whisperx --help` took 2 min 54 s
+- 2026-10-05 (CPU worker, fresh from the v2 image): a cold `uvx whisperx --help` took 2 min 54 s
   against 16.5 s warm; the worker's first `import torch` took 86-107 s. With `UV_OFFLINE=1` the
   first `uvx` took 31.4 s.
