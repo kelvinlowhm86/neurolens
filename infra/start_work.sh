@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Starts processing (docs/M3e_spec.md §6b): the SageMaker endpoint's normal state is max 1.
 #   infra/start_work.sh                         scale out on demand; the GPU stops after 7 idle minutes
-#   infra/start_work.sh --keep-warm [--hours N] one GPU now, for N hours (1-4, default 3); AWS ends it
+#   infra/start_work.sh --keep-warm [--hours N] one GPU now, for N hours (1-5, default 3); AWS ends it
 set -euo pipefail
 
 VARIANT_MAIN=main
@@ -12,7 +12,7 @@ KEEP_WARM=0
 HOURS_GIVEN=0
 
 usage() {
-  echo "usage: $0 [--keep-warm [--hours 1-4]]" >&2
+  echo "usage: $0 [--keep-warm [--hours 1-5]]" >&2
   exit 2
 }
 
@@ -29,7 +29,7 @@ done
   echo "--hours goes with --keep-warm." >&2
   usage
 }
-case "$HOURS" in 1|2|3|4) ;; *) echo "--hours must be 1, 2, 3 or 4 (got $HOURS)." >&2; exit 2 ;; esac
+case "$HOURS" in 1|2|3|4|5) ;; *) echo "--hours must be 1 to 5 (got $HOURS)." >&2; exit 2 ;; esac
 
 source "$(dirname "$0")/aws_env.sh"
 RESOURCE="endpoint/$ENDPOINT/variant/$VARIANT_MAIN"

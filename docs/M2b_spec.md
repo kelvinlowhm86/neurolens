@@ -7,7 +7,7 @@ Only the parts of this milestone still in use are described here; the rest is in
 ## 2. Warm hold and demo routine
 
 ### 2d. Warm hold (demos and study sessions)
-- `start_work.sh --keep-warm [--hours N]` (N from 1 to 4, default 3): **first** creates or replaces the one-off scheduled action `neurolens-keep-warm-end` at now + N hours, which sets the endpoint's scaling **minimum to 0** and its maximum to 1; then sets min 1, max 1. If creating the scheduled action fails, it stops with an error and starts nothing. Re-running it during a hold moves the end to N hours from now. The 4-hour cap bounds the cost of a forgotten hold (about $7.50), since a hold deliberately turns off every automatic stop.
+- `start_work.sh --keep-warm [--hours N]` (N from 1 to 5, default 3): **first** creates or replaces the one-off scheduled action `neurolens-keep-warm-end` at now + N hours, which sets the endpoint's scaling **minimum to 0** and its maximum to 1; then sets min 1, max 1. If creating the scheduled action fails, it stops with an error and starts nothing. Re-running it during a hold moves the end to N hours from now. The 4-hour cap bounds the cost of a forgotten hold (about $7.50), since a hold deliberately turns off every automatic stop.
 - While the minimum is 1, AWS keeps the worker: scale-in cannot go below the minimum. When the hold ends, the minimum is 0 again and the normal rules apply: an idle worker is removed after 7 idle minutes. A job in progress is never cut.
 - `start_work.sh` without a keep option sets min 0 / max 1 only; it never changes the keep-warm timer, so it cannot end a running hold.
 - `start_work.sh` does not check alarms: the GPU guard is the backstop (M3e §6c).

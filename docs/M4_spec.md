@@ -24,7 +24,9 @@ decides (§6).
 **Out of scope:** in-app study code (consent screens, participant flags, timing); study scripts
 beyond the survey form; new experiment tooling unless an experiment cannot be run without it.
 
-## 2. STePS booth (11 Nov, about 3 hours)
+## 2. STePS booth (11 Nov, the whole event)
+The 29th STePS: Wednesday 11 Nov, 2:00–6:30 pm, Multi-Purpose Hall, COM3 Level 1
+(https://uvents.nus.edu.sg/event/29th-steps).
 A drop-in table at STePS: visitors try NeuroLens on a team laptop, then fill in a short anonymous survey.
 - **Survey:** `docs/study/questionnaire.md` is the form's text and settings; `docs/study/make_form.gs`
   builds it in Google Forms (keep the two in step). It collects no email or name. It asks for
@@ -35,14 +37,14 @@ A drop-in table at STePS: visitors try NeuroLens on a team laptop, then fill in 
 - **Account:** one booth account, signed in on the booth laptop, given enough minutes beforehand with
   `infra/grant_credit.py <dollars> --backend data_api`. Visitors use the samples or upload a short
   clip from the team's devices or their own.
-- **GPU:** `infra/start_work.sh --keep-warm --hours 4` at least 15 minutes before opening (a cold
+- **GPU:** `infra/start_work.sh --keep-warm --hours 5` at least 15 minutes before opening (a cold
   GPU takes about 10 minutes), then one short warm-up upload. `infra/stop_work.sh` at closing.
 - **After the booth:** delete the booth account's jobs from History (or the account itself), so
   visitors' uploads do not stay. Download the form responses as CSV; keep it local (git-ignored,
   `*.local.*` name) and use only totals and short anonymous quotes in the report. SUS score per
   response: odd items `answer − 1`, even items `5 − answer`, sum × 2.5 (0–100).
-- **Cost (estimate):** 4 GPU hours on `ml.g6e.xlarge` at about $2.61 an hour (SageMaker price) plus Aurora awake:
-  about $11.
+- **Cost (estimate):** 5 GPU hours on `ml.g6e.xlarge` at about $2.61 an hour (SageMaker price) plus Aurora awake:
+  about $14.
 
 ## 3. Experiments
 Experiments 1–3 as in the preliminary report (`docs/course/Preliminary.tex` §5.1): latency

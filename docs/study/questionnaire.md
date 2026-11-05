@@ -1,6 +1,6 @@
 # NeuroLens booth survey (Google Form text)
 
-Drop-in booth at STePS (11 Nov), about 3 hours, one booth account on a team laptop. Visitors try a sample or upload a short clip, then fill in this form (QR code at the booth, link on the website). Anonymous: the form does not collect email addresses. About 3-4 minutes.
+Drop-in booth at STePS (11 Nov, 2:00–6:30 pm), one booth account on a team laptop. Visitors try a sample or upload a short clip, then fill in this form (QR code at the booth, link on the website). Anonymous: the form does not collect email addresses. About 3-4 minutes.
 
 `make_form.gs` (next to this file) builds this form in Google Forms: paste it into a new project at script.google.com, press Run, allow access once; the log prints the form's link and edit link. Keep this file and the script in step.
 

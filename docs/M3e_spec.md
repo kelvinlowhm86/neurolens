@@ -162,7 +162,7 @@ The same rules as the old `verify` (length limit first, then record the duration
 
   A running job dies and is refunded (§5). Uploads are refused while paused (§8), and one already uploading when the pause starts is refunded by the dispatcher (§3 step 8).
 - **`start_work.sh`** sets max 1 (the normal state; also what Terraform applies).
-  - `--keep-warm --hours N` (1–4): first a one-time scheduled action that sets min back to 0 at the end (`--schedule "at(YYYY-MM-DDThh:mm:ss)"`, UTC), then min 1. In that order, a failure never leaves min 1 without an end. AWS ends a keep-warm without anyone remembering. Running it again moves the end.
+  - `--keep-warm --hours N` (1–5): first a one-time scheduled action that sets min back to 0 at the end (`--schedule "at(YYYY-MM-DDThh:mm:ss)"`, UTC), then min 1. In that order, a failure never leaves min 1 without an end. AWS ends a keep-warm without anyone remembering. Running it again moves the end.
   - Neither script touches Aurora's minimum capacity, and Terraform no longer ignores changes to it.
   - There is no option to keep Aurora awake: Aurora has no scheduled end, so a forgotten one would bill about $40 a month (estimate: 0.5 ACU around the clock), and a demo keeps it awake by itself (it pauses after 5 idle minutes).
 - `debug_worker.sh` is deleted. Container logs are in CloudWatch (`/aws/sagemaker/Endpoints/neurolens`).

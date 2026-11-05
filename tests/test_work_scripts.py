@@ -305,7 +305,7 @@ def test_start_refuses_keep_db(sandbox):
     [
         ("--hours", "2"),
         ("--keep-warm", "--hours", "0"),
-        ("--keep-warm", "--hours", "5"),
+        ("--keep-warm", "--hours", "6"),
         ("--max", "3"),
     ],
 )

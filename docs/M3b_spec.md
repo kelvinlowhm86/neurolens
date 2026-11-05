@@ -127,7 +127,7 @@ Options are named by what they change; the help text says when to use each.
 | Command | Does |
 |---|---|
 | `start_work.sh` | sets the endpoint's scaling maximum to 1, so an upload starts a GPU by itself; it stops after 7 idle minutes. |
-| `start_work.sh --keep-warm [--hours N]` | the above plus a warm GPU now, kept for N hours (1 to 4, default 3); AWS ends it at the end of the window. For demos and study sessions. |
+| `start_work.sh --keep-warm [--hours N]` | the above plus a warm GPU now, kept for N hours (1 to 5, default 3); AWS ends it at the end of the window. For demos and study sessions. |
 | `stop_work.sh` | sets the scalable target to 0/0 and reads it back, deletes any keep-warm action, sets the endpoint's desired count to 0 and waits until no instance remains. The website stays up. |
 | `build_image.sh` | zips the last commit (refuses uncommitted changes), builds the worker image in CodeBuild, and prints its digest; put it in `terraform.tfvars` as `worker_image` and apply. |
 
