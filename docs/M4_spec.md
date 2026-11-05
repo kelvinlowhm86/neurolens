@@ -7,27 +7,27 @@ of credit, M3b/M3c; early access by request, M3k), and the experiment scripts in
 
 **Ground rules:** region `us-east-1`, `neurolens` CLI profile. **No new product features:**
 problems the booth or the experiments find go in the report as future work. Every GPU session's
-cost estimate is stated, and agreed by Josh, before it starts; every session ends with
+cost estimate is stated, and agreed by the team, before it starts; every session ends with
 `infra/stop_work.sh` (`docs/session_checklist.md`).
 
 ## 1. Scope
 **In scope:** the drop-in booth and its anonymous survey (§2); Experiments 1–3 with the existing
-scripts (§3); the report material (§4); merging `aws-josh` into `main` (§5); teardown when Josh
+scripts (§3); the report material (§4); merging `aws-josh` into `main` (§5); teardown when the team
 decides (§6).
 
 **Out of scope:** in-app study code (consent screens, participant flags, timing); study scripts
 beyond the survey form; new experiment tooling unless an experiment cannot be run without it.
 
 ## 2. Booth study (11 Nov, about 3 hours)
-A drop-in table: visitors try NeuroLens on Josh's laptop, then fill in a short anonymous survey.
+A drop-in table: visitors try NeuroLens on a team laptop, then fill in a short anonymous survey.
 - **Survey:** `docs/study/questionnaire.md` is the form's text and settings; `docs/study/make_form.gs`
   builds it in Google Forms (keep the two in step). It collects no email or name. It asks for
   consent (a required tick), what the visitor did, the 10 SUS items in the standard order,
   usefulness and trust, whether NeuroLens showed something new, willingness to pay, and two open
   questions. `docs/study/booth_survey_qr.svg` (and `.png`) is the form's QR code for the table card;
   the site's "Give feedback" link opens the same form.
-- **Account:** one booth account, signed in on Josh's laptop, given enough minutes beforehand with
-  `infra/grant_credit.py`. Visitors use the samples or upload a short clip from Josh's devices or
+- **Account:** one booth account, signed in on the booth laptop, given enough minutes beforehand with
+  `infra/grant_credit.py`. Visitors use the samples or upload a short clip from the team's devices or
   their own.
 - **GPU:** `infra/start_work.sh --keep-warm --hours 4` at least 15 minutes before opening (a cold
   GPU takes about 10 minutes), then one short warm-up upload. `infra/stop_work.sh` at closing.
@@ -43,7 +43,7 @@ The run layout, file columns and manifests are fixed by the scripts themselves
 (`neurolens/experiment_runs.py` and each script's docstring); `experiments/README.md` lists them.
 Each run writes `experiments/<experiment>/<run_id>/` in the bucket with a `manifest.json`
 (`experiments/finish_run.py`, given the live image's digest).
-- **Clips:** Josh supplies them: one fixed set for all three experiments; open-licensed, listed in
+- **Clips:** the team supplies them: one fixed set for all three experiments; open-licensed, listed in
   `data/videos/SOURCES.md`; with sound, some clear English speech, some without speech; H.264/AAC,
   720p or less, at most 120 s. Proposed lengths 15, 30 and 60 s, 3 clips each (120 s: open).
 - **Experiment 1 (latency):** on a warm GPU (`start_work.sh --keep-warm`, then one warm-up job),
@@ -86,7 +86,7 @@ Each run writes `experiments/<experiment>/<run_id>/` in the bucket with a `manif
 Teammates work on `main` in parallel: merge `aws-josh` into `main` (not a rebase), resolve
 conflicts with the teammate who changed the file, and check that `pytest` passes in CI on `main`.
 
-## 6. Teardown (only when Josh decides)
+## 6. Teardown (only when the team decides)
 Nothing is deleted on a date. In order, each step checked before the next:
 1. `infra/stop_work.sh` prints ALL STOPPED.
 2. Copy anything the report still needs from `s3://<bucket>/experiments/` to the laptop, then
