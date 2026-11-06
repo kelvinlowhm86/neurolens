@@ -1,22 +1,23 @@
 # NeuroLens: rules for people and AI tools
 
-NeuroLens predicts brain activity for a video (TRIBE v2) and turns it into per-region "engagement" curves, served by a Flask web app. Course project: not for commercial use (the model is CC BY-NC).
+NeuroLens predicts brain activity for a video (TRIBE v2) and turns it into a signed, second-by-second brain response (7 signals in 3 groups, a 3D map), served by a Flask web app. Course project: not for commercial use (the model is CC BY-NC).
 
 ## Layout
-- `neurolens/` the package: `settings.py` (config + paths), `engagement.py` (pure maths, numpy only), `inference.py` (model + atlas loading, `run_inference`, `strip_audio`), `web/app.py` (`create_app()`, Flask routes).
-- `app.py` thin launcher (`python app.py`, port 5003). `static/` the page. `data/` samples, videos, thumbnails.
-- `notebooks/` the two `.ipynb` files (need a GPU). `requirements/` per-machine dependency lists. `infra/` AWS-only files (later milestones). `tests/` pytest. `docs/` specs.
+- `neurolens/` the package: `settings.py` (config + paths), `response.py` (signals from the brain-area map, pure maths, numpy only), `inference.py` (model + atlas loading, `build_events`, `without_audio`, `predict`, fake mode), `media.py` (ffprobe duration), `pricing.py`, `storage.py` (S3 helpers), `db.py` (Aurora/Postgres access), `billing.py` (credits, ledger, sign-in users), `results.py`, `experiment_runs.py`, `worker.py` (the SageMaker container: `/ping`, `/invocations`, claim, charge/refund), `lambdas/` (dispatcher, SageMaker error handler, GPU guard, reaper, dead-letter handler), `web/` (`app.py` `create_app()` and Flask routes, `auth.py`, `lambda_handler.py`).
+- `app.py` and `worker.py` at the root are thin launchers (`python app.py`, port 5003). `static/` the page. `data/` samples, videos, thumbnails (`data/videos/README.md`).
+- `notebooks/` the two `.ipynb` files (a laptop prototype needing its own GPU; `notebooks/README.md`). `requirements/` per-machine dependency lists. `infra/` Terraform, IAM, worker image, deploy and start/stop scripts, migrations, operator scripts (`infra/README.md`). `experiments/` report experiments, side trials and `locustfile.py` (`experiments/README.md`). `tests/` pytest. `docs/` specs, evidence, study and submitted `course/` documents (`docs/README.md`).
 
 ## Commands
 - Set up: `python3.12 -m venv .venv && source .venv/bin/activate && pip install -e . -r requirements/dev.txt`
 - Test: `pytest`. Lint: `ruff check .`. Format: `ruff format .`
+- Laptop, whole product with no real AWS: `python infra/local_stack.py` (the local PostgreSQL from README "Run it on a laptop"; `--grant <email> <dollars>` adds credit). `python app.py` runs only against it.
 
 ## Rules
 - Heavy imports (`torch`, `tribev2`, `nilearn`, `huggingface_hub`) only inside functions, never at module top of `neurolens/`.
-- The web code must not import `neurolens.inference` at module level (only inside `create_app` when `load_model=True`; removed in M1).
+- The web code never imports `neurolens.inference` (nor `torch`): analysis happens only in the SageMaker container (`python worker.py serve`; set `FAKE_INFERENCE=1` on a laptop). `create_app(data_dir=None, cfg=None)` never reads `config.json`; the launcher `app.py` loads it.
 - Read config only through `neurolens.settings`. Nothing runs at import time.
-- Never commit `config.json`, tokens or AWS keys. Never put them in Docker images.
-- Never edit a test to make it pass: stop and ask.
-- Do not change `extract_engagement` without updating `tests/fixtures/extract_engagement_golden.json` and saying so.
-- Normalisation rule, do not "fix": `extract_engagement` cuts the with-audio and no-audio auditory passes to their shared length first, then rescales each to 0-1. So `auditory` and `auditory_with_audio` can differ in the same row.
-- Work on branch `aws-josh`, not `main`. Specs in `docs/` describe the current design only; history lives in git.
+- Settings: `config.json` is committed and shared (behaviour settings only, no secrets). Secrets and deployment-specific values (`HF_TOKEN`, `NEUROLENS_S3_BUCKET`, `NEUROLENS_GPU_ENDPOINT`) go in `.env` (git-ignored; copy `.env.example`) and are read through `settings.load_settings`. Never commit `.env`, tokens or AWS keys, and never put them in Docker images.
+- Change a test only when the behaviour it pins was deliberately changed; the commit says which test and why. Never edit a test just to make it pass.
+- Do not change `extract_response` without regenerating `tests/fixtures/extract_response_golden.json` and saying so.
+- Values rule, do not "fix": `extract_response` gives signed means with no absolute value and no rescaling (0 = typical film/TV viewing, the model's built-in scale), so videos can be compared. The muted (no-audio) series are cut to the shared length of the two passes.
+- Specs in `docs/` describe the current design only; history lives in git.

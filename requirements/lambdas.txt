@@ -1,0 +1,3 @@
+# The report Lambda's Bedrock SDK, shipped as its own layer (infra/build_report_layer.sh).
+# Kept out of the web and job Lambda zips, which need no third-party package.
+anthropic[bedrock]==2.3.0

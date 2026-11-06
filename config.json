@@ -1,0 +1,52 @@
+{
+  "paths": {
+    "models": "./models",
+    "data": "./data"
+  },
+  "model": {
+    "repo_id": "facebook/tribev2"
+  },
+  "hf_download_timeout": 300,
+  "max_video_duration_seconds": 120,
+  "max_upload_bytes": 300000000,
+  "upload": {
+    "max_batch_files": 5,
+    "max_waiting_jobs": 10
+  },
+  "research": {
+    "curve_rewards_per_window": 5,
+    "curve_reward_window_days": 30,
+    "no_curve_days": 90,
+    "curve_length_tolerance_s": 2,
+    "curve_min_views": 1000
+  },
+  "response": {
+    "colour_range": 0.5
+  },
+  "worker": {
+    "heartbeat_seconds": 50,
+    "max_job_minutes": 55
+  },
+  "report": {
+    "model": "us.anthropic.claude-sonnet-4-6",
+    "max_tokens": 20000,
+    "max_tries": 3,
+    "stale_minutes": 16
+  },
+  "db": {
+    "backend": "data_api"
+  },
+  "auth": {
+    "mode": "dev",
+    "dev_user_id": "dev-user",
+    "dev_email": "dev@localhost"
+  },
+  "billing": {
+    "starter_cents": 0,
+    "invite_cents": 1000
+  },
+  "server": {
+    "host": "127.0.0.1",
+    "port": 5003
+  }
+}

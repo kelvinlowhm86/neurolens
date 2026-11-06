@@ -1,0 +1,4 @@
+# Extra packages for experiments/gaze_trial.py (ViNet-S trial). torch and numpy come from the
+# project's model environment; pinning torch here could replace its CUDA build with a CPU one.
+gdown==6.4.2
+opencv-python-headless==5.0.0.93

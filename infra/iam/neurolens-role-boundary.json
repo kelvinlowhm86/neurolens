@@ -1,0 +1,174 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "NeurolensBucketsOnly",
+      "Effect": "Allow",
+      "Action": "s3:*",
+      "Resource": [
+        "arn:aws:s3:::neurolens-*",
+        "arn:aws:s3:::neurolens-*/*"
+      ]
+    },
+    {
+      "Sid": "NeurolensQueuesOnly",
+      "Effect": "Allow",
+      "Action": "sqs:*",
+      "Resource": "arn:aws:sqs:us-east-1:*:neurolens-*"
+    },
+    {
+      "Sid": "NeurolensParametersOnly",
+      "Effect": "Allow",
+      "Action": [
+        "ssm:GetParameter",
+        "ssm:GetParameters"
+      ],
+      "Resource": "arn:aws:ssm:us-east-1:*:parameter/neurolens/*"
+    },
+    {
+      "Sid": "DecryptParametersThroughParameterStoreOnly",
+      "Effect": "Allow",
+      "Action": "kms:Decrypt",
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "kms:ViaService": "ssm.us-east-1.amazonaws.com"
+        }
+      }
+    },
+    {
+      "Sid": "DeleteCognitoLoginsInNeurolensPools",
+      "Effect": "Allow",
+      "Action": [
+        "cognito-idp:ListUsers",
+        "cognito-idp:AdminDeleteUser"
+      ],
+      "Resource": "arn:aws:cognito-idp:us-east-1:*:userpool/*",
+      "Condition": {"StringEquals": {"aws:ResourceTag/Project": "neurolens"}}
+    },
+    {
+      "Sid": "LogsOnlyNeurolensFunctions",
+      "Effect": "Allow",
+      "Action": [
+        "logs:CreateLogStream",
+        "logs:PutLogEvents"
+      ],
+      "Resource": "arn:aws:logs:us-east-1:*:log-group:/aws/lambda/neurolens-*:*"
+    },
+    {
+      "Sid": "DataApiOnlyNeurolensDatabase",
+      "Effect": "Allow",
+      "Action": [
+        "rds-data:ExecuteStatement",
+        "rds-data:BeginTransaction",
+        "rds-data:CommitTransaction",
+        "rds-data:RollbackTransaction"
+      ],
+      "Resource": "arn:aws:rds:us-east-1:*:cluster:neurolens-*"
+    },
+    {
+      "Sid": "ReadOnlyTheNeurolensDatabaseSecret",
+      "Effect": "Allow",
+      "Action": "secretsmanager:GetSecretValue",
+      "Resource": "arn:aws:secretsmanager:us-east-1:*:secret:rds!*",
+      "Condition": {
+        "StringLike": {
+          "secretsmanager:ResourceTag/aws:rds:primaryDBClusterArn": "arn:aws:rds:us-east-1:*:cluster:neurolens-*"
+        }
+      }
+    },
+    {
+      "Sid": "SageMakerEndpointOnlyNeurolens",
+      "Effect": "Allow",
+      "Action": [
+        "sagemaker:DescribeEndpoint",
+        "sagemaker:UpdateEndpointWeightsAndCapacities",
+        "sagemaker:InvokeEndpointAsync"
+      ],
+      "Resource": "arn:aws:sagemaker:us-east-1:*:endpoint/neurolens*"
+    },
+    {
+      "Sid": "StartOnlyTheReportFunction",
+      "Effect": "Allow",
+      "Action": "lambda:InvokeFunction",
+      "Resource": "arn:aws:lambda:us-east-1:*:function:neurolens-report"
+    },
+    {
+      "Sid": "OnlyClaudeSonnet46InTheUs",
+      "Effect": "Allow",
+      "Action": "bedrock:InvokeModel",
+      "Resource": [
+        "arn:aws:bedrock:us-east-1:*:inference-profile/us.anthropic.claude-sonnet-4-6",
+        "arn:aws:bedrock:*::foundation-model/anthropic.claude-sonnet-4-6"
+      ]
+    },
+    {
+      "Sid": "ReadScalingTargetsHasNoResource",
+      "Effect": "Allow",
+      "Action": "application-autoscaling:DescribeScalableTargets",
+      "Resource": "*"
+    },
+    {
+      "Sid": "EcrLoginTokenHasNoResource",
+      "Effect": "Allow",
+      "Action": "ecr:GetAuthorizationToken",
+      "Resource": "*"
+    },
+    {
+      "Sid": "PullAndPushTheWorkerImage",
+      "Effect": "Allow",
+      "Action": [
+        "ecr:BatchCheckLayerAvailability",
+        "ecr:BatchGetImage",
+        "ecr:GetDownloadUrlForLayer",
+        "ecr:InitiateLayerUpload",
+        "ecr:UploadLayerPart",
+        "ecr:CompleteLayerUpload",
+        "ecr:PutImage"
+      ],
+      "Resource": "arn:aws:ecr:us-east-1:*:repository/neurolens*"
+    },
+    {
+      "Sid": "PullTheAwsBaseImage",
+      "Effect": "Allow",
+      "Action": [
+        "ecr:BatchCheckLayerAvailability",
+        "ecr:BatchGetImage",
+        "ecr:GetDownloadUrlForLayer"
+      ],
+      "Resource": "arn:aws:ecr:us-east-1:763104351884:repository/pytorch-inference"
+    },
+    {
+      "Sid": "PublishGpuErrorsOnlyNeurolens",
+      "Effect": "Allow",
+      "Action": "sns:Publish",
+      "Resource": "arn:aws:sns:us-east-1:*:neurolens-*"
+    },
+    {
+      "Sid": "PublishEndpointInstanceMetricsOnly",
+      "Effect": "Allow",
+      "Action": "cloudwatch:PutMetricData",
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "cloudwatch:namespace": "/aws/sagemaker/Endpoints"
+        }
+      }
+    },
+    {
+      "Sid": "ContainerAndBuildLogsOnlyNeurolens",
+      "Effect": "Allow",
+      "Action": [
+        "logs:CreateLogGroup",
+        "logs:CreateLogStream",
+        "logs:PutLogEvents"
+      ],
+      "Resource": [
+        "arn:aws:logs:us-east-1:*:log-group:/aws/sagemaker/Endpoints/neurolens*",
+        "arn:aws:logs:us-east-1:*:log-group:/aws/sagemaker/Endpoints/neurolens*:*",
+        "arn:aws:logs:us-east-1:*:log-group:/aws/codebuild/neurolens-*",
+        "arn:aws:logs:us-east-1:*:log-group:/aws/codebuild/neurolens-*:*"
+      ]
+    }
+  ]
+}

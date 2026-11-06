@@ -1,0 +1,64 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "SignInPoolCreateOnlyIfTaggedNeurolens",
+      "Effect": "Allow",
+      "Action": "cognito-idp:CreateUserPool",
+      "Resource": "*",
+      "Condition": {"StringEquals": {"aws:RequestTag/Project": "neurolens"}}
+    },
+    {
+      "Sid": "SignInPoolsOnlyNeurolens",
+      "Effect": "Allow",
+      "Action": "cognito-idp:*",
+      "Resource": "arn:aws:cognito-idp:us-east-1:*:userpool/*",
+      "Condition": {"StringEquals": {"aws:ResourceTag/Project": "neurolens"}}
+    },
+    {
+      "Sid": "SignInDomainReadHasNoResource",
+      "Effect": "Allow",
+      "Action": ["cognito-idp:DescribeUserPoolDomain", "cognito-idp:ListUserPools"],
+      "Resource": "*"
+    },
+    {
+      "Sid": "CdnCreateOnlyIfTaggedNeurolens",
+      "Effect": "Allow",
+      "Action": "cloudfront:CreateDistribution",
+      "Resource": "*",
+      "Condition": {"StringEquals": {"aws:RequestTag/Project": "neurolens"}}
+    },
+    {
+      "Sid": "CdnTagOnlyAsNeurolens",
+      "Effect": "Allow",
+      "Action": "cloudfront:TagResource",
+      "Resource": "arn:aws:cloudfront::*:distribution/*",
+      "Condition": {"StringEquals": {"aws:RequestTag/Project": "neurolens"}}
+    },
+    {
+      "Sid": "CdnDistributionsOnlyNeurolens",
+      "Effect": "Allow",
+      "Action": "cloudfront:*",
+      "Resource": "arn:aws:cloudfront::*:distribution/*",
+      "Condition": {"StringEquals": {"aws:ResourceTag/Project": "neurolens"}}
+    },
+    {
+      "Sid": "CdnOriginSigningSettingsAndManagedPolicies",
+      "Effect": "Allow",
+      "Action": [
+        "cloudfront:CreateOriginAccessControl", "cloudfront:GetOriginAccessControl",
+        "cloudfront:UpdateOriginAccessControl", "cloudfront:DeleteOriginAccessControl",
+        "cloudfront:ListOriginAccessControls", "cloudfront:ListCachePolicies",
+        "cloudfront:GetCachePolicy", "cloudfront:ListOriginRequestPolicies",
+        "cloudfront:GetOriginRequestPolicy", "cloudfront:ListDistributions"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "LambdaAccountLimitsRead",
+      "Effect": "Allow",
+      "Action": "lambda:GetAccountSettings",
+      "Resource": "*"
+    }
+  ]
+}

@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NeuroLens — Privacy policy</title>
+<link rel="icon" href="data:,">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0B0C0E; --bar: #0B0C0E; --well: #0E1013; --line: #262A31;
+    --text: #E8EAED; --ink-2: #B4B9C0; --muted: #9097A1;
+    --accent: #FF8A2A;
+    --display: 'Space Grotesk', system-ui, sans-serif; --mono: 'JetBrains Mono', ui-monospace, monospace;
+    --grid: linear-gradient(rgba(255,255,255,.035) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(255,255,255,.035) 1px, transparent 1px);
+    --t-press: 80ms; --t-quick: 160ms; --t-page: 350ms;
+    --ease-out: cubic-bezier(.2, .7, .2, 1);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { background: var(--bg); }
+  body { min-height: 100vh; background-color: var(--bg); background-image: var(--grid); background-size: 24px 24px; color: var(--text); font: 15px/1.65 var(--display); letter-spacing: -0.003em; }
+  .bar { background: var(--bar); color: var(--text); display: flex; align-items: center; gap: 12px; padding: 0 24px; height: 56px; border-bottom: 1px solid var(--line); }
+  .brand { font: 600 17px/1 var(--display); letter-spacing: -0.02em; color: inherit; text-decoration: none; }
+  a { color: var(--accent); overflow-wrap: anywhere; transition: color var(--t-quick) var(--ease-out), background-color var(--t-quick) var(--ease-out), border-color var(--t-quick) var(--ease-out), transform var(--t-press) var(--ease-out); }
+  a:active { transform: scale(.98); }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  main { max-width: 760px; margin: 0 auto; padding: 48px 24px 72px; }
+  h1 { font: 600 clamp(28px, 4vw, 38px)/1.1 var(--display); letter-spacing: -0.025em; margin: 0 0 16px; }
+  h2 { font: 600 18px/1.3 var(--display); letter-spacing: -0.015em; margin: 32px 0 8px; }
+  p, li { color: var(--ink-2); }
+  ul, ol { padding-left: 22px; }
+  li { margin: 4px 0; }
+  strong { color: var(--text); }
+  code { font: 13px var(--mono); color: var(--text); background: var(--well); border: 1px solid var(--line); border-radius: 3px; padding: 1px 5px; overflow-wrap: anywhere; }
+  .updated { font-size: 13px; color: var(--muted); margin-bottom: 1.2em; }
+  p + p { margin-top: .8em; }
+  @media (max-width: 860px) {
+    .bar { padding: 0 16px; }
+    main { padding: 36px 16px 56px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; scroll-behavior: auto !important; }
+    @view-transition { navigation: none; }
+    .vt-scan { display: none; }
+  }
+  @view-transition { navigation: auto; }
+  .bar { view-transition-name: bar; }
+  ::view-transition-old(root) { animation: vt-out var(--t-page) var(--ease-out) both; }
+  ::view-transition-new(root) { animation: vt-reveal var(--t-page) var(--ease-out) both; }
+  .vt-scan { position: fixed; left: 0; top: 0; bottom: 0; width: 2px; z-index: 1000; pointer-events: none; opacity: 0; background: linear-gradient(180deg, transparent, #FF8A2A 20%, #FFC24A 50%, #FF8A2A 80%, transparent); box-shadow: 0 0 14px 2px rgba(255, 138, 42, .5), 28px 0 44px rgba(255, 138, 42, .1); }
+  html.vt-in .vt-scan { animation: vt-scan var(--t-page) var(--ease-out) both; }
+  @keyframes vt-out { to { opacity: 0; transform: scale(.99); } }
+  @keyframes vt-reveal { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0); } }
+  @keyframes vt-scan { from { transform: translateX(-2px); opacity: 1; } 85% { opacity: 1; } to { transform: translateX(calc(100vw - 2px)); opacity: 0; } }
+  @media (prefers-reduced-motion: reduce) { @view-transition { navigation: none; } }
+</style>
+<script>
+  // The scan line runs only while a page-to-page transition reveals this page.
+  addEventListener('pagereveal', e => {
+    if (!e.viewTransition) return;
+    document.documentElement.classList.add('vt-in');
+    e.viewTransition.finished.finally(() => document.documentElement.classList.remove('vt-in'));
+  });
+</script>
+</head>
+<body>
+<div class="vt-scan" aria-hidden="true"></div>
+<header class="bar"><a class="brand" href="/">NeuroLens</a></header>
+<main>
+  <h1>NeuroLens privacy policy</h1>
+  <p class="updated">Last updated: 5 November 2026</p>
+
+  <p>NeuroLens is an app that predicts the brain response to a video and shows the main brain
+  response chart, a written report and a 3D brain map. Analysing your own videos uses credit
+  from the NeuroLens team; the sample videos are free. Videos that people choose to share may
+  later help build NeuroLens's own models, which may become a paid product — that part is
+  described under "Sharing a video" below. This page says what data NeuroLens handles.</p>
+
+  <h2>What we collect</h2>
+  <ul>
+    <li><strong>Your email address</strong>, from Google or from the address you sign up with. We
+    use it only to recognise your account when you sign in and when you come back.</li>
+    <li><strong>Videos you upload</strong>, and the analysis results made from them, including the 3D brain data. We also keep a copy re-encoded to play on phones; it is deleted with the video, kept with the result (30 days), and is not part of any shared copy.</li>
+    <li><strong>A job record</strong> for each upload: the file name, when it ran, how long the
+    video was and what it cost in credit. If a retention curve got its credit back, the record
+    also keeps that video's link, so the same video counts once.</li>
+    <li><strong>A small picture from each video</strong> (its thumbnail, shown in History). It is
+    kept with the result and is not part of any shared copy.</li>
+    <li><strong>Your sharing choice</strong> for each upload: whether you agreed to share it
+    (below). The box is unticked by default and the analysis works either way.</li>
+    <li><strong>An access request, if you ask for free minutes:</strong> your channel link and any
+    note. It is emailed to the NeuroLens team (through Amazon Web Services) and kept until you
+    delete your account.</li>
+    <li><strong>A real audience-retention curve</strong>, if you choose to add one to a video you
+    share, together with the details the form asks for (whether it was promoted with ads, whether
+    it was re-cut, and the video's link). When we can check the video, we also keep its publish
+    date, length and view count.</li>
+  </ul>
+  <p>The 3D brain data is part of the analysis result. Deleting a video removes it.</p>
+  <p>We do not receive your Google password or your contacts. If you sign in with Google, we
+  receive only your email address and whether Google has verified it.</p>
+
+  <h2>How long we keep it</h2>
+  <ul>
+    <li>Uploaded videos that are not shared are deleted automatically after 30 days (up to 31
+    days, since deletion happens overnight). They are deleted at once when the job is cancelled
+    or refunded.</li>
+    <li>Results are deleted automatically after 30 days.</li>
+    <li>A video you share, and any retention curve you add, are kept for up to 3 years. If no
+    curve is added, the shared copy is deleted 90 days after upload.</li>
+    <li>Your email address and job records stay until you delete your account, or until the
+    project is taken down.</li>
+  </ul>
+
+  <h2 id="sharing"><span id="research"></span>Sharing a video</h2>
+  <p>Each upload has a separate, optional box: "Share to help improve NeuroLens. I own the rights
+  to it." Sharing is never required and changes nothing about the analysis — the same prediction
+  runs either way.</p>
+  <p>If you share a video, we keep the video itself, its file details, and any audience-retention
+  curve you add from YouTube or Facebook, with the details given alongside it. When we can check
+  the video, we also keep its publish date, length and view count. We use them to help improve
+  NeuroLens, by building and testing its own engagement models, which may later be offered as a
+  paid product — with notice first. The models are trained on videos and real audience data, never
+  on NeuroLens's brain predictions. Nothing is published, sold or given outside the team; anything
+  shown publicly is only statistics. Everything is stored with Amazon Web Services in the United
+  States.</p>
+  <p>The shared copy is kept for up to 3 years, or deleted 90 days after upload if no curve was
+  added. "Stop sharing" in the video's menu, deleting the video, or deleting your account removes
+  the shared copy at once. A model trained before that is not retrained, but your data is not used
+  again.</p>
+  <p>By sharing, you confirm that you own the rights to the video and that any identifiable people
+  in it agreed to appear. You keep all rights to the video and give us a free, non-exclusive
+  licence to use it for the purposes above. As a thank-you, a valid audience-retention curve added
+  to a video can make that video's analysis free: its price comes back as credit (not cash). A
+  curve counts when the video is the same length as the analysed video, give or take 2 seconds,
+  and, when we can check it, has at least 1,000 views. This applies once per published video (the
+  same file or link counts once), to up to 5 videos in any 30 days, and only on accounts that
+  have had credit added. A curve is valid when it has at least 20 points, is not flat, does not
+  rise overall and never goes above 1,000%.</p>
+
+  <h2>AI reports</h2>
+  <p>When you ask for a report, the video's frames (one per second), its spoken words and its
+  brain numbers are sent to Claude on Amazon Bedrock, processed in AWS's US regions. AWS states that Bedrock
+  does not store them or use them for training. The frames and the report are deleted with the
+  job, and expire with the result after 30 days. When you ask for a comparison, the same things
+  for both videos are sent the same way; the comparison is deleted when either video is deleted,
+  and expires after 30 days.</p>
+
+  <h2>Who can see it</h2>
+  <p>Only you, and the NeuroLens team, can see your videos and results. We do not sell or share
+  them, and we do not use them for advertising. Sign-in is handled by Amazon Cognito.</p>
+
+  <h2>Deleting your data</h2>
+  <p>You can delete any analysis from your history on the main page: this removes its video,
+  result (including the 3D brain data) and any shared copy. You can also delete your whole
+  account there by typing DELETE to confirm; this removes every video, analysis and row we hold,
+  and your NeuroLens login. If a video is still queued or processing, wait for it to finish, then
+  try deleting your account again. To ask what we hold about you, email
+  <a href="mailto:e0297372@u.nus.edu">e0297372@u.nus.edu</a>.</p>
+
+  <p><a href="/">Back to NeuroLens</a></p>
+</main>
+</body>
+</html>

@@ -1,8 +1,9 @@
-"""Tests for neurolens.web.app via create_app(load_model=False). From docs/M0_spec.md."""
+"""Tests for neurolens.web.app via create_app(). From docs/M0_spec.md.
 
-import io
-import json
-import subprocess
+M3b §8 retired `/api/samples` (the page reads /data/samples.json), and with it the test that
+the route equals data/samples.json.
+"""
+
 from pathlib import Path
 
 import pytest
@@ -14,7 +15,7 @@ DATA_DIR = REPO_ROOT / "data"
 
 @pytest.fixture
 def client():
-    app = create_app(load_model=False, data_dir=DATA_DIR)
+    app = create_app(data_dir=DATA_DIR)
     app.config["TESTING"] = True
     return app.test_client()
 
@@ -26,20 +27,17 @@ def test_index_serves_index_html(client):
     resp.close()
 
 
-def test_samples_equals_samples_json(client):
-    resp = client.get("/api/samples")
+def test_thumbnail_is_served(tmp_path):
+    """A sample thumbnail under data/output/ is served as is. Uses its own data folder, so it does
+    not depend on which samples data/samples.json lists (M3d §9 empties it until the AWS day)."""
+    data = tmp_path / "data"
+    thumb = data / "output" / "clip" / "thumb.jpg"
+    thumb.parent.mkdir(parents=True)
+    thumb.write_bytes(b"\xff\xd8\xff\xe0 fake jpeg")
+    test_client = create_app(data_dir=data).test_client()
+    resp = test_client.get("/data/output/clip/thumb.jpg")
     assert resp.status_code == 200
-    assert resp.get_json() == json.loads((DATA_DIR / "samples.json").read_text())
-
-
-def test_thumbnail_is_served(client):
-    samples = json.loads((DATA_DIR / "samples.json").read_text())["samples"]
-    thumb = next(s["thumbnail"] for s in samples if s.get("thumbnail"))
-    assert thumb.startswith("output/")
-    expected = (DATA_DIR / thumb).read_bytes()
-    resp = client.get(f"/data/{thumb}")
-    assert resp.status_code == 200
-    assert resp.data == expected
+    assert resp.data == thumb.read_bytes()
     resp.close()
 
 
@@ -58,29 +56,10 @@ def test_path_traversal_cannot_read_file_outside_data_dir(tmp_path):
     data.mkdir()
     (data / "ok.txt").write_text("fine")
     (tmp_path / "config.json").write_text('{"hf_token": "secret"}')
-    app = create_app(load_model=False, data_dir=data)
+    app = create_app(data_dir=data)
     test_client = app.test_client()
     assert test_client.get("/data/ok.txt").data == b"fine"
     for url in ("/data/../config.json", "/data/%2e%2e/config.json", "/data/..%2fconfig.json"):
         resp = test_client.get(url)
         assert resp.status_code == 404, url
         assert b"secret" not in resp.data
-
-
-def test_analyse_without_file_returns_400(client):
-    resp = client.post("/api/analyse")
-    assert resp.status_code == 400
-
-
-def test_analyse_with_file_returns_503_without_calling_ffprobe(client, monkeypatch):
-    def fail(*args, **kwargs):
-        raise AssertionError("subprocess must not be called when the model is not loaded")
-
-    monkeypatch.setattr(subprocess, "run", fail)
-    resp = client.post(
-        "/api/analyse",
-        data={"video": (io.BytesIO(b"not really a video"), "clip.mp4")},
-        content_type="multipart/form-data",
-    )
-    assert resp.status_code == 503
-    assert resp.get_json() == {"error": "Model not loaded"}

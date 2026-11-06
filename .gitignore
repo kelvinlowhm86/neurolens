@@ -1,8 +1,9 @@
 # ─── Secrets ────────────────────────────────────────────────────────────────
-# config.json holds a live HuggingFace token. Copy config.sample.json instead.
-config.json
+# .env holds the HuggingFace token and deployment identifiers. Copy .env.example instead.
+# (config.json is committed: shared settings only, no secrets.)
 .env
 .env.*
+!.env.example
 
 # ─── Model weights & HF caches ─────────────────────────────────────────────
 # Everything TRIBE v2 pulls lands under ./models (HF_HOME points here):
@@ -25,18 +26,27 @@ hub/
 # fully fetched). Re-downloads automatically on first run.
 /data/nilearn/
 
+# Glasser HCP-MMP1 map files, downloaded once by load_model (~2.6 MB, SHA-256 checked).
+/data/hcp_mmp/
+
 # ─── Sample media (large, re-obtainable) ───────────────────────────────────
 # 155 MB of source ads. Ignore the contents, but keep the manifest README --
 # a negation cannot rescue a file from inside an excluded *directory*, so the
 # directory itself must stay un-excluded.
 /data/videos/*
 !/data/videos/README.md
+!/data/videos/SOURCES.md
+
+# Results of the Slurm side experiments (experiments/*.sbatch); local only
+/data/experiment_results/
 
 # ─── Generated output ──────────────────────────────────────────────────────
-/output/
 /data/output/**/*.json
+/data/output/**/*.csv
+/data/output/**/*.pdf
 /data/output/**/*.npy
 /data/output/**/*.png
+/data/output/**/brain
 # ...but keep the thumbnails the dashboard renders:
 !/data/output/**/thumb.jpg
 
@@ -64,8 +74,9 @@ Thumbs.db
 .vscode/
 .idea/
 
-# ─── Personal files (Claude Code instructions, AI-use log) ─────────────────
-*.local.md
+# ─── Personal files (Claude Code instructions and settings, plans, logs, pages) ─
+*.local.*
+*.local/
 
 # ─── Tooling caches & build output ─────────────────────────────────────────
 .ruff_cache/
@@ -74,6 +85,12 @@ Thumbs.db
 dist/
 build/
 
-# ─── Terraform (later milestones) ──────────────────────────────────────────
+# ─── Terraform ─────────────────────────────────────────────────────────────
 *.tfstate*
 .terraform/
+terraform.tfvars
+*.tfplan
+tfplan
+backend.hcl
+# Lambda zips and the ffprobe layer Terraform uploads
+infra/terraform/.build/

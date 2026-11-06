@@ -1,0 +1,81 @@
+#!/usr/bin/env bash
+# Ships the last commit as the website (M3b §3c): the web function's code, then the page
+# and its sample data into the bucket's site/ prefix, then clears CloudFront's cache so the new
+# page shows at once. Run after `terraform apply` has created the functions.
+set -euo pipefail
+source "$(dirname "$0")/aws_env.sh"   # AWS_PROFILE, AWS_REGION
+cd "$(git rev-parse --show-toplevel)"
+
+if [ -n "$(git status --porcelain)" ]; then
+  echo "Uncommitted changes: commit first. Deploy ships the last commit only." >&2; exit 1
+fi
+TF="terraform -chdir=infra/terraform"
+BUCKET=$($TF output -raw bucket_name)
+DISTRIBUTION=$($TF output -raw cloudfront_distribution_id)
+
+# 1. Code. The zip goes through the bucket's deploy/ prefix (M3h §18e), then Lambda reads it
+# from there; wait until the update is live.
+infra/build_web_lambda.sh
+aws s3 cp build/web_lambda.zip "s3://$BUCKET/deploy/web_lambda.zip" --only-show-errors
+for fn in neurolens-web; do
+  aws lambda update-function-code --function-name "$fn" --s3-bucket "$BUCKET" \
+    --s3-key deploy/web_lambda.zip --query LastUpdateStatus --output text >/dev/null
+  aws lambda wait function-updated --function-name "$fn"
+  echo "Updated $fn."
+done
+
+# 2. Site files, staged first so what is synced is exactly what is listed here.
+STAGE=$(mktemp -d)
+trap 'rm -rf "$STAGE"' EXIT
+mkdir -p "$STAGE/static" "$STAGE/data"
+git archive HEAD static | tar -x -C "$STAGE"
+cp static/index.html "$STAGE/index.html"
+cp static/app.html "$STAGE/app"
+# Only samples whose clip is listed in data/videos/SOURCES.md are public; their video, thumbnail,
+# brain, CSV and PDF files go with them. A listed clip can be a third-party one the team has cleared
+# for this project (the CeraVe cuts, by the team's decision); comparisons are public only when both
+# samples are.
+python3 -I - "$STAGE" <<'PY'
+import json, re, shutil, sys
+from pathlib import Path
+
+stage, data = Path(sys.argv[1]), Path("data")
+listed = set(re.findall(r"\|\s*`([^`]+)`", (data / "videos/SOURCES.md").read_text()))
+document = json.loads((data / "samples.json").read_text())
+samples = document["samples"]
+public = [s for s in samples if s["video_file"].removeprefix("videos/") in listed]
+public_ids = {s["id"] for s in public}
+comparisons = [
+    c for c in document.get("comparisons", [])
+    if c.get("a") in public_ids and c.get("b") in public_ids
+]
+for s in public:
+    for name in (
+        s["video_file"], s.get("thumbnail"), s.get("brain_file"), s.get("csv_file"),
+        s.get("pdf_file"),
+    ):
+        if name:
+            target = stage / "data" / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy(data / name, target)
+for c in comparisons:
+    if c.get("pdf_file"):
+        target = stage / "data" / c["pdf_file"]
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy(data / c["pdf_file"], target)
+(stage / "data/samples.json").write_text(
+    json.dumps({"samples": public, "comparisons": comparisons})
+)
+print(f"{len(public)} of {len(samples)} samples are public; "
+      f"{len(comparisons)} comparisons.")
+PY
+aws s3 sync "$STAGE" "s3://$BUCKET/site/" --delete --only-show-errors
+# The page itself: browsers must check for a new version on every load, or a tab can keep running
+# an old page after a deploy (without Cache-Control they guess how long to keep it).
+aws s3 cp "$STAGE/index.html" "s3://$BUCKET/site/index.html" --cache-control no-cache \
+  --content-type "text/html; charset=utf-8" --only-show-errors
+aws s3 cp "$STAGE/app" "s3://$BUCKET/site/app" --cache-control no-cache \
+  --content-type "text/html; charset=utf-8" --only-show-errors
+aws cloudfront create-invalidation --distribution-id "$DISTRIBUTION" --paths '/*' \
+  --query Invalidation.Id --output text >/dev/null
+echo "Deployed $(git rev-parse --short HEAD) to $($TF output -raw public_base_url)"

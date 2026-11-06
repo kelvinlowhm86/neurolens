@@ -1,467 +1,1021 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NeuroLens — Video Engagement Analysis</title>
-<script src="/static/chart.min.js"></script>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NeuroLens</title>
+<link rel="icon" href="data:,">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script>
+  if (/(?:^|;\s*)nl_signed_in=1(?:;|$)/.test(document.cookie)) {
+    document.documentElement.classList.add('signed-in');
+  }
+</script>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700&family=JetBrains+Mono:wght@400;500&display=swap');
-
   :root {
-    --bg-primary: #FAFBFC;
-    --bg-card: #FFFFFF;
-    --bg-hover: #F1F5F9;
-    --bg-panel: #F1F5F9;
-    --navy: #0F1629;
-    --navy-light: #1E293B;
-    --border: #E2E8F0;
-    --border-strong: #CBD5E1;
-    --text-primary: #0F1629;
-    --text-secondary: #475569;
-    --text-muted: #94A3B8;
-    --accent: #0D7C8F;
-    --accent-light: #E0F7FA;
-    --accent-glow: rgba(13, 124, 143, 0.08);
-    --red: #DC2626; --blue: #2563EB; --green: #16A34A;
-    --gold: #D97706; --purple: #9333EA; --orange: #EA580C;
-    --radius: 12px; --radius-sm: 8px;
-    --shadow-sm: 0 1px 2px rgba(15,22,41,0.05);
-    --shadow-md: 0 4px 12px rgba(15,22,41,0.08);
+    --bg: #0B0C0E; --bar: #0B0C0E; --panel: rgba(17, 19, 22, .92); --well: #0E1013;
+    --line: #262A31; --text: #E8EAED; --muted: #9097A1;
+    --accent: #FF8A2A; --accent-2: #FFC24A;
+    --display: 'Space Grotesk', system-ui, sans-serif;
+    --mono: 'JetBrains Mono', ui-monospace, monospace;
+    --t-press: 80ms; --t-quick: 160ms; --t-enter: 240ms; --t-page: 350ms;
+    --ease-out: cubic-bezier(.2, .7, .2, 1); --ease-io: cubic-bezier(.65, 0, .35, 1);
+    --grid: linear-gradient(rgba(255, 255, 255, .035) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(255, 255, 255, .035) 1px, transparent 1px);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  [hidden] { display: none !important; }
+  html { background: var(--bg); scroll-behavior: smooth; }
+  body { min-height: 100vh; background-color: var(--bg); background-image: var(--grid); background-size: 24px 24px; color: var(--text); font: 14px/1.55 var(--display); letter-spacing: -0.003em; }
+  section[id] { scroll-margin-top: 72px; }
+  a { color: inherit; }
+  a, button { transition: color var(--t-quick) var(--ease-out), background-color var(--t-quick) var(--ease-out), border-color var(--t-quick) var(--ease-out), transform var(--t-press) var(--ease-out); }
+  button:active, a:active { transform: scale(.98); }
+  button:disabled, [aria-disabled="true"] { opacity: .5; cursor: default; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .bar { background: var(--bar); color: var(--text); display: flex; align-items: center; gap: 12px; padding: 0 24px; height: 56px; border-bottom: 1px solid var(--line); }
+  .brand { font: 600 17px/1 var(--display); letter-spacing: -0.02em; margin-right: auto; color: inherit; text-decoration: none; }
+  .bar-nav { display: flex; align-items: center; gap: 22px; margin-right: 22px; }
+  .bar-nav a { font-size: 13px; color: var(--muted); text-decoration: none; }
+  .bar-nav a:hover { color: var(--text); }
+  .btn-white { background: var(--text); color: var(--bg); border: 1px solid var(--text); border-radius: 3px; padding: 10px 16px; font-weight: 600; text-decoration: none; display: inline-block; white-space: nowrap; }
+  .btn-white:hover { background: #fff; border-color: #fff; }
+  .btn-line { border: 1px solid var(--line); color: var(--text); border-radius: 3px; padding: 9px 15px; text-decoration: none; display: inline-block; white-space: nowrap; }
+  .btn-line:hover { border-color: var(--muted); }
+  h1 { font: 600 clamp(34px, 4.4vw, 58px)/1.04 var(--display); letter-spacing: -0.035em; }
+  h2 { font: 600 clamp(24px, 2.6vw, 34px)/1.15 var(--display); letter-spacing: -0.025em; }
+  h3 { font: 600 18px/1.3 var(--display); letter-spacing: -0.015em; }
+  .lede { font-size: 17px; line-height: 1.6; color: var(--muted); max-width: 32em; }
+  .actions { display: flex; gap: 10px; flex-wrap: wrap; }
+  html.signed-in .explore, html.signed-in .access-btn { display: none; }
+
+  .hero { max-width: 1240px; margin: 0 auto; padding: 56px 48px; min-height: calc(100vh - 56px); display: grid; grid-template-columns: minmax(300px, 0.9fr) 1.1fr; gap: 56px; align-items: center; }
+  .hero-copy { display: flex; flex-direction: column; gap: 26px; }
+  /* The video keeps its own 16:9 height; the brain panel takes the rest of the column. */
+  .hero-player { display: flex; flex-direction: column; gap: 10px; height: min(80vh, 760px); }
+
+  .video-box { position: relative; background: #000; border-radius: 3px; overflow: hidden; aspect-ratio: 16 / 9; flex: none; }
+  .video-box video { width: 100%; height: 100%; display: block; object-fit: cover; cursor: pointer; }
+  .sound-toggle { position: absolute; right: 12px; bottom: 12px; width: 34px; height: 34px; border: 0; border-radius: 50%; background: var(--text); color: var(--bg); display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 2px 8px rgba(0, 0, 0, .35); }
+  .sound-toggle:hover { background: #fff; }
+  .sound-toggle svg { width: 16px; height: 16px; display: block; }
+  .brain-box { position: relative; background: var(--well); border: 1px solid var(--line); border-radius: 3px; overflow: hidden; flex: 1; min-height: 0; }
+  .brain-box canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  .brain-message { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 20px; text-align: center; font-size: 13px; color: var(--muted); }
+  .brain-skeleton { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 18px; pointer-events: none; }
+  .brain-skeleton svg { width: min(72%, 260px); height: auto; }
+  .brain-legend { position: absolute; left: 14px; bottom: 12px; display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--muted); pointer-events: none; }
+  .brain-legend i { width: 86px; height: 6px; border-radius: 3px; background: linear-gradient(90deg, #D9DCE1, #800000 10%, #E61A0A 40%, #FF800A 66%, #FFD926 88%, #FFFFD9); }
+  .brain-time { position: absolute; right: 14px; top: 12px; font: 500 13px var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+  .brain-hint { position: absolute; right: 14px; bottom: 12px; font-size: 11px; color: var(--muted); pointer-events: none; }
+
+  .curve-box { position: relative; flex: none; height: 118px; background: var(--well); border: 1px solid var(--line); border-radius: 3px; overflow: hidden; display: flex; flex-direction: column; }
+  .curve-box svg { display: block; width: 100%; height: 84px; flex: none; }
+  .curve-zero { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 2 4; opacity: .55; }
+  .curve-ghost { fill: none; stroke: var(--muted); stroke-width: 1; opacity: .28; }
+  .curve-drawn { fill: none; stroke: var(--accent); stroke-width: 1.5; stroke-linejoin: round; stroke-linecap: round; }
+  .curve-play { stroke: var(--text); stroke-width: 1; opacity: .45; }
+  .curve-dot { fill: var(--bg); stroke: var(--accent-2); stroke-width: 2; }
+  .curve-label { font: 10.5px var(--display); fill: var(--muted); text-anchor: end; paint-order: stroke; stroke: var(--well); stroke-width: 4px; stroke-linejoin: round; }
+  .curve-callout { flex: none; height: 32px; display: flex; align-items: center; gap: 8px; padding: 0 10px; border-top: 1px solid var(--line); font-size: 11.5px; line-height: 1.3; color: var(--text); opacity: 0; transition: opacity var(--t-quick) var(--ease-out); pointer-events: none; }
+  .curve-callout.on { opacity: 1; }
+  .curve-callout .when { flex: none; font: 500 10.5px var(--mono); color: var(--accent-2); font-variant-numeric: tabular-nums; }
+  .curve-callout .what { min-width: 0; max-height: 2.6em; overflow: hidden; }
+  .coming-soon { background: var(--well); border: 1px solid var(--line); border-radius: 3px; display: flex; align-items: center; justify-content: center; flex: 1; min-height: 300px; padding: 28px; text-align: center; color: var(--muted); font-size: 15px; }
+
+  .how { max-width: 1120px; margin: 96px auto 32px; padding: 72px 64px; background: var(--panel); border: 1px solid var(--line); border-radius: 3px; display: grid; grid-template-columns: 260px 1fr; gap: 64px; }
+  .steps { list-style: none; }
+  .step { display: grid; grid-template-columns: 44px 1fr; gap: 18px; padding: 28px 0; border-top: 1px solid var(--line); transition: opacity var(--t-enter) var(--ease-out), transform var(--t-enter) var(--ease-out); }
+  .step:first-child { border-top: 0; padding-top: 0; }
+  .step:last-child { padding-bottom: 0; }
+  html.has-reveal .step:not(.is-visible) { opacity: 0; transform: translateY(16px); }
+  .step-num { font: 500 12px/1 var(--mono); color: var(--accent-2); padding-top: 5px; font-variant-numeric: tabular-nums; }
+  .step p { margin-top: 8px; color: var(--muted); font-size: 14.5px; max-width: 38em; }
+
+  .showcase { max-width: 1120px; margin: 96px auto 0; padding: 0 64px; display: flex; flex-direction: column; gap: 96px; }
+  .show-row { display: grid; grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr); gap: 56px; align-items: center; }
+  .show-row.flip .show-copy { order: 2; }
+  .show-row.flip .show-visual { order: 1; }
+  .show-copy { display: flex; flex-direction: column; gap: 14px; }
+  .show-eyebrow { font: 500 12px/1 var(--mono); color: var(--accent-2); font-variant-numeric: tabular-nums; }
+  .show-text { font-size: 15px; line-height: 1.6; color: var(--muted); max-width: 34em; }
+  .show-well { background: var(--well); border: 1px solid var(--line); border-radius: 3px; padding: 20px; }
+  .show-svg { display: block; width: 100%; height: 56px; overflow: visible; }
+  .show-strip + .show-strip { margin-top: 16px; }
+  .show-strip-label { display: block; margin-bottom: 6px; font-size: 13px; color: var(--muted); }
+  .show-zero { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 2 4; opacity: .55; vector-effect: non-scaling-stroke; }
+  .show-fill { opacity: 1; transition: opacity 700ms var(--ease-out) 80ms; }
+  .show-line { fill: none; stroke: var(--text); stroke-opacity: .85; stroke-width: 1.5; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; stroke-dasharray: 1; stroke-dashoffset: 0; transition: stroke-dashoffset 900ms var(--ease-out); }
+  .show-line-a { stroke: #FF8A2A; stroke-width: 2; }
+  .show-line-b { stroke: #6FA8FF; stroke-width: 2; }
+  .show-play { stroke: #fff; stroke-width: 1; stroke-opacity: .45; vector-effect: non-scaling-stroke; }
+  .show-axis { display: flex; justify-content: space-between; margin-top: 10px; font: 11px var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+  html.has-reveal .show-visual:not(.is-drawn) .show-line { stroke-dashoffset: 1; }
+  html.has-reveal .show-visual:not(.is-drawn) .show-fill { opacity: 0; }
+  .show-headline { font-size: 17px; line-height: 1.45; font-weight: 500; color: var(--text); }
+  .show-moments:not([hidden]) { margin-top: 16px; border-top: 1px solid var(--line); }
+  .show-moment { display: grid; grid-template-columns: 48px minmax(0, 1fr); gap: 14px; padding: 14px 0; }
+  .show-moment + .show-moment { border-top: 1px solid var(--line); }
+  .show-moment:last-child { padding-bottom: 0; }
+  .show-moment-time { font: 500 12px/1.5 var(--mono); color: var(--accent-2); font-variant-numeric: tabular-nums; }
+  .show-moment-what { display: block; font-size: 14px; line-height: 1.5; color: var(--text); }
+  .show-moment-try { display: block; margin-top: 3px; font-size: 13px; line-height: 1.45; color: var(--muted); }
+  .show-legend { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; margin-bottom: 12px; font-size: 12px; color: var(--muted); }
+  .show-legend-item { display: inline-flex; align-items: center; gap: 7px; }
+  .show-dash { display: inline-block; width: 14px; height: 2px; border-radius: 1px; }
+  .show-dash.a { background: #FF8A2A; }
+  .show-dash.b { background: #6FA8FF; }
+  .show-compare-svg { height: 150px; }
+  .show-compare-headline { margin-top: 14px; font-size: 15px; line-height: 1.45; color: var(--text); }
+
+  .access { max-width: 1120px; margin: 80px auto 88px; padding: 0 64px; display: grid; grid-template-columns: 260px 1fr; gap: 64px; }
+  .access-cols { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .access-col { padding: 0 28px; border-left: 1px solid var(--line); }
+  .access-col:first-child { padding-left: 0; border-left: 0; }
+  .access-col:last-child { padding-right: 0; }
+  .access-label { display: block; font-size: 13px; color: var(--muted); }
+  .access-value { display: block; margin-top: 8px; font: 600 24px/1.1 var(--display); color: var(--text); letter-spacing: -0.02em; }
+  .access-col p { margin-top: 10px; font-size: 13.5px; line-height: 1.5; color: var(--muted); }
+  .access-btn { margin-top: 12px; }
+  .access-note { grid-column: 1 / -1; margin-top: 18px; font-size: 12px; color: var(--muted); }
+
+  .closing { max-width: 1120px; margin: 0 auto 72px; padding: 40px 64px; background: var(--panel); border: 1px solid var(--line); border-radius: 3px; display: flex; align-items: center; gap: 24px; flex-wrap: wrap; }
+  .closing h2 { margin-right: auto; }
+  footer { border-top: 1px solid var(--line); padding: 32px 64px 26px; font-size: 12px; color: var(--muted); }
+  footer a { text-decoration: none; }
+  footer a:hover { color: var(--text); }
+  .footer-top { max-width: 1120px; margin: 0 auto; display: flex; align-items: flex-start; justify-content: space-between; gap: 32px; }
+  .footer-name { display: block; font: 600 15px/1.2 var(--display); color: var(--text); }
+  .footer-brand p { margin-top: 4px; }
+  .footer-links { display: flex; gap: 20px; flex-wrap: wrap; }
+  .footer-bottom { max-width: 1120px; margin: 22px auto 0; padding-top: 18px; border-top: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 11.5px; }
+  #footerCredits { display: flex; flex-wrap: wrap; gap: 18px; }
+
+  @media (max-width: 860px) {
+    .bar { padding: 0 16px; }
+    .bar-nav { display: none; }
+    .hero { grid-template-columns: 1fr; padding: 40px 16px 48px; gap: 32px; min-height: 0; }
+    .hero-player { height: auto; }
+    .brain-box { min-height: 280px; }
+    .showcase { margin: 56px auto 0; padding: 0 16px; gap: 56px; }
+    .show-row { grid-template-columns: 1fr; gap: 24px; }
+    .show-row.flip .show-copy, .show-row.flip .show-visual { order: 0; }
+    .how { grid-template-columns: 1fr; margin: 56px 16px 24px; padding: 48px 24px; gap: 32px; }
+    .access { grid-template-columns: 1fr; margin: 56px auto 56px; padding: 0 16px; gap: 24px; }
+    .access-cols { grid-template-columns: 1fr; }
+    .access-col { padding: 18px 0; border-left: 0; border-top: 1px solid var(--line); }
+    .access-col:first-child { padding-top: 0; border-top: 0; }
+    .access-col:last-child { padding-bottom: 0; }
+    .closing { margin: 0 16px 56px; padding: 28px 24px; }
+    footer { padding: 28px 16px 22px; }
+    .footer-top { flex-direction: column; gap: 20px; }
   }
 
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { background: var(--bg-primary); color: var(--text-primary); font-family: 'Plus Jakarta Sans', -apple-system, sans-serif; min-height: 100vh; }
-
-  header {
-    position: sticky; top: 0; z-index: 100; background: var(--navy);
-    padding: 0 32px; height: 56px; display: flex; align-items: center; justify-content: space-between;
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    .step, .curve-callout, .show-line, .show-fill { transition: none; }
+    html.has-reveal .step:not(.is-visible) { opacity: 1; transform: none; }
+    html.has-reveal .show-visual:not(.is-drawn) .show-line { stroke-dashoffset: 0; }
+    html.has-reveal .show-visual:not(.is-drawn) .show-fill { opacity: 1; }
   }
-  .logo { display: flex; align-items: center; gap: 10px; }
-  .logo-icon { width: 28px; height: 28px; border-radius: 6px; background: linear-gradient(135deg, var(--accent), #06B6D4); display: flex; align-items: center; justify-content: center; }
-  .logo-icon svg { width: 16px; height: 16px; }
-  .logo-text { font-size: 18px; font-weight: 700; color: #FFF; letter-spacing: -0.3px; }
-  .logo-text span { color: #06B6D4; }
-  .header-right { display: flex; align-items: center; gap: 20px; }
-  .header-meta { font-size: 12px; color: #94A3B8; font-family: 'JetBrains Mono', monospace; }
 
-  .layout { display: grid; grid-template-columns: 1fr 1fr; min-height: calc(100vh - 56px); }
-  .panel-left { padding: 24px; border-right: 1px solid var(--border); position: sticky; top: 56px; height: calc(100vh - 56px); display: flex; flex-direction: column; gap: 16px; overflow-y: auto; }
-  .panel-right { padding: 24px; overflow-y: auto; height: calc(100vh - 56px); background: var(--bg-panel); }
-
-  /* Upload */
-  .upload-zone {
-    border: 2px dashed var(--border-strong); border-radius: var(--radius);
-    display: flex; flex-direction: column; align-items: center; justify-content: center;
-    gap: 14px; cursor: pointer; transition: all 0.3s; position: relative;
-    background: var(--bg-card); padding: 40px 20px;
-  }
-  .upload-zone:hover { border-color: var(--accent); background: var(--accent-glow); }
-  .upload-zone.hidden { display: none; }
-  .upload-icon { width: 56px; height: 56px; border-radius: 50%; background: var(--accent-light); display: flex; align-items: center; justify-content: center; }
-  .upload-icon svg { width: 24px; height: 24px; color: var(--accent); }
-  .upload-title { font-size: 15px; font-weight: 600; }
-  .upload-subtitle { font-size: 12px; color: var(--text-muted); }
-  .upload-zone input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
-
-  /* Samples carousel */
-  .samples-section { flex-shrink: 0; }
-  .samples-label { font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px; }
-  .samples-grid { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 6px; }
-  .samples-grid::-webkit-scrollbar { height: 4px; }
-  .samples-grid::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 2px; }
-  .sample-card {
-    flex: 0 0 140px; border-radius: var(--radius-sm); overflow: hidden; cursor: pointer;
-    border: 2px solid var(--border); transition: all 0.2s; background: var(--bg-card);
-  }
-  .sample-card:hover { border-color: var(--accent); transform: translateY(-2px); box-shadow: var(--shadow-md); }
-  .sample-card.active { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-glow); }
-  .sample-thumb { width: 100%; height: 80px; object-fit: cover; background: var(--bg-hover); display: flex; align-items: center; justify-content: center; }
-  .sample-thumb img { width: 100%; height: 100%; object-fit: cover; }
-  .sample-thumb-placeholder { color: var(--text-muted); font-size: 20px; }
-  .sample-info { padding: 8px 10px; }
-  .sample-title { font-size: 11px; font-weight: 600; color: var(--text-primary); line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-  .sample-dur { font-size: 10px; color: var(--text-muted); font-family: 'JetBrains Mono', monospace; margin-top: 3px; }
-
-  /* Video */
-  .video-container { display: none; flex-direction: column; flex: 1; gap: 12px; min-height: 0; }
-  .video-container.active { display: flex; }
-  .video-wrapper { flex: 1; background: var(--navy); border-radius: var(--radius); overflow: hidden; display: flex; align-items: center; justify-content: center; min-height: 260px; }
-  .video-wrapper video { width: 100%; max-height: 100%; object-fit: contain; }
-  .video-info { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: var(--bg-card); border-radius: var(--radius-sm); border: 1px solid var(--border); }
-  .video-filename { font-size: 12px; font-family: 'JetBrains Mono', monospace; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 180px; }
-  .video-stats { display: flex; gap: 14px; font-size: 11px; font-family: 'JetBrains Mono', monospace; color: var(--text-muted); }
-  .btn-new { padding: 6px 14px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--bg-card); color: var(--text-secondary); font-size: 12px; cursor: pointer; font-family: 'Plus Jakarta Sans', sans-serif; font-weight: 500; }
-  .btn-new:hover { border-color: var(--accent); color: var(--accent); }
-
-  /* Processing */
-  .processing { display: none; flex-direction: column; align-items: center; justify-content: center; gap: 16px; flex: 1; background: var(--bg-card); border-radius: var(--radius); border: 1px solid var(--border); }
-  .processing.active { display: flex; }
-  .spinner { width: 40px; height: 40px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.9s linear infinite; }
-  @keyframes spin { to { transform: rotate(360deg); } }
-  .processing-text { font-size: 14px; font-weight: 600; }
-  .processing-detail { font-size: 12px; color: var(--text-muted); font-family: 'JetBrains Mono', monospace; }
-
-  /* Charts */
-  .charts-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 12px; color: var(--text-muted); font-size: 14px; }
-  .charts-empty svg { width: 48px; height: 48px; opacity: 0.3; }
-  .charts-container { display: none; }
-  .charts-container.active { display: block; }
-
-  .chart-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 20px; margin-bottom: 14px; box-shadow: var(--shadow-sm); }
-  .chart-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
-  .chart-title { font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
-  .chart-dot { width: 8px; height: 8px; border-radius: 50%; }
-  .chart-peak { font-size: 11px; font-family: 'JetBrains Mono', monospace; color: var(--text-muted); }
-  .chart-wrapper { height: 120px; }
-  .chart-wrapper.tall { height: 150px; }
-  .chart-desc { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); font-size: 12px; line-height: 1.5; color: var(--text-muted); }
-
-  .result-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 16px; }
-  .stat-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 14px; text-align: center; }
-  .stat-value { font-size: 24px; font-weight: 700; font-family: 'JetBrains Mono', monospace; color: var(--accent); }
-  .stat-label { font-size: 10px; color: var(--text-muted); margin-top: 3px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; }
-
-  @media (max-width: 1024px) {
-    .layout { grid-template-columns: 1fr; }
-    .panel-left { position: relative; top: 0; height: auto; min-height: 400px; border-right: none; border-bottom: 1px solid var(--border); }
-    .panel-right { height: auto; }
-  }
+  /* Page-to-page change (landing <-> app): the header stays put, the old page dims away
+     and a thin vertical line moves left to right revealing the new one. */
+  @view-transition { navigation: auto; }
+  .bar { view-transition-name: bar; }
+  ::view-transition-old(root) { animation: vt-out var(--t-page) var(--ease-out) both; }
+  ::view-transition-new(root) { animation: vt-reveal var(--t-page) var(--ease-out) both; }
+  .vt-scan { position: fixed; left: 0; top: 0; bottom: 0; width: 2px; z-index: 1000; pointer-events: none; opacity: 0; background: linear-gradient(180deg, transparent, #FF8A2A 20%, #FFC24A 50%, #FF8A2A 80%, transparent); box-shadow: 0 0 14px 2px rgba(255, 138, 42, .5), 28px 0 44px rgba(255, 138, 42, .1); }
+  html.vt-in .vt-scan { animation: vt-scan var(--t-page) var(--ease-out) both; }
+  @keyframes vt-out { to { opacity: 0; transform: scale(.99); } }
+  @keyframes vt-reveal { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0); } }
+  @keyframes vt-scan { from { transform: translateX(-2px); opacity: 1; } 85% { opacity: 1; } to { transform: translateX(calc(100vw - 2px)); opacity: 0; } }
+  @media (prefers-reduced-motion: reduce) { @view-transition { navigation: none; } .vt-scan { display: none; } }
 </style>
+<script>
+  // The scan line runs only while a page-to-page transition reveals this page.
+  addEventListener('pagereveal', e => {
+    if (!e.viewTransition) return;
+    document.documentElement.classList.add('vt-in');
+    e.viewTransition.finished.finally(() => document.documentElement.classList.remove('vt-in'));
+  });
+</script>
 </head>
 <body>
-<header>
-  <div class="logo">
-    <div class="logo-icon"><svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div>
-    <div class="logo-text">Neuro<span>Lens</span></div>
-  </div>
-  <div class="header-right">
-    <div class="header-meta" id="headerMeta">Select a video to view analysis</div>
-  </div>
+<div class="vt-scan" aria-hidden="true"></div>
+<header class="bar">
+  <a class="brand" href="/">NeuroLens</a>
+  <nav class="bar-nav" aria-label="Page sections">
+    <a href="#how">How it works</a>
+    <a href="#access">Early access</a>
+  </nav>
+  <a class="btn-white" id="topSignIn" href="/login">Sign in</a>
 </header>
 
-<div class="layout">
-  <div class="panel-left">
-    <!-- Upload (only with ?pass=) -->
-    <div class="upload-zone hidden" id="uploadZone">
-      <div class="upload-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>
-      <div class="upload-title">Upload a video for analysis</div>
-      <div class="upload-subtitle">MP4, MOV, or WebM — max 120 seconds</div>
-      <input type="file" accept="video/*" id="fileInput">
-    </div>
-
-    <!-- Samples carousel -->
-    <div class="samples-section" id="samplesSection">
-      <div class="samples-label">Sample Videos</div>
-      <div class="samples-grid" id="samplesGrid"></div>
-    </div>
-
-    <!-- Processing -->
-    <div class="processing" id="processing">
-      <div class="spinner"></div>
-      <div class="processing-text">Analysing neural engagement...</div>
-      <div class="processing-detail" id="processingDetail">Running TRIBE v2 inference</div>
-    </div>
-
-    <!-- Video player -->
-    <div class="video-container" id="videoContainer">
-      <div class="video-wrapper"><video id="videoPlayer" controls></video></div>
-      <div class="video-info">
-        <span class="video-filename" id="videoFilename"></span>
-        <div class="video-stats"><span id="videoDuration"></span><span id="videoProcessTime"></span></div>
-        <button class="btn-new" id="btnNew">Back</button>
+<main>
+  <section class="hero">
+    <div class="hero-copy">
+      <h1>Watch a brain watch your video.</h1>
+      <p class="lede">NeuroLens predicts how an average viewer's brain responds to a video, second by second: which areas light up for faces, places, speech and sound. Find the moments that land and the ones that dip, and pick the stronger cut before you publish.</p>
+      <div class="actions">
+        <a class="btn-white explore" href="/app">Explore samples</a>
+        <a class="btn-line" id="heroSignIn" href="/login">Sign in to upload</a>
       </div>
     </div>
+    <div class="hero-player" id="heroPlayer">
+      <div class="video-box" id="videoBox" hidden>
+        <video id="heroVideo" muted loop playsinline aria-label="Sample video. Click to pause or resume."></video>
+        <button class="sound-toggle" id="soundToggle" type="button" aria-label="Turn sound on" aria-pressed="false">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M2.5 6h2.5l3.5-3v10L5 10H2.5z"/><path d="m11 6 4 4m0-4-4 4"/></svg>
+        </button>
+      </div>
+      <div class="brain-box" id="brainBox" hidden>
+        <div class="brain-message" id="brainMessage" hidden></div>
+        <div class="brain-legend"><span>typical</span><i></i><span>higher</span></div>
+        <span class="brain-time" id="brainSecond"></span>
+        <span class="brain-hint">drag to turn</span>
+      </div>
+      <div class="curve-box" id="curveBox" hidden>
+        <svg id="heroCurve" role="img" aria-label="Overall brain response over time">
+          <line class="curve-zero" id="curveZero" x1="0" y1="0" x2="0" y2="0"></line>
+          <text class="curve-label" id="curveLabel" x="6" y="0">typical viewing</text>
+          <path class="curve-ghost" id="curveGhost"></path>
+          <path class="curve-drawn" id="curveDrawn"></path>
+          <line class="curve-play" id="curvePlay" x1="0" y1="0" x2="0" y2="0"></line>
+          <circle class="curve-dot" id="curveDot" r="3"></circle>
+        </svg>
+        <div class="curve-callout" id="curveCallout">
+          <span class="when" id="curveWhen"></span>
+          <span class="what" id="curveWhat"></span>
+        </div>
+      </div>
+      <div class="coming-soon" id="comingSoon" hidden>A sample video is coming soon.</div>
+    </div>
+  </section>
+
+  <section class="showcase" id="showcase" hidden>
+    <div class="show-row" id="showRowSignals" hidden>
+      <div class="show-copy">
+        <span class="show-eyebrow">01 / Signals</span>
+        <h2>Seeing, hearing, understanding.</h2>
+        <p class="show-text">Seven brain areas, grouped into three. Every second is measured against typical film and TV viewing, so you can compare any two videos.</p>
+      </div>
+      <div class="show-visual">
+        <div class="show-well">
+          <div class="show-strip">
+            <span class="show-strip-label">Seeing</span>
+            <svg class="show-svg" id="stripSee" role="img" aria-label="Seeing over time"></svg>
+          </div>
+          <div class="show-strip">
+            <span class="show-strip-label">Hearing</span>
+            <svg class="show-svg" id="stripHear" role="img" aria-label="Hearing over time"></svg>
+          </div>
+          <div class="show-strip">
+            <span class="show-strip-label">Understanding</span>
+            <svg class="show-svg" id="stripUnderstand" role="img" aria-label="Understanding over time"></svg>
+          </div>
+          <div class="show-axis"><span>0:00</span><span id="showSignalsEnd"></span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="show-row flip" id="showRowReport" hidden>
+      <div class="show-copy">
+        <span class="show-eyebrow">02 / Report</span>
+        <h2>A report you can act on.</h2>
+        <p class="show-text">A written report names the moments that hold attention and the ones to change, with the second each one starts.</p>
+      </div>
+      <div class="show-visual">
+        <div class="show-well">
+          <p class="show-headline" id="showReportHeadline"></p>
+          <div class="show-moments" id="showReportMoments" hidden></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="show-row" id="showRowCompare" hidden>
+      <div class="show-copy">
+        <span class="show-eyebrow">03 / Compare</span>
+        <h2>Compare two cuts.</h2>
+        <p class="show-text">Put two versions side by side and see where each one wins.</p>
+      </div>
+      <div class="show-visual">
+        <div class="show-well">
+          <div class="show-legend">
+            <span class="show-legend-item"><span class="show-dash a"></span><span id="showLegendA"></span></span>
+            <span class="show-legend-item"><span class="show-dash b"></span><span id="showLegendB"></span></span>
+          </div>
+          <svg class="show-svg show-compare-svg" id="showCompareSvg" role="img" aria-label="Overall response of two cuts"></svg>
+          <p class="show-compare-headline" id="showCompareHeadline" hidden></p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="how" id="how">
+    <h2>How it works</h2>
+    <ol class="steps">
+      <li class="step">
+        <span class="step-num">01</span>
+        <div>
+          <h3>Upload a clip</h3>
+          <p id="uploadLimit">Any video up to the upload limit, and sample videos are free without an account.</p>
+        </div>
+      </li>
+      <li class="step">
+        <span class="step-num">02</span>
+        <div>
+          <h3>We predict the brain response</h3>
+          <p>An AI model trained on brain scans predicts the response for every second. It takes a few minutes, and you can watch its progress.</p>
+        </div>
+      </li>
+      <li class="step">
+        <span class="step-num">03</span>
+        <div>
+          <h3>See what works, second by second</h3>
+          <p>Every second against typical viewing, a 3D brain, and a written report on what to keep and change. Compare two cuts side by side.</p>
+        </div>
+      </li>
+    </ol>
+  </section>
+
+  <section class="access" id="access">
+    <h2>Early access</h2>
+    <div class="access-cols">
+      <div class="access-col">
+        <span class="access-label">Samples</span>
+        <span class="access-value">Open</span>
+        <p>Explore every sample without an account.</p>
+      </div>
+      <div class="access-col">
+        <span class="access-label">Your videos</span>
+        <span class="access-value">Free to try</span>
+        <p>Creators and marketers get 5 free minutes.*</p>
+        <a class="btn-line access-btn" href="/login">Get free minutes</a>
+      </div>
+      <div class="access-col">
+        <span class="access-label">Shared</span>
+        <span class="access-value">Keep going</span>
+        <p>Add a video's retention curve and earn its credit back.</p>
+      </div>
+      <p class="access-note">*For channels with 1,000+ followers.</p>
+    </div>
+  </section>
+
+  <section class="closing">
+    <h2>See it on your own video.</h2>
+    <a class="btn-white" id="closingSignIn" href="/login">Sign in to upload</a>
+  </section>
+</main>
+
+<footer>
+  <div class="footer-top">
+    <div class="footer-brand">
+      <span class="footer-name">NeuroLens</span>
+      <p>Predicted brain response for video, second by second.</p>
+    </div>
+    <nav class="footer-links" aria-label="Footer">
+      <a class="explore" href="/app">Samples</a>
+      <a href="#how">How it works</a>
+      <a href="#access">Early access</a>
+      <a href="/static/privacy.html">Privacy policy</a>
+      <a href="https://docs.google.com/forms/d/e/1FAIpQLSc-jfz7EDENV7lkHziErGTBtv7SsN9sda7_wnjoeIhs8LaP4Q/viewform" target="_blank" rel="noopener">Give feedback</a>
+    </nav>
   </div>
-
-  <div class="panel-right">
-    <div class="charts-empty" id="chartsEmpty">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 3v18h18"/><path d="M7 16l4-8 4 4 5-9"/></svg>
-      <div>Select a video to view its engagement analysis</div>
-    </div>
-    <div class="charts-container" id="chartsContainer">
-      <div class="result-stats" id="resultStats"></div>
-
-      <div class="chart-card">
-        <div class="chart-header"><div class="chart-title"><span class="chart-dot" style="background:var(--orange)"></span> Overall Engagement</div><div class="chart-peak" id="peakOverall"></div></div>
-        <div class="chart-wrapper tall"><canvas id="chartOverall"></canvas></div>
-        <div class="chart-desc">The combined neural engagement score across all five brain regions. Higher values mean the brain is processing more of the video content at that moment. Look for peaks (high-attention moments) and troughs (where viewers may disengage).</div>
-      </div>
-
-      <div class="chart-card">
-        <div class="chart-header"><div class="chart-title"><span class="chart-dot" style="background:var(--red)"></span> FFA — Faces</div><div class="chart-peak" id="peakFfa"></div></div>
-        <div class="chart-wrapper"><canvas id="chartFfa"></canvas></div>
-        <div class="chart-desc">Activation of the Fusiform Face Area — the brain region specialised for face recognition. Spikes when faces appear on screen. Strong face activation typically correlates with higher emotional engagement and memorability.</div>
-      </div>
-
-      <div class="chart-card">
-        <div class="chart-header"><div class="chart-title"><span class="chart-dot" style="background:var(--blue)"></span> EBA — Bodies</div><div class="chart-peak" id="peakEba"></div></div>
-        <div class="chart-wrapper"><canvas id="chartEba"></canvas></div>
-        <div class="chart-desc">Activation of the Extrastriate Body Area — responds to human bodies, hands, and gestures. Sustained elevation means people are consistently on screen. Drops may indicate product-only shots or environment-focused moments.</div>
-      </div>
-
-      <div class="chart-card">
-        <div class="chart-header"><div class="chart-title"><span class="chart-dot" style="background:var(--green)"></span> PPA — Scenes</div><div class="chart-peak" id="peakPpa"></div></div>
-        <div class="chart-wrapper"><canvas id="chartPpa"></canvas></div>
-        <div class="chart-desc">Activation of the Parahippocampal Place Area — responds to environments, landscapes, and spatial scenes. High when the video shows wide establishing shots, interiors, or location context. Low during close-ups on people or products.</div>
-      </div>
-
-      <div class="chart-card">
-        <div class="chart-header"><div class="chart-title"><span class="chart-dot" style="background:var(--gold)"></span> STS — Social Cues</div><div class="chart-peak" id="peakSts"></div></div>
-        <div class="chart-wrapper"><canvas id="chartSts"></canvas></div>
-        <div class="chart-desc">Activation of the Superior Temporal Sulcus — responds to social signals like eye gaze, facial expressions, and biological motion. High during interpersonal moments, dialogue, and emotionally charged interactions between people.</div>
-      </div>
-
-      <div class="chart-card">
-        <div class="chart-header"><div class="chart-title"><span class="chart-dot" style="background:var(--purple)"></span> Auditory Cortex — Audio Contribution</div><div class="chart-peak" id="peakAud"></div></div>
-        <div class="chart-wrapper tall"><canvas id="chartAuditory"></canvas></div>
-        <div class="chart-desc">The solid line shows auditory cortex activation with the full audio track; the dashed line shows activation with audio stripped. The shaded gap between them is the audio's independent contribution. Large gaps mean the soundtrack is doing real work — important for assessing impact on muted social media placements.</div>
-      </div>
-    </div>
+  <div class="footer-bottom">
+    <span>Brain model: TRIBE v2 by Meta, CC BY-NC 4.0</span>
+    <span id="footerCredits" hidden></span>
   </div>
-</div>
+</footer>
 
 <script>
-let analysisData = null, charts = [], videoFile = null, samplesData = null;
+  if (document.documentElement.classList.contains('signed-in')) {
+    const $ = id => document.getElementById(id);
+    const top = $('topSignIn');
+    top.textContent = 'Open app';
+    top.href = '/app';
+    const hero = $('heroSignIn');
+    hero.textContent = 'Upload a video';
+    hero.href = '/app?upload=1';
+    hero.className = 'btn-white';
+    const closing = $('closingSignIn');
+    closing.textContent = 'Upload a video';
+    closing.href = '/app?upload=1';
+  }
+</script>
+<script src="/static/post_json.js"></script>
+<script type="module">
+import { createBrainView, decodeBrain, UNAVAILABLE } from '/static/brain_view.js';
+
 const $ = id => document.getElementById(id);
-const video = $('videoPlayer');
+const REDUCE_MOTION = (() => {
+  try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch { return false; }
+})();
 
-// ─── Pass gate ──────────────────────────────────────────────────────────────
-const params = new URLSearchParams(window.location.search);
-const hasPass = params.has('pass');
-
-if (hasPass) {
-  $('uploadZone').classList.remove('hidden');
-  $('headerMeta').textContent = 'Upload a video or select a sample';
+const WAKE_EVENTS = ['pointermove', 'pointerdown', 'touchstart', 'keydown', 'scroll'];
+let woke = false;
+function wake() {
+  if (woke) return;
+  woke = true;
+  for (const type of WAKE_EVENTS) window.removeEventListener(type, wake);
+  // keepalive: a click on Sign in navigates at once and would otherwise cancel the wake.
+  postJSON('/api/wake', {}, { keepalive: true }).catch(() => {});
+}
+for (const type of WAKE_EVENTS) {
+  window.addEventListener(type, wake, { once: true, passive: true });
 }
 
-// ─── Chart.js setup ─────────────────────────────────────────────────────────
-Chart.defaults.color = '#94A3B8';
-Chart.defaults.borderColor = 'rgba(15,22,41,0.06)';
-Chart.defaults.font.family = "'Plus Jakarta Sans', sans-serif";
-Chart.defaults.font.size = 11;
-Chart.defaults.animation.duration = 600;
+const videoBox = $('videoBox');
+const brainBox = $('brainBox');
+const brainSecond = $('brainSecond');
+const comingSoon = $('comingSoon');
+const footerCredits = $('footerCredits');
+const showcaseSection = $('showcase');
+const showRowSignals = $('showRowSignals');
+const showRowReport = $('showRowReport');
+const showRowCompare = $('showRowCompare');
+const heroVideo = $('heroVideo');
+const soundToggle = $('soundToggle');
+const curveBox = $('curveBox');
+const curveSvg = $('heroCurve');
+const curveZero = $('curveZero');
+const curveLabel = $('curveLabel');
+const curveGhost = $('curveGhost');
+const curveDrawn = $('curveDrawn');
+const curvePlay = $('curvePlay');
+const curveDot = $('curveDot');
+const curveCallout = $('curveCallout');
+const curveWhen = $('curveWhen');
+const curveWhat = $('curveWhat');
+const SOUND_ON = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M2.5 6h2.5l3.5-3v10L5 10H2.5z"/><path d="M11 5.5a3.5 3.5 0 0 1 0 5M12.8 3.8a6 6 0 0 1 0 8.4"/></svg>';
+const SOUND_OFF = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M2.5 6h2.5l3.5-3v10L5 10H2.5z"/><path d="m11 6 4 4m0-4-4 4"/></svg>';
+const brainView = createBrainView(brainBox, $('brainMessage'));
+let brainShown = false;
 
-const playheadPlugin = {
-  id: 'playhead',
-  afterDraw(chart) {
-    if (!analysisData || !video.duration) return;
-    const x = chart.scales.x.getPixelForValue(video.currentTime);
-    if (x < chart.scales.x.left || x > chart.scales.x.right) return;
-    const ctx = chart.ctx;
-    ctx.save();
-    ctx.beginPath(); ctx.moveTo(x, chart.chartArea.top); ctx.lineTo(x, chart.chartArea.bottom);
-    ctx.strokeStyle = 'rgba(15,22,41,0.3)'; ctx.lineWidth = 1.5; ctx.setLineDash([4,3]); ctx.stroke();
-    ctx.fillStyle = '#0F1629'; ctx.font = "500 10px 'JetBrains Mono', monospace"; ctx.textAlign = 'center';
-    ctx.fillText(Math.floor(video.currentTime) + 's', x, chart.chartArea.top - 4);
-    ctx.restore();
-  }
+const curve = {
+  values: [], duration: 0, moments: [], width: 0, height: 84, mid: 42, range: 0.4,
+  full: '', lastPos: -1, active: -1, ready: false
 };
-Chart.register(playheadPlugin);
 
-// ─── Load samples ───────────────────────────────────────────────────────────
-async function loadSamples() {
-  try {
-    const res = await fetch('/api/samples');
-    samplesData = await res.json();
-    renderSamples();
-  } catch (e) {
-    console.warn('Could not load samples:', e);
+const showcase = { signals: null, compare: null };
+const credits = new Set();
+
+let limitsPromise = null;
+function getLimits() {
+  if (!limitsPromise) {
+    limitsPromise = fetch('/api/limits')
+      .then(res => res.ok ? res.json() : null)
+      .catch(() => null);
+  }
+  return limitsPromise;
+}
+
+async function loadLimits() {
+  const limits = await getLimits();
+  const seconds = limits && Number(limits.max_video_duration_seconds);
+  const minutes = Number.isFinite(seconds) && seconds > 0 ? Math.max(1, Math.round(seconds / 60)) : null;
+  if (minutes !== null) {
+    $('uploadLimit').textContent = `Any video up to ${minutes} ${minutes === 1 ? 'minute' : 'minutes'}. Sample videos are free without an account.`;
   }
 }
 
-function renderSamples() {
-  const grid = $('samplesGrid');
-  if (!samplesData || !samplesData.samples || samplesData.samples.length === 0) {
-    $('samplesSection').style.display = 'none';
+function showComingSoon() {
+  videoBox.hidden = true;
+  brainBox.hidden = true;
+  curveBox.hidden = true;
+  comingSoon.hidden = false;
+  curve.ready = false;
+}
+
+function addCredit(text) {
+  if (typeof text === 'string' && text.trim()) credits.add(text.trim());
+}
+
+function renderCredits() {
+  footerCredits.replaceChildren();
+  for (const text of credits) {
+    const span = document.createElement('span');
+    span.textContent = text;
+    footerCredits.appendChild(span);
+  }
+  footerCredits.hidden = credits.size === 0;
+}
+
+function brainUnavailable() {
+  brainShown = false;
+  brainView.clear(UNAVAILABLE);
+  brainSecond.textContent = '';
+}
+
+async function loadBrain(sample) {
+  const limits = await getLimits();
+  const range = limits && limits.colour_range;
+  if (!Number.isFinite(range) || range <= 0 || !sample.brain_file) {
+    brainUnavailable();
     return;
   }
-  grid.innerHTML = '';
-  samplesData.samples.forEach((s, idx) => {
-    const card = document.createElement('div');
-    card.className = 'sample-card';
-    card.dataset.idx = idx;
-    card.innerHTML = `
-      <div class="sample-thumb">
-        ${s.thumbnail ? `<img src="/data/${s.thumbnail}" onerror="this.parentElement.innerHTML='<div class=sample-thumb-placeholder>▶</div>'">` : '<div class="sample-thumb-placeholder">▶</div>'}
-      </div>
-      <div class="sample-info">
-        <div class="sample-title">${s.title}</div>
-        <div class="sample-dur">${s.duration_seconds}s</div>
-      </div>
-    `;
-    card.addEventListener('click', () => loadSample(idx));
-    grid.appendChild(card);
+  try {
+    const res = await fetch(`/data/${sample.brain_file}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const decoded = decodeBrain(await res.arrayBuffer());
+    if (!decoded) throw new Error('malformed brain file');
+    brainView.setColourRange(range);
+    brainView.show(decoded.rows, decoded.count);
+    brainShown = true;
+  } catch (error) {
+    console.warn('3D view:', error);
+    brainUnavailable();
+  }
+}
+
+function formatClock(seconds) {
+  const whole = Math.max(0, Math.floor(seconds));
+  return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, '0')}`;
+}
+
+function finiteSeries(values) {
+  return Array.isArray(values) && values.length >= 2 && values.every(value => Number.isFinite(value))
+    ? values
+    : null;
+}
+
+function sampleSeries(sample, key) {
+  const signals = sample && sample.result && sample.result.signals;
+  return signals ? finiteSeries(signals[key]) : null;
+}
+
+const SVG_NS = 'http://www.w3.org/2000/svg';
+let svgUid = 0;
+
+function svgEl(name, attrs = {}) {
+  const element = document.createElementNS(SVG_NS, name);
+  for (const [key, value] of Object.entries(attrs)) element.setAttribute(key, value);
+  return element;
+}
+
+function largestAbs(seriesList) {
+  let largest = 0;
+  for (const values of seriesList) for (const value of values) largest = Math.max(largest, Math.abs(value));
+  return largest;
+}
+
+function seriesPath(values, width, mid, range, xOf) {
+  const amplitude = Math.max(1, mid - 8);
+  let path = '';
+  for (let i = 0; i < values.length; i++) {
+    const y = mid - (values[i] / range) * amplitude;
+    path += (i ? 'L' : 'M') + xOf(i).toFixed(1) + ',' + y.toFixed(1);
+  }
+  return path;
+}
+
+// Closes the area to the zero line at the series' own last x, so a shorter series ends there.
+function areaPath(line, lastX, mid) {
+  return `${line}L${lastX.toFixed(1)},${mid.toFixed(1)}L0,${mid.toFixed(1)}Z`;
+}
+
+function svgWidth(svg) {
+  const rect = svg.getBoundingClientRect();
+  return Math.max(1, rect.width || svg.clientWidth || 1);
+}
+
+function drawSignals() {
+  const state = showcase.signals;
+  if (!state) return;
+  const range = Math.max(0.15, largestAbs(state.series.map(item => item.values)) * 1.1);
+  const playheads = [];
+  for (const item of state.series) {
+    const svg = item.svg;
+    if (!svg) continue;
+    const width = svgWidth(svg);
+    const height = 56;
+    const mid = height / 2;
+    const line = seriesPath(item.values, width, mid, range, i => (i / (item.values.length - 1)) * width);
+    const area = areaPath(line, width, mid);
+    const heatId = `show-heat-${++svgUid}`;
+    const belowId = `show-below-${++svgUid}`;
+    const aboveClipId = `show-above-${++svgUid}`;
+    const belowClipId = `show-below-clip-${++svgUid}`;
+
+    const defs = svgEl('defs');
+    const heat = svgEl('linearGradient', {
+      id: heatId, gradientUnits: 'userSpaceOnUse',
+      x1: '0', y1: mid.toFixed(1), x2: '0', y2: '0'
+    });
+    for (const [offset, colour, opacity] of [
+      [0, '#800000', .05], [.35, '#E61A0A', .12], [.7, '#FF800A', .2], [1, '#FFFFD9', .34]
+    ]) {
+      heat.appendChild(svgEl('stop', { offset: String(offset), 'stop-color': colour, 'stop-opacity': String(opacity) }));
+    }
+    const below = svgEl('linearGradient', {
+      id: belowId, gradientUnits: 'userSpaceOnUse',
+      x1: '0', y1: mid.toFixed(1), x2: '0', y2: String(height)
+    });
+    below.appendChild(svgEl('stop', { offset: '0', 'stop-color': '#6F7E99', 'stop-opacity': '.14' }));
+    below.appendChild(svgEl('stop', { offset: '1', 'stop-color': '#6F7E99', 'stop-opacity': '0' }));
+    const aboveClip = svgEl('clipPath', { id: aboveClipId });
+    aboveClip.appendChild(svgEl('rect', { x: '0', y: '0', width: width.toFixed(1), height: mid.toFixed(1) }));
+    const belowClip = svgEl('clipPath', { id: belowClipId });
+    belowClip.appendChild(svgEl('rect', {
+      x: '0', y: mid.toFixed(1), width: width.toFixed(1), height: (height - mid).toFixed(1)
+    }));
+    defs.append(heat, below, aboveClip, belowClip);
+
+    const fillAbove = svgEl('path', {
+      d: area, fill: `url(#${heatId})`, 'clip-path': `url(#${aboveClipId})`, class: 'show-fill'
+    });
+    const fillBelow = svgEl('path', {
+      d: area, fill: `url(#${belowId})`, 'clip-path': `url(#${belowClipId})`, class: 'show-fill'
+    });
+    const zero = svgEl('line', {
+      x1: '0', y1: mid.toFixed(1), x2: width.toFixed(1), y2: mid.toFixed(1), class: 'show-zero'
+    });
+    const drawn = svgEl('path', { d: line, class: 'show-line', pathLength: '1' });
+    const playhead = svgEl('line', {
+      x1: '0', y1: '0', x2: '0', y2: String(height), class: 'show-play'
+    });
+    svg.setAttribute('viewBox', `0 0 ${width.toFixed(1)} ${height}`);
+    svg.replaceChildren(defs, fillAbove, fillBelow, zero, drawn, playhead);
+    playheads.push({ element: playhead, width });
+  }
+  state.playheads = playheads;
+}
+
+function drawCompare() {
+  const state = showcase.compare;
+  const svg = $('showCompareSvg');
+  if (!state || !svg) return;
+  const width = svgWidth(svg);
+  const height = 150;
+  const mid = height / 2;
+  const maxLength = Math.max(state.a.values.length, state.b.values.length);
+  const range = Math.max(0.15, largestAbs([state.a.values, state.b.values]) * 1.1);
+  const xOf = i => (i / (maxLength - 1)) * width;
+  const aLine = seriesPath(state.a.values, width, mid, range, xOf);
+  const bLine = seriesPath(state.b.values, width, mid, range, xOf);
+  const zero = svgEl('line', {
+    x1: '0', y1: mid.toFixed(1), x2: width.toFixed(1), y2: mid.toFixed(1), class: 'show-zero'
   });
+  const aFill = svgEl('path', {
+    d: areaPath(aLine, xOf(state.a.values.length - 1), mid), fill: '#FF8A2A', 'fill-opacity': '.08', class: 'show-fill'
+  });
+  const bFill = svgEl('path', {
+    d: areaPath(bLine, xOf(state.b.values.length - 1), mid), fill: '#6FA8FF', 'fill-opacity': '.08', class: 'show-fill'
+  });
+  const aDrawn = svgEl('path', { d: aLine, class: 'show-line show-line-a', pathLength: '1' });
+  const bDrawn = svgEl('path', { d: bLine, class: 'show-line show-line-b', pathLength: '1' });
+  svg.setAttribute('viewBox', `0 0 ${width.toFixed(1)} ${height}`);
+  svg.replaceChildren(aFill, bFill, zero, aDrawn, bDrawn);
 }
 
-function loadSample(idx) {
-  const s = samplesData.samples[idx];
-
-  // Highlight active card
-  document.querySelectorAll('.sample-card').forEach(c => c.classList.remove('active'));
-  document.querySelector(`.sample-card[data-idx="${idx}"]`).classList.add('active');
-
-  // Load video
-  video.src = `/data/${s.video_file}`;
-  $('videoFilename').textContent = s.video_file;
-  $('videoDuration').textContent = `${s.duration_seconds}s`;
-  $('videoProcessTime').textContent = '';
-
-  // Load pre-computed data
-  analysisData = {
-    filename: s.video_file,
-    duration_seconds: s.duration_seconds,
-    timesteps: s.timesteps,
-    processing_time_seconds: 0,
-  };
-
-  // Show results
-  $('uploadZone').classList.add('hidden');
-  $('processing').classList.remove('active');
-  $('videoContainer').classList.add('active');
-  $('chartsEmpty').style.display = 'none';
-  $('chartsContainer').classList.add('active');
-  $('headerMeta').textContent = `${s.title} — ${s.duration_seconds}s`;
-
-  renderStats();
-  buildCharts();
+function updateShowcasePlayhead(seconds) {
+  const state = showcase.signals;
+  if (!state || !state.playheads || showRowSignals.hidden) return;
+  const fraction = state.duration > 0 ? Math.max(0, Math.min(1, seconds / state.duration)) : 0;
+  for (const playhead of state.playheads) {
+    const x = (fraction * playhead.width).toFixed(1);
+    playhead.element.setAttribute('x1', x);
+    playhead.element.setAttribute('x2', x);
+  }
 }
 
-loadSamples();
-
-// ─── Upload handling ────────────────────────────────────────────────────────
-const uploadZone = $('uploadZone'), fileInput = $('fileInput');
-['dragenter','dragover'].forEach(e => uploadZone.addEventListener(e, ev => { ev.preventDefault(); uploadZone.classList.add('dragover'); }));
-['dragleave','drop'].forEach(e => uploadZone.addEventListener(e, ev => { ev.preventDefault(); uploadZone.classList.remove('dragover'); }));
-uploadZone.addEventListener('drop', ev => { const f = ev.dataTransfer.files; if (f.length && f[0].type.startsWith('video/')) handleFile(f[0]); });
-fileInput.addEventListener('change', ev => { if (ev.target.files.length) handleFile(ev.target.files[0]); });
-
-$('btnNew').addEventListener('click', resetUI);
-
-function handleFile(file) {
-  videoFile = file;
-  $('uploadZone').classList.add('hidden');
-  $('samplesSection').style.display = 'none';
-  $('processing').classList.add('active');
-  $('headerMeta').textContent = `Processing: ${file.name}`;
-  video.src = URL.createObjectURL(file);
-  analyseVideo(file);
+function drawShowcase() {
+  if (showcase.signals) drawSignals();
+  if (showcase.compare) drawCompare();
+  updateShowcasePlayhead(Number.isFinite(heroVideo.currentTime) ? heroVideo.currentTime : 0);
 }
 
-async function analyseVideo(file) {
-  const detail = $('processingDetail');
-  const steps = ['Uploading video...','Extracting audio and transcribing speech...','Running V-JEPA2 video encoder...','Running Wav2Vec-BERT audio encoder...','Predicting brain activity (full video)...','Stripping audio for comparison run...','Predicting brain activity (video only)...','Computing ROI engagement scores...'];
-  let stepIdx = 0;
-  const timer = setInterval(() => { stepIdx = Math.min(stepIdx+1, steps.length-1); detail.textContent = steps[stepIdx]; }, 8000);
+function valueAt(values, position) {
+  const i = Math.max(0, Math.min(values.length - 1, Math.floor(position)));
+  const j = Math.min(values.length - 1, i + 1);
+  const fraction = Math.max(0, Math.min(1, position - i));
+  return values[i] * (1 - fraction) + values[j] * fraction;
+}
+
+function chartY(value) {
+  const amplitude = curve.mid - 8;
+  return curve.mid - (value / curve.range) * amplitude;
+}
+
+function buildPath(upto) {
+  const values = curve.values;
+  if (!values.length) return '';
+  const last = Math.min(values.length - 1, Math.max(0, upto));
+  const xOf = index => (index / (values.length - 1)) * curve.width;
+  let path = '';
+  for (let i = 0; i <= Math.floor(last); i++) {
+    path += (i ? 'L' : 'M') + xOf(i).toFixed(1) + ',' + chartY(values[i]).toFixed(1);
+  }
+  if (last > Math.floor(last)) {
+    path += 'L' + xOf(last).toFixed(1) + ',' + chartY(valueAt(values, last)).toFixed(1);
+  }
+  return path;
+}
+
+function measureCurve() {
+  if (!curve.ready) return;
+  const rect = curveSvg.getBoundingClientRect();
+  curve.width = Math.max(1, rect.width || curveBox.clientWidth || 1);
+  curve.height = Math.max(1, rect.height || 84);
+  curve.mid = curve.height / 2;
+  curveSvg.setAttribute('viewBox', `0 0 ${curve.width.toFixed(1)} ${curve.height.toFixed(1)}`);
+  curveZero.setAttribute('x1', '0');
+  curveZero.setAttribute('x2', curve.width.toFixed(1));
+  curveZero.setAttribute('y1', curve.mid.toFixed(1));
+  curveZero.setAttribute('y2', curve.mid.toFixed(1));
+  curveLabel.setAttribute('x', (curve.width - 6).toFixed(1));
+  curveLabel.setAttribute('y', (curve.mid - 5).toFixed(1));
+  curvePlay.setAttribute('y1', '0');
+  curvePlay.setAttribute('y2', curve.height.toFixed(1));
+  let largest = 0.0001;
+  for (const value of curve.values) largest = Math.max(largest, Math.abs(value));
+  curve.range = Math.max(0.15, largest * 1.15);
+  curve.full = buildPath(curve.values.length - 1);
+  curveGhost.setAttribute('d', curve.full);
+  if (REDUCE_MOTION) {
+    curveGhost.style.display = 'none';
+    curveDrawn.setAttribute('d', curve.full);
+  } else {
+    curveGhost.style.display = '';
+    curveDrawn.setAttribute('d', '');
+  }
+  curve.lastPos = -1;
+}
+
+function updateCallout(seconds) {
+  if (!curve.moments.length) return;
+  let found = -1;
+  for (let i = 0; i < curve.moments.length; i++) {
+    const moment = curve.moments[i];
+    if (seconds >= moment.start && seconds < moment.end + 1) {
+      found = i;
+      break;
+    }
+  }
+  if (found === curve.active) return;
+  curve.active = found;
+  if (found < 0) {
+    curveCallout.classList.remove('on');
+    return;
+  }
+  const moment = curve.moments[found];
+  curveWhen.textContent = formatClock(moment.start);
+  curveWhat.textContent = moment.what_happens;
+  curveCallout.classList.add('on');
+}
+
+function updateCurve(seconds) {
+  if (!curve.ready || curveBox.hidden) return;
+  const values = curve.values;
+  const duration = curve.duration || (Number.isFinite(heroVideo.duration) ? heroVideo.duration : 0);
+  const fraction = duration > 0 ? Math.max(0, Math.min(1, seconds / duration)) : 0;
+  const position = fraction * (values.length - 1);
+  if (!REDUCE_MOTION && Math.abs(position - curve.lastPos) > 0.02) {
+    curveDrawn.setAttribute('d', buildPath(position));
+    curve.lastPos = position;
+  }
+  const x = fraction * curve.width;
+  curvePlay.setAttribute('x1', x.toFixed(1));
+  curvePlay.setAttribute('x2', x.toFixed(1));
+  curveDot.setAttribute('cx', x.toFixed(1));
+  curveDot.setAttribute('cy', chartY(valueAt(values, position)).toFixed(1));
+  updateCallout(seconds);
+}
+
+function setupCurve(sample) {
+  const signals = sample.result && sample.result.signals;
+  const values = signals && Array.isArray(signals.overall) ? signals.overall : null;
+  if (!values || values.length < 2 || !values.every(value => Number.isFinite(value))) {
+    curveBox.hidden = true;
+    return;
+  }
+  curve.values = values;
+  curve.duration = Number(sample.result && sample.result.duration_seconds) || 0;
+  const report = sample.report && typeof sample.report === 'object' ? sample.report : null;
+  curve.moments = report && Array.isArray(report.moments)
+    ? report.moments.filter(moment => moment && Number.isFinite(moment.start) && Number.isFinite(moment.end) && moment.what_happens)
+    : [];
+  curve.active = -1;
+  curve.ready = true;
+  curveBox.hidden = false;
+  measureCurve();
+  updateCurve(Number.isFinite(heroVideo.currentTime) ? heroVideo.currentTime : 0);
+}
+
+function setupReport(sample) {
+  const report = sample && sample.report && typeof sample.report === 'object' ? sample.report : null;
+  const headline = report && typeof report.headline === 'string' ? report.headline.trim() : '';
+  if (!headline) return false;
+  $('showReportHeadline').textContent = headline;
+  const box = $('showReportMoments');
+  box.replaceChildren();
+  const moments = report && Array.isArray(report.moments)
+    ? report.moments.filter(moment => moment && Number.isFinite(moment.start) && typeof moment.what_happens === 'string' && moment.what_happens.trim())
+    : [];
+  for (const moment of moments.slice(0, 2)) {
+    const row = document.createElement('div');
+    row.className = 'show-moment';
+    const time = document.createElement('span');
+    time.className = 'show-moment-time';
+    time.textContent = formatClock(moment.start);
+    const body = document.createElement('div');
+    const what = document.createElement('span');
+    what.className = 'show-moment-what';
+    what.textContent = moment.what_happens;
+    body.appendChild(what);
+    if (typeof moment.suggestion === 'string' && moment.suggestion.trim()) {
+      const suggestion = document.createElement('span');
+      suggestion.className = 'show-moment-try';
+      suggestion.textContent = `Try: ${moment.suggestion}`;
+      body.appendChild(suggestion);
+    }
+    row.append(time, body);
+    box.appendChild(row);
+  }
+  box.hidden = box.childElementCount === 0;
+  return true;
+}
+
+function setupShowcase(hero, samples, comparisons) {
+  let shown = false;
+  let heroUsed = false;
 
   try {
-    const fd = new FormData(); fd.append('video', file);
-    const res = await fetch('/api/analyse', { method: 'POST', body: fd });
-    clearInterval(timer);
-    if (!res.ok) { const err = await res.json(); throw new Error(err.error || `HTTP ${res.status}`); }
-    analysisData = await res.json();
-    showUploadResults();
-  } catch (err) { clearInterval(timer); alert(`Analysis failed: ${err.message}`); resetUI(); }
-}
-
-function showUploadResults() {
-  $('processing').classList.remove('active');
-  $('videoContainer').classList.add('active');
-  $('chartsEmpty').style.display = 'none';
-  $('chartsContainer').classList.add('active');
-  $('videoFilename').textContent = analysisData.filename;
-  $('videoDuration').textContent = `${analysisData.duration_seconds}s`;
-  $('videoProcessTime').textContent = `${analysisData.processing_time_seconds}s`;
-  $('headerMeta').textContent = `${analysisData.filename} — ${analysisData.duration_seconds}s — ${analysisData.timesteps.length} timesteps`;
-  renderStats();
-  buildCharts();
-}
-
-function renderStats() {
-  const ts = analysisData.timesteps;
-  const eng = ts.map(t => t.engagement_overall);
-  const peak = eng.indexOf(Math.max(...eng));
-  const avg = (eng.reduce((a,b) => a+b, 0) / eng.length).toFixed(2);
-  $('resultStats').innerHTML = `
-    <div class="stat-card"><div class="stat-value">${analysisData.duration_seconds}s</div><div class="stat-label">Duration</div></div>
-    <div class="stat-card"><div class="stat-value">${avg}</div><div class="stat-label">Avg Engagement</div></div>
-    <div class="stat-card"><div class="stat-value">${peak}s</div><div class="stat-label">Peak Moment</div></div>`;
-}
-
-// ─── Charts ─────────────────────────────────────────────────────────────────
-function buildCharts() {
-  charts.forEach(c => c.destroy()); charts = [];
-  const ts = analysisData.timesteps, labels = ts.map(t => t.t);
-  function peakInfo(d) { const m = Math.max(...d); return `peak ${m.toFixed(2)} @ ${d.indexOf(m)}s`; }
-
-  function make(id, data, color, fill = true) {
-    const ctx = $(id).getContext('2d');
-    const g = ctx.createLinearGradient(0, 0, 0, ctx.canvas.parentElement.offsetHeight);
-    g.addColorStop(0, color + '20'); g.addColorStop(1, color + '02');
-    const c = new Chart(ctx, {
-      type: 'line',
-      data: { labels, datasets: [{ data, borderColor: color, backgroundColor: fill ? g : 'transparent', fill, borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, pointHoverBackgroundColor: color, pointHoverBorderColor: '#FFF', pointHoverBorderWidth: 2, tension: 0.35 }] },
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        interaction: { mode: 'index', intersect: false },
-        onClick: (e) => { const x = c.scales.x.getValueForPixel(e.x); if (x >= 0 && x < analysisData.duration_seconds) video.currentTime = x; },
-        plugins: { legend: { display: false }, tooltip: { backgroundColor: '#0F1629', titleColor: '#E2E8F0', bodyColor: '#FFF', borderColor: '#1E293B', borderWidth: 1, cornerRadius: 8, padding: 10, titleFont: { family: "'JetBrains Mono', monospace", size: 11 }, bodyFont: { family: "'JetBrains Mono', monospace", size: 12, weight: '500' }, callbacks: { title: i => `t = ${i[0].label}s`, label: i => ` ${i.parsed.y.toFixed(3)}` } } },
-        scales: { x: { grid: { display: false }, ticks: { maxTicksLimit: 15, font: { family: "'JetBrains Mono', monospace", size: 10 }, color: '#94A3B8' } }, y: { min: 0, max: 1.05, grid: { color: 'rgba(15,22,41,0.04)' }, ticks: { display: false } } }
-      }
-    });
-    charts.push(c); return c;
+    const see = sampleSeries(hero, 'see');
+    const hear = sampleSeries(hero, 'hear');
+    const understand = sampleSeries(hero, 'understand');
+    if (see && hear && understand) {
+      const duration = Number(hero.result && hero.result.duration_seconds);
+      const seconds = Number.isFinite(duration) && duration > 0
+        ? duration
+        : Math.max(see.length, hear.length, understand.length);
+      showcase.signals = {
+        duration: seconds,
+        series: [
+          { values: see, svg: $('stripSee') },
+          { values: hear, svg: $('stripHear') },
+          { values: understand, svg: $('stripUnderstand') }
+        ]
+      };
+      $('showSignalsEnd').textContent = formatClock(seconds);
+      showRowSignals.hidden = false;
+      shown = true;
+      heroUsed = true;
+    }
+  } catch (error) {
+    console.warn('showcase signals:', error);
   }
 
-  make('chartOverall', ts.map(t => t.engagement_overall), '#EA580C'); $('peakOverall').textContent = peakInfo(ts.map(t => t.engagement_overall));
-  make('chartFfa', ts.map(t => t.regions.ffa_faces), '#DC2626'); $('peakFfa').textContent = peakInfo(ts.map(t => t.regions.ffa_faces));
-  make('chartEba', ts.map(t => t.regions.eba_bodies), '#2563EB'); $('peakEba').textContent = peakInfo(ts.map(t => t.regions.eba_bodies));
-  make('chartPpa', ts.map(t => t.regions.ppa_scenes), '#16A34A'); $('peakPpa').textContent = peakInfo(ts.map(t => t.regions.ppa_scenes));
-  make('chartSts', ts.map(t => t.regions.sts_social), '#D97706'); $('peakSts').textContent = peakInfo(ts.map(t => t.regions.sts_social));
-
-  const awD = ts.map(t => t.auditory_with_audio).filter(v => v !== null);
-  const aoD = ts.map(t => t.auditory_without_audio).filter(v => v !== null);
-  const aL = labels.slice(0, awD.length);
-  const actx = $('chartAuditory').getContext('2d');
-  const ag = actx.createLinearGradient(0, 0, 0, 150); ag.addColorStop(0, '#9333EA18'); ag.addColorStop(1, '#9333EA02');
-  const ac = new Chart(actx, {
-    type: 'line',
-    data: { labels: aL, datasets: [
-      { label: 'With audio', data: awD, borderColor: '#9333EA', backgroundColor: ag, fill: '+1', borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, tension: 0.35 },
-      { label: 'Without audio', data: aoD, borderColor: '#9333EA50', borderDash: [5,4], backgroundColor: 'transparent', fill: false, borderWidth: 1.5, pointRadius: 0, pointHoverRadius: 4, tension: 0.35 }
-    ] },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      interaction: { mode: 'index', intersect: false },
-      onClick: (e) => { const x = ac.scales.x.getValueForPixel(e.x); if (x >= 0 && x < analysisData.duration_seconds) video.currentTime = x; },
-      plugins: { legend: { display: true, position: 'top', align: 'end', labels: { boxWidth: 14, boxHeight: 2, padding: 12, color: '#475569', font: { size: 11, family: "'Plus Jakarta Sans', sans-serif" } } }, tooltip: { backgroundColor: '#0F1629', titleColor: '#E2E8F0', bodyColor: '#FFF', cornerRadius: 8, titleFont: { family: "'JetBrains Mono', monospace", size: 11 }, bodyFont: { family: "'JetBrains Mono', monospace", size: 11 }, callbacks: { title: i => `t = ${i[0].label}s` } } },
-      scales: { x: { grid: { display: false }, ticks: { maxTicksLimit: 15, font: { family: "'JetBrains Mono', monospace", size: 10 }, color: '#94A3B8' } }, y: { min: 0, max: 1.05, grid: { color: 'rgba(15,22,41,0.04)' }, ticks: { display: false } } }
+  try {
+    if (setupReport(hero)) {
+      showRowReport.hidden = false;
+      shown = true;
+      heroUsed = true;
     }
-  });
-  charts.push(ac); $('peakAud').textContent = peakInfo(awD);
+  } catch (error) {
+    console.warn('showcase report:', error);
+  }
+
+  if (hero && (heroUsed || hero.video_file)) addCredit(hero.attribution);
+
+  try {
+    const comparison = Array.isArray(comparisons) ? comparisons[0] : null;
+    if (comparison) {
+      const list = Array.isArray(samples) ? samples : [];
+      const a = list.find(sample => sample && sample.id === comparison.a);
+      const b = list.find(sample => sample && sample.id === comparison.b);
+      const aValues = sampleSeries(a, 'overall');
+      const bValues = sampleSeries(b, 'overall');
+      if (a && b && aValues && bValues) {
+        const titleOf = sample => typeof sample.title === 'string' && sample.title.trim() ? sample.title.trim() : 'Untitled';
+        showcase.compare = {
+          a: { values: aValues, title: titleOf(a) },
+          b: { values: bValues, title: titleOf(b) }
+        };
+        $('showLegendA').textContent = `A  ${showcase.compare.a.title}`;
+        $('showLegendB').textContent = `B  ${showcase.compare.b.title}`;
+        const headline = comparison.report && typeof comparison.report.headline === 'string'
+          ? comparison.report.headline.trim()
+          : '';
+        const headlineEl = $('showCompareHeadline');
+        headlineEl.textContent = headline;
+        headlineEl.hidden = !headline;
+        addCredit(a.attribution);
+        addCredit(b.attribution);
+        showRowCompare.hidden = false;
+        shown = true;
+      }
+    }
+  } catch (error) {
+    console.warn('showcase compare:', error);
+  }
+
+  showcaseSection.hidden = !shown;
+  if (shown) {
+    drawShowcase();
+    setupVisualReveal();
+  }
+  renderCredits();
 }
 
-// ─── Video sync ─────────────────────────────────────────────────────────────
-let rafId = null;
-function syncPlayhead() { charts.forEach(c => c.update('none')); if (!video.paused) rafId = requestAnimationFrame(syncPlayhead); }
-video.addEventListener('play', () => { rafId = requestAnimationFrame(syncPlayhead); });
-video.addEventListener('pause', () => { cancelAnimationFrame(rafId); charts.forEach(c => c.update('none')); });
-video.addEventListener('seeked', () => { charts.forEach(c => c.update('none')); });
-
-// ─── Reset ──────────────────────────────────────────────────────────────────
-function resetUI() {
-  analysisData = null; videoFile = null; video.src = '';
-  charts.forEach(c => c.destroy()); charts = [];
-  if (hasPass) $('uploadZone').classList.remove('hidden');
-  $('samplesSection').style.display = '';
-  $('processing').classList.remove('active');
-  $('videoContainer').classList.remove('active');
-  $('chartsEmpty').style.display = '';
-  $('chartsContainer').classList.remove('active');
-  $('headerMeta').textContent = hasPass ? 'Upload a video or select a sample' : 'Select a video to view analysis';
-  fileInput.value = '';
-  document.querySelectorAll('.sample-card').forEach(c => c.classList.remove('active'));
+function setupVisualReveal() {
+  if (REDUCE_MOTION || !('IntersectionObserver' in window)) return;
+  const visuals = document.querySelectorAll('.show-row:not([hidden]) .show-visual');
+  if (!visuals.length) return;
+  document.documentElement.classList.add('has-reveal');
+  const observer = new IntersectionObserver(entries => {
+    for (const entry of entries) {
+      if (!entry.isIntersecting) continue;
+      entry.target.classList.add('is-drawn');
+      observer.unobserve(entry.target);
+    }
+  }, { threshold: 0.3 });
+  for (const visual of visuals) observer.observe(visual);
 }
+
+function showHero(sample) {
+  comingSoon.hidden = true;
+  videoBox.hidden = false;
+  brainBox.hidden = false;
+  heroVideo.src = `/data/${sample.video_file}`;
+  heroVideo.muted = true;
+  heroVideo.play().catch(() => {});
+  loadBrain(sample);
+  setupCurve(sample);
+  requestAnimationFrame(measureCurve);
+}
+
+async function loadLanding() {
+  let data = null;
+  try {
+    const res = await fetch('/data/samples.json', { cache: 'no-store' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    data = await res.json();
+  } catch (error) { /* an empty list or a failed request both get the quiet panel */ }
+  const samples = data && Array.isArray(data.samples) ? data.samples : [];
+  const comparisons = data && Array.isArray(data.comparisons) ? data.comparisons : [];
+  const hero = samples.find(entry => entry && entry.landing === true) || samples[0] || null;
+  if (!hero || !hero.video_file) showComingSoon();
+  else showHero(hero);
+  setupShowcase(hero, samples, comparisons);
+}
+
+function renderSoundToggle() {
+  const on = !heroVideo.muted;
+  soundToggle.innerHTML = on ? SOUND_ON : SOUND_OFF;
+  soundToggle.setAttribute('aria-label', on ? 'Turn sound off' : 'Turn sound on');
+  soundToggle.setAttribute('aria-pressed', String(on));
+}
+
+function setupReveal() {
+  if (REDUCE_MOTION || !('IntersectionObserver' in window)) return;
+  const steps = document.querySelectorAll('.step');
+  if (!steps.length) return;
+  document.documentElement.classList.add('has-reveal');
+  const observer = new IntersectionObserver(entries => {
+    for (const entry of entries) {
+      if (!entry.isIntersecting) continue;
+      entry.target.classList.add('is-visible');
+      observer.unobserve(entry.target);
+    }
+  }, { threshold: 0.25 });
+  for (const step of steps) observer.observe(step);
+}
+
+soundToggle.addEventListener('click', event => {
+  event.stopPropagation();
+  heroVideo.muted = !heroVideo.muted;
+  renderSoundToggle();
+});
+
+heroVideo.addEventListener('click', () => {
+  if (heroVideo.paused) heroVideo.play().catch(() => {});
+  else heroVideo.pause();
+});
+renderSoundToggle();
+
+function tick() {
+  const t = Number.isFinite(heroVideo.currentTime) ? heroVideo.currentTime : 0;
+  if (brainShown) {
+    brainView.setSecond(t);
+    brainSecond.textContent = `${Math.floor(t)} s`;
+  }
+  updateCurve(t);
+  updateShowcasePlayhead(t);
+  requestAnimationFrame(tick);
+}
+requestAnimationFrame(tick);
+window.addEventListener('resize', () => {
+  measureCurve();
+  drawShowcase();
+}, { passive: true });
+
+setupReveal();
+loadLanding();
+loadLimits();
 </script>
 </body>
 </html>

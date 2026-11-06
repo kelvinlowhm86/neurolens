@@ -1,0 +1,84 @@
+{
+  "cloud": {
+    "gpu_usd_per_hour": {
+      "value": 2.61,
+      "unit": "USD per GPU-hour",
+      "source": "AWS SageMaker pricing page, ml.g6e.xlarge on-demand, us-east-1",
+      "estimate": false
+    },
+    "idle_wait_minutes": {
+      "value": 7,
+      "unit": "minutes",
+      "source": "Our endpoint configuration: stops after 7 idle minutes",
+      "estimate": false
+    },
+    "cold_start_minutes": {
+      "value": 7.2,
+      "unit": "minutes",
+      "source": "Measured on the endpoint: ~6.5 min machine start + ~40 s model ready",
+      "estimate": false
+    },
+    "videos_per_cold_session": {
+      "value": 3,
+      "unit": "videos per session",
+      "source": "Assumption: three videos batched into one warm session",
+      "estimate": true
+    },
+    "fixed_usd_per_month": {
+      "value": 5,
+      "unit": "USD per month",
+      "source": "Estimate: Aurora wake-ups, S3 and Lambda at low traffic; to be refined from billing",
+      "estimate": true
+    }
+  },
+  "on_prem": {
+    "gpu_name": {
+      "value": null,
+      "unit": "name",
+      "source": "Fill in: the exact name in the gpu_name column of the on-prem CSV (the card the benchmark ran on); tco_compare.py refuses to run while it is empty or names a different card",
+      "estimate": false
+    },
+    "gpu_price_usd": {
+      "value": null,
+      "unit": "USD",
+      "source": "Fill in: that card's purchase price, with its source (new or used)",
+      "estimate": true
+    },
+    "host_price_usd": {
+      "value": 2500,
+      "unit": "USD",
+      "source": "Estimate: workstation to hold the GPU",
+      "estimate": true
+    },
+    "amortisation_months": {
+      "value": 36,
+      "unit": "months",
+      "source": "Assumption: three-year straight-line amortisation",
+      "estimate": true
+    },
+    "gpu_tdp_watts": {
+      "value": null,
+      "unit": "watts",
+      "source": "Fill in: that card's TDP from the maker's spec sheet",
+      "estimate": false
+    },
+    "host_idle_watts": {
+      "value": 100,
+      "unit": "watts",
+      "source": "Estimate: workstation idle draw excluding the GPU",
+      "estimate": true
+    },
+    "electricity_usd_per_kwh": {
+      "value": 0.23,
+      "unit": "USD per kWh",
+      "source": "Estimate: Singapore tariff converted to USD",
+      "estimate": true
+    },
+    "hours_on_per_month": {
+      "value": 730,
+      "unit": "hours per month",
+      "source": "24/7 operation: 24 hours x 365 days / 12 months",
+      "estimate": false
+    }
+  }
+}

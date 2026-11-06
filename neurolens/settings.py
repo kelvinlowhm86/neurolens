@@ -1,9 +1,22 @@
 """Config and paths. Nothing here runs at import time: call the functions when needed."""
 
+import copy
 import json
 import os
 import sys
 from pathlib import Path
+
+
+def server_address(cfg):
+    """(host, port) the web app binds to: config `server.host` / `server.port`, by default
+    127.0.0.1:5003 (this machine only; the development identity requires it, M3a §2)."""
+    server = (cfg or {}).get("server") or {}
+    return server.get("host", "127.0.0.1"), server.get("port", 5003)
+
+
+class UnsafeConfigError(Exception):
+    """A setting combination that must never run, e.g. the development identity on a public
+    address (M3a §2)."""
 
 
 def get_root():
@@ -23,17 +36,96 @@ def load_config(root=None):
     config_path = root / "config.json"
     if not config_path.exists():
         raise FileNotFoundError(
-            f"{config_path} not found. Run: cp config.sample.json config.json  "
-            "(config.json is gitignored: it holds your HuggingFace token.)"
+            f"{config_path} not found. It is committed in the repository: "
+            "restore it with `git checkout config.json`."
         )
     with open(config_path) as f:
         return json.load(f)
 
 
+def load_dotenv(root=None):
+    """Read `<root>/.env` (KEY=VALUE lines) into os.environ. A missing file is not an error.
+
+    A variable that is already set is left alone, so a real environment variable always wins
+    over the file. Blank lines and `#` comments are ignored; one pair of quotes around a value
+    is removed; only the first `=` splits, so values may contain `=`.
+    """
+    path = (Path(root) if root is not None else get_root()) / ".env"
+    if not path.exists():
+        return
+    for line in path.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key, value = key.strip(), value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+            value = value[1:-1]
+        if key and key not in os.environ:
+            os.environ[key] = value
+
+
+def apply_env(cfg):
+    """A copy of cfg with person- and deployment-specific values taken from the environment.
+
+    HF_TOKEN -> hf_token; NEUROLENS_AWS_REGION / NEUROLENS_S3_BUCKET /
+    NEUROLENS_GPU_ENDPOINT -> aws.region / aws.s3_bucket / aws.gpu_endpoint;
+    NEUROLENS_DB_CLUSTER_ARN / _SECRET_ARN / _NAME ->
+    aws.db_cluster_arn / aws.db_secret_arn / aws.db_name; NEUROLENS_REPORT_FUNCTION ->
+    aws.report_function; NEUROLENS_DB_DSN -> db.dsn (a local
+    PostgreSQL DSN holds a password, so it never goes in config.json). M3b's web functions:
+    NEUROLENS_AUTH_MODE / _COGNITO_ISSUER / _COGNITO_CLIENT_ID / _COGNITO_DOMAIN -> auth.mode /
+    auth.cognito_issuer / auth.cognito_client_id / auth.cognito_domain,
+    NEUROLENS_PUBLIC_BASE_URL -> public_base_url, and NEUROLENS_DEPLOYED -> deployed: true.
+    NEUROLENS_YOUTUBE_API_KEY -> youtube_api_key (M3j §2). Only variables that are set and
+    non-empty change anything. The input is never modified.
+    """
+    out = copy.deepcopy(cfg)
+    token = os.environ.get("HF_TOKEN")
+    if token:
+        out["hf_token"] = token
+    youtube_key = os.environ.get("NEUROLENS_YOUTUBE_API_KEY")
+    if youtube_key:
+        out["youtube_api_key"] = youtube_key
+    for var, section, key in (
+        ("NEUROLENS_AWS_REGION", "aws", "region"),
+        ("NEUROLENS_S3_BUCKET", "aws", "s3_bucket"),
+        ("NEUROLENS_GPU_ENDPOINT", "aws", "gpu_endpoint"),
+        ("NEUROLENS_DB_CLUSTER_ARN", "aws", "db_cluster_arn"),
+        ("NEUROLENS_DB_SECRET_ARN", "aws", "db_secret_arn"),
+        ("NEUROLENS_DB_NAME", "aws", "db_name"),
+        ("NEUROLENS_REPORT_FUNCTION", "aws", "report_function"),
+        ("NEUROLENS_DB_DSN", "db", "dsn"),
+        ("NEUROLENS_AUTH_MODE", "auth", "mode"),
+        ("NEUROLENS_COGNITO_ISSUER", "auth", "cognito_issuer"),
+        ("NEUROLENS_COGNITO_CLIENT_ID", "auth", "cognito_client_id"),
+        ("NEUROLENS_COGNITO_DOMAIN", "auth", "cognito_domain"),
+    ):
+        value = os.environ.get(var)
+        if value:
+            out.setdefault(section, {})[key] = value
+    if os.environ.get("NEUROLENS_PUBLIC_BASE_URL"):
+        out["public_base_url"] = os.environ["NEUROLENS_PUBLIC_BASE_URL"]
+    if os.environ.get("NEUROLENS_DEPLOYED"):
+        out["deployed"] = True
+    return out
+
+
+def get_parameter(ssm_client, name):
+    """One Parameter Store SecureString, decrypted (M3b §2b). Raises if it does not exist."""
+    return ssm_client.get_parameter(Name=name, WithDecryption=True)["Parameter"]["Value"]
+
+
+def load_settings(root=None):
+    """What entry points use: `.env` into the environment, then config.json plus the overlay."""
+    load_dotenv(root)
+    return apply_env(load_config(root))
+
+
 def resolve_paths(cfg, root):
-    """Absolute models/data/output folders from the config. Creates nothing."""
+    """Absolute models/data folders from the config. Creates nothing."""
     root = Path(root)
-    return {name: (root / cfg["paths"][name]).resolve() for name in ("models", "data", "output")}
+    return {name: (root / cfg["paths"][name]).resolve() for name in ("models", "data")}
 
 
 def ensure_dirs(paths):
@@ -57,7 +149,10 @@ def configure_env(cfg, paths):
     models = Path(paths["models"])
     data = Path(paths["data"])
 
-    os.environ["HF_TOKEN"] = cfg["hf_token"]
+    # The token is optional here: it normally arrives through the environment (.env), and fake
+    # mode needs none.
+    if cfg.get("hf_token"):
+        os.environ["HF_TOKEN"] = cfg["hf_token"]
 
     # HF_HOME is the root the other HF caches derive from; the rest are set explicitly
     # so they survive anyone overriding HF_HOME downstream.
@@ -78,6 +173,13 @@ def configure_env(cfg, paths):
     os.environ["HF_HUB_HTTP_TIMEOUT"] = timeout
 
 
+# The max duration reflects the target use case (short-form pre-roll / social ad
+# creative). The GPU was chosen for it: memory and job time grow with video length
+# and were measured only up to 120 s. A 120 s 4K video takes about 40-47 minutes, so
+# a running job must never be stopped as idle. This is a hard
+# product constraint, independent of billing — it must be enforced
+# regardless of credit balance (see M3e §3a `verify_queued`, which must check this
+# BEFORE any credit-adjustment logic, not instead of it).
 def max_duration(cfg):
     """Longest accepted video in seconds (120 when unset or when there is no config)."""
     if cfg is None:

@@ -1,0 +1,24 @@
+start	end	status	description	status_message
+2026-10-23T22:19:34.980000+08:00	2026-10-23T22:27:48.477000+08:00	Successful	Setting desired instance count to 1.	Successfully set desired instance count to 1. Change successfully fulfilled by sagemaker.
+2026-10-23T22:41:07.987000+08:00	2026-10-23T22:41:39.865000+08:00	Successful	Setting desired instance count to 0.	Successfully set desired instance count to 0. Change successfully fulfilled by sagemaker.
+2026-10-23T22:47:34.953000+08:00	2026-10-23T22:52:33.543000+08:00	Successful	Setting desired instance count to 1.	Successfully set desired instance count to 1. Change successfully fulfilled by sagemaker.
+2026-10-23T23:41:56.695000+08:00	2026-10-23T23:46:24.964000+08:00	Successful	Setting desired instance count to 1.	Successfully set desired instance count to 1. Change successfully fulfilled by sagemaker.
+2026-10-23T23:57:07.982000+08:00	2026-10-23T23:57:42.007000+08:00	Successful	Setting desired instance count to 0.	Successfully set desired instance count to 0. Change successfully fulfilled by sagemaker.
+2026-10-24T23:57:07.999000+08:00	2026-10-24T23:57:40.904000+08:00	Successful	Setting desired instance count to 0.	Successfully set desired instance count to 0. Change successfully fulfilled by sagemaker.
+2026-10-25T00:00:56.718000+08:00	2026-10-25T00:09:19.042000+08:00	Successful	Setting desired instance count to 1.	Successfully set desired instance count to 1. Change successfully fulfilled by sagemaker.
+2026-10-25T00:24:07.959000+08:00	2026-10-25T00:24:42.053000+08:00	Successful	Setting desired instance count to 0.	Successfully set desired instance count to 0. Change successfully fulfilled by sagemaker.
+2026-10-25T11:19:07.956000+08:00	2026-10-25T11:19:42.878000+08:00	Successful	Setting desired instance count to 0.	Successfully set desired instance count to 0. Change successfully fulfilled by sagemaker.
+2026-10-25T11:29:56.694000+08:00	2026-10-25T11:37:43.780000+08:00	Successful	Setting desired instance count to 1.	Successfully set desired instance count to 1. Change successfully fulfilled by sagemaker.
+2026-10-25T11:58:07.995000+08:00	2026-10-25T11:58:42.901000+08:00	Successful	Setting desired instance count to 0.	Successfully set desired instance count to 0. Change successfully fulfilled by sagemaker.
+2026-10-25T12:03:56.684000+08:00	2026-10-25T12:08:19.516000+08:00	Successful	Setting desired instance count to 1.	Successfully set desired instance count to 1. Change successfully fulfilled by sagemaker.
+2026-10-25T12:19:08.038000+08:00	2026-10-25T12:19:43.933000+08:00	Successful	Setting desired instance count to 0.	Successfully set desired instance count to 0. Change successfully fulfilled by sagemaker.
+2026-10-25T18:44:07.953000+08:00	2026-10-25T18:44:41.857000+08:00	Successful	Setting desired instance count to 0.	Successfully set desired instance count to 0. Change successfully fulfilled by sagemaker.
+2026-10-25T18:57:56.689000+08:00	2026-10-25T19:05:38.595000+08:00	Successful	Setting desired instance count to 1.	Successfully set desired instance count to 1. Change successfully fulfilled by sagemaker.
+2026-10-25T19:43:08.005000+08:00	2026-10-25T19:43:40.979000+08:00	Successful	Setting desired instance count to 0.	Successfully set desired instance count to 0. Change successfully fulfilled by sagemaker.
+2026-10-28T11:07:55.559000+08:00	2026-10-28T11:08:29.443000+08:00	Successful	Setting desired instance count to 0.	Successfully set desired instance count to 0. Change successfully fulfilled by sagemaker.
+2026-10-28T11:21:06.293000+08:00	2026-10-28T11:32:03.806000+08:00	Overridden	Setting desired instance count to 1.	Successfully set desired instance count to 1. Found it was later changed to 0.
+2026-10-28T11:32:06.299000+08:00	2026-10-28T11:42:46.570000+08:00	Overridden	Setting desired instance count to 1.	Successfully set desired instance count to 1. Found it was later changed to 0.
+2026-10-28T11:43:06.290000+08:00	2026-10-28T11:53:40.090000+08:00	Overridden	Setting desired instance count to 1.	Successfully set desired instance count to 1. Found it was later changed to 0.
+2026-10-28T11:54:06.300000+08:00	2026-10-28T12:05:00.881000+08:00	Overridden	Setting desired instance count to 1.	Successfully set desired instance count to 1. Found it was later changed to 0.
+2026-10-28T12:05:06.344000+08:00	2026-10-28T12:19:24.232000+08:00	Successful	Setting desired instance count to 1.	Successfully set desired instance count to 1. Change successfully fulfilled by sagemaker.
+2026-10-28T12:39:55.553000+08:00	2026-10-28T12:40:29.539000+08:00	Successful	Setting desired instance count to 0.	Successfully set desired instance count to 0. Change successfully fulfilled by sagemaker.

@@ -1,0 +1,365 @@
+#!/usr/bin/env python3
+"""Add or replace one dashboard sample, or a stored comparison, from finished jobs (M3d §9, M3h §7).
+
+    AWS_PROFILE=neurolens python infra/make_sample.py <job_id> <video> <title> <attribution>
+    AWS_PROFILE=neurolens python infra/make_sample.py compare <sample_id_1> <job_id_1> \
+        <sample_id_2> <job_id_2>
+
+The first form downloads the job's result, brain file and report (when present) into
+data/output/<id>/ (id = the video's file stem), grabs a thumbnail at 1 s (or --thumbnail-at), and
+writes the entry into data/samples.json with the summary computed from the result. Re-run it
+after a summary rule change. The compare form copies the stored comparison for two samples that
+are already in samples.json, as two entries, one per way round (M3h §7). Both forms also write
+the PDF and record its path. `pdfs` re-renders every stored sample and comparison PDF from
+samples.json after a layout change. This is an operator script: it talks to AWS and is never
+run by the tests.
+"""
+
+import argparse
+import io
+import json
+import os
+import shutil
+import subprocess
+import sys
+import zipfile
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+DATA = ROOT / "data"
+SAMPLES = DATA / "samples.json"
+sys.path.insert(0, str(ROOT))
+
+
+def bucket_name():
+    from_env = os.environ.get("NEUROLENS_S3_BUCKET")
+    if from_env:
+        return from_env
+    return subprocess.check_output(
+        ["terraform", "-chdir=infra/terraform", "output", "-raw", "bucket_name"],
+        cwd=ROOT,
+        text=True,
+    ).strip()
+
+
+def video_in_data(video):
+    video = Path(video).resolve()
+    if video.is_relative_to(DATA):
+        return video
+    target = DATA / "videos" / video.name
+    target.parent.mkdir(parents=True, exist_ok=True)
+    if not target.exists() or target.stat().st_size != video.stat().st_size:
+        shutil.copy2(video, target)
+    return target
+
+
+def make_thumbnail(video, target, seconds):
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-y",
+            "-loglevel",
+            "error",
+            "-ss",
+            str(seconds),
+            "-i",
+            str(video),
+            "-frames:v",
+            "1",
+            "-q:v",
+            "2",
+            str(target),
+        ],
+        check=True,
+    )
+
+
+def _document():
+    if SAMPLES.exists():
+        return json.loads(SAMPLES.read_text())
+    return {"samples": []}
+
+
+def _write_document(samples, comparisons):
+    document = {"samples": samples}
+    if comparisons:
+        document["comparisons"] = comparisons
+    SAMPLES.write_text(json.dumps(document, indent=2) + "\n")
+
+
+def _object_bytes(s3, bucket, key):
+    """The object's body, or None when it does not exist."""
+    from botocore.exceptions import ClientError
+
+    from neurolens import storage
+
+    try:
+        return s3.get_object(Bucket=bucket, Key=key)["Body"].read()
+    except FileNotFoundError:
+        return None
+    except ClientError as err:
+        if storage.is_not_found(err):
+            return None
+        raise
+
+
+def _without_usage(answer):
+    return {key: value for key, value in answer.items() if key != "usage"}
+
+
+def _frames(s3, bucket, result):
+    """The job's stored frames, or [] when there are none (M3h §18d)."""
+    job_id = result.get("job_id") if isinstance(result, dict) else None
+    if not job_id:
+        return []
+    body = _object_bytes(s3, bucket, f"results/{job_id}.frames")
+    if body is None:
+        return []
+    with zipfile.ZipFile(io.BytesIO(body)) as archive:
+        names = sorted(name for name in archive.namelist() if name.endswith(".jpg"))
+        return [archive.read(name) for name in names]
+
+
+def add_sample(args):
+    import boto3
+
+    from neurolens import report_pdf, results
+    from neurolens.lambdas import report
+
+    video = video_in_data(args.video)
+    sample_id = video.stem
+    output = DATA / "output" / sample_id
+    output.mkdir(parents=True, exist_ok=True)
+    result_path = output / "result.json"
+    brain_path = output / "brain"
+    csv_path = output / "result.csv"
+    thumbnail_path = output / "thumb.jpg"
+    pdf_path = output / "report.pdf"
+
+    bucket = bucket_name()
+    s3 = boto3.client("s3")
+    s3.download_file(bucket, f"results/{args.job_id}.json", str(result_path))
+    s3.download_file(bucket, f"results/{args.job_id}.brain", str(brain_path))
+    result = json.loads(result_path.read_text())
+    if result.get("format") != 2:
+        raise SystemExit(f"results/{args.job_id}.json is not format 2: rerun the job first")
+    csv_path.write_text(results.to_csv(result), encoding="utf-8")
+
+    stored_report = None
+    body = _object_bytes(s3, bucket, f"results/{args.job_id}.report.json")
+    if body is not None:
+        stored_report = json.loads(body)
+        problem = report._report_problem(stored_report, result["duration_seconds"])
+        if problem:
+            raise SystemExit(f"results/{args.job_id}.report.json is not usable: {problem}")
+
+    make_thumbnail(video, thumbnail_path, args.thumbnail_at)
+
+    summary = results.summarise(result)
+    entry = {
+        "id": sample_id,
+        "title": args.title,
+        "description": args.description if args.description is not None else args.title,
+        "attribution": args.attribution,
+        "video_file": video.relative_to(DATA).as_posix(),
+        "thumbnail": thumbnail_path.relative_to(DATA).as_posix(),
+        "brain_file": brain_path.relative_to(DATA).as_posix(),
+        "csv_file": csv_path.relative_to(DATA).as_posix(),
+        "result": result,
+        "summary": summary,
+    }
+    if stored_report is not None:
+        entry["report"] = _without_usage(stored_report)
+        pdf_path.write_bytes(
+            report_pdf.report_pdf(args.title, result, stored_report, _frames(s3, bucket, result))
+        )
+        entry["pdf_file"] = pdf_path.relative_to(DATA).as_posix()
+
+    document = _document()
+    samples = document.get("samples", [])
+    existing = next((sample for sample in samples if sample.get("id") == sample_id), None)
+    if args.sharing_example:
+        entry["sharing_example"] = True
+        for sample in samples:
+            if sample.get("id") != sample_id:
+                sample.pop("sharing_example", None)
+    elif existing and existing.get("sharing_example"):
+        entry["sharing_example"] = True
+    if args.landing:
+        entry["landing"] = True
+        for sample in samples:
+            if sample.get("id") != sample_id:
+                sample.pop("landing", None)
+    elif existing and existing.get("landing"):
+        entry["landing"] = True
+    for index, sample in enumerate(samples):
+        if sample.get("id") == sample_id:
+            samples[index] = entry
+            break
+    else:
+        samples.append(entry)
+    _write_document(samples, document.get("comparisons", []))
+    print(f"Wrote sample {sample_id} to {SAMPLES} ({len(samples)} samples)")
+
+
+def add_comparison(args):
+    import boto3
+
+    from neurolens import report_pdf, report_prompt, storage
+    from neurolens.lambdas import report
+
+    document = _document()
+    samples = document.get("samples", [])
+    by_id = {sample["id"]: sample for sample in samples}
+    missing = [name for name in (args.sample_id_1, args.sample_id_2) if name not in by_id]
+    if missing:
+        raise SystemExit(f"not in {SAMPLES}: {', '.join(missing)}")
+
+    job_a, job_b = storage.comparison_pair(args.job_id_1, args.job_id_2)
+    sample_by_job = {args.job_id_1: args.sample_id_1, args.job_id_2: args.sample_id_2}
+    duration_by_job = {
+        job: by_id[sample]["result"]["duration_seconds"] for job, sample in sample_by_job.items()
+    }
+
+    s3 = boto3.client("s3")
+    bucket = bucket_name()
+    key = storage.comparison_key(job_a, job_b)
+    body = _object_bytes(s3, bucket, key)
+    if body is None:
+        raise SystemExit(f"{key} does not exist: run the comparison first, then try again")
+    answer = json.loads(body)
+    problem = report._comparison_problem(answer, duration_by_job[job_a], duration_by_job[job_b])
+    if problem:
+        raise SystemExit(f"{key} is not usable: {problem}")
+
+    stored = _without_usage(answer)
+    pair = {sample_by_job[job_a], sample_by_job[job_b]}
+    kept = [
+        comparison
+        for comparison in document.get("comparisons", [])
+        if {comparison.get("a"), comparison.get("b")} != pair
+    ]
+    entries = []
+    for flip, (job_x, job_y) in enumerate(((job_a, job_b), (job_b, job_a))):
+        sample_x, sample_y = by_id[sample_by_job[job_x]], by_id[sample_by_job[job_y]]
+        oriented = report_prompt.orient_comparison(stored, flip=bool(flip))
+        pdf_path = DATA / "output" / "compare" / f"{sample_x['id']}__{sample_y['id']}.pdf"
+        pdf_path.parent.mkdir(parents=True, exist_ok=True)
+        pdf_path.write_bytes(
+            report_pdf.comparison_pdf(
+                (sample_x["title"], sample_x["result"], _frames(s3, bucket, sample_x["result"])),
+                (sample_y["title"], sample_y["result"], _frames(s3, bucket, sample_y["result"])),
+                oriented,
+            )
+        )
+        entries.append(
+            {
+                "a": sample_x["id"],
+                "b": sample_y["id"],
+                "report": oriented,
+                "pdf_file": pdf_path.relative_to(DATA).as_posix(),
+            }
+        )
+    comparisons = [*kept, *entries]
+    _write_document(samples, comparisons)
+    print(
+        f"Wrote comparisons {entries[0]['a']}/{entries[0]['b']} and "
+        f"{entries[1]['a']}/{entries[1]['b']} to {SAMPLES}"
+    )
+
+
+def re_render_pdfs():
+    """Render every stored sample report and comparison again (M3h §18d)."""
+    import boto3
+
+    from neurolens import report_pdf
+
+    document = _document()
+    samples = document.get("samples", [])
+    comparisons = document.get("comparisons", [])
+    by_id = {sample["id"]: sample for sample in samples}
+    s3 = boto3.client("s3")
+    bucket = bucket_name()
+
+    for sample in samples:
+        report = sample.get("report")
+        if not report:
+            continue
+        output = DATA / "output" / sample["id"]
+        output.mkdir(parents=True, exist_ok=True)
+        path = output / "report.pdf"
+        path.write_bytes(
+            report_pdf.report_pdf(
+                sample["title"], sample["result"], report, _frames(s3, bucket, sample["result"])
+            )
+        )
+        sample["pdf_file"] = path.relative_to(DATA).as_posix()
+
+    for comparison in comparisons:
+        sample_a, sample_b = by_id.get(comparison.get("a")), by_id.get(comparison.get("b"))
+        if not sample_a or not sample_b or not comparison.get("report"):
+            continue
+        path = DATA / "output" / "compare" / f"{sample_a['id']}__{sample_b['id']}.pdf"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(
+            report_pdf.comparison_pdf(
+                (
+                    sample_a["title"],
+                    sample_a["result"],
+                    _frames(s3, bucket, sample_a["result"]),
+                ),
+                (
+                    sample_b["title"],
+                    sample_b["result"],
+                    _frames(s3, bucket, sample_b["result"]),
+                ),
+                comparison["report"],
+            )
+        )
+        comparison["pdf_file"] = path.relative_to(DATA).as_posix()
+
+    _write_document(samples, comparisons)
+    print(f"Re-rendered {len(samples)} samples and {len(comparisons)} comparisons in {DATA}")
+
+
+def main():
+    values = sys.argv[1:]
+    if values and values[0] == "pdfs":
+        re_render_pdfs()
+        return
+    if values and values[0] == "compare":
+        parser = argparse.ArgumentParser(
+            prog="make_sample.py compare",
+            description="Copy a stored comparison between two existing samples.",
+        )
+        parser.add_argument("sample_id_1")
+        parser.add_argument("job_id_1")
+        parser.add_argument("sample_id_2")
+        parser.add_argument("job_id_2")
+        add_comparison(parser.parse_args(values[1:]))
+        return
+
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("job_id")
+    parser.add_argument("video")
+    parser.add_argument("title")
+    parser.add_argument("attribution")
+    parser.add_argument("--description", default=None)
+    parser.add_argument(
+        "--thumbnail-at", type=float, default=1.0, help="the frame to use, in seconds (default 1)"
+    )
+    parser.add_argument(
+        "--sharing-example",
+        action="store_true",
+        help="mark this sample as the example of a shared video",
+    )
+    parser.add_argument(
+        "--landing",
+        action="store_true",
+        help="mark this sample as the one the landing page plays",
+    )
+    add_sample(parser.parse_args(values))
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,862 @@
+"""Shared fixtures for the M1 tests.
+
+Everything AWS-related runs against moto, an in-memory fake of S3. Fake credentials
+are set for every test so that an accidental real AWS call fails instead of costing money.
+
+M3a (docs/M3a_spec.md §10): database tests run against a real PostgreSQL 16 named by
+NEUROLENS_TEST_DSN. Each test gets a fresh schema built from infra/migrations/*.sql, and the
+ledger invariants are checked for every user when the test ends.
+
+M3b (docs/M3b_spec.md §2, §7b, §8): Cognito-mode apps get their settings from `cognito_cfg` and
+their Parameter Store secrets from moto (`ssm`). Sign-in goes through §8's seam: `init_auth`
+receives fake `server_metadata`, and `responses` fakes only HTTP (the token endpoint returns an
+ID token signed with a test RSA key, the JWKS URL returns that key), so Authlib's real state,
+nonce and signature checks run and nothing contacts Cognito or Google.
+"""
+
+import base64
+import importlib
+import json
+import os
+import subprocess
+import sys
+import time
+import uuid
+from pathlib import Path
+from types import SimpleNamespace
+from urllib.parse import parse_qs, urlparse
+
+import numpy as np
+import pytest
+
+BUCKET = "neurolens-test-bucket"
+# The 7 signals of M3d §2; these stand in for response.SIGNALS so light tests need no atlas.
+ROI_NAMES = ["faces", "bodies", "scenes", "visual", "sound", "speech", "social"]
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+MIGRATIONS = REPO_ROOT / "infra" / "migrations"
+# The user that owns the worker tests' jobs (uploads/{user_id}/{job_id}.mp4, M3a §6).
+USER_ID = "test-user"
+USER_EMAIL = "test-user@example.com"
+STARTER_CENTS = 500  # M3a §3b default
+# The web app's development user in make_cfg (M3a §2), distinct from create_app's built-in one.
+WEB_USER_ID = "web-user"
+WEB_USER_EMAIL = "web-user@example.com"
+LOCAL_DB_HINT = (
+    "Start PostgreSQL 16 locally with: docker run -d --name neurolens-test-pg "
+    "-e POSTGRES_PASSWORD=test -p 55432:5432 postgres:16 ; then: export "
+    "NEUROLENS_TEST_DSN=postgresql://postgres:test@localhost:55432/postgres"
+)
+
+
+@pytest.fixture(autouse=True)
+def aws_env(monkeypatch, tmp_path_factory):
+    """Fake credentials and no access to the developer's real AWS files or profile."""
+    empty = tmp_path_factory.mktemp("aws_empty")
+    monkeypatch.setenv("AWS_ACCESS_KEY_ID", "testing")
+    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "testing")
+    monkeypatch.setenv("AWS_SECURITY_TOKEN", "testing")
+    monkeypatch.setenv("AWS_SESSION_TOKEN", "testing")
+    monkeypatch.setenv("AWS_DEFAULT_REGION", "us-east-1")
+    monkeypatch.setenv("AWS_SHARED_CREDENTIALS_FILE", str(empty / "credentials"))
+    monkeypatch.setenv("AWS_CONFIG_FILE", str(empty / "config"))
+    monkeypatch.delenv("AWS_PROFILE", raising=False)
+
+
+ENV_SETTING_VARS = [
+    "HF_TOKEN",
+    "NEUROLENS_AWS_REGION",
+    "NEUROLENS_S3_BUCKET",
+    "NEUROLENS_GPU_ENDPOINT",  # M3e: aws.gpu_endpoint
+    "NEUROLENS_DEPLOYED",  # M3e: marks a deployed (Cognito) web app
+    "NEUROLENS_DB_CLUSTER_ARN",  # M3a §3a: aws.db_cluster_arn
+    "NEUROLENS_DB_SECRET_ARN",  # M3a §3a: aws.db_secret_arn
+    "NEUROLENS_DB_NAME",  # M3a §3a: aws.db_name
+    "NEUROLENS_AUTH_MODE",  # M3b §2b: auth.mode
+    "NEUROLENS_COGNITO_ISSUER",  # M3b §2b: auth.cognito_issuer
+    "NEUROLENS_COGNITO_CLIENT_ID",  # M3b §2b: auth.cognito_client_id
+    "NEUROLENS_COGNITO_DOMAIN",  # M3b §2b: auth.cognito_domain
+    "NEUROLENS_PUBLIC_BASE_URL",  # M3b §2b: public_base_url
+]
+
+
+@pytest.fixture(autouse=True)
+def isolate_env_settings(monkeypatch):
+    """The developer's real .env and environment must never leak into a test.
+
+    Removes the settings variables and turns neurolens.settings.load_dotenv into a no-op
+    (load_settings and serve() look it up by its module-global name). Tests of the real
+    load_dotenv put the real function back themselves (tests/test_env_settings.py).
+    """
+    from neurolens import settings
+
+    for name in ENV_SETTING_VARS:
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setattr(settings, "load_dotenv", lambda *a, **kw: None, raising=False)
+
+
+@pytest.fixture
+def aws():
+    """A moto S3 bucket plus a boto3 client for it."""
+    import boto3
+    from moto import mock_aws
+
+    with mock_aws():
+        s3 = boto3.client("s3", region_name="us-east-1")
+        s3.create_bucket(Bucket=BUCKET)
+        yield SimpleNamespace(s3=s3, bucket=BUCKET)
+
+
+@pytest.fixture
+def make_cfg(aws, tmp_path):
+    """Build a config dict like config.json plus the .env values, pointing at the moto resources."""
+
+    def make(with_aws=True, **overrides):
+        cfg = {
+            "hf_token": "hf_not_a_real_token",
+            "paths": {
+                "models": str(tmp_path / "models"),
+                "data": str(tmp_path / "data"),
+            },
+            "model": {
+                "repo_id": "facebook/tribev2",
+            },
+            "aws": {
+                "region": "us-east-1",
+                "s3_bucket": aws.bucket,
+            },
+            "hf_download_timeout": 300,
+            "max_video_duration_seconds": 120,
+            "max_upload_bytes": 300000000,
+            # M3d §6: the response at which the 3D map's heat colour is full.
+            "response": {"colour_range": 0.5},
+            # M3e §4b: the heartbeat settings config.json gains (same values).
+            "worker": {"heartbeat_seconds": 50, "max_job_minutes": 75},
+            # M3a §9: the development identity, starter credit and the address the app binds to.
+            # No `db` block: tests hand the database in (create_app(db=...), handle_job(db=...)).
+            "auth": {"mode": "dev", "dev_user_id": WEB_USER_ID, "dev_email": WEB_USER_EMAIL},
+            "billing": {"starter_cents": STARTER_CENTS},
+            "server": {"host": "127.0.0.1", "port": 5003},
+        }
+        if not with_aws:
+            del cfg["aws"]
+        cfg.update(overrides)
+        return cfg
+
+    return make
+
+
+def _make_clip(path, seconds=3, audio=True):
+    cmd = ["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi", "-i"]
+    cmd += [f"testsrc=size=160x120:rate=10:duration={seconds}"]
+    if audio:
+        cmd += ["-f", "lavfi", "-i", f"sine=frequency=440:duration={seconds}"]
+    cmd += ["-c:v", "libx264", "-pix_fmt", "yuv420p"]
+    if audio:
+        cmd += ["-c:a", "aac", "-shortest"]
+    cmd += [str(path)]
+    subprocess.run(cmd, check=True, capture_output=True)
+
+
+@pytest.fixture(scope="session")
+def clip_path(tmp_path_factory):
+    """A 3-second mp4 with an audio track, generated with ffmpeg (no binary files in git)."""
+    path = tmp_path_factory.mktemp("clips") / "clip.mp4"
+    _make_clip(path, seconds=3, audio=True)
+    return path
+
+
+@pytest.fixture(scope="session")
+def clip2_path(tmp_path_factory):
+    """A different 2-second mp4 (different size from clip_path)."""
+    path = tmp_path_factory.mktemp("clips2") / "clip2.mp4"
+    _make_clip(path, seconds=2, audio=False)
+    return path
+
+
+@pytest.fixture
+def roi_masks_small():
+    """Tiny hand-made signal masks (100 vertices each) so nothing downloads the atlas."""
+    masks = {}
+    for i, name in enumerate(ROI_NAMES):
+        mask = np.zeros(20484, dtype=bool)
+        mask[i * 100 : (i + 1) * 100] = True
+        masks[name] = mask
+    return masks
+
+
+@pytest.fixture
+def new_key():
+    """Returns (job_id, key) for a fresh upload key (M3a §6: uploads/{user_id}/{job_id}{ext}).
+    No jobs row exists for it: to the M3a worker it is an unknown job."""
+
+    def make(ext=".mp4", user_id=USER_ID):
+        job_id = str(uuid.uuid4())
+        return job_id, f"uploads/{user_id}/{job_id}{ext}"
+
+    return make
+
+
+@pytest.fixture
+def new_job(db, new_key):
+    """Returns (job_id, key) for a fresh upload key whose job is reserved in the database, as the
+    presign endpoint leaves it (M3a §4a Stage 1): the user exists with the starter credit and the
+    job is `queued` with the price of `client_seconds` reserved."""
+    from neurolens import billing
+
+    def make(ext=".mp4", *, client_seconds=3, user_id=USER_ID, starter_cents=STARTER_CENTS):
+        job_id, key = new_key(ext, user_id=user_id)
+        billing.ensure_user(db, user_id, f"{user_id}@example.com", starter_cents)
+        billing.reserve(db, user_id, job_id, key, f"clip{ext}", round(client_seconds * 1000))
+        return job_id, key
+
+    return make
+
+
+# ---------------------------------------------------------------- PostgreSQL (M3a §10)
+
+
+@pytest.fixture(scope="session")
+def pg_dsn():
+    """The test server's DSN. Unset: skip, except in CI, where the billing tests must run."""
+    dsn = os.environ.get("NEUROLENS_TEST_DSN")
+    if not dsn:
+        if os.environ.get("CI", "").lower() == "true":
+            pytest.fail("NEUROLENS_TEST_DSN is not set in CI: the billing tests cannot be skipped.")
+        pytest.skip(f"PostgreSQL tests skipped: NEUROLENS_TEST_DSN is not set. {LOCAL_DB_HINT}")
+    return dsn
+
+
+def migration_statements():
+    """Every statement of infra/migrations/*.sql in order, split as apply_schema.py splits them
+    (M3a §3c): a statement ends with `;` at the end of a line."""
+    statements = []
+    for path in sorted(MIGRATIONS.glob("*.sql")):
+        current = []
+        for line in path.read_text().splitlines():
+            current.append(line)
+            if line.rstrip().endswith(";"):
+                statements.append("\n".join(current).strip())
+                current = []
+        assert not "\n".join(current).strip(), f"{path.name} ends without a `;`"
+    assert statements, f"no migrations found in {MIGRATIONS}"
+    return statements
+
+
+INVARIANT_QUERIES = {
+    # 1. ledger sums equal the balances row (and no ledger row belongs to a user with no balance)
+    "ledger sums differ from the balance": """
+        SELECT b.user_id FROM balances b
+        WHERE b.available_cents <> COALESCE(
+                (SELECT sum(available_delta_cents) FROM ledger l WHERE l.user_id = b.user_id), 0)
+           OR b.reserved_cents <> COALESCE(
+                (SELECT sum(reserved_delta_cents) FROM ledger l WHERE l.user_id = b.user_id), 0)
+        UNION ALL
+        SELECT DISTINCT l.user_id FROM ledger l
+        WHERE NOT EXISTS (SELECT 1 FROM balances b WHERE b.user_id = l.user_id)
+    """,
+    # 2. no balance is negative
+    "negative balance": """
+        SELECT user_id FROM balances WHERE available_cents < 0 OR reserved_cents < 0
+    """,
+    # 3. reserved equals the sum over the user's queued and processing jobs
+    "reserved differs from the open jobs": """
+        SELECT b.user_id FROM balances b
+        WHERE b.reserved_cents <> COALESCE((
+            SELECT sum(j.reserved_cents) FROM jobs j
+            WHERE j.user_id = b.user_id AND j.status IN ('queued', 'processing')), 0)
+    """,
+    # 4. done: exactly one capture row and no refund; failed: exactly one refund row and no
+    #    capture; a job still open has neither (only the two terminal functions write them)
+    "terminal job without exactly one outcome": """
+        WITH c AS (
+            SELECT j.job_id, j.status,
+                (SELECT count(*) FROM ledger l
+                 WHERE l.job_id = j.job_id AND l.kind = 'capture') AS captures,
+                (SELECT count(*) FROM ledger l
+                 WHERE l.job_id = j.job_id AND l.kind = 'refund') AS refunds
+            FROM jobs j
+        )
+        SELECT job_id::text FROM c
+        WHERE (status = 'done' AND (captures, refunds) <> (1, 0))
+           OR (status = 'failed' AND (captures, refunds) <> (0, 1))
+           OR (status IN ('queued', 'processing') AND (captures, refunds) <> (0, 0))
+    """,
+}
+
+
+def check_invariants(conn):
+    broken = {}
+    for name, sql in INVARIANT_QUERIES.items():
+        rows = conn.execute(sql).fetchall()
+        if rows:
+            broken[name] = [r[0] for r in rows]
+    assert not broken, f"M3a §10 ledger invariants broken: {broken}"
+
+
+@pytest.fixture
+def db_dsn(pg_dsn):
+    """A DSN for a fresh schema with the migrations applied. When the test ends the four §10
+    invariants are checked for every user (a failure there shows as an error of the test), then
+    the schema is dropped."""
+    import psycopg
+    from psycopg.conninfo import make_conninfo
+
+    schema = f"t_{uuid.uuid4().hex}"
+    admin = psycopg.connect(pg_dsn, autocommit=True)
+    admin.execute(f'CREATE SCHEMA "{schema}"')
+    dsn = make_conninfo(pg_dsn, options=f"-c search_path={schema}")
+    conn = psycopg.connect(dsn, autocommit=True)
+    try:
+        for statement in migration_statements():
+            conn.execute(statement)
+        yield dsn
+        check_invariants(conn)
+    finally:
+        conn.close()
+        admin.execute("SET lock_timeout = '10s'")  # a leaked open transaction fails, not hangs
+        admin.execute(f'DROP SCHEMA "{schema}" CASCADE')
+        admin.close()
+
+
+@pytest.fixture
+def db(db_dsn):
+    """The application's PostgreSQL backend (M3a §3d) on the test's fresh schema."""
+    from neurolens.db import PostgresDatabase
+
+    database = PostgresDatabase(db_dsn)
+    yield database
+    close = getattr(database, "close", None)  # the spec gives it no close(); use one if present
+    if callable(close):
+        close()
+
+
+class Pg:
+    """Direct SQL on the test schema, for setting up states (ages, locks) and reading results
+    without going through the code under test."""
+
+    def __init__(self, conn):
+        self.conn = conn
+
+    def rows(self, sql, *params):
+        cur = self.conn.execute(sql, params)
+        if cur.description is None:
+            return []
+        names = [d.name for d in cur.description]
+        return [dict(zip(names, row, strict=True)) for row in cur.fetchall()]
+
+    def one(self, sql, *params):
+        rows = self.rows(sql, *params)
+        return rows[0] if rows else None
+
+    def job(self, job_id):
+        row = self.one("SELECT * FROM jobs WHERE job_id = %s::uuid", str(job_id))
+        if row is not None:
+            row["job_id"] = str(row["job_id"])
+        return row
+
+    def balance(self, user_id=USER_ID):
+        """(available_cents, reserved_cents), or None if the user has no balance row."""
+        row = self.one(
+            "SELECT available_cents, reserved_cents FROM balances WHERE user_id = %s", user_id
+        )
+        return None if row is None else (row["available_cents"], row["reserved_cents"])
+
+    def ledger(self, user_id=USER_ID):
+        rows = self.rows("SELECT * FROM ledger WHERE user_id = %s ORDER BY id", user_id)
+        for row in rows:
+            row["job_id"] = None if row["job_id"] is None else str(row["job_id"])
+        return rows
+
+    def kinds(self, user_id=USER_ID):
+        return [row["kind"] for row in self.ledger(user_id)]
+
+    def refund_reason(self, job_id):
+        row = self.one(
+            "SELECT error_code FROM jobs WHERE job_id = %s::uuid AND status = 'failed'",
+            str(job_id),
+        )
+        return None if row is None else row["error_code"]
+
+    def age(self, job_id, *, updated_s=None, created_s=None):
+        """Move the job's updated_at / created_at that many seconds into the past."""
+        if updated_s is not None:
+            self.conn.execute(
+                "UPDATE jobs SET updated_at = now() - make_interval(secs => %s) "
+                "WHERE job_id = %s::uuid",
+                (updated_s, str(job_id)),
+            )
+        if created_s is not None:
+            self.conn.execute(
+                "UPDATE jobs SET created_at = now() - make_interval(secs => %s) "
+                "WHERE job_id = %s::uuid",
+                (created_s, str(job_id)),
+            )
+
+    def snapshot(self):
+        """Everything money- and job-related, to show that a call changed nothing."""
+        return {
+            "balances": self.rows("SELECT * FROM balances ORDER BY user_id"),
+            "ledger": self.rows("SELECT * FROM ledger ORDER BY id"),
+            "jobs": self.rows("SELECT * FROM jobs ORDER BY job_id"),
+        }
+
+
+@pytest.fixture
+def pg(db_dsn):
+    import psycopg
+
+    conn = psycopg.connect(db_dsn, autocommit=True)
+    yield Pg(conn)
+    conn.close()
+
+
+class RowLock:
+    """A third connection that holds `SELECT ... FOR UPDATE` on rows until released (M3a §10's
+    deterministic concurrency): callers can wait until N other sessions are blocked behind it."""
+
+    def __init__(self, dsn, pg):
+        import psycopg
+
+        self._conn = psycopg.connect(dsn)  # not autocommit: the lock lasts until rollback
+        self._pg = pg
+        self.pid = self._conn.info.backend_pid
+
+    def execute(self, sql, *params):
+        self._conn.execute(sql, params)
+
+    def wait_for_blocked(self, count, timeout=10.0):
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            # A second waiter queues behind the first one's tuple lock, not the holder's, so
+            # count every session of this database that waits on any lock (tests run serially).
+            row = self._pg.one(
+                "SELECT count(*) AS n FROM pg_stat_activity "
+                "WHERE datname = current_database() AND cardinality(pg_blocking_pids(pid)) > 0"
+            )
+            if row["n"] >= count:
+                return
+            time.sleep(0.02)
+        raise AssertionError(f"fewer than {count} sessions blocked behind the held lock")
+
+    def release(self):
+        self._conn.rollback()
+        self._conn.close()
+
+
+@pytest.fixture
+def row_lock(db_dsn, pg):
+    locks = []
+
+    def make():
+        lock = RowLock(db_dsn, pg)
+        locks.append(lock)
+        return lock
+
+    yield make
+    for lock in locks:
+        if not lock._conn.closed:
+            lock.release()
+
+
+@pytest.fixture
+def patch_everywhere(monkeypatch):
+    """Replace a function wherever the implementation might look it up.
+
+    The spec names the functions by module (for example neurolens.inference.predict) but
+    not how the worker imports them, so patch the module attribute and, if present, the copy
+    in the worker / web modules.
+    """
+
+    def patch(name, fn, *modules):
+        patched = 0
+        for modname in modules:
+            mod = importlib.import_module(modname)
+            if hasattr(mod, name):
+                monkeypatch.setattr(mod, name, fn)
+                patched += 1
+        assert patched, f"{name} not found in any of {modules}"
+
+    return patch
+
+
+class SpyS3:
+    """Wraps a boto3 client: records every call and refuses the listed ones.
+
+    `forbid_on_uploads` refuses a call only when it targets an uploaded video (a key under
+    uploads/). The worker also reads results/ objects (result_exists, from M2b), so "never
+    download the video" cannot be checked by refusing get_object altogether.
+    """
+
+    def __init__(self, inner, forbid=(), forbid_on_uploads=()):
+        self._inner = inner
+        self._forbid = set(forbid)
+        self._forbid_on_uploads = set(forbid_on_uploads)
+        self.calls = []
+
+    def __getattr__(self, name):
+        attr = getattr(self._inner, name)
+        if not callable(attr):
+            return attr
+
+        def wrapper(*args, **kwargs):
+            self.calls.append((name, args, kwargs))
+            if name in self._forbid:
+                raise AssertionError(f"s3.{name} must not be called here")
+            key = kwargs.get("Key", args[1] if len(args) > 1 else None)
+            if name in self._forbid_on_uploads and str(key).startswith("uploads/"):
+                raise AssertionError(f"s3.{name} must not be called on {key} here")
+            return attr(*args, **kwargs)
+
+        return wrapper
+
+    def names(self):
+        return [c[0] for c in self.calls]
+
+
+@pytest.fixture
+def spy_s3(aws):
+    def make(forbid=(), forbid_on_uploads=()):
+        return SpyS3(aws.s3, forbid=forbid, forbid_on_uploads=forbid_on_uploads)
+
+    return make
+
+
+# ---------------------------------------------------------------- M3b (docs/M3b_spec.md)
+
+ISSUER = "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_TestPool"
+CLIENT_ID = "test-client-id"
+COGNITO_DOMAIN = "neurolens-test.auth.us-east-1.amazoncognito.com"
+PUBLIC_BASE_URL = "https://d111111abcdef8.cloudfront.net"
+GPU_ENDPOINT = "neurolens-gpu-test"
+# §8's sign-in seam: fake URLs that only `responses` answers.
+SERVER_METADATA = {
+    "issuer": ISSUER,
+    "authorization_endpoint": "https://idp.test/oauth2/authorize",
+    "token_endpoint": "https://idp.test/oauth2/token",
+    "jwks_uri": "https://idp.test/oauth2/jwks.json",
+}
+WEB_PARAMETERS = {
+    "/neurolens/web/cognito_client_secret": "test-client-secret",
+    "/neurolens/web/flask_secret_key": "k" * 64,
+}
+MISSING = object()  # a claim left out of the ID token
+
+
+@pytest.fixture
+def ssm(aws):
+    """moto's Parameter Store holding the five /neurolens/web/* SecureStrings (§2b)."""
+    import boto3
+
+    client = boto3.client("ssm", region_name="us-east-1")
+    for name, value in WEB_PARAMETERS.items():
+        client.put_parameter(Name=name, Value=value, Type="SecureString")
+    return client
+
+
+@pytest.fixture
+def cognito_cfg(make_cfg):
+    """A Cognito-mode config as the web Lambda has it after settings.apply_env (§2b): every
+    required setting present."""
+
+    def make(**overrides):
+        settings_ = {
+            "auth": {
+                "mode": "cognito",
+                "cognito_issuer": ISSUER,
+                "cognito_client_id": CLIENT_ID,
+                "cognito_domain": COGNITO_DOMAIN,
+            },
+            "public_base_url": PUBLIC_BASE_URL,
+            "deployed": True,
+            "db": {"backend": "data_api"},
+            "request_topic_arn": "arn:aws:sns:us-east-1:123456789012:neurolens-access-requests",
+        }
+        settings_.update(overrides)
+        cfg = make_cfg(**settings_)
+        cfg["aws"].update(
+            gpu_endpoint=GPU_ENDPOINT,
+            db_cluster_arn="arn:aws:rds:us-east-1:000000000000:cluster:neurolens-db",
+            db_secret_arn="arn:aws:secretsmanager:us-east-1:000000000000:secret:rds!cluster-x",
+            db_name="neurolens",
+        )
+        return cfg
+
+    return make
+
+
+@pytest.fixture
+def auth_seam(patch_everywhere):
+    """§8: every init_auth call gets the fake server_metadata, so Authlib never downloads
+    Cognito's OpenID configuration."""
+    from neurolens.web import auth
+
+    real = auth.init_auth
+
+    def init_auth(*args, **kwargs):
+        kwargs["server_metadata"] = dict(SERVER_METADATA)
+        return real(*args, **kwargs)
+
+    patch_everywhere("init_auth", init_auth, "neurolens.web.auth", "neurolens.web.app")
+
+
+@pytest.fixture(scope="session")
+def rsa_keys():
+    """The identity provider's signing key, and another key with the same key ID (a token signed
+    with it must fail the signature check, not the key lookup)."""
+    from joserfc.jwk import RSAKey
+
+    return (
+        RSAKey.generate_key(2048, parameters={"kid": "test-key"}),
+        RSAKey.generate_key(2048, parameters={"kid": "test-key"}),
+    )
+
+
+@pytest.fixture
+def fake_http(aws):
+    """Every HTTP request made with `requests` (Authlib) must match a registered fake;
+    anything else fails with a connection error instead of reaching the internet."""
+    import responses
+
+    with responses.RequestsMock(assert_all_requests_are_fired=False) as rsps:
+        yield rsps
+
+
+class FakeIdP:
+    """Cognito's token and key endpoints over HTTP. `claims` and `signing_key` describe the next
+    ID token the token endpoint hands out."""
+
+    def __init__(self, rsps, key, wrong_key):
+        import responses
+
+        self.key = key
+        self.wrong_key = wrong_key
+        self.claims = None
+        self.signing_key = key
+        rsps.add(
+            responses.GET, SERVER_METADATA["jwks_uri"], json={"keys": [key.as_dict(private=False)]}
+        )
+        rsps.add_callback(responses.POST, SERVER_METADATA["token_endpoint"], callback=self._token)
+
+    def _token(self, request):
+        from joserfc import jwt
+
+        id_token = jwt.encode({"alg": "RS256", "kid": "test-key"}, self.claims, self.signing_key)
+        body = {
+            "access_token": "test-access-token",
+            "token_type": "Bearer",
+            "expires_in": 3600,
+            "id_token": id_token,
+        }
+        return 200, {"Content-Type": "application/json"}, json.dumps(body)
+
+
+@pytest.fixture
+def idp(fake_http, rsa_keys):
+    return FakeIdP(fake_http, *rsa_keys)
+
+
+def sign_in(
+    client,
+    idp,
+    *,
+    sub="google_1001",
+    email="ann@example.com",
+    email_verified=True,
+    signing_key=None,
+    state=None,
+    **claims,
+):
+    """The browser's round trip: /login, Cognito (faked: the token endpoint's next ID token
+    carries the nonce /login sent), then /auth/callback. Returns the callback's response."""
+    login = client.get("/login")
+    assert login.status_code in (302, 303), login.status_code
+    query = parse_qs(urlparse(login.headers["Location"]).query)
+    now = int(time.time())
+    idp.claims = {
+        "iss": ISSUER,
+        "aud": CLIENT_ID,
+        "sub": sub,
+        "email": email,
+        "token_use": "id",
+        "iat": now,
+        "auth_time": now,
+        "exp": now + 3600,
+        "nonce": query["nonce"][0],
+    }
+    if email_verified is not MISSING:
+        idp.claims["email_verified"] = email_verified
+    idp.claims.update(claims)
+    idp.signing_key = signing_key or idp.key
+    return client.get(
+        "/auth/callback", query_string={"code": "test-code", "state": state or query["state"][0]}
+    )
+
+
+@pytest.fixture
+def cognito_app(aws, db, cognito_cfg, ssm, idp, auth_seam, tmp_path):
+    """create_app in Cognito mode (§8: create_app(..., ssm_client=...)) on the test database,
+    moto S3 and Parameter Store, with the sign-in seam in place."""
+    from neurolens.web.app import create_app
+
+    data_dir = tmp_path / "data"
+    data_dir.mkdir(exist_ok=True)
+
+    def make(cfg=None, *, database=None, s3_client=None, **overrides):
+        app = create_app(
+            cfg=cfg if cfg is not None else cognito_cfg(**overrides),
+            data_dir=data_dir,
+            db=database if database is not None else db,
+            s3_client=s3_client if s3_client is not None else aws.s3,
+            ssm_client=ssm,
+        )
+        app.config["TESTING"] = True
+        return app
+
+    return make
+
+
+@pytest.fixture
+def cognito_client(cognito_app):
+    return cognito_app().test_client()
+
+
+class FakeClock:
+    """Stands in for neurolens.db's `time` module: sleeping only moves the clock."""
+
+    def __init__(self):
+        self.start = self.now = 1_000_000.0
+
+    def monotonic(self):
+        return self.now
+
+    def time(self):
+        return self.now
+
+    def sleep(self, seconds):
+        self.now += seconds
+
+    @property
+    def elapsed(self):
+        return self.now - self.start
+
+
+@pytest.fixture
+def waking_aurora(monkeypatch):
+    """An rds-data client (built as M3a requires, without retries) whose every call answers
+    DatabaseResumingException, as Aurora does while it wakes; neurolens.db runs on a fake clock.
+    Returns (client, clock)."""
+    from botocore.exceptions import ClientError
+    from neurolens import db as dbmod
+
+    client = dbmod.data_api_client("us-east-1")
+
+    def resuming(*args, **kwargs):
+        raise ClientError(
+            {"Error": {"Code": "DatabaseResumingException", "Message": "resuming"}},
+            "BeginTransaction",
+        )
+
+    for name in ("begin_transaction", "execute_statement", "commit_transaction"):
+        setattr(client, name, resuming)
+    clock = FakeClock()
+    monkeypatch.setattr(dbmod, "time", clock)
+    return client, clock
+
+
+def fresh_import(name):
+    """Import a module anew, so state it keeps per container (the Lambda handlers) starts empty."""
+    sys.modules.pop(name, None)
+    return importlib.import_module(name)
+
+
+def function_url_event(
+    method="GET", path="/", *, body=None, headers=None, cookies=None, base64_body=False
+):
+    """A Lambda function URL event (payload format 2.0). Header names arrive lowercased."""
+    headers = {k.lower(): v for k, v in (headers or {}).items()}
+    headers.setdefault("host", "abcdefgh.lambda-url.us-east-1.on.aws")
+    event = {
+        "version": "2.0",
+        "routeKey": "$default",
+        "rawPath": path,
+        "rawQueryString": "",
+        "headers": headers,
+        "requestContext": {
+            "accountId": "anonymous",
+            "apiId": "abcdefgh",
+            "domainName": headers["host"],
+            "domainPrefix": "abcdefgh",
+            "http": {
+                "method": method,
+                "path": path,
+                "protocol": "HTTP/1.1",
+                "sourceIp": "203.0.113.7",
+                "userAgent": "test",
+            },
+            "requestId": str(uuid.uuid4()),
+            "routeKey": "$default",
+            "stage": "$default",
+            "time": "08/Oct/2026:00:00:00 +0000",
+            "timeEpoch": 0,
+        },
+        "isBase64Encoded": False,
+    }
+    if cookies:
+        event["cookies"] = list(cookies)
+    if body is not None:
+        raw = body if isinstance(body, bytes) else body.encode()
+        if base64_body:
+            event["body"] = base64.b64encode(raw).decode()
+            event["isBase64Encoded"] = True
+        else:
+            event["body"] = raw.decode()
+    return event
+
+
+class LambdaContext:
+    function_name = "neurolens-test"
+    memory_limit_in_mb = 512
+    invoked_function_arn = "arn:aws:lambda:us-east-1:000000000000:function:neurolens-test"
+    aws_request_id = "test-request"
+
+    def get_remaining_time_in_millis(self):
+        return 60_000
+
+
+@pytest.fixture
+def lambda_env(aws, ssm, make_cfg, tmp_path, monkeypatch):
+    """What Terraform gives the web and webhook functions (§2b, §3a, §7b): config.json in the code
+    bundle's root, deployment values in environment variables, secrets in Parameter Store.
+    `write_config(**overrides)` rewrites config.json."""
+    root = tmp_path / "bundle"
+    (root / "data").mkdir(parents=True)
+
+    def write_config(**overrides):
+        cfg = make_cfg()
+        for name in ("aws", "hf_token"):
+            del cfg[name]  # never in the committed config.json
+        cfg["paths"] = {"models": "./models", "data": "./data"}
+        cfg["db"] = {"backend": "data_api"}
+        cfg.update(overrides)
+        (root / "config.json").write_text(json.dumps(cfg))
+
+    write_config()
+    env = {
+        "NEUROLENS_ROOT": str(root),
+        "NEUROLENS_DEPLOYED": "1",
+        "NEUROLENS_AUTH_MODE": "cognito",
+        "NEUROLENS_COGNITO_ISSUER": ISSUER,
+        "NEUROLENS_COGNITO_CLIENT_ID": CLIENT_ID,
+        "NEUROLENS_COGNITO_DOMAIN": COGNITO_DOMAIN,
+        "NEUROLENS_PUBLIC_BASE_URL": PUBLIC_BASE_URL,
+        "NEUROLENS_GPU_ENDPOINT": GPU_ENDPOINT,
+        "NEUROLENS_S3_BUCKET": aws.bucket,
+        "NEUROLENS_AWS_REGION": "us-east-1",
+        "NEUROLENS_DB_CLUSTER_ARN": "arn:aws:rds:us-east-1:000000000000:cluster:neurolens-db",
+        "NEUROLENS_DB_SECRET_ARN": "arn:aws:secretsmanager:us-east-1:000000000000:secret:x",
+        "NEUROLENS_DB_NAME": "neurolens",
+    }
+    for name, value in env.items():
+        monkeypatch.setenv(name, value)
+    return SimpleNamespace(root=root, write_config=write_config)

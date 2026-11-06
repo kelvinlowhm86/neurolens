@@ -1,0 +1,293 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "NeurolensBucketsOnly",
+      "Effect": "Allow",
+      "Action": "s3:*",
+      "Resource": [
+        "arn:aws:s3:::neurolens-*",
+        "arn:aws:s3:::neurolens-*/*"
+      ]
+    },
+    {
+      "Sid": "NeurolensQueuesOnly",
+      "Effect": "Allow",
+      "Action": "sqs:*",
+      "Resource": "arn:aws:sqs:us-east-1:*:neurolens-*"
+    },
+    {
+      "Sid": "AlarmsRead",
+      "Effect": "Allow",
+      "Action": [
+        "cloudwatch:DescribeAlarms",
+        "cloudwatch:GetMetricData",
+        "cloudwatch:ListMetrics"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "AlarmsOnlyNeurolens",
+      "Effect": "Allow",
+      "Action": [
+        "cloudwatch:PutMetricAlarm",
+        "cloudwatch:DeleteAlarms",
+        "cloudwatch:EnableAlarmActions",
+        "cloudwatch:DisableAlarmActions",
+        "cloudwatch:TagResource",
+        "cloudwatch:UntagResource",
+        "cloudwatch:ListTagsForResource",
+        "cloudwatch:DescribeAlarmHistory"
+      ],
+      "Resource": "arn:aws:cloudwatch:us-east-1:*:alarm:neurolens-*"
+    },
+    {
+      "Sid": "DashboardOnlyNeurolens",
+      "Effect": "Allow",
+      "Action": [
+        "cloudwatch:PutDashboard",
+        "cloudwatch:GetDashboard",
+        "cloudwatch:DeleteDashboards"
+      ],
+      "Resource": "arn:aws:cloudwatch::*:dashboard/neurolens*"
+    },
+    {
+      "Sid": "EmailTopicsOnlyNeurolens",
+      "Effect": "Allow",
+      "Action": "sns:*",
+      "Resource": "arn:aws:sns:us-east-1:*:neurolens-*"
+    },
+    {
+      "Sid": "ParametersOnlyUnderNeurolens",
+      "Effect": "Allow",
+      "Action": [
+        "ssm:PutParameter",
+        "ssm:GetParameter",
+        "ssm:GetParameters",
+        "ssm:DeleteParameter",
+        "ssm:AddTagsToResource",
+        "ssm:RemoveTagsFromResource",
+        "ssm:ListTagsForResource"
+      ],
+      "Resource": "arn:aws:ssm:us-east-1:*:parameter/neurolens/*"
+    },
+    {
+      "Sid": "ParameterListHasNoResource",
+      "Effect": "Allow",
+      "Action": "ssm:DescribeParameters",
+      "Resource": "*"
+    },
+    {
+      "Sid": "FunctionsOnlyNeurolens",
+      "Effect": "Allow",
+      "Action": "lambda:*",
+      "Resource": "arn:aws:lambda:us-east-1:*:function:neurolens-*"
+    },
+    {
+      "Sid": "EventRulesOnlyNeurolens",
+      "Effect": "Allow",
+      "Action": "events:*",
+      "Resource": "arn:aws:events:us-east-1:*:rule/neurolens-*"
+    },
+    {
+      "Sid": "FunctionLogsOnlyNeurolens",
+      "Effect": "Allow",
+      "Action": "logs:*",
+      "Resource": [
+        "arn:aws:logs:us-east-1:*:log-group:/aws/lambda/neurolens-*",
+        "arn:aws:logs:us-east-1:*:log-group:/aws/lambda/neurolens-*:*"
+      ]
+    },
+    {
+      "Sid": "EndpointLogsOnlyNeurolens",
+      "Effect": "Allow",
+      "Action": "logs:*",
+      "Resource": "arn:aws:logs:us-east-1:*:log-group:/aws/sagemaker/Endpoints/neurolens*"
+    },
+    {
+      "Sid": "ListLogGroups",
+      "Effect": "Allow",
+      "Action": "logs:DescribeLogGroups",
+      "Resource": "*"
+    },
+    {
+      "Sid": "DatabaseRead",
+      "Effect": "Allow",
+      "Action": [
+        "rds:Describe*",
+        "rds:ListTagsForResource"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "DatabaseOnlyNeurolens",
+      "Effect": "Allow",
+      "Action": "rds:*",
+      "Resource": [
+        "arn:aws:rds:us-east-1:*:cluster:neurolens-*",
+        "arn:aws:rds:us-east-1:*:db:neurolens-*",
+        "arn:aws:rds:us-east-1:*:subgrp:neurolens-*",
+        "arn:aws:rds:us-east-1:*:cluster-pg:neurolens-*"
+      ]
+    },
+    {
+      "Sid": "DatabaseCreateUsesTheDefaultGroups",
+      "Effect": "Allow",
+      "Action": [
+        "rds:CreateDBCluster",
+        "rds:CreateDBInstance"
+      ],
+      "Resource": [
+        "arn:aws:rds:us-east-1:*:cluster-pg:default.*",
+        "arn:aws:rds:us-east-1:*:pg:default.*",
+        "arn:aws:rds:us-east-1:*:og:default:*"
+      ]
+    },
+    {
+      "Sid": "RdsCreatesTheDatabasePasswordSecret",
+      "Effect": "Allow",
+      "Action": [
+        "secretsmanager:CreateSecret",
+        "secretsmanager:TagResource"
+      ],
+      "Resource": "arn:aws:secretsmanager:us-east-1:*:secret:rds!*"
+    },
+    {
+      "Sid": "OnlyTheNeurolensDatabaseSecret",
+      "Effect": "Allow",
+      "Action": [
+        "secretsmanager:GetSecretValue",
+        "secretsmanager:DescribeSecret",
+        "secretsmanager:RotateSecret",
+        "secretsmanager:DeleteSecret",
+        "secretsmanager:UntagResource"
+      ],
+      "Resource": "arn:aws:secretsmanager:us-east-1:*:secret:rds!*",
+      "Condition": {
+        "StringLike": {
+          "secretsmanager:ResourceTag/aws:rds:primaryDBClusterArn": "arn:aws:rds:us-east-1:*:cluster:neurolens-*"
+        }
+      }
+    },
+    {
+      "Sid": "KeyInfoForTheEncryptedDatabase",
+      "Effect": "Allow",
+      "Action": "kms:DescribeKey",
+      "Resource": "*"
+    },
+    {
+      "Sid": "DataApiOnlyNeurolensDatabase",
+      "Effect": "Allow",
+      "Action": [
+        "rds-data:ExecuteStatement",
+        "rds-data:BeginTransaction",
+        "rds-data:CommitTransaction",
+        "rds-data:RollbackTransaction"
+      ],
+      "Resource": "arn:aws:rds:us-east-1:*:cluster:neurolens-*"
+    },
+    {
+      "Sid": "QueueTriggersOnlyForNeurolensFunctions",
+      "Effect": "Allow",
+      "Action": "lambda:CreateEventSourceMapping",
+      "Resource": "*",
+      "Condition": {
+        "ArnLike": {
+          "lambda:FunctionArn": "arn:aws:lambda:us-east-1:*:function:neurolens-*"
+        }
+      }
+    },
+    {
+      "Sid": "ChangeQueueTriggersOnlyForNeurolensFunctions",
+      "Effect": "Allow",
+      "Action": [
+        "lambda:UpdateEventSourceMapping",
+        "lambda:DeleteEventSourceMapping"
+      ],
+      "Resource": "arn:aws:lambda:us-east-1:*:event-source-mapping:*",
+      "Condition": {
+        "ArnLike": {
+          "lambda:FunctionArn": "arn:aws:lambda:us-east-1:*:function:neurolens-*"
+        }
+      }
+    },
+    {
+      "Sid": "ReadAndTagQueueTriggers",
+      "Effect": "Allow",
+      "Action": [
+        "lambda:GetEventSourceMapping",
+        "lambda:TagResource",
+        "lambda:UntagResource",
+        "lambda:ListTags"
+      ],
+      "Resource": "arn:aws:lambda:us-east-1:*:event-source-mapping:*"
+    },
+    {
+      "Sid": "SageMakerOnlyNeurolens",
+      "Effect": "Allow",
+      "Action": "sagemaker:*",
+      "Resource": [
+        "arn:aws:sagemaker:us-east-1:*:endpoint/neurolens*",
+        "arn:aws:sagemaker:us-east-1:*:endpoint-config/neurolens*",
+        "arn:aws:sagemaker:us-east-1:*:model/neurolens*"
+      ]
+    },
+    {
+      "Sid": "WorkerRepositoryOnlyNeurolens",
+      "Effect": "Allow",
+      "Action": "ecr:*",
+      "Resource": "arn:aws:ecr:us-east-1:*:repository/neurolens*"
+    },
+    {
+      "Sid": "EcrLoginTokenHasNoResource",
+      "Effect": "Allow",
+      "Action": "ecr:GetAuthorizationToken",
+      "Resource": "*"
+    },
+    {
+      "Sid": "ReadAwsPytorchBaseImageDigest",
+      "Effect": "Allow",
+      "Action": "ecr:BatchGetImage",
+      "Resource": "arn:aws:ecr:us-east-1:763104351884:repository/pytorch-inference"
+    },
+    {
+      "Sid": "WorkerBuildOnlyNeurolens",
+      "Effect": "Allow",
+      "Action": "codebuild:*",
+      "Resource": "arn:aws:codebuild:us-east-1:*:project/neurolens*"
+    },
+    {
+      "Sid": "CloudControlHasNoResourceScoping",
+      "Effect": "Allow",
+      "Action": [
+        "cloudformation:CreateResource",
+        "cloudformation:GetResource",
+        "cloudformation:UpdateResource",
+        "cloudformation:DeleteResource",
+        "cloudformation:GetResourceRequestStatus",
+        "cloudformation:ListResources"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "BuildLogsOnlyNeurolens",
+      "Effect": "Allow",
+      "Action": [
+        "logs:CreateLogGroup",
+        "logs:DeleteLogGroup",
+        "logs:PutRetentionPolicy",
+        "logs:TagResource",
+        "logs:UntagResource",
+        "logs:ListTagsForResource",
+        "logs:ListTagsLogGroup"
+      ],
+      "Resource": "arn:aws:logs:us-east-1:*:log-group:/aws/codebuild/neurolens-*"
+    },
+    {
+      "Sid": "LayersOnlyNeurolens",
+      "Effect": "Allow",
+      "Action": "lambda:*",
+      "Resource": "arn:aws:lambda:us-east-1:*:layer:neurolens-*"
+    }
+  ]
+}
