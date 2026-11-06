@@ -446,6 +446,8 @@
   .compare-more[open] summary { margin-bottom: 8px; }
   .compare-more-body { display: flex; flex-direction: column; gap: 12px; }
   .compare-more .ai-note { margin-top: 0; padding-top: 10px; }
+  /* Both are filled only from a written comparison: with none (video vs sample, or not written yet) they would show as empty boxes. */
+  .compare-diff-panel:not(:has(.compare-diffs > *)), .compare-more:not(:has(li)) { display: none; }
   .compare-verdict { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; display: flex; flex-direction: column; gap: 8px; }
   .kicker { font-size: 11px; color: var(--muted); letter-spacing: .02em; }
   .compare-verdict h3 { font: 600 15px/1.35 var(--display); }
