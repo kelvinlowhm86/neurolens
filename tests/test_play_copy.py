@@ -269,6 +269,37 @@ def test_play_copy_caps_the_long_edge_and_keeps_both_sides_even(tmp_path, size, 
         assert width % 2 == 0 and height % 2 == 0
 
 
+def test_play_copy_has_a_keyframe_every_second_so_a_seek_lands_at_once(tmp_path, long_clip):
+    destination = tmp_path / "play.mp4"
+
+    with inference.PlayCopy(long_clip, destination) as copy:
+        assert copy.wait(timeout_s=inference.PLAY_COPY_WAIT_SECONDS) is True
+
+    times = subprocess.run(
+        [
+            "ffprobe",
+            "-v",
+            "error",
+            "-select_streams",
+            "v:0",
+            "-skip_frame",
+            "nokey",
+            "-show_entries",
+            "frame=pts_time",
+            "-of",
+            "csv=p=0",
+            str(destination),
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.split()
+    keyframes = [float(t.strip(",")) for t in times]
+    gaps = [b - a for a, b in zip(keyframes, keyframes[1:], strict=False)]
+    assert keyframes[0] == 0 and len(keyframes) >= 59
+    assert max(gaps) <= 1.01
+
+
 def test_wait_with_no_time_left_gives_up_and_reaps_the_process(tmp_path, long_clip):
     destination = tmp_path / "play.mp4"
 

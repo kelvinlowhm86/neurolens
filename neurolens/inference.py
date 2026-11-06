@@ -230,6 +230,10 @@ class PlayCopy:
                     "yuv420p",
                     "-profile:v",
                     "high",
+                    # A keyframe every second, so a click on the chart lands at once (libx264's
+                    # default gap is up to 10 s, and a seek decodes from the keyframe before it).
+                    "-force_key_frames",
+                    "expr:gte(t,n_forced*1)",
                     "-movflags",
                     "+faststart",
                     "-c:a",

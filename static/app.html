@@ -5652,6 +5652,7 @@ function seek(t) {
   if (hasLocalVideo()) {
     virtualTime = value;
     video.currentTime = value;
+    tick(); // move the playhead, readouts and brain now; the picture follows when the seek lands
   } else {
     virtualTime = value;
     if (virtualPlaying) virtualAnchor = performance.now() - value * 1000;
