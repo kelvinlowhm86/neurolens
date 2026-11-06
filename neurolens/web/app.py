@@ -566,17 +566,17 @@ def create_app(
         jobs = load_jobs()
         refunded = False
         for job in jobs:
-            if (
-                job["status"] == billing.QUEUED
-                and job["gpu_wait_until"] is not None
-                and billing.refund_if_gpu_wait_over(db, job["job_id"])
-            ):
+            if job["gpu_wait_over"] and refund_gpu_wait(job["job_id"]):
                 refunded = True
         if refunded:
             jobs = load_jobs()
         rows = []
         for job in jobs:
-            row = {key: value for key, value in job.items() if key != "research_consent"}
+            row = {
+                key: value
+                for key, value in job.items()
+                if key not in ("research_consent", "gpu_wait_over")
+            }
             row["job_id"] = str(job["job_id"])
             row["created_at"] = storage.utc_text(job["created_at"])
             if job["gpu_wait_until"] is not None:
@@ -586,6 +586,15 @@ def create_app(
             row["result_available"] = job["status"] == billing.DONE and job["created_at"] > cutoff
             rows.append(row)
         return jsonify(rows)
+
+    def refund_gpu_wait(job_id):
+        """Refund a job whose GPU wait ran out (M3l §2c) while its owner looks. A failure here
+        must not break the answer: it is logged, and the reaper refunds the job later."""
+        try:
+            return billing.refund_if_gpu_wait_over(db, str(job_id))
+        except Exception:
+            app.logger.exception(f"{job_id}: could not refund the expired GPU wait")
+            return False
 
     def owned_job(job_id):
         """(job, None) for the caller's own job, else (None, an error response). Checked in the
@@ -601,12 +610,19 @@ def create_app(
             rows = tx.execute(
                 "SELECT job_id, object_key, filename, status, stage, stages, attempt, updated_at, "
                 "claimed_at, gpu_wait_until, error_code, error_message, research_consent, "
+                "(status = :queued AND claimed_at IS NULL AND "
+                "gpu_wait_until + make_interval(secs => :grace) < now()) AS gpu_wait_over, "
                 "retention_added_at, dataset_removed_at, dataset_removed_reason, "
                 "verified_duration_ms, report_state, "
                 "report_tries, report_started_at, report_error FROM jobs "
                 "WHERE job_id = CAST(:job_id AS uuid) AND user_id = :user_id "
                 "AND deleted_at IS NULL",
-                {"job_id": job_id, "user_id": user_id},
+                {
+                    "job_id": job_id,
+                    "user_id": user_id,
+                    "queued": billing.QUEUED,
+                    "grace": billing.GPU_WAIT_GRACE_S,
+                },
             )
         if not rows:
             return None, _not_found()
@@ -692,11 +708,7 @@ def create_app(
         job, error = owned_job(job_id)
         if error:
             return error
-        if (
-            job["status"] == billing.QUEUED
-            and job["gpu_wait_until"] is not None
-            and billing.refund_if_gpu_wait_over(db, job["job_id"])
-        ):
+        if job["gpu_wait_over"] and refund_gpu_wait(job_id):
             job, error = owned_job(job_id)
             if error:
                 return error
@@ -705,6 +717,7 @@ def create_app(
             "object_key",
             "claimed_at",
             "gpu_wait_until",
+            "gpu_wait_over",
             "retention_added_at",
             "dataset_removed_at",
             "dataset_removed_reason",

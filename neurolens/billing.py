@@ -400,6 +400,8 @@ def list_jobs(
             "SELECT j.job_id, j.filename, j.status, j.created_at, j.verified_duration_ms, "
             "j.captured_cents, j.error_code, j.research_consent, j.claimed_at, "
             "j.gpu_wait_until, j.curve_rewarded_at, "
+            "(j.status = :queued AND j.claimed_at IS NULL AND "
+            "j.gpu_wait_until + make_interval(secs => :grace) < now()) AS gpu_wait_over, "
             "(j.status = :queued AND j.verified_duration_ms IS NULL) AS cancellable, "
             "(j.status = :done AND j.research_consent "
             "AND j.dataset_removed_at IS NULL) AS sharing, "
@@ -418,6 +420,7 @@ def list_jobs(
                 "done": DONE,
                 "queued": QUEUED,
                 "cancelled": "cancelled",
+                "grace": GPU_WAIT_GRACE_S,
             },
         )
     for row in rows:
