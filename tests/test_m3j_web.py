@@ -22,7 +22,6 @@ PRICE_CENTS = pricing.estimate_cost_cents(30.1)
 OTHER_USER = "other-user"
 VIEWS = "lt_1k"
 PUBLISHED = "week"
-REWARD_MIN_DAYS = 7
 LENGTH_TOLERANCE_S = 2
 DAY_S = 24 * 60 * 60
 YOUTUBE_ID = "dQw4w9WgXcQ"
@@ -115,7 +114,6 @@ def curve_args(job_id, *, sha="a" * 64, points=None, video_ref=None, facts_=None
         "video_ref": video_ref if video_ref is not None else video_ref_for(job_id),
         "same_cut": "same",
         "source": "youtube_api",
-        "reward_min_days": REWARD_MIN_DAYS,
         "facts": facts_,
         "length_tolerance_s": LENGTH_TOLERANCE_S,
     }
@@ -155,15 +153,10 @@ def snapshot_rows(pg, job_id):
     )
 
 
-def reward_date(pg, job_id, days=REWARD_MIN_DAYS):
-    return storage.utc_text(pg.job(job_id)["created_at"] + timedelta(days=days))
-
-
 def app_for(aws, db, make_cfg, tmp_path, *, research=None, youtube_api_key="test-youtube-key"):
     research_cfg = {
         "curve_rewards_per_window": 5,
         "curve_reward_window_days": 30,
-        "curve_reward_min_days": REWARD_MIN_DAYS,
         "curve_length_tolerance_s": LENGTH_TOLERANCE_S,
         "no_curve_days": 90,
     }
@@ -229,12 +222,12 @@ def test_the_check_reports_a_video_public_for_a_month_as_payable_now(
     assert data["platform"] == "youtube"
     assert data["video_id"] == YOUTUBE_ID
     assert data["reward_cents"] == PRICE_CENTS
-    assert data["reward_from"] is None
+    assert "reward_from" not in data
     assert data["reason"] is None
     assert data["published_on"] == published.date().isoformat()
 
 
-def test_the_check_reports_a_young_video_with_the_date_it_pays(
+def test_the_check_reports_a_young_video_with_enough_views_as_payable_now(
     db, aws, make_cfg, tmp_path, monkeypatch, pg
 ):
     client = app_for(aws, db, make_cfg, tmp_path)
@@ -246,11 +239,10 @@ def test_the_check_reports_a_young_video_with_the_date_it_pays(
 
     resp = client.post(f"/api/jobs/{job_id}/retention/check", json=check_body())
 
-    expected_from = storage.utc_text(published + timedelta(days=REWARD_MIN_DAYS))
     assert resp.status_code == 200
     data = resp.get_json()
-    assert data["reason"] == "too_early"
-    assert data["reward_from"] == expected_from
+    assert data["reason"] is None
+    assert "reward_from" not in data
     assert data["reward_cents"] == PRICE_CENTS
     assert data["published_on"] == published.date().isoformat()
 
@@ -267,7 +259,7 @@ def test_the_check_reports_a_length_mismatch(db, aws, make_cfg, tmp_path, monkey
     data = resp.get_json()
     assert data["reason"] == "length_mismatch"
     assert data["reward_cents"] == 0
-    assert data["reward_from"] is None
+    assert "reward_from" not in data
 
 
 def test_the_check_reports_an_unfunded_account(db, aws, make_cfg, tmp_path, monkeypatch):
@@ -342,7 +334,7 @@ def test_a_video_we_cannot_see_is_400_and_writes_nothing(
     assert pg.snapshot() == before
 
 
-def test_a_failed_lookup_falls_back_to_the_analysis_date_and_logs(
+def test_a_failed_lookup_falls_back_to_unknown_facts_and_logs(
     db, aws, make_cfg, tmp_path, monkeypatch, pg, caplog
 ):
     from neurolens import youtube
@@ -358,8 +350,9 @@ def test_a_failed_lookup_falls_back_to_the_analysis_date_and_logs(
 
     assert resp.status_code == 200
     data = resp.get_json()
-    assert data["reason"] == "too_early"
-    assert data["reward_from"] == reward_date(pg, job_id)
+    assert data["reason"] is None
+    assert "reward_from" not in data
+    assert data["reward_cents"] == PRICE_CENTS
     assert data["published_on"] is None
     assert any(record.levelname == "ERROR" for record in caplog.records)
     assert snapshot_rows(pg, job_id) == []
@@ -579,17 +572,17 @@ def test_the_page_and_the_server_share_the_new_consent_version():
     assert match.group("version") == billing.CONSENT_VERSION
 
 
-def test_the_privacy_page_states_the_configured_week_and_length_tolerance():
+def test_the_privacy_page_states_the_configured_view_rule_and_length_tolerance():
     research = settings.load_settings()["research"]
-    days = research["curve_reward_min_days"]
+    min_views = research["curve_min_views"]
     tolerance = research["curve_length_tolerance_s"]
-    assert days == REWARD_MIN_DAYS
     assert tolerance == LENGTH_TOLERANCE_S
 
     html = (REPO_ROOT / "static" / "privacy.html").read_text()
     text = _section_text(html, "sharing")
 
-    assert f"public at least {days} days" in text
+    assert f"{min_views:,} views" in text
+    assert "public at least 7 days" not in text
     assert f"give or take {tolerance} seconds" in text
     assert 'id="research"' in html, "the old #research anchor must still land on the section"
 

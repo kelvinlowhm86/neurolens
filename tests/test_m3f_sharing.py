@@ -124,7 +124,6 @@ def curve_kwargs(job_id, *, sha="review-curve"):
         "video_ref": f"youtube:{job_id.replace('-', '')[:11]}",
         "same_cut": "same",
         "source": "youtube_api",
-        "reward_min_days": 7,
         "facts": None,
         "length_tolerance_s": 2,
     }

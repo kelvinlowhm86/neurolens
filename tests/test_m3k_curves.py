@@ -1,9 +1,10 @@
-"""M3k's 1,000-view rule for curves (docs/M3k_spec.md §7, §11).
+"""The 1,000-view curve rule (docs/M3k_spec.md §7, M3l §3, §7).
 
 A checked video must show at least `research.curve_min_views` views before its curve pays.
 Hidden and unknown view counts keep paying as before, because those creators were screened by
-hand. The check and the save share the rule, so their answers agree; the check's reply names the
-view count it saw and the minimum it applied.
+hand. M3l removes the one-week wait, so the view count is no longer paired with a date. The check
+and the save share the rule, so their answers agree; the check's reply names the view count it
+saw and the minimum it applied.
 """
 
 import json
@@ -18,7 +19,6 @@ STARTER_CENTS = 10_000
 PRICE_CENTS = pricing.estimate_cost_cents(30.1)
 VIEWS = "lt_1k"
 PUBLISHED = "week"
-REWARD_MIN_DAYS = 7
 LENGTH_TOLERANCE_S = 2
 MIN_VIEWS = 1000
 DAY_S = 24 * 60 * 60
@@ -76,7 +76,6 @@ def curve_args(
         "video_ref": video_ref if video_ref is not None else video_ref_for(job_id),
         "same_cut": "same",
         "source": "youtube_api",
-        "reward_min_days": REWARD_MIN_DAYS,
         "facts": facts_,
         "length_tolerance_s": LENGTH_TOLERANCE_S,
         "min_views": min_views,
@@ -122,15 +121,11 @@ def offer(db, user_id, job_id, *, video_ref, facts_, min_views=MIN_VIEWS):
     args = {
         "reward_cap": 5,
         "reward_window_days": 30,
-        "reward_min_days": REWARD_MIN_DAYS,
         "length_tolerance_s": LENGTH_TOLERANCE_S,
         "min_views": min_views,
     }
-    result = billing.curve_offer(db, user_id, job_id, video_ref, facts_, **args)
-    if isinstance(result, dict):
-        return result["reward_cents"], result.get("reward_from"), result["reason"]
-    cents, reward_from, reason = result
-    return cents, reward_from, reason
+    cents, reason = billing.curve_offer(db, user_id, job_id, video_ref, facts_, **args)
+    return cents, reason
 
 
 def patch_lookup(monkeypatch, result):
@@ -152,7 +147,6 @@ def app_client(
     research = {
         "curve_rewards_per_window": 5,
         "curve_reward_window_days": 30,
-        "curve_reward_min_days": REWARD_MIN_DAYS,
         "curve_length_tolerance_s": LENGTH_TOLERANCE_S,
         "curve_min_views": curve_min_views,
         "no_curve_days": 90,
@@ -197,7 +191,7 @@ def test_a_checked_video_below_the_minimum_is_stored_but_pays_nothing(db, pg):
 
     assert result["rewarded_cents"] == 0
     assert result["reason"] == "too_few_views"
-    assert result.get("reward_from") is None
+    assert "reward_from" not in result
     [snapshot] = snapshot_rows(pg, job_id)
     assert snapshot["checked_views"] == 999
     assert snapshot["rewarded_cents"] == 0
@@ -258,23 +252,21 @@ def test_unknown_facts_are_rewarded_as_before(db, pg):
     assert snapshot["published"] == PUBLISHED
 
 
-def test_few_views_and_too_early_names_the_views_and_the_date(db, pg):
+def test_few_views_names_the_views_without_a_date(db, pg):
     job_id, _ = make_job(db)
     pg.age(job_id, created_s=10 * DAY_S)
     billing.grant_credit(db, f"{WEB_USER_ID}@example.com", 100)
-    published = days_ago(2)
-    expected_from = storage.utc_text(published + timedelta(days=REWARD_MIN_DAYS))
 
     result = billing.add_curve(
         db,
         WEB_USER_ID,
         job_id,
-        **curve_args(job_id, facts_=facts(published, views=640)),
+        **curve_args(job_id, facts_=facts(days_ago(2), views=640)),
     )
 
     assert result["rewarded_cents"] == 0
     assert result["reason"] == "too_few_views"
-    assert result["reward_from"] == expected_from
+    assert "reward_from" not in result
     assert snapshot_rows(pg, job_id)[0]["checked_views"] == 640
 
 
@@ -302,7 +294,7 @@ def reward_case(name):
         "pays_now": (0, facts(now - timedelta(days=30), views=25048), "a" * 64),
         "exactly_the_minimum": (0, facts(now - timedelta(days=30), views=MIN_VIEWS), "b" * 64),
         "too_few_views": (0, facts(now - timedelta(days=30), views=999), "c" * 64),
-        "too_few_views_and_too_early": (
+        "too_few_views_on_a_young_video": (
             10 * DAY_S,
             facts(now - timedelta(days=2), views=640),
             "d" * 64,
@@ -324,7 +316,7 @@ def reward_case(name):
         "pays_now",
         "exactly_the_minimum",
         "too_few_views",
-        "too_few_views_and_too_early",
+        "too_few_views_on_a_young_video",
         "hidden_views",
         "unknown_facts",
         "few_views_with_a_length_mismatch",
@@ -340,7 +332,7 @@ def test_the_check_and_the_save_give_the_same_reason(db, pg, case):
         "published": PUBLISHED if facts_ is None else None,
     }
 
-    cents, _, reason = offer(db, WEB_USER_ID, job_id, video_ref=YOUTUBE_REF, facts_=facts_)
+    cents, reason = offer(db, WEB_USER_ID, job_id, video_ref=YOUTUBE_REF, facts_=facts_)
     saved = billing.add_curve(
         db, WEB_USER_ID, job_id, **curve_args(job_id, sha=sha, facts_=facts_, **args)
     )
@@ -398,7 +390,7 @@ def test_the_check_reports_the_checked_views_and_the_configured_minimum(
     assert data["checked_views"] == 1200
     assert data["min_views"] == 1500
     assert data["reward_cents"] == PRICE_CENTS
-    assert data["reward_from"] is None
+    assert "reward_from" not in data
 
 
 def test_the_check_reports_hidden_views_as_null(db, aws, make_cfg, tmp_path, monkeypatch):
@@ -429,7 +421,7 @@ def test_the_history_preview_still_ignores_the_view_count(db, pg):
         **curve_args(job_id, facts_=facts(days_ago(30), views=640)),
     )
 
-    [row] = billing.list_jobs(db, WEB_USER_ID, 50, reward_min_days=REWARD_MIN_DAYS)
+    [row] = billing.list_jobs(db, WEB_USER_ID, 50)
 
     assert row["curve_reward_cents"] == PRICE_CENTS
     assert row["curve_rewarded"] is False

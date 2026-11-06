@@ -47,7 +47,6 @@ def app_for(aws, db, make_cfg, tmp_path, s3_client=None):
         research={
             "curve_rewards_per_window": 5,
             "curve_reward_window_days": 30,
-            "curve_reward_min_days": 7,
             "no_curve_days": 90,
         }
     )
@@ -126,7 +125,6 @@ def add_curve(db, job_id, *, sha="curve-sha"):
         video_ref=f"youtube:{job_id.replace('-', '')[:11]}",
         same_cut="same",
         source="youtube_api",
-        reward_min_days=7,
         facts=None,
         length_tolerance_s=2,
     )

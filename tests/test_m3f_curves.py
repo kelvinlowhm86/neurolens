@@ -25,7 +25,6 @@ PRICE_CENTS = pricing.estimate_cost_cents(27.4)  # one started 30 s block
 OTHER_USER = "other-user"
 VIEWS = "lt_1k"
 PUBLISHED = "week"
-REWARD_MIN_DAYS = 7
 DAY_S = 24 * 60 * 60
 YOUTUBE_LINK = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
 
@@ -65,7 +64,6 @@ def curve_args(job_id, *, sha="a" * 64, points=None, flags=None, **overrides):
         "video_ref": f"youtube:{job_id.replace('-', '')[:11]}",
         "same_cut": "same",
         "source": "youtube_api",
-        "reward_min_days": REWARD_MIN_DAYS,
         "facts": None,
         "length_tolerance_s": 2,
     }
@@ -111,7 +109,6 @@ def app_for(aws, db, make_cfg, tmp_path, s3_client=None):
         research={
             "curve_rewards_per_window": 5,
             "curve_reward_window_days": 30,
-            "curve_reward_min_days": REWARD_MIN_DAYS,
             "no_curve_days": 90,
         }
     )

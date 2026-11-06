@@ -1,11 +1,11 @@
 """M3j checked publish dates and length (docs/M3j_spec.md §3, §5, §11).
 
 `youtube.lookup` turns the Data API's reply into facts or refuses loudly without leaking the key.
-The reward now depends on the video's publish date: a video public for a week pays at once, a
-young one waits, and a video of a different length is saved without credit. The check and the
-save use the same rules, so their answers agree. Money and snapshots are read directly from
-PostgreSQL; time moves by changing the job's `created_at` or the facts' `published_at`, never by
-sleeping.
+The checked facts include the publish date, length and view count. M3l removed the one-week wait:
+a video of a different length is saved without credit, and enough views otherwise pay at once.
+The check and the save use the same rules, so their answers agree. Money and snapshots are read
+directly from PostgreSQL; time moves by changing the job's `created_at` or the facts'
+`published_at`, never by sleeping.
 """
 
 import importlib
@@ -24,7 +24,6 @@ STARTER_CENTS = 10_000
 PRICE_CENTS = pricing.estimate_cost_cents(30.1)
 VIEWS = "lt_1k"
 PUBLISHED = "week"
-REWARD_MIN_DAYS = 7
 LENGTH_TOLERANCE_S = 2
 DAY_S = 24 * 60 * 60
 
@@ -215,7 +214,6 @@ def curve_args(
         "video_ref": video_ref if video_ref is not None else video_ref_for(job_id),
         "same_cut": "same",
         "source": "youtube_api",
-        "reward_min_days": REWARD_MIN_DAYS,
         "facts": facts_,
         "length_tolerance_s": LENGTH_TOLERANCE_S,
     }
@@ -259,24 +257,16 @@ def snapshot_rows(pg, job_id):
     )
 
 
-def reward_date(pg, job_id, days=REWARD_MIN_DAYS):
-    return storage.utc_text(pg.job(job_id)["created_at"] + timedelta(days=days))
-
-
 def offer(db, user_id, job_id, *, video_ref, facts_, **overrides):
-    """The check's answer as (cents, reward_from, reason), whatever container it returns."""
+    """The check's answer as (cents, reason)."""
     args = {
         "reward_cap": 5,
         "reward_window_days": 30,
-        "reward_min_days": REWARD_MIN_DAYS,
         "length_tolerance_s": LENGTH_TOLERANCE_S,
     }
     args.update(overrides)
-    result = billing.curve_offer(db, user_id, job_id, video_ref, facts_, **args)
-    if isinstance(result, dict):
-        return result["reward_cents"], result.get("reward_from"), result["reason"]
-    cents, reward_from, reason = result
-    return cents, reward_from, reason
+    cents, reason = billing.curve_offer(db, user_id, job_id, video_ref, facts_, **args)
+    return cents, reason
 
 
 # ---------------------------------------------------------------- the reward and the written facts
@@ -302,25 +292,23 @@ def test_a_video_public_for_a_month_pays_at_once_and_stores_the_checked_facts(db
     assert pg.job(job_id)["curve_rewarded_at"] is not None
 
 
-def test_a_young_video_waits_until_a_week_after_it_was_published(db, pg):
+def test_a_young_video_with_enough_views_pays_at_once(db, pg):
     job_id, _ = make_job(db)
     pg.age(job_id, created_s=10 * DAY_S)
     billing.grant_credit(db, f"{WEB_USER_ID}@example.com", 100)
     published = days_ago(2)
-    expected_from = storage.utc_text(published + timedelta(days=REWARD_MIN_DAYS))
 
     result = billing.add_curve(
         db, WEB_USER_ID, job_id, **curve_args(job_id, facts_=facts(published))
     )
 
-    assert result["rewarded_cents"] == 0
-    assert result["reason"] == "too_early"
-    assert result["reward_from"] == expected_from
-    assert pg.job(job_id)["curve_rewarded_at"] is None
-    assert "curve_reward" not in pg.kinds(WEB_USER_ID)
+    assert result["rewarded_cents"] == PRICE_CENTS
+    assert result["reason"] is None
+    assert pg.job(job_id)["curve_rewarded_at"] is not None
+    assert pg.kinds(WEB_USER_ID).count("curve_reward") == 1
 
 
-def test_unknown_facts_still_wait_a_week_after_the_analysis(db, pg):
+def test_unknown_facts_pay_at_once(db, pg):
     job_id, _ = make_job(db)
     pg.age(job_id, created_s=6 * DAY_S)
     billing.grant_credit(db, f"{WEB_USER_ID}@example.com", 100)
@@ -332,9 +320,8 @@ def test_unknown_facts_still_wait_a_week_after_the_analysis(db, pg):
         **curve_args(job_id, facts_=None, views=VIEWS, published=PUBLISHED),
     )
 
-    assert result["rewarded_cents"] == 0
-    assert result["reason"] == "too_early"
-    assert result["reward_from"] == reward_date(pg, job_id)
+    assert result["rewarded_cents"] == PRICE_CENTS
+    assert result["reason"] is None
 
 
 @pytest.mark.parametrize(
@@ -390,13 +377,13 @@ def reward_case(name):
     now = datetime.now(UTC)
     cases = {
         "pays_now": (0, facts(now - timedelta(days=30)), "a" * 64),
-        "too_early_from_publish": (
+        "young_from_publish": (
             10 * DAY_S,
             facts(now - timedelta(days=2)),
             "b" * 64,
         ),
-        "too_early_from_analysis": (6 * DAY_S, None, "c" * 64),
-        "pays_from_analysis": (8 * DAY_S, None, "d" * 64),
+        "young_from_analysis": (6 * DAY_S, None, "c" * 64),
+        "older_from_analysis": (8 * DAY_S, None, "d" * 64),
         "length_mismatch": (
             0,
             facts(now - timedelta(days=30), duration_s=33),
@@ -416,9 +403,9 @@ def reward_case(name):
     "case",
     [
         "pays_now",
-        "too_early_from_publish",
-        "too_early_from_analysis",
-        "pays_from_analysis",
+        "young_from_publish",
+        "young_from_analysis",
+        "older_from_analysis",
         "length_mismatch",
         "length_within_tolerance",
         "not_funded",
@@ -435,7 +422,7 @@ def test_the_check_and_the_save_give_the_same_reason(db, pg, case):
         "published": PUBLISHED if facts_ is None else None,
     }
 
-    cents, _, reason = offer(db, WEB_USER_ID, job_id, video_ref=YOUTUBE_REF, facts_=facts_)
+    cents, reason = offer(db, WEB_USER_ID, job_id, video_ref=YOUTUBE_REF, facts_=facts_)
     saved = billing.add_curve(
         db, WEB_USER_ID, job_id, **curve_args(job_id, sha=sha, facts_=facts_, **args)
     )
@@ -451,7 +438,7 @@ def test_the_check_writes_nothing(db, pg):
     billing.grant_credit(db, f"{WEB_USER_ID}@example.com", 100)
     before = pg.snapshot()
 
-    cents, reward_from, reason = offer(
+    cents, reason = offer(
         db,
         WEB_USER_ID,
         job_id,
@@ -459,7 +446,7 @@ def test_the_check_writes_nothing(db, pg):
         facts_=facts(days_ago(30)),
     )
 
-    assert (cents, reward_from, reason) == (PRICE_CENTS, None, None)
+    assert (cents, reason) == (PRICE_CENTS, None)
     assert snapshot_rows(pg, job_id) == []
     assert pg.snapshot() == before
 
@@ -507,7 +494,7 @@ def test_list_jobs_no_longer_promises_a_reward_date(db, pg):
     pg.age(job_id, created_s=5 * DAY_S)
     billing.grant_credit(db, f"{WEB_USER_ID}@example.com", 100)
 
-    [row] = billing.list_jobs(db, WEB_USER_ID, 50, reward_min_days=REWARD_MIN_DAYS)
+    [row] = billing.list_jobs(db, WEB_USER_ID, 50)
 
     assert row["curve_reward_cents"] == PRICE_CENTS
     assert "curve_reward_from" not in row

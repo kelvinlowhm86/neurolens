@@ -2,9 +2,9 @@
 
 `results.parse_video_link` accepts the YouTube and Facebook forms and names each refusal.
 `results.parse_facebook_retention` accepts only Meta's documented retention reply. `add_curve`
-links a curve to its published video, rewards a curve added at least 7 days after the analysis,
-and refuses a link taken by another account or a job already linked to another video.
-`list_jobs` previews the reward date from the same rule.
+links a curve to its published video, pays at once once the views rule is met, and refuses a
+link taken by another account or a job already linked to another video. `list_jobs` previews the
+reward amount from the same rule, without a promised date.
 
 Money and snapshots are read directly from PostgreSQL (`pg`); time moves by changing the job's
 `created_at`, never by sleeping.
@@ -12,7 +12,6 @@ Money and snapshots are read directly from PostgreSQL (`pg`); time moves by chan
 
 import json
 import uuid
-from datetime import timedelta
 
 import pytest
 from conftest import MIGRATIONS, WEB_USER_ID
@@ -23,7 +22,6 @@ PRICE_CENTS = pricing.estimate_cost_cents(27.4)
 OTHER_USER = "other-user"
 VIEWS = "lt_1k"
 PUBLISHED = "week"
-REWARD_MIN_DAYS = 7
 DAY_S = 24 * 60 * 60
 
 YOUTUBE_ID = "dQw4w9WgXcQ"
@@ -69,7 +67,6 @@ def curve_args(job_id, *, sha="a" * 64, points=None, flags=None, video_ref=None,
         "video_ref": video_ref if video_ref is not None else video_ref_for(job_id),
         "same_cut": "same",
         "source": "youtube_api",
-        "reward_min_days": REWARD_MIN_DAYS,
         "facts": None,
         "length_tolerance_s": 2,
     }
@@ -133,10 +130,6 @@ def migration_013_update():
             current = []
     [update] = [statement for statement in statements if "UPDATE JOBS" in statement.upper()]
     return update
-
-
-def reward_date(pg, job_id, days=REWARD_MIN_DAYS):
-    return storage.utc_text(pg.job(job_id)["created_at"] + timedelta(days=days))
 
 
 def facebook_values():
@@ -320,36 +313,35 @@ def test_a_facebook_reply_outside_the_documented_shape_is_refused(case, text):
     assert str(exc.value) == FACEBOOK_SHAPE_MESSAGE, case
 
 
-# ---------------------------------------------------------------- add_curve: the 7-day reward
+# ---------------------------------------------------------------- add_curve: the one rule
 
 
-def test_a_valid_curve_on_day_six_is_stored_with_no_reward_and_returns_the_reward_date(db, pg):
+def test_a_valid_curve_pays_at_once_regardless_of_age(db, pg):
     job_id, _ = make_job(db)
     pg.age(job_id, created_s=6 * DAY_S)
     billing.grant_credit(db, f"{WEB_USER_ID}@example.com", 100)
 
     result = billing.add_curve(db, WEB_USER_ID, job_id, **curve_args(job_id))
 
-    assert result["rewarded_cents"] == 0
+    assert result["rewarded_cents"] == PRICE_CENTS
     assert result["quality"] == []
-    assert result["reward_from"] == reward_date(pg, job_id)
+    assert result["reason"] is None
     [snapshot] = snapshot_rows(pg, job_id)
-    assert snapshot["rewarded_cents"] == 0
+    assert snapshot["rewarded_cents"] == PRICE_CENTS
     assert snapshot["video_ref"] == video_ref_for(job_id)
     assert snapshot["same_cut"] == "same"
     assert snapshot["source"] == "youtube_api"
-    assert pg.job(job_id)["curve_rewarded_at"] is None
-    assert "curve_reward" not in pg.kinds(WEB_USER_ID)
+    assert pg.job(job_id)["curve_rewarded_at"] is not None
+    assert pg.kinds(WEB_USER_ID).count("curve_reward") == 1
 
 
-def test_a_newer_valid_curve_on_day_seven_is_rewarded_once(db, pg):
+def test_a_second_valid_curve_on_the_same_job_is_not_rewarded_again(db, pg):
     job_id, _ = make_job(db)
     pg.age(job_id, created_s=6 * DAY_S)
     billing.grant_credit(db, f"{WEB_USER_ID}@example.com", 100)
     first = billing.add_curve(db, WEB_USER_ID, job_id, **curve_args(job_id))
-    assert first["rewarded_cents"] == 0
+    assert first["rewarded_cents"] == PRICE_CENTS
 
-    pg.age(job_id, created_s=8 * DAY_S)
     second = billing.add_curve(
         db,
         WEB_USER_ID,
@@ -357,10 +349,10 @@ def test_a_newer_valid_curve_on_day_seven_is_rewarded_once(db, pg):
         **curve_args(job_id, sha="b" * 64, points=curve(last=0.6)),
     )
 
-    assert second["rewarded_cents"] == PRICE_CENTS
+    assert second["rewarded_cents"] == 0
+    assert second["reason"] == "already_rewarded"
     assert pg.balance(WEB_USER_ID) == (STARTER_CENTS + 100, 0)
-    assert [row["rewarded_cents"] for row in snapshot_rows(pg, job_id)] == [0, PRICE_CENTS]
-    assert pg.job(job_id)["curve_rewarded_at"] is not None
+    assert [row["rewarded_cents"] for row in snapshot_rows(pg, job_id)] == [PRICE_CENTS, 0]
     assert pg.kinds(WEB_USER_ID).count("curve_reward") == 1
 
 
@@ -471,10 +463,9 @@ def test_a_link_rewarded_before_stop_sharing_cannot_be_rewarded_again_on_a_reenc
         None,
         reward_cap=5,
         reward_window_days=30,
-        reward_min_days=REWARD_MIN_DAYS,
         length_tolerance_s=2,
     )
-    assert offer[2] == "already_rewarded"
+    assert offer[1] == "already_rewarded"
 
 
 def test_a_link_rewarded_before_the_job_is_deleted_cannot_be_rewarded_again_on_a_reencoded_upload(
@@ -511,10 +502,9 @@ def test_a_link_rewarded_before_the_job_is_deleted_cannot_be_rewarded_again_on_a
         None,
         reward_cap=5,
         reward_window_days=30,
-        reward_min_days=REWARD_MIN_DAYS,
         length_tolerance_s=2,
     )
-    assert offer[2] == "already_rewarded"
+    assert offer[1] == "already_rewarded"
 
 
 # ---------------------------------------------------------------- migration 013
@@ -579,7 +569,7 @@ def test_list_jobs_previews_the_reward_without_a_date(db, pg):
     pg.age(job_id, created_s=5 * DAY_S)
     billing.grant_credit(db, f"{WEB_USER_ID}@example.com", 100)
 
-    [row] = billing.list_jobs(db, WEB_USER_ID, 50, reward_min_days=REWARD_MIN_DAYS)
+    [row] = billing.list_jobs(db, WEB_USER_ID, 50)
 
     assert row["sharing"] is True
     assert row["curve_reward_cents"] == PRICE_CENTS
@@ -590,7 +580,7 @@ def test_list_jobs_previews_the_reward_without_a_date(db, pg):
 def test_list_jobs_has_no_reward_date_when_no_reward_is_possible(db, pg, consent):
     job_id, _ = make_job(db, consent=consent)
 
-    [row] = billing.list_jobs(db, WEB_USER_ID, 50, reward_min_days=REWARD_MIN_DAYS)
+    [row] = billing.list_jobs(db, WEB_USER_ID, 50)
 
     assert row["curve_reward_cents"] == 0
     assert "curve_reward_from" not in row

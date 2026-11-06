@@ -134,7 +134,6 @@ def add_curve(db, user_id, job_id, sha, *, cap=5, window=30):
         video_ref=f"youtube:{job_id.replace('-', '')[:11]}",
         same_cut="same",
         source="youtube_api",
-        reward_min_days=7,
         facts=None,
         length_tolerance_s=2,
     )

@@ -1,16 +1,15 @@
 """M3i web changes (docs/M3i_spec.md §2, §6-§9, §11).
 
 The retention route needs a valid `video_url` and `same_cut`, parses a Facebook report with the
-link's video id, and saves the link and its source. The invite credit and the 7-day curve reward
-are read from `config.json`, and `grant_credit.py` grants the invite credit when no amount is
-given. Refusals write nothing to S3 or PostgreSQL.
+link's video id, and saves the link and its source. The invite credit is read from `config.json`,
+which no longer carries a one-week curve wait; `grant_credit.py` grants the invite credit when no
+amount is given. Refusals write nothing to S3 or PostgreSQL.
 """
 
 import importlib.util
 import json
 import re
 import uuid
-from datetime import timedelta
 
 import pytest
 from conftest import ISSUER, REPO_ROOT, WEB_USER_ID
@@ -21,7 +20,6 @@ STARTER_CENTS = 10_000
 OTHER_USER = "other-user"
 VIEWS = "lt_1k"
 PUBLISHED = "week"
-REWARD_MIN_DAYS = 7
 DAY_S = 24 * 60 * 60
 YOUTUBE_ID = "dQw4w9WgXcQ"
 YOUTUBE_LINK = f"https://www.youtube.com/watch?v={YOUTUBE_ID}"
@@ -97,7 +95,6 @@ def curve_args(job_id, *, sha="a" * 64, points=None, video_ref=None):
         "video_ref": video_ref if video_ref is not None else video_ref_for(job_id),
         "same_cut": "same",
         "source": "youtube_api",
-        "reward_min_days": REWARD_MIN_DAYS,
         "facts": None,
         "length_tolerance_s": 2,
     }
@@ -134,16 +131,11 @@ def snapshot_rows(pg, job_id):
     )
 
 
-def reward_date(pg, job_id, days=REWARD_MIN_DAYS):
-    return storage.utc_text(pg.job(job_id)["created_at"] + timedelta(days=days))
-
-
 def app_for(aws, db, make_cfg, tmp_path):
     cfg = make_cfg(
         research={
             "curve_rewards_per_window": 5,
             "curve_reward_window_days": 30,
-            "curve_reward_min_days": REWARD_MIN_DAYS,
             "no_curve_days": 90,
         }
     )
@@ -225,9 +217,7 @@ def test_a_facebook_curve_saves_with_the_facebook_source(db, aws, make_cfg, tmp_
     assert snapshot["source"] == "facebook_api"
 
 
-def test_a_day_six_curve_saves_without_a_reward_and_returns_the_reward_date(
-    db, aws, make_cfg, tmp_path, pg
-):
+def test_a_young_curve_with_unknown_views_pays_at_once(db, aws, make_cfg, tmp_path, pg):
     client = app_for(aws, db, make_cfg, tmp_path)
     job_id, _ = make_job(db)
     pg.age(job_id, created_s=6 * DAY_S)
@@ -237,10 +227,10 @@ def test_a_day_six_curve_saves_without_a_reward_and_returns_the_reward_date(
 
     assert resp.status_code == 200
     data = resp.get_json()
-    assert data["rewarded_cents"] == 0
-    assert data["reward_from"] == reward_date(pg, job_id)
+    assert data["rewarded_cents"] == pricing.estimate_cost_cents(27.4)
+    assert "reward_from" not in data
     [snapshot] = snapshot_rows(pg, job_id)
-    assert snapshot["rewarded_cents"] == 0
+    assert snapshot["rewarded_cents"] == pricing.estimate_cost_cents(27.4)
 
 
 @pytest.mark.parametrize("same_cut", ["same", "light_edit", "recut"])
@@ -381,12 +371,12 @@ def test_a_second_link_on_a_job_is_409_video_link_changed(db, aws, make_cfg, tmp
 # ---------------------------------------------------------------- config and copy
 
 
-def test_config_has_the_invite_credit_and_the_seven_day_curve_reward():
+def test_config_has_the_invite_credit_and_no_week_setting():
     cfg = settings.load_settings()
 
     assert cfg["billing"]["invite_cents"] == 1000
     assert cfg["billing"]["starter_cents"] == 0
-    assert cfg["research"]["curve_reward_min_days"] == REWARD_MIN_DAYS
+    assert "curve_reward_min_days" not in cfg["research"]
 
 
 def test_the_landing_page_offers_five_minutes_from_the_configured_credit():
@@ -413,14 +403,15 @@ def _section_text(html, anchor):
     return " ".join(re.sub(r"<[^>]+>", " ", section).split())
 
 
-def test_the_privacy_page_states_the_configured_seven_day_rule():
-    days = settings.load_settings()["research"]["curve_reward_min_days"]
-    assert days == REWARD_MIN_DAYS
+def test_the_privacy_page_states_the_configured_view_rule_without_a_week():
+    research = settings.load_settings()["research"]
+    min_views = research["curve_min_views"]
 
     html = (REPO_ROOT / "static" / "privacy.html").read_text()
     text = _section_text(html, "sharing")
 
-    assert f"public at least {days} days" in text
+    assert f"{min_views:,} views" in text
+    assert "public at least 7 days" not in text
     assert "YouTube or Facebook" in text
 
 

@@ -12,11 +12,10 @@ import uuid
 
 import pytest
 from conftest import WEB_USER_ID
-from neurolens import billing, pricing, storage
+from neurolens import billing, storage
 from neurolens.lambdas import reaper
 
 STARTER_CENTS = 10_000
-PRICE_CENTS = pricing.estimate_cost_cents(27.4)
 DAY = 24 * 60 * 60
 
 _DAYS_INTERVAL = re.compile(
@@ -48,29 +47,6 @@ class BigIntDaysDatabase:
             yield _BigIntDaysTransaction(tx)
 
 
-def curve_args(job_id):
-    snapshot_id = str(uuid.uuid4())
-    return {
-        "snapshot_id": snapshot_id,
-        "raw_key": f"dataset/{job_id}/retention/{snapshot_id}.json",
-        "csv_key": f"dataset/{job_id}/retention/{snapshot_id}.csv",
-        "curve_sha256": "bigint-curve",
-        "points": [(i / 19, 1.0 - 0.5 * i / 19) for i in range(20)],
-        "quality_flags": [],
-        "views": "lt_1k",
-        "published": "week",
-        "promoted": False,
-        "reward_cap": 5,
-        "reward_window_days": 30,
-        "video_ref": f"youtube:{job_id.replace('-', '')[:11]}",
-        "same_cut": "same",
-        "source": "youtube_api",
-        "reward_min_days": 7,
-        "facts": None,
-        "length_tolerance_s": 2,
-    }
-
-
 def make_job(db):
     billing.ensure_user(db, WEB_USER_ID, f"{WEB_USER_ID}@example.com", STARTER_CENTS)
     job_id = str(uuid.uuid4())
@@ -87,21 +63,6 @@ def run_or_fail(call, label):
         return call()
     except Exception as err:
         pytest.fail(f"{label} does not accept a bigint days parameter: {type(err).__name__}: {err}")
-
-
-def test_add_curve_accepts_a_bigint_reward_window(db, pg):
-    job_id = make_job(db)
-    pg.age(job_id, created_s=8 * DAY)
-    billing.grant_credit(db, f"{WEB_USER_ID}@example.com", 100)
-
-    result = run_or_fail(
-        lambda: billing.add_curve(
-            BigIntDaysDatabase(db), WEB_USER_ID, job_id, **curve_args(job_id)
-        ),
-        "add_curve",
-    )
-
-    assert result["rewarded_cents"] == PRICE_CENTS
 
 
 def test_expired_dataset_jobs_accepts_a_bigint_day_count(db, pg):
