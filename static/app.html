@@ -687,7 +687,7 @@
       </section>
       <div class="timeline" id="timeline"></div>
       <div class="retention-card" id="retentionCard" hidden>
-        <p id="retentionCardText">Thanks for sharing.</p>
+        <p id="retentionCardText"></p>
         <button class="btn-ghost" id="retentionCardBtn" type="button">Add audience retention</button>
       </div>
     </div>
@@ -3448,8 +3448,8 @@ function showRetention(jobId, title) {
     const reward = cached && (cached.curve_reward_cents || 0) > 0
       ? creditWords(cached.curve_reward_cents) : null;
     $('retentionCardText').textContent = reward
-      ? `Thanks for sharing. Once it reaches 1,000 views, add its retention curve: see real viewers beside the prediction and get ${reward} back.`
-      : "Thanks for sharing. Once it reaches 1,000 views, add its retention curve: see real viewers beside the prediction.";
+      ? `Once it reaches 1,000 views, add its retention curve: see real viewers beside the prediction and get ${reward} back.`
+      : "Once it reaches 1,000 views, add its retention curve: see real viewers beside the prediction.";
   }
 }
 function showSampleRetention(ctx) {
