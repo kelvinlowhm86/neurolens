@@ -118,7 +118,7 @@ No date is promised before the form names a link (M3j §5).
 - **Upload dialog:** the per-row "Add audience retention" link, the curve held by the page and its
   send-when-done path are removed (M3f §2a, §5d). The quiet line under the consent box is M3j §8's.
 - **Entry points** (History row link, "⋯" menu, results card): row link "Get X back", menu
-  "Add audience retention (get X back)", card "Thanks for sharing. Once it reaches 1,000 views,
+  "Add audience retention (get X back)", card "Once it reaches 1,000 views,
   add its retention curve: see real viewers beside the prediction and get X back."
 - **Form, step 1:** the video name and a "Video link" field only. On a valid-looking link
   (debounced about 400 ms, and on paste) the page calls `/retention/check` and shows one line:

@@ -70,7 +70,7 @@ The job status and job list answers carry `gpu_wait_until` (UTC text, or null).
 - `billing.curve_offer` / `_curve_reward` return `(cents, reason)`.
 - Page copy (exact):
   - Upload box: `Add its retention curve once it's reached 1,000 views: see real viewers beside the prediction, and get its credit back.`
-  - Retention card after sharing: `Thanks for sharing. Once it reaches 1,000 views, add its retention curve: see real viewers beside the prediction and get <reward> back.`
+  - Retention card after sharing: `Once it reaches 1,000 views, add its retention curve: see real viewers beside the prediction and get <reward> back.`
   - `too_few_views` message keeps its current meaning, without any date.
 - Tests that pinned `too_early` or `reward_from` are changed because this behaviour was
   deliberately removed (say so in the commit).

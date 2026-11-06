@@ -104,7 +104,7 @@ all nullable.
   viewers beside the prediction, and get its credit back." `billing.CONSENT_VERSION` becomes
   `"2026-11-03"`.
 - **Entry points:** History row "Get X back", menu "Add audience retention (get X back)". Results
-  card: "Thanks for sharing. Once it reaches 1,000 views, add its retention curve: see real viewers
+  card: "Once it reaches 1,000 views, add its retention curve: see real viewers
   beside the prediction and get X back."
 - **Form, step 1:** the video name and the "Video link" field only. On a valid-looking link
   (debounced ~400 ms, and on paste) the page calls `/retention/check` and shows one line:
