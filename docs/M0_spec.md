@@ -1,7 +1,7 @@
 # NeuroLens — M0 Implementation Spec
 Only the parts of this milestone still in use are described here; the rest is in later specs (see docs/README.md).
 **Milestone:** Repo structure, tooling and CI (before any AWS work)
-**Grounded in:** the repository on branch `aws-josh`.
+**Grounded in:** the repository on the working branch.
 
 **Ground rules:** M0 changes **no behaviour**. The app must serve the same pages and compute the same numbers as before. No AWS resources, no GPU, nothing billable. Python **3.12** everywhere (venv, CI, later the GPU worker): `tribev2` pins `torch<2.7`, which has no Python 3.14 builds, so the Mac's default Python cannot be used. The pins in §3 were checked with `uv pip compile` (installable together); whether they *run* together is proven by the real-import check and the GPU run (M3e §12). Everything runs on a laptop without `config.json` or the model.
 
@@ -18,9 +18,9 @@ Only the parts of this milestone still in use are described here; the rest is in
 `.github/workflows/ci.yml`, on push and pull request: Python 3.12, `pip install -e .`, `pip install -r requirements/dev.txt`, `ruff check .`, `ruff format --check .`, `pytest`. CI never installs `torch` or `tribev2`. GitHub Actions is free for public repositories and has a monthly free allowance for private ones.
 
 ## 7. `AGENTS.md` and `CLAUDE.md`
-`CLAUDE.md` contains one line: `@AGENTS.md` (teammates may use other tools). `AGENTS.md` is short: one-line project summary; layout map; commands (`pip install -e .`, `pytest`, `ruff check .`, `ruff format .`); rules: heavy imports only inside functions, web must not import `inference`, config only through `settings`, never commit secrets or tokens (`config.json` is committed, shared settings only), never edit a test to make it pass (stop and ask instead), do not change `extract_response` without regenerating `tests/fixtures/extract_response_golden.json` and saying so, keep the values rule (signed means, no rescaling; M3d §2); branch `aws-josh`; specs describe the current design only.
+`CLAUDE.md` contains one line: `@AGENTS.md` (teammates may use other tools). `AGENTS.md` is short: one-line project summary; layout map; commands (`pip install -e .`, `pytest`, `ruff check .`, `ruff format .`); rules: heavy imports only inside functions, web must not import `inference`, config only through `settings`, never commit secrets or tokens (`config.json` is committed, shared settings only), never edit a test to make it pass (stop and ask instead), do not change `extract_response` without regenerating `tests/fixtures/extract_response_golden.json` and saying so, keep the values rule (signed means, no rescaling; M3d §2); the working branch; specs describe the current design only.
 
-## 8. Order of work (one commit each, on `aws-josh`)
+## 8. Order of work (one commit each, on the working branch)
 1. Golden fixture (generated from the original code, before any move).
 2. `pyproject.toml`, `requirements/`, `.gitignore` (needed to run pytest at all).
 3. **All tests written, by the separate test-writing agent. They fail.** Commit them. From here on `git diff` on `tests/` must stay empty.
@@ -35,4 +35,4 @@ Only the parts of this milestone still in use are described here; the rest is in
 - A fresh venv installs with `pip install -e . -r requirements/dev.txt` from a clean clone.
 - The golden test passed before and after the move without edits.
 - `python app.py` starts on the Mac and the page loads sample videos and thumbnails. A real upload waits for a machine with the model (M2).
-- `git diff --stat main..aws-josh` shows moves, not rewrites of `static/`, `data/` or the specs.
+- `git diff --stat main..<working branch>` shows moves, not rewrites of `static/`, `data/` or the specs.

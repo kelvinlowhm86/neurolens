@@ -4,23 +4,23 @@ Status: current design. Builds on M3i (curve collection), M3j (checked facts, re
 M3b §7a (granting credit). Where this spec and an older one disagree, this one wins, and the older
 section is updated to match (§10).
 
-## Decisions (4 Nov, Josh)
+## Decisions (4 Nov)
 - Free credit goes to people who bring data: short-form creators and marketers with a channel of
   1,000+ followers on YouTube, Facebook, TikTok or Instagram. Not open to the general public; no
   separate path for teachers or researchers.
-- A signed-in user asks inside the app; Josh screens each channel by hand and grants with
+- A signed-in user asks inside the app; the operator screens each channel by hand and grants with
   `infra/grant_credit.py` (unchanged amount: `billing.invite_cents`, 5 minutes) or declines.
   Every request has a status the user sees: waiting, granted or declined. Nobody waits forever.
-- The request is saved first, then Josh is notified by email through an SNS topic (the service
-  that already emails him the alarms; SES would send "from" his Gmail address and risk spam, and we
+- The request is saved first, then the operator is notified by email through an SNS topic (the service
+  that already emails the alarms; SES would send "from" a Gmail address and risk spam, and we
   have no domain). A failed notification is logged as an error; the request stays saved. The
   database table, not the email, is the list of requests.
-- The form asks only for the channel link and an optional note: Josh screens by opening the link,
+- The form asks only for the channel link and an optional note: the operator screens by opening the link,
   so a "creator / marketer" question adds nothing.
 - New reward condition: when the server checked the video's view count (a YouTube lookup that
   answered and showed the count), it must be at least `research.curve_min_views` (1,000). Unknown
   views (Facebook, a failed lookup, a hidden count) pay as before: those users were screened, and
-  Josh spot-checks by hand. Nothing extra is built for spot checks: `checked_views` is already
+  the operator spot-checks by hand. Nothing extra is built for spot checks: `checked_views` is already
   null on exactly those curves.
 - TikTok and Instagram curves are not accepted yet (Instagram gives only a picture of the curve;
   TikTok's API is unconfirmed). Revisit when such creators ask.
@@ -36,7 +36,7 @@ admin web page.
 ## 2. Settings
 - `config.json` `research.curve_min_views`: 1000.
 - The topic: Terraform's `aws_sns_topic.access_requests` (`neurolens-access-requests`), with an
-  email subscription to the existing `var.alert_email` (Josh's address, in the git-ignored
+  email subscription to the existing `var.alert_email` (the alert address, in the git-ignored
   `terraform.tfvars`). Its ARN is published as Parameter Store String
   `/neurolens/web/request_topic_arn` (one more entry in `aws_ssm_parameter.web_deployment`).
   `web/lambda_handler.DEPLOYMENT_PARAMETERS` gains `"/neurolens/web/request_topic_arn": (None,
@@ -76,7 +76,7 @@ One row per account (the primary key).
   a channel link and a note; nothing financial is lost). `remove_deleted_account` deletes the row
   too, before the user row (a request that raced the delete).
 
-## 5. Notifying Josh (`neurolens/notify.py`)
+## 5. Notifying the operator (`neurolens/notify.py`)
 - `sns_notifier(region, topic_arn) -> callable(request, email)`: boto3 `sns.publish` to the
   topic, subject "NeuroLens access request (<platform>)", plain text: the requester's email,
   channel link, note, and the lines `python infra/access_requests.py list --backend data_api` and
@@ -138,7 +138,7 @@ The no-credit panel (shown when the credit is below one video's price) shows one
   `list` prints waiting requests (date, email, platform, channel link, note), oldest first;
   `decline` asks for the email at a prompt, shows the request, asks to confirm, then declines.
   Granting stays `grant_credit.py`.
-- **Terraform:** the topic and its email subscription (Josh clicks the one confirmation email
+- **Terraform:** the topic and its email subscription (the operator clicks the one confirmation email
   once after apply); the web app function's role gets `sns:Publish` on that topic only; the
   `/neurolens/web/request_topic_arn` parameter (§2). The deploy policy and role boundary in
   `infra/iam/` already allow `neurolens-*` topics: no change there.
@@ -175,8 +175,8 @@ Full treatment for the reward rule and the grant; light for the rest. Behaviour,
   route. Each must turn a test red.
 
 ## 12. Known limitations (accepted)
-- Views are checked only on YouTube; elsewhere the screening and Josh's spot checks are the
+- Views are checked only on YouTube; elsewhere the screening and the operator's spot checks are the
   guard. A user could claim a curve is from another, larger video only on Facebook (no lookup).
 - A view count is read at save time; a video that later drops below 1,000 (rare) keeps its credit.
-- One request per account; a declined user cannot ask again (Josh can still grant by hand).
-- Anyone can make an account and ask; the cost is one email to Josh and one row (stopping rule).
+- One request per account; a declined user cannot ask again (the operator can still grant by hand).
+- Anyone can make an account and ask; the cost is one email to the operator and one row (stopping rule).

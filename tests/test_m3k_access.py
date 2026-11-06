@@ -1,8 +1,9 @@
 """M3k early access by request (docs/M3k_spec.md §3-§6, §11).
 
-A signed-in user asks for free minutes with a channel link; Josh screens it and grants or
-declines. The request is stored once per account, emailed to Josh, and its status is visible in
-`/api/me`. A failed email is logged without the requester's details and keeps the request.
+A signed-in user asks for free minutes with a channel link; the operator screens it and grants or
+declines. The request is stored once per account, emailed to the operator, and its status is
+visible in `/api/me`. A failed email is logged without the requester's details and keeps the
+request.
 """
 
 import pytest

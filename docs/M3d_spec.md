@@ -169,7 +169,7 @@ The summary holds only the sound share. The model's first second (t = 0) has no 
 - **One brain viewer:** the 3D brain code (mesh and head loading, the hot scale, painting, the camera and orbit) moves from the app page into one shared ES module, `static/brain_view.js`, used by both pages, so a look change is made once. Behaviour in the app is unchanged.
 
 ## 9. Samples, deploy and calibration
-- **Remove:** the 14 current entries in `data/samples.json` and their thumbnails under `data/output/`. The git-ignored third-party videos stay on Josh's laptop, unused.
+- **Remove:** the 14 current entries in `data/samples.json` and their thumbnails under `data/output/`. The git-ignored third-party videos stay on the operator's laptop, unused.
 - **New samples:** the Sintel trailer, and Big Buck Bunny re-encoded to about 720p (a SOURCES.md row). Tears of Steel is optional (CC BY 3.0, live action with faces and speech); if used, it gets a SOURCES.md row too.
 - **`infra/make_sample.py <job_id> <video> <title> <attribution>`** (operator script, `AWS_PROFILE=neurolens`):
   - Downloads that job's result and brain file into `data/output/<id>/` (`<id>` = the video's file stem), writes `data/output/<id>/result.csv` with `results.to_csv(result)`, grabs a thumbnail with ffmpeg at 1 s, or at `--thumbnail-at <seconds>` when that frame is dark (a fade-in), and adds or replaces the entry in `data/samples.json`.
@@ -177,8 +177,8 @@ The summary holds only the sound share. The model's first second (t = 0) has no 
   - `--sharing-example` and `--landing` mark this sample for that role and clear the flag from every other sample; replacing a sample without the flag keeps the one it had.
   - `.gitignore` adds `/data/output/**/brain` and `/data/output/**/*.csv` (regenerable, like `result.json`).
 - **`deploy_web.sh`:** publishes only samples whose clip is listed in SOURCES.md (unchanged) and also copies each one's brain and CSV files. It uploads `static/app.html` as `site/app` (§8b).
-- **AWS day** (cost estimate first: about $3-5, GPU about 1.5 h at $2.61/h for `ml.g6e.xlarge` plus Aurora; Josh confirms remaining credits):
-  - One batch of Josh's manual steps: Terraform apply (M3c plus CORS), the schema (`python infra/apply_schema.py --backend data_api`), the worker image (`infra/build_image.sh`, then apply its digest), `infra/deploy_web.sh`.
+- **AWS day** (cost estimate first: about $3-5, GPU about 1.5 h at $2.61/h for `ml.g6e.xlarge` plus Aurora; the operator confirms remaining credits):
+  - One batch of the operator's manual steps: Terraform apply (M3c plus CORS), the schema (`python infra/apply_schema.py --backend data_api`), the worker image (`infra/build_image.sh`, then apply its digest), `infra/deploy_web.sh`.
   - Real GPU jobs on each sample clip, one of them with consent.
   - **Stop check:** the sample values must be finite and centred near 0 (median overall within ±0.3). If not, the built-in-scale assumption is wrong: stop and rethink the wording before going further.
   - **Colour range:** read the value ranges from the brain files and set `colour_range` so the samples' maps neither stay grey nor saturate. Commit, run `make_sample.py` for each sample, and redeploy the web.
@@ -200,7 +200,7 @@ Existing tests that pin the old format (`timesteps`, `regions`, `engagement_over
 - **Worker (full):** the brain is written before the result; a failed brain write publishes no result and goes down the failure path; a non-finite value (or a float16 overflow) is refused before any write; a consented job writes only `dataset/<job_id>/video…` (M3j §9b).
 - **Samples:** `test_samples_schema` checks the new entry shape, that every sample's brain file length divides by 20484 × 2, and that each sample's `csv_file` matches `results.to_csv(result)` when present (the CSV is git-ignored, so a fresh clone skips the content check).
 - **Mesh:** the committed mesh file parses: header counts match the length, face indices in range, both parent indices of every vertex are < 20484, and exactly 20484 vertices are their own parent (the fsaverage5 points).
-- **Landing (light):** `/app` serves `static/app.html` and is public (signed out, Cognito mode); `/` still serves `static/index.html`; `/auth/callback` redirects to `/app`. The public-routes test adds `/app` to its list (Josh approved, 22 Oct). The page itself is checked by a walk, not unit tests.
+- **Landing (light):** `/app` serves `static/app.html` and is public (signed out, Cognito mode); `/` still serves `static/index.html`; `/auth/callback` redirects to `/app`. The public-routes test adds `/app` to its list (approved 22 Oct). The page itself is checked by a walk, not unit tests.
 - **Break-its** (on committed code): drop a brain key or the thumbnail key from `storage.job_keys`, remove the ownership check from the thumbnail route, remove the ownership check from the brain route, and remove it from the video route; let the cancel route refund a `processing` job (`processing_stale_s=0`), and drop the reaper's `created_at` deadline. A test must fail each time.
 
 ## 11. Docs (current-state only)

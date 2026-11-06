@@ -3,7 +3,7 @@
 Status: current design. Builds on M3i (curve collection) and M3f §5 (sharing and curves). Where this
 spec and an older one disagree, this one wins, and the older section is updated to match (§10).
 
-## Decisions (2 Nov, Josh)
+## Decisions (2 Nov)
 - For YouTube the server looks the video up (YouTube Data API, API key) for its publish date,
   length and view count. Facebook links, and YouTube lookups that fail, supply unknown facts. A
   checked view count must reach 1,000 before the curve pays; unknown facts skip the check.

@@ -49,8 +49,8 @@ down.
 
 1. Terraform 1.10 or newer: `brew tap hashicorp/tap && brew install hashicorp/tap/terraform`.
 2. The AWS command-line tool (`aws --version`).
-3. A named AWS profile in `~/.aws` (`aws configure --profile neurolens`). For Brandon's account,
-   use the profile `neurolens-brandon`. **Never paste keys into chat, git or a Docker image.**
+3. A named AWS profile in `~/.aws` (`aws configure --profile neurolens`). For the live account,
+   use its named profile. **Never paste keys into chat, git or a Docker image.**
 4. Python 3.12 for the repo (`AGENTS.md`) and `git`. Set up the repo's virtual environment (the
    operator scripts `apply_schema.py`, `grant_credit.py` and the others use it), from the repo
    root:
@@ -100,7 +100,7 @@ Every command runs with these three variables exported. `AWS_PROFILE` is read by
 `.env`); `AWS_REGION` is the region. Use the same profile name for the first two:
 
 ```bash
-export AWS_PROFILE=neurolens              # e.g. neurolens-brandon for Brandon's account
+export AWS_PROFILE=neurolens              # e.g. the profile named for the live account
 export NEUROLENS_AWS_PROFILE=neurolens    # the same value: infra/*.sh read only this
 export AWS_REGION=us-east-1
 aws sts get-caller-identity      # check the account ID before anything else

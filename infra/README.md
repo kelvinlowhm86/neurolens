@@ -1,7 +1,7 @@
 # Infra
 
 Operator scripts and the AWS resources they drive. AWS commands run with the profile from
-`terraform/README.md` §0 (`neurolens`, or `neurolens-brandon` for Brandon's account).
+`terraform/README.md` §0 (`neurolens`, or the named profile for the live account).
 
 ## Every work session
 

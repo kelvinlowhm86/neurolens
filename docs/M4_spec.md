@@ -8,25 +8,19 @@ of credit, M3b/M3c; early access by request, M3k), and the experiment scripts in
 **A proposal:** the team running M4 may change any part of it; the report states what was
 actually done.
 
-**Accounts:** the live app runs in Brandon's AWS account (Josh's CLI profile for it:
-`neurolens-brandon`). Josh's own account (profile `neurolens`) keeps a second, complete copy as a
-backup until the course ends.
-
 **Ground rules:** region `us-east-1`, the CLI profile of the account in use. **No new product features:**
 problems the booth or the experiments find go in the report as future work. Every GPU session's
 cost estimate is stated, and agreed by the team, before it starts; every session ends with
 `infra/stop_work.sh` (`docs/session_checklist.md`).
 
 ## 1. Scope
-**In scope:** the booth at STePS and its anonymous survey (§2); Experiments 1–3 (§3); what the report takes from them (§4); merging `aws-josh` into `main` (§5); teardown when the team
+**In scope:** the booth at STePS and its anonymous survey (§2); Experiments 1–3 (§3); what the report takes from them (§4); merging the working branch into `main` (§5); teardown when the team
 decides (§6).
 
 **Out of scope:** in-app study code (consent screens, participant flags, timing); study scripts
 beyond the survey form; new experiment tooling unless an experiment cannot be run without it.
 
 ## 2. STePS booth (11 Nov, the whole event)
-The 29th STePS: Wednesday 11 Nov, 2:00–6:30 pm, Multi-Purpose Hall, COM3 Level 1
-(https://uvents.nus.edu.sg/event/29th-steps).
 A drop-in table at STePS: visitors try NeuroLens on a team laptop, then fill in a short anonymous survey.
 - **Survey:** `docs/study/questionnaire.md` is the form's text and settings; `docs/study/make_form.gs`
   builds it in Google Forms (keep the two in step). It collects no email or name. It asks for
@@ -34,17 +28,8 @@ A drop-in table at STePS: visitors try NeuroLens on a team laptop, then fill in 
   usefulness and trust, whether NeuroLens showed something new, willingness to pay, and two open
   questions. `docs/study/booth_survey_qr.svg` (and `.png`) is the form's QR code for the table card;
   the site's "Give feedback" link opens the same form.
-- **Account:** one booth account, signed in on the booth laptop, given enough minutes beforehand with
-  `infra/grant_credit.py <dollars> --backend data_api`. Visitors use the samples or upload a short
-  clip from the team's devices or their own.
-- **GPU:** `infra/start_work.sh --keep-warm --hours 5` at least 15 minutes before opening (a cold
-  GPU takes about 10 minutes), then one short warm-up upload. `infra/stop_work.sh` at closing.
-- **After the booth:** delete the booth account's jobs from History (or the account itself), so
-  visitors' uploads do not stay. Download the form responses as CSV; keep it local (git-ignored,
-  `*.local.*` name) and use only totals and short anonymous quotes in the report. SUS score per
-  response: odd items `answer − 1`, even items `5 − answer`, sum × 2.5 (0–100).
-- **Cost (estimate):** 5 GPU hours on `ml.g6e.xlarge` at about $2.61 an hour (SageMaker price) plus Aurora awake:
-  about $14.
+- **After the booth:** use only totals and short anonymous quotes from the survey in the report.
+  SUS score per response: odd items `answer − 1`, even items `5 − answer`, sum × 2.5 (0–100).
 
 ## 3. Experiments
 Experiments 1–3 as in the preliminary report (`docs/course/Preliminary.tex` §5.1): latency
@@ -67,7 +52,7 @@ What this milestone hands to the final report:
   (90 days are kept until then for the run timings).
 
 ## 5. Merge into `main`
-Teammates work on `main` in parallel: merge `aws-josh` into `main` (not a rebase), resolve
+Teammates work on `main` in parallel: merge the working branch (`aws-josh`) into `main` (not a rebase), resolve
 conflicts with the teammate who changed the file, and check that `pytest` passes in CI on `main`.
 
 ## 6. Teardown (only when the team decides)
@@ -101,21 +86,19 @@ Nothing is deleted on a date. In order, each step checked before the next:
    named `neurolens*`; nothing in Parameter Store under `/neurolens/`; and no `neurolens-*` IAM
    roles.
 8. Last, as part of the same teardown, the ACCOUNT OWNER (the deploy user cannot delete itself)
-   deletes the deploy user and the five `neurolens-*` policies. In a borrowed account the owner
-   does this; in Josh's own account Josh does the same as owner. Remove the deployer's profile
-   from every laptop that used it (`~/.aws/credentials` and `~/.aws/config`).
+   deletes the deploy user and the five `neurolens-*` policies. Remove the operator's profile from every laptop that used it (`~/.aws/credentials` and `~/.aws/config`).
 9. On every laptop that deployed: delete `.env` (it holds the revoked tokens), and
    `infra/terraform/backend.hcl`, `terraform.tfvars` and `.terraform/` (they name the deleted
    account and state bucket); remove the local test database container and its data with
    `docker rm -fv neurolens-test-pg`; and delete a stored HuggingFace login token if one exists
    (`~/.cache/huggingface/token`). The team's own sample videos and `data/output/` may be kept.
 
-Run steps 1-5, 7 and 8 in each account (Brandon's, then Josh's backup), step 6 once, and step 9 on
+Run steps 1-5, 7 and 8 in each account (the live account, then the backup account), step 6 once, and step 9 on
 every laptop that deployed.
 
 ## 7. Acceptance criteria
 1. The STePS booth ran, and its survey responses are exported and summarised.
 2. Experiments 1–3 each have at least one complete run.
 3. No committed file holds an email, name, user ID, job ID or a visitor's free-text answer.
-4. `aws-josh` is merged into `main` and CI passes there.
+4. The working branch is merged into `main` and CI passes there.
 5. After each session, `stop_work.sh` printed ALL STOPPED.

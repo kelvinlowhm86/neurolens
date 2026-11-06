@@ -4,7 +4,7 @@ Status: current design. Builds on M3g (the AI report), M3d §9 (samples) and M3f
 Where this spec and an older one disagree, this one wins, and the older section is updated to
 match (§17).
 
-## Decisions (29 Oct, Josh)
+## Decisions (29 Oct)
 - A comparison report reads exactly two videos. A signed-in user can ask for one on two of their
   own done, non-deleted videos that both have frames. Free, written only on a click, at most
   `report.max_tries` (3) tries per pair (only failures use one up), the same stale rule and the
@@ -20,7 +20,7 @@ match (§17).
   uses the same table builder (M3g §5b).
 - Samples (public, for signed-out visitors) may carry a stored single report, and a pair of
   samples may carry a stored comparison. Both are made once by the operator through the real
-  live path in Josh's account and copied into `data/samples.json` by `infra/make_sample.py`.
+  live path in the live account and copied into `data/samples.json` by `infra/make_sample.py`.
   Visitors can never start a Bedrock call. All four samples carry a report, and two pairs carry a
   stored comparison (Big Buck Bunny / Sintel, CeraVe 30 s / 76 s).
 - On the page the comparison shows in the Report tab while comparing, in the single report's
@@ -302,7 +302,7 @@ The page uses the entry whose `a` is the open sample. `comparisons` may be missi
 
 ### 7c. `infra/deploy_web.sh`
 Unchanged rule: only samples whose clip is listed in `data/videos/SOURCES.md` are published. The
-two CeraVe cuts are listed there by Josh's decision (third-party ad, public sample for this
+two CeraVe cuts are listed there by the team's decision (third-party ad, public sample for this
 non-commercial course project); the script's comment no longer says third-party ads never are.
 Comparisons are published only when both of their samples are; the staged file is
 `{"samples": public, "comparisons": public_pairs}`.
@@ -411,8 +411,8 @@ Break-it checks (3): use `x, y` as given instead of `comparison_pair` in the POS
 report for B-vs-A must go red); drop the comparison cascade from `purge_job_files`; check only
 one of the two jobs' ownership in `claim_comparison`. Each must turn a test red.
 
-## 14. Real run (ask Josh before; estimate ≤ $2: GPU start and two short jobs, two reports, one comparison)
-Upload the two CeraVe cuts (30 s, 76 s) as normal videos in Josh's account; click Report on each
+## 14. Real run (ask the operator before; estimate ≤ $2: GPU start and two short jobs, two reports, one comparison)
+Upload the two CeraVe cuts (30 s, 76 s) as normal videos in the live account; click Report on each
 and Compare on the pair. Check: both reports and the comparison on the page, swapped both ways;
 the stored `usage`; the frames files' sizes (to confirm two 120 s videos fit Bedrock's 20 MB
 request). Then run `make_sample.py` for both cuts and `make_sample.py compare`, commit
@@ -446,7 +446,7 @@ comparison row and object are gone. Bedrock line in Cost Explorer the next day.
   (`starter.calls == [job_id]`), changes deliberately to `[{"job_id": job_id}]`.
 
 ## 18. PDF download (report and comparison)
-Decided 31 Oct (Josh): a server-made PDF of a written report and of a written comparison; light
+Decided 31 Oct: a server-made PDF of a written report and of a written comparison; light
 paper, the page's fonts and orange, A first and orange, B blue; no 3D brain. Generated on click
 in the web function, never stored for jobs. Design approved from real CeraVe previews, then
 reviewed by an independent Opus pass; its fixes are part of this section.

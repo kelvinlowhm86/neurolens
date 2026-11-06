@@ -20,4 +20,4 @@ NeuroLens predicts brain activity for a video (TRIBE v2) and turns it into a sig
 - Change a test only when the behaviour it pins was deliberately changed; the commit says which test and why. Never edit a test just to make it pass.
 - Do not change `extract_response` without regenerating `tests/fixtures/extract_response_golden.json` and saying so.
 - Values rule, do not "fix": `extract_response` gives signed means with no absolute value and no rescaling (0 = typical film/TV viewing, the model's built-in scale), so videos can be compared. The muted (no-audio) series are cut to the shared length of the two passes.
-- Work on branch `aws-josh`, not `main`. Specs in `docs/` describe the current design only; history lives in git.
+- Specs in `docs/` describe the current design only; history lives in git.

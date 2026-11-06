@@ -59,7 +59,7 @@ Migration 003; consent at upload; the shared copy in the worker (the video under
 - Stored as a new snapshot under `dataset/<job_id>/retention/<snapshot_id>.json` (the file as uploaded) and `dataset/<job_id>/retention/<snapshot_id>.csv` (two columns, header `elapsed_ratio,watch_ratio`). A new upload adds a snapshot rather than replacing the old one; an identical curve (same hash) is refused as a duplicate (M3f §5d).
 - The page shows a quiet "Add audience retention" link on a done, shared job's History row and results page until its first snapshot, and always in the "⋯" menu, with a link to the guide (M3f §5d). To know this, `list_jobs` returns `sharing` and `curve_count`, and the job status response includes `research_consent` once the job is `done` (it stays hidden before).
 - The parser is a pure function, `neurolens.results.parse_retention_report(text) -> list[tuple[float, float]]`, which raises `ValueError` with the row number.
-- **Guide** (`static/retention_guide.html`, served at `/static/retention_guide.html`): how the video's owner gets the report in Google's APIs Explorer for `youtubeAnalytics.reports.query` (`ids=channel==MINE`, `startDate`/`endDate`, `metrics=audienceWatchRatio,relativeRetentionPerformance`, `dimensions=elapsedVideoTimeRatio`, `filters=video==<id>`), then saves the response as a `.json` file. Written from the API docs (it states their date), not tried on a real channel: none was available (Josh, 21 Oct).
+- **Guide** (`static/retention_guide.html`, served at `/static/retention_guide.html`): how the video's owner gets the report in Google's APIs Explorer for `youtubeAnalytics.reports.query` (`ids=channel==MINE`, `startDate`/`endDate`, `metrics=audienceWatchRatio,relativeRetentionPerformance`, `dimensions=elapsedVideoTimeRatio`, `filters=video==<id>`), then saves the response as a `.json` file. Written from the API docs (it states their date), not tried on a real channel: none was available (as of 21 Oct).
 
 ## 4. Deleting a video: `DELETE /api/jobs/<job_id>`
 1. The job must be owned and not deleted (otherwise 404).
@@ -115,7 +115,7 @@ Marking first means no curve can be added while the purge runs. A failed purge l
   - the `stripe` block in `config.json`, `stripe` in `requirements/web.txt`, and `tests/test_m3b_stripe.py`;
   - the Stripe parts of the other tests (named in §8).
 - Terraform: delete the webhook function, its URL, role and alarm entry, the `stripe_webhook_url` output, and the webhook loop entry in `deploy_web.sh`.
-- Josh deletes by hand: the SSM parameters `/neurolens/web/stripe_secret_key`, `stripe_webhook_secret` and `topup_allowlist` (created by hand, not by Terraform), and the event destination in the Stripe test dashboard.
+- The operator deletes by hand: the SSM parameters `/neurolens/web/stripe_secret_key`, `stripe_webhook_secret` and `topup_allowlist` (created by hand, not by Terraform), and the event destination in the Stripe test dashboard.
 - `static/privacy.html`: remove Stripe, and add consent, the dataset, research retention (up to 3 years, or 90 days without a curve) and the delete options. It says uploads that are not kept for research are deleted after 30 days, and at once when the job is cancelled or refunded.
 
 ## 7. Permissions and storage (Terraform)
@@ -125,7 +125,7 @@ Marking first means no curve can be added while the purge runs. A failed purge l
   - `s3:DeleteObject` on `uploads/*`, `results/*` and `dataset/*`;
   - `s3:PutObject` on `dataset/*/retention/*` (the raw report and parsed CSV of each snapshot);
   - `cognito-idp:ListUsers` and `cognito-idp:AdminDeleteUser` on our pool only.
-- **Role boundary:** `infra/iam/neurolens-role-boundary.json` gains a statement allowing those two actions on a us-east-1 user pool tagged `Project=neurolens` (matched by tag, not pool ID, so the file works unchanged in any account). The boundary caps every role, so without this the web role's grant would be denied. Josh applies the boundary change (a paste, like earlier IAM policy edits).
+- **Role boundary:** `infra/iam/neurolens-role-boundary.json` gains a statement allowing those two actions on a us-east-1 user pool tagged `Project=neurolens` (matched by tag, not pool ID, so the file works unchanged in any account). The boundary caps every role, so without this the web role's grant would be denied. The operator applies the boundary change (a paste, like earlier IAM policy edits).
 - **Alarm:** a CloudWatch log metric filter on `COGNITO_DELETE_FAILED` in the web function's log group, plus the alarm `neurolens-cognito-delete-failed` (count at least 1 in 5 minutes, emails the existing alarm topic).
 - **Worker:** the worker role already has `s3:GetObject` on `uploads/*`, which `copy_object` needs as its source.
 
@@ -153,7 +153,7 @@ Marking first means no curve can be added while the purge runs. A failed purge l
     - `ListUsers` finding nothing counts as done;
     - a Cognito failure answers 500 `login_delete_failed` and logs the `COGNITO_DELETE_FAILED` line with the sub;
     - a stale session afterwards gets 401, not 500.
-- **Existing tests this spec retires or changes:** `tests/test_m3b_stripe.py` (deleted); `tests/test_m3a_billing.py::test_job_state_reports_status_updated_at_and_attempt` (its key set gains `research_consent`, Josh approved 20 Oct); tests that expect `can_top_up` in `/api/me` (the key is removed, which also changes `me()`); and the Stripe settings in the Cognito-mode fixtures in `tests/conftest.py`. Any other existing test that fails is reported to Josh, not edited.
+- **Existing tests this spec retires or changes:** `tests/test_m3b_stripe.py` (deleted); `tests/test_m3a_billing.py::test_job_state_reports_status_updated_at_and_attempt` (its key set gains `research_consent`, approved 20 Oct); tests that expect `can_top_up` in `/api/me` (the key is removed, which also changes `me()`); and the Stripe settings in the Cognito-mode fixtures in `tests/conftest.py`. Any other existing test that fails is reported to the operator, not edited.
 
 ## 9. Acceptance criteria
 1. Full suite passes with PostgreSQL. `ruff` is clean. `git grep -i stripe` finds only specs, git history notes and the ledger kind `test_topup`.

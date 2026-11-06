@@ -105,6 +105,8 @@ TRIBE v2 itself (`facebook/tribev2`) is freely downloadable under CC BY-NC 4.0.
 
 ## Deploying on AWS
 
+Two roles appear in these docs. **The account owner** owns the AWS account and grants access. **The operator** sets up and deploys NeuroLens in that account, and also handles alerts and access requests (the account-owner guide, `infra/iam/ACCOUNT_OWNER.md`, calls them the deployer).
+
 The GPU runs in a SageMaker asynchronous endpoint. After the first-time setup (`infra/terraform/README.md`), shipping a new GPU image is three steps:
 
 ```bash

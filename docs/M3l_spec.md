@@ -1,6 +1,6 @@
 # NeuroLens — M3l Implementation Spec: honest GPU wait, one curve rule, real viewers, compare with samples
 
-## Decisions (6 Nov, Josh)
+## Decisions (6 Nov)
 - A video waiting for a GPU says so honestly once the wait is clearly not a normal start (normal
   cold start 9 to 13 minutes, M3f §6a): after 20 minutes. It replaces "slower than usual".
 - When the GPU request's wait runs out, the job gets its own reason, shown as

@@ -42,7 +42,7 @@ A 55 s 4K clip took 4.4 times longer than a 480p clip of similar length (video e
 - From the exact 4K test file (`bbb_4k_55s_38mbps.mp4`, `data/videos/SOURCES.md`), cut a 4K clip of about 30 s with stream copy (no re-encode). From that cut, make **lossless** H.264 copies at 720p and 480p (`-qp 0`, same aspect ratio) with the **audio stream copied unchanged**, so the resize is the only difference. Choose the length so the largest file is under `max_upload_bytes`, and check the sizes before uploading.
 - Upload the 4K cut, the 720p copy and the 480p copy as normal jobs on the same worker, image and code, after the session's warm-up job (no first-job warm-up in any of them).
 - **Pass:** every value of a copy's result within **0.001** of the 4K cut's result from the same session (measured noise: 0.0000 on the same GPU, at most 0.0003 across GPUs). Compare the `inference_full` stage times. The smallest resolution that passes is the candidate.
-- Limits to state in the report: one animated clip. A live-action 4K clip (Tears of Steel, 6.7 GB source) is added only if Josh agrees to the extra cost.
+- Limits to state in the report: one animated clip. A live-action 4K clip (Tears of Steel, 6.7 GB source) is added only if the team agrees to the extra cost.
 
 ## 10. Experiments instrumentation
 The experiment method is in `docs/M4_spec.md` §3.

@@ -16,7 +16,7 @@
 
 **Open sign-up is safe:** new accounts start with **0 credit**. Credit comes from `grant_credit.py` (§7a). A stranger can sign up and browse the samples, but cannot run a GPU job. The Google OAuth app is **published** (not "Testing"), so anyone with Google can sign up without being added to a list; the consent screen links a one-page privacy policy (`static/privacy.html`).
 
-**Day one: check the unknowns before building anything else.** If any check fails, stop and ask Josh.
+**Day one: check the unknowns before building anything else.** If any check fails, stop and ask the operator.
 1. A Cognito user pool with its hosted sign-in page, Google as an identity provider and the app client's callback `https://<distribution>.cloudfront.net/auth/callback` signs a Google user and an email user in end to end (create the CloudFront distribution first; its Lambda origin can be added later). Google's authorized redirect URI is Cognito's `https://<prefix>.auth.us-east-1.amazoncognito.com/oauth2/idpresponse`.
 2. The ID token of a Google-federated user carries `email_verified = true` (through the attribute mapping, §2a).
 3. The account's Lambda concurrency limit (new accounts can be well below 1,000). If it is low, request 1,000 through Service Quotas (free); the web, reaper, dead-letter and GPU job functions share it.
@@ -30,7 +30,7 @@
 - The reaper every 3 hours, 5-minute auto-pause and 1 ACU maximum (§6)
 - 0 starter credit and `grant_credit.py` (§7)
 - Experiment 3, an independent track (§9)
-- Deleting the scaffolding before `aws-josh` is merged into `main` (§10)
+- Deleting the scaffolding before the working branch is merged into `main` (§10)
 
 ### Out of scope (M4)
 The usability study itself, the participant withdrawal script (built nearer the study), and final teardown.
@@ -86,7 +86,7 @@ The usability study itself, the participant withdrawal script (built nearer the 
 ### 3c. Deploying
 `infra/deploy_web.sh` (refuses uncommitted changes):
 1. builds the Lambda zip and ships it to `neurolens-web` with `aws lambda update-function-code`, waiting until the update is live. Terraform uploads the zip only when it creates the function and ignores its code afterwards, so an apply for anything else never needs a build or changes the running code; build the zip once before the first apply, and
-2. syncs the site files: `static/index.html` → `site/index.html` and `static/app.html` → `site/app` (both uploaded with `Cache-Control: no-cache`, so a browser checks for a new page on every load instead of running an old one after a deploy), `static/` → `site/static/`, and `site/data/samples.json` holding **only the samples whose clip is listed in `data/videos/SOURCES.md`** (open-licensed, or a third-party clip the owner has cleared for this project), with only those samples' videos, thumbnails and results; then invalidates the CloudFront cache (`/*`). Both current samples are listed, so the public list is not empty. The laptop keeps the same samples.
+2. syncs the site files: `static/index.html` → `site/index.html` and `static/app.html` → `site/app` (both uploaded with `Cache-Control: no-cache`, so a browser checks for a new page on every load instead of running an old one after a deploy), `static/` → `site/static/`, and `site/data/samples.json` holding **only the samples whose clip is listed in `data/videos/SOURCES.md`** (open-licensed, or a third-party clip the team has cleared for this project), with only those samples' videos, thumbnails and results; then invalidates the CloudFront cache (`/*`). Both current samples are listed, so the public list is not empty. The laptop keeps the same samples.
 
 ## 4. The page, history and messages
 ### 4a. Endpoints
@@ -162,7 +162,7 @@ Options are named by what they change; the help text says when to use each.
   - Starter credit 0 (§7a): `tests/test_env_settings.py`'s committed-config test (renamed for it).
   - Tests that build Cognito-mode apps get the new required settings; dev-mode tests (`dev-user`, `ensure_user`, `/api/limits`) are unchanged, because dev mode is always signed in.
   - `tests/test_m3a_db.py`'s module docstring names `infra/check_aurora.py`.
-  - Any other existing test that fails against this spec is reported to Josh, not edited.
+  - Any other existing test that fails against this spec is reported to the operator, not edited.
 - `neurolens.web.auth`: `current_user() -> tuple[str, str] | None`; `init_auth(app, cfg, ssm_client, *, server_metadata=None)`. The sign-in rule for `/api/*` is one `before_request` check in `create_app`, not a per-route decorator, so a new route cannot be left open. With `server_metadata` (a dict with `issuer`, `authorization_endpoint`, `token_endpoint` and `jwks_uri`), Authlib uses it instead of downloading the OpenID configuration.
 - **Sign-in test seam:** tests pass `server_metadata` with fake URLs and fake only HTTP with `responses`: the token endpoint returns an ID token the test signs with its own RSA key; the JWKS URL returns that key. Authlib's real state, nonce and signature checks run. Nothing in the tests contacts Cognito or Google. `dev.txt` gains `responses`.
 - `neurolens.settings.get_parameter(ssm_client, name) -> str` (one `SecureString`, decrypted).

@@ -4,7 +4,7 @@ Status: current design. Builds on M3d (result, page), M3e (SageMaker worker) and
 sharing). Where this spec and an older one disagree, this one wins, and the older section is
 updated to match.
 
-## Decisions (28 Oct, Josh)
+## Decisions (28 Oct)
 - A written report per video, by Claude Sonnet 4.6 on Amazon Bedrock (US regions), from the
   brain numbers and the video's frames. Free, at most one finished report per video, stored and
   deleted with the job.
@@ -275,7 +275,7 @@ Full treatment: it triggers paid Bedrock calls. Fake SDK client and fake S3; no 
 Break-it checks (2): drop the tries cap from `claim_report`; drop the deleted-job check from
 `finish_report`. Each must turn a test red.
 
-## 12. Real run (ask Josh before; estimate ≤ $0.20)
+## 12. Real run (ask the operator before; estimate ≤ $0.20)
 After the deploy with M3f §6a: one fresh video through the real GPU, then one report. Check the
 frames file, the report on the page, the stored `usage`, and the Bedrock line in Cost Explorer the
 next day. Then delete the job and confirm both new objects are gone.

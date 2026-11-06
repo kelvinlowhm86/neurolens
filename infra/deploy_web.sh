@@ -32,8 +32,8 @@ git archive HEAD static | tar -x -C "$STAGE"
 cp static/index.html "$STAGE/index.html"
 cp static/app.html "$STAGE/app"
 # Only samples whose clip is listed in data/videos/SOURCES.md are public; their video, thumbnail,
-# brain, CSV and PDF files go with them. A listed clip can be a third-party one the owner has cleared
-# for this project (the CeraVe cuts, by Josh's decision); comparisons are public only when both
+# brain, CSV and PDF files go with them. A listed clip can be a third-party one the team has cleared
+# for this project (the CeraVe cuts, by the team's decision); comparisons are public only when both
 # samples are.
 python3 -I - "$STAGE" <<'PY'
 import json, re, shutil, sys

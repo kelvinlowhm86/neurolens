@@ -4,7 +4,7 @@
 
 **Full treatment** (tests first by a separate agent, break-it checks, Opus review): the dispatcher's checks and credit (§3), the container's charge and refund paths (§4c), every failure path (§5), the GPU guard (§6c) and the dataset clean-up (§7). They decide money, GPU spend and data deletion. Light treatment: Terraform, the image build, scripts, page wording.
 
-## Decisions (22 Oct, Josh)
+## Decisions (22 Oct)
 - **SageMaker Async is the design.** It needs no operator to switch processing on. The GPU starts on demand and stops after 7 idle minutes. The NAT Gateway is deleted, because nothing in the private network needs the internet any more: Lambdas and the container reach Aurora through the Data API and S3 through its public endpoint.
 - **The container keeps the bookkeeping.** It claims the job, records progress stages, charges on success and refunds on failure. SageMaker only replaces how GPU machines start and stop.
 - **Checks before the GPU.** A small Lambda (the dispatcher) checks the size, measures the duration with ffprobe and prices the job before anything is sent to SageMaker. Bad files and short credit never wake a GPU.
@@ -254,7 +254,7 @@ behaviour remains below.
 
 **Kept:** the VPC and private subnets (Aurora's subnet group needs them), the database security group, the jobs queue (§3) and DLQ (now consumed by the dispatcher).
 
-**IAM paste by Josh** (one batch):
+**IAM paste by the operator** (one batch):
 - `infra/iam/neurolens-deploy-*.json` gain SageMaker, ECR, CodeBuild and Application Auto Scaling actions scoped to `neurolens*`, and lose EC2/Auto Scaling launch rights;
 - **Application Auto Scaling cannot be scoped by name** (a scalable target's ARN ends in a random id, and policies and scheduled actions have no ARN of their own). The scalable target is tagged `Project=neurolens`; changing actions are allowed on `*` only with `aws:ResourceTag/Project=neurolens` (`aws:RequestTag/Project=neurolens` when registering a new one), checked against the AWS Service Authorization Reference; describes are on `*`;
 - the service-linked role allowed for scaling is `sagemaker.application-autoscaling.amazonaws.com` (`AWSServiceRoleForApplicationAutoScaling_SageMakerEndpoint`);
@@ -324,17 +324,17 @@ behaviour remains below.
   - the guard stops while a job is processing;
   - the clean-up deletes a job with a retention snapshot;
   - the container charges a job whose claim it lost.
-- **Existing tests this spec retires or changes** (Josh approves by approving this spec):
+- **Existing tests this spec retires or changes** (approved with this spec):
   - **deleted with their subject:** `test_breaker.py`, `test_breaker_alarm.py`, `test_m2b_protection.py`, `test_m2b_shutdown.py`, `test_m2b_heartbeat.py`, `test_m3a_heartbeat.py`, and the SQS-polling parts of `test_worker.py`, `test_m2b_worker.py`, `test_m3a_worker.py`;
   - **rewritten to the new entry point with the same assertions:** the job-logic parts of those worker tests, `test_m3d_worker.py`, `test_m3d_thumbnail.py`, `test_m3c_consent.py`, `test_unreadable_video.py`, `test_cancel_and_refund_cleanup.py`;
   - **renamed setting:** `worker_group` → `gpu_endpoint` in `conftest.py`, `test_env_settings.py`, `test_m3b_auth.py`, `test_m3b_web.py`, `test_m2b_web.py`, `test_m3a_web.py`;
   - **reworked:** `test_work_scripts.py`, `test_experiments_scripts.py`, `test_m2b_boot_record.py`, and the `verify` tests in `test_m3a_billing.py` → `verify_queued`;
   - the reaper's 4-hour deadline tests in `test_m3a_lambdas.py`;
-  - any other existing test that fails is reported to Josh, not edited.
+  - any other existing test that fails is reported to the operator, not edited.
 
 ## 12. AWS day B (cost estimate first)
 Order, with no long gap between the steps:
-1. Josh pastes the IAM changes.
+1. The operator pastes the IAM changes.
 2. `make_model_data.sh`.
 3. Build the ffprobe layer and the image.
 4. `terraform apply` with the image digest (the GPU pools and the real model; SageMaker refuses a CUDA image on a CPU type, so there is no CPU rehearsal), then at once `python infra/apply_schema.py --backend data_api` (migration 005) and `infra/deploy_web.sh` (the apply changes the web function's settings but never its code, and the old code refuses the new settings at start-up). Run one real job (it is the first time the real model loads in the container: watch for any write into `/opt/ml/model`), and per-video delete it. Then check that:

@@ -1,13 +1,13 @@
-# Letting Josh deploy NeuroLens in your AWS account
+# Letting the deployer set up NeuroLens in your AWS account
 
-This guide gives Josh his own login (an AWS "user") inside your account, allowed to set up NeuroLens
+This guide gives the deployer their own login (an AWS "user") inside your account, allowed to set up NeuroLens
 and nothing else. Do it once, about 20 minutes, signed in as the account owner (root) or an admin.
 Only step 4's test message costs money, a fraction of a cent.
 
-Josh's user can only create or change things named `neurolens-...`. It cannot
+The deployer's user can only create or change things named `neurolens-...`. It cannot
 open or change anything else in the account, start ordinary servers, or change billing. It can read
 a few account-wide lists: service limits, GPU availability, and the activity log, which also lists
-other projects' events. You can remove his access at any time by deleting his access key (step 3's
+other projects' events. You can remove their access at any time by deleting their access key (step 3's
 Security credentials page).
 
 ## 1. Create the five policies
@@ -35,11 +35,11 @@ For each file in the table below:
 
 Tip: if a red error appears after pasting, the copy missed part of the text. Copy it again.
 
-## 2. Give Josh's user four of them
+## 2. Give the deployer's user four of them
 
-This is what lets Josh's user do the NeuroLens setup.
+This is what lets the deployer's user do the NeuroLens setup.
 
-Open https://us-east-1.console.aws.amazon.com/iam/home#/users and click the user **Josh**.
+Open https://us-east-1.console.aws.amazon.com/iam/home#/users and click the user you created for the deployer.
 
 1. Open the **Permissions** tab.
 2. Click **Add permissions**, then **Add permissions** again.
@@ -55,18 +55,18 @@ creates, never attached to a user.
 Check: the Permissions tab now lists exactly those four and nothing broad such as
 AdministratorAccess.
 
-## 3. Make an access key for Josh
+## 3. Make an access key for the deployer
 
-An access key is a password for command-line tools: Josh's laptop uses it to run the setup as
-his user.
+An access key is a password for command-line tools: the deployer's laptop uses it to run the setup as
+their user.
 
-Still on Josh's page (Users, Josh):
+Still on the deployer's user page (Users):
 
 1. Open the **Security credentials** tab.
 2. Under **Access keys**, click **Create access key**.
 3. Choose **Command Line Interface (CLI)**, tick the confirmation box, click **Next**, then
    **Create access key**.
-4. Send Josh both the **Access key ID** and the **Secret access key** privately: a password-manager
+4. Send the deployer both the **Access key ID** and the **Secret access key** privately: a password-manager
    share, or a direct message you can delete, never a group chat. The secret is shown only once.
    **Download .csv file** keeps a copy; delete it after sending.
 
@@ -83,10 +83,10 @@ If it asks for use-case details, fill the short form: company/use = university c
 (NUS); use case = writes a short text summary of a video analysis; internal users only.
 
 Then click **Open in playground** (or Playground, then Chat, and pick Claude Sonnet 4.6), type
-`hi`, and send. Why: the first message switches the model on for the whole account, and Josh's
+`hi`, and send. Why: the first message switches the model on for the whole account, and the deployer's
 limited user is not allowed to do that switch.
 
 ## 5. When the course ends
 
-Once NeuroLens has been taken down, delete the user **Josh** (IAM, Users) and the five `neurolens-`
+Once NeuroLens has been taken down, delete the deployer's user (IAM, Users) and the five `neurolens-`
 policies (IAM, Policies, search `neurolens`).

@@ -3,7 +3,7 @@
 Status: current design. Builds on M3d (page) and M3e (SageMaker). Where this spec and an older one
 disagree, this one wins, and the older section is updated to match.
 
-## Decisions (25 Oct, Josh)
+## Decisions (25 Oct)
 - Built as a real public product: no simplification for a small audience or for less work.
 - Batch upload of up to 5 files in one dialog. Each file stays its own job, with its own price,
   15-s cancel window and refund.
@@ -305,8 +305,8 @@ rules that still apply.
   `curve_reward`.
 
 ### 5f. Old research data
-The six jobs shared under the old wording are Josh's test data. In the real-run session, after the
-deploy, Josh stops sharing each one in the page (which also removes any old `retention.csv` and
+The six jobs shared under the old wording are the operator's test data. In the real-run session, after the
+deploy, the operator stops sharing each one in the page (which also removes any old `retention.csv` and
 `result.json` under `dataset/`). Nothing in the code reads the old layout afterwards.
 
 ## 6. GPU start and sign-in
@@ -328,7 +328,7 @@ alarms and the GPU guard). We own no off-switch. Expected cold start: about 13 �
   behaviour plus one wasted partial start (about $0.25, estimate); no credit is affected.
 - **GPU name:** the container logs `torch.cuda.get_device_name()` at start and the boot record gains
   `gpu_name` (M3e §10), to tell whether slow sessions (the same 27 s clip took about 2 or about 6
-  minutes depending on the session) are the `ml.g6.2xlarge` fallback. Josh then decides whether to
+  minutes depending on the session) are the `ml.g6.2xlarge` fallback. The operator then decides whether to
   keep that fallback.
 - **Tests (full treatment, small: it starts a paid GPU):** written first by a separate agent. Count 0
   → one start; count 1 → none; updating → none; a failed start call → job still dispatched, error

@@ -232,7 +232,7 @@ locals {
 }
 
 # Someone asked for free minutes (M3k §9): the database holds the request, this topic only emails
-# Josh. Confirm the subscription email once after apply. No standing cost.
+# The operator confirms the subscription email once after apply. No standing cost.
 resource "aws_sns_topic" "access_requests" {
   name = "neurolens-access-requests"
   tags = { Milestone = "M3k" }

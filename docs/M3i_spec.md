@@ -3,7 +3,7 @@
 Status: current design. Builds on M3f §5 (research sharing and curves). Where this spec and an older
 one disagree, this one wins, and the older section is updated to match (§10).
 
-## Decisions (2 Nov, Josh)
+## Decisions (2 Nov)
 - A curve earns its video's credit back when every other rule passes and the checked video has at
   least 1,000 views. A hidden or unknown count pays as before. Curves are accepted and stored at
   any age; a later, different curve for the same job can still earn the reward.
@@ -16,7 +16,7 @@ one disagree, this one wins, and the older section is updated to match (§10).
   only; no real report has been seen yet, so the check is strict and a mismatch is refused loudly.
   Meta ad curves and Facebook/Instagram Reels are left out until a real report is seen.
 - Creators and marketers with a channel of 1,000+ followers ask for free minutes inside the app;
-  Josh screens each channel by hand and grants the standard 5 minutes of credit (enough for a brand
+  the operator screens each channel by hand and grants the standard 5 minutes of credit (enough for a brand
   team to compare two cuts of two or three 30–60 s ads) or declines (M3k §8-§9).
 - A rewarded curve gets a small celebration (a short confetti burst, the credit counting up); the
   page stays clean, modern and light: the form's new questions are compact one-tap rows.
@@ -220,8 +220,8 @@ Full treatment (money). Behaviour, not call details.
   (no lock across jobs) and both store a curve; the unique index lets only one be rewarded, and the
   other save fails with an error instead of a clear message. Needs two colluding accounts.
 - Deleting the account deletes its jobs, and with them the record of its rewarded links and video
-  hashes. A new account starts with no credit (credit comes only from Josh's grants), so it cannot
-  reuse them without Josh granting it credit again.
+  hashes. A new account starts with no credit (credit comes only from the operator's grants), so it cannot
+  reuse them without the operator granting it credit again.
 - Facebook supplies no facts, and a YouTube lookup that fails leaves them unknown; both pay as
   before. A checked YouTube video must match the analysed length within 2 s and have at least
   1,000 views.

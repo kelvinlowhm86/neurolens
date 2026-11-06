@@ -5,7 +5,7 @@ Only the parts of this milestone still in use are described here; the rest is in
 
 **Ground rules for all of M1:** everything runs in AWS region `us-east-1` (the `g6e` GPU family used from M2a onward is not offered in Singapore, so do not "correct" the region). All M1 work runs without a GPU, in fake-model mode. Python 3.12, as in M0.
 
-**Tests first, as in M0:** a separate agent writes every test from this spec before the implementation exists; the implementer may not edit them and asks Josh if one looks wrong. The break-it check (M0 §8) is repeated for the worker's size and duration rejections.
+**Tests first, as in M0:** a separate agent writes every test from this spec before the implementation exists; the implementer may not edit them and asks the team if one looks wrong. The break-it check (M0 §8) is repeated for the worker's size and duration rejections.
 
 ## 2. Configuration: shared settings in `config.json`, secrets and identifiers in `.env`
 One rule: **behaviour settings are shared; anything specific to a person or a deployment is not.**
@@ -26,7 +26,7 @@ The fake-model switch is an environment variable, not a config field, so a real 
 ## 3. AWS resource provisioning (Terraform)
 Create `infra/terraform/` — a Terraform configuration using the AWS provider in `us-east-1`, with `default_tags` `Project=neurolens`. Terraform tracks what exists, so running `terraform apply` twice is safe by design and `terraform destroy` removes everything it created.
 
-**Budget guardrail (Josh's account).** An account-wide AWS Budget of $40/month with email alerts at 50%, 80% and 100% of actual spend already exists (created by hand, not by Terraform). Confirm it is still there before the first `terraform apply`.
+**Budget guardrail.** The design has an account-wide AWS Budget alert (created by hand, not by Terraform). Confirm it is still there before the first `terraform apply`.
 
 **Remote state.** Terraform's record of what exists (its *state*) must not live on one laptop, or teammates will clash. Store it in a separate, small S3 bucket (e.g. `neurolens-tfstate-<account-id>`) with versioning on, using the S3 backend with S3-native locking (`use_lockfile = true`). Create that one bucket once, by hand or with a tiny `infra/terraform/bootstrap/` configuration, and document the step in `infra/terraform/README.md`. The state bucket is never destroyed by `terraform destroy`.
 
