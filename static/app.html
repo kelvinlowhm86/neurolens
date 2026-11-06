@@ -2580,6 +2580,9 @@ async function pollJob(jobId) {
     } else if (res.ok) {
       const st = await res.json();
       if (trackedJob !== jobId) return;
+      // The History row follows the progress screen at once, not at its own next poll.
+      const listed = (jobsCache || []).find(job => job.job_id === jobId);
+      if (listed && listed.status !== st.status && st.status !== 'done' && st.status !== 'failed') loadHistory();
       if (st.status === 'done') {
         const opened = await showResult(jobId);
         if (trackedJob !== jobId) return;
@@ -5440,9 +5443,13 @@ function showCompareRow() {
     ].filter(group => group.items.length);
   }
   const valueOf = item => sampleId ? item.id : (item.job_id || item.id);
-  const labelOf = item => sampleId
-    ? (item.title || item.id)
-    : (item.filename || item.title || `Job ${String(valueOf(item)).slice(0, 8)}`);
+  // Own videos are named as in History, so two uploads of one file can be told apart.
+  const ownName = job => {
+    if (!job.filename) return `Job ${job.job_id.slice(0, 8)}`;
+    const number = historyNumber(job);
+    return number > 1 ? `${job.filename} (${number})` : job.filename;
+  };
+  const labelOf = item => sampleId ? (item.title || item.id) : (item.job_id ? ownName(item) : item.title);
   comparisonCandidates = groups.flatMap(group => group.items.map(item => ({
     value: valueOf(item),
     label: labelOf(item),
