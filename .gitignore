@@ -76,6 +76,7 @@ Thumbs.db
 
 # ─── Personal files (Claude Code instructions and settings, plans, logs, pages) ─
 *.local.*
+*.local/
 
 # ─── Tooling caches & build output ─────────────────────────────────────────
 .ruff_cache/
