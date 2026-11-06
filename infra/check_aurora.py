@@ -51,6 +51,7 @@ EXPECTED_TYPES = {
     "retention_added_at": OPTIONAL_DATETIME,
     "dataset_removed_at": OPTIONAL_DATETIME,
     "claimed_at": OPTIONAL_DATETIME,
+    "gpu_wait_until": OPTIONAL_DATETIME,
     "consent_version": OPTIONAL_STR,
     "consented_at": OPTIONAL_DATETIME,
     "video_sha256": OPTIONAL_STR,

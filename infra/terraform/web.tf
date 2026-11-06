@@ -276,7 +276,8 @@ resource "aws_s3_object" "web_zip" {
   tags   = { Milestone = "M3h" }
 
   lifecycle {
-    ignore_changes = [source, etag] # uploaded once; deploy_web.sh replaces it
+    # Uploaded once; deploy_web.sh replaces it, and its upload carries no tags.
+    ignore_changes = [source, etag, tags, tags_all]
   }
 }
 
