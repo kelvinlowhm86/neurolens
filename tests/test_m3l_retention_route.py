@@ -39,9 +39,7 @@ def add_snapshot(
     snapshot_id = str(uuid.uuid4())
     csv_key = f"dataset/{job_id}/retention/{snapshot_id}.csv"
     pairs = curve() if pairs is None else pairs
-    aws.s3.put_object(
-        Bucket=aws.bucket, Key=csv_key, Body=results.retention_csv(pairs).encode()
-    )
+    aws.s3.put_object(Bucket=aws.bucket, Key=csv_key, Body=results.retention_csv(pairs).encode())
     pg.conn.execute(
         "INSERT INTO retention_snapshots "
         "(snapshot_id, job_id, added_at, curve_sha256, csv_key, quality_flags, video_seconds) "

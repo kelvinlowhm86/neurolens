@@ -101,9 +101,7 @@ def test_below_the_minimum_pays_nothing_and_says_too_few_views(db, pg):
     assert result["rewarded_cents"] == 0
     assert result["reason"] == "too_few_views"
     assert "reward_from" not in result
-    [snapshot] = pg.rows(
-        "SELECT * FROM retention_snapshots WHERE job_id = %s::uuid", job_id
-    )
+    [snapshot] = pg.rows("SELECT * FROM retention_snapshots WHERE job_id = %s::uuid", job_id)
     assert snapshot["checked_views"] == MIN_VIEWS - 1
     assert snapshot["rewarded_cents"] == 0
     assert pg.job(job_id)["curve_rewarded_at"] is None
