@@ -80,7 +80,7 @@ def test_no_page_still_calls_access_invited(name):
     assert "invited" not in page_text(name).lower()
 
 
-def test_the_guide_gives_the_views_line_on_youtube_and_the_plain_line_on_facebook():
+def test_the_guide_gives_the_views_line_on_youtube_and_facebook():
     _, min_views = config_numbers()
     html = (REPO_ROOT / "static" / "retention_guide.html").read_text()
     youtube = html.split('id="youtube"', 1)[1].split("<h2", 1)[0]
@@ -89,15 +89,11 @@ def test_the_guide_gives_the_views_line_on_youtube_and_the_plain_line_on_faceboo
     def text(fragment):
         return " ".join(re.sub(r"<[^>]+>", " ", fragment).split())
 
-    youtube_line = (
-        "Add it once the video has been public a week "
-        f"(and, on YouTube, has {min_views:,}+ views) to get its credit back."
-    )
-    plain_line = "Add it once the video has been public a week to get its credit back."
+    line = f"Add it once the video has {min_views:,} views to get its credit back."
 
-    assert youtube_line in text(youtube)
-    assert plain_line in text(facebook)
-    assert "views" not in text(facebook)
+    assert line in text(youtube)
+    assert line in text(facebook)
+    assert "week" not in text(youtube) + text(facebook)
 
 
 def test_the_privacy_page_names_the_access_request_data():
