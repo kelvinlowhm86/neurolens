@@ -51,9 +51,9 @@ What this milestone hands to the final report:
 - After the last experiment, set `log_retention_days = 14` in `terraform.tfvars` and apply
   (90 days are kept until then for the run timings).
 
-## 5. Merge into `main`
-Teammates work on `main` in parallel: merge the working branch (`aws-josh`) into `main` (not a rebase), resolve
-conflicts with the teammate who changed the file, and check that `pytest` passes in CI on `main`.
+## 5. Branch
+Everyone works on `main`; CI runs `pytest` on every push. A conflict is resolved with the teammate
+who changed the file.
 
 ## 6. Teardown (only when the team decides)
 Nothing is deleted on a date. In order, each step checked before the next:

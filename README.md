@@ -1,5 +1,7 @@
 # NeuroLens: predicted brain response to video
 
+**Try it live:** https://df6girqyykyfa.cloudfront.net (the samples open without signing in).
+
 ## Overview
 
 NeuroLens uses Meta's TRIBE v2 (TRImodal Brain Encoder) to predict, second by second, how an average viewer's brain would respond to a video. It shows predicted brain response relative to typical film and TV viewing: which brain systems respond (seeing, hearing, understanding), the strongest and weakest moments, how much depends on the soundtrack, and a 3D brain map synced to the video.

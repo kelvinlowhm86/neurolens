@@ -27,11 +27,11 @@ For each file in the table below:
 
 | File to open | Name to type | What it covers |
 |---|---|---|
-| https://raw.githubusercontent.com/kelvinlowhm86/neurolens/aws-josh/infra/iam/neurolens-role-boundary.json | `neurolens-role-boundary` | A safety ceiling: the most the app's own parts may ever do |
-| https://raw.githubusercontent.com/kelvinlowhm86/neurolens/aws-josh/infra/iam/neurolens-deploy-services.json | `neurolens-deploy-services` | Storage, queues, database, alerts and the GPU server |
-| https://raw.githubusercontent.com/kelvinlowhm86/neurolens/aws-josh/infra/iam/neurolens-deploy-compute.json | `neurolens-deploy-compute` | The app's private network and its parts' permissions |
-| https://raw.githubusercontent.com/kelvinlowhm86/neurolens/aws-josh/infra/iam/neurolens-deploy-web.json | `neurolens-deploy-web` | The website and its sign-in |
-| https://raw.githubusercontent.com/kelvinlowhm86/neurolens/aws-josh/infra/iam/neurolens-quota-requests.json | `neurolens-quota-requests` | Asking AWS to raise NeuroLens's limits, e.g. GPUs (free) |
+| https://raw.githubusercontent.com/kelvinlowhm86/neurolens/main/infra/iam/neurolens-role-boundary.json | `neurolens-role-boundary` | A safety ceiling: the most the app's own parts may ever do |
+| https://raw.githubusercontent.com/kelvinlowhm86/neurolens/main/infra/iam/neurolens-deploy-services.json | `neurolens-deploy-services` | Storage, queues, database, alerts and the GPU server |
+| https://raw.githubusercontent.com/kelvinlowhm86/neurolens/main/infra/iam/neurolens-deploy-compute.json | `neurolens-deploy-compute` | The app's private network and its parts' permissions |
+| https://raw.githubusercontent.com/kelvinlowhm86/neurolens/main/infra/iam/neurolens-deploy-web.json | `neurolens-deploy-web` | The website and its sign-in |
+| https://raw.githubusercontent.com/kelvinlowhm86/neurolens/main/infra/iam/neurolens-quota-requests.json | `neurolens-quota-requests` | Asking AWS to raise NeuroLens's limits, e.g. GPUs (free) |
 
 Tip: if a red error appears after pasting, the copy missed part of the text. Copy it again.
 
