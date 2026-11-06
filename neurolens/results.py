@@ -279,6 +279,17 @@ def retention_csv(pairs):
     return out.getvalue()
 
 
+def parse_retention_csv(text):
+    """The (elapsed_ratio, watch_ratio) pairs of a stored retention CSV (M3l §4)."""
+    reader = csv.DictReader(io.StringIO(text))
+    return [(float(row["elapsed_ratio"]), float(row["watch_ratio"])) for row in reader]
+
+
+def retention_points(pairs, duration_s):
+    """A stored curve as [seconds, percent] points for the page's Real viewers strip (M3l §4)."""
+    return [[ratio * duration_s, watch * 100] for ratio, watch in pairs]
+
+
 MIN_CURVE_POINTS = 20
 MIN_WATCH_SPREAD = 0.02
 MAX_WATCH_RATIO = 10

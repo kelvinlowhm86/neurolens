@@ -153,8 +153,8 @@ place in line among other users, waking the database from the landing page.
 ### 5a. Consent
 - One box per batch, unticked, never required:
   "Share to help improve NeuroLens ([details](/static/privacy.html#sharing)). I own the rights to
-  it." Under it, aligned with the label, a quiet line: "Add its retention curve once it's been
-  public a week: see real viewers beside the prediction, and get its credit back." (M3j §8).
+  it." Under it, aligned with the label, a quiet line: "Add its retention curve once it's reached
+  1,000 views: see real viewers beside the prediction, and get its credit back." (M3j §8).
 - The page sends `consent_version`, the version of the wording it showed, with each presign that
   has `research_consent`. The server accepts only its current `billing.CONSENT_VERSION`
   (`"2026-11-03"`, M3j §8); any other value → 409 `consent_outdated` ("Please refresh the page."), nothing
@@ -174,10 +174,10 @@ place in line among other users, waking the database from the landing page.
   model trained before is not retrained, but the data is not used again); the uploader confirms
   rights and that identifiable people agreed to appear, keeps all rights and gives a free,
   non-exclusive licence for these purposes; as a thank-you, a valid audience-retention curve added
-  to a video that has been public at least 7 days (7 days after the analysis when we can't check
-  the publish date) can make that video's analysis free: its price comes back as credit (not cash),
-  and when we can check it the video must be the same length as the analysed video, give or take
-  2 seconds; once per published video (the same file or link counts once), up to 5 videos in any
+  to a video can make that video's analysis free: its price comes back as credit (not cash), and
+  when we can check it the video must be the same length as the analysed video, give or take 2
+  seconds and have at least 1,000 views; once per published video (the same file or link counts
+  once), up to 5 videos in any
   30 days, only on accounts that have had credit added; valid means at least 20 points, not flat,
   not rising overall and never above 1,000%. A test keeps these numbers equal to config.json.
 
@@ -228,8 +228,8 @@ place in line among other users, waking the database from the landing page.
   video's shared copy was deleted after 90 days without a curve."
 
 ### 5d. Adding a curve
-M3j §5-§8 supersedes the reward date, the form and the replies; this section keeps the rules that
-still apply.
+M3j §5-§8 and M3l §3 supersede the reward rules, the form and the replies; this section keeps the
+rules that still apply.
 - Offered on a done, shared, not-removed job: the quiet link on its History row, always in its "⋯"
   menu (a newer snapshot), and the results page's thank-you card until its first snapshot. The
   row link reads "Get X back" and the menu "Add audience retention (get X back)", with no date
@@ -263,7 +263,7 @@ still apply.
 - **`billing.add_curve`** stores the snapshot with its `video_ref` (`<platform>:<video_id>`),
   `same_cut`, `source` (`youtube_api` or `facebook_api`) and the checked `checked_views`,
   `published_at` and `video_seconds` (null when unknown). Its refusals (an account's existing link,
-  a second link on one job), its reward conditions and its `reason`/`reward_from` reply are in
+  a second link on one job), its reward conditions and its `reason` reply are in
   M3i §6 and M3j §5; the earlier conditions still apply alongside them: a valid curve;
   `captured_cents > 0`; the job has no `curve_rewarded_at`; no other job with the same non-null
   `video_sha256` has `curve_rewarded_at`; the user has received credit beyond the starter credit
@@ -274,7 +274,7 @@ still apply.
 - A partial unique index on the ledger (`job_id` where `kind = 'curve_reward'`) makes a second reward
   for one job impossible even if the code is wrong.
 - Settings in `config.json` `research`: `curve_rewards_per_window` (5), `curve_reward_window_days`
-  (30), `curve_reward_min_days` (7), `curve_length_tolerance_s` (2, M3j §2), `no_curve_days` (90).
+  (30), `curve_length_tolerance_s` (2, M3j §2), `no_curve_days` (90).
   These are anti-abuse product limits, not budget limits.
 - Replies on the form (`curveResultMessage`/`curveQualityMessage` in `static/app.html`): when
   rewarded, "Thanks! This analysis is now free: 1 min 30 s of credit is back." (the amount comes
@@ -288,7 +288,7 @@ still apply.
   save.
 - `list_jobs` returns, for shared jobs, `sharing` (done, shared and not removed), `curve_count` and
   `curve_reward_cents` (what a valid curve would give, ignoring the date, the link and the length,
-  0 if not possible). There is no `curve_reward_from`: before a link there is no date to promise
+  0 if not possible). There is no `curve_reward_from`
   (M3j §5); the amount and the per-user conditions come from the helper `add_curve` uses.
   `needs_retention` is replaced by `curve_count = 0`.
 

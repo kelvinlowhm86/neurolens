@@ -219,7 +219,6 @@ def create_app(
     research_cfg = cfg.get("research") or {}
     reward_cap = research_cfg.get("curve_rewards_per_window", DEFAULT_REWARD_CAP)
     reward_window_days = research_cfg.get("curve_reward_window_days", DEFAULT_REWARD_WINDOW_DAYS)
-    reward_min_days = research_cfg.get("curve_reward_min_days", billing.DEFAULT_REWARD_MIN_DAYS)
     length_tolerance_s = research_cfg.get(
         "curve_length_tolerance_s", billing.DEFAULT_LENGTH_TOLERANCE_S
     )
@@ -554,19 +553,36 @@ def create_app(
             return _not_configured()
         user_id, _ = signed_in_user()
         cutoff = datetime.now(UTC) - timedelta(days=RESULT_DAYS)
-        jobs = billing.list_jobs(
-            db,
-            user_id,
-            int(limit),
-            reward_cap=reward_cap,
-            reward_window_days=reward_window_days,
-            reward_min_days=reward_min_days,
-        )
+
+        def load_jobs():
+            return billing.list_jobs(
+                db,
+                user_id,
+                int(limit),
+                reward_cap=reward_cap,
+                reward_window_days=reward_window_days,
+            )
+
+        jobs = load_jobs()
+        refunded = False
+        for job in jobs:
+            if (
+                job["status"] == billing.QUEUED
+                and job["gpu_wait_until"] is not None
+                and billing.refund_if_gpu_wait_over(db, job["job_id"])
+            ):
+                refunded = True
+        if refunded:
+            jobs = load_jobs()
         rows = []
         for job in jobs:
             row = {key: value for key, value in job.items() if key != "research_consent"}
             row["job_id"] = str(job["job_id"])
             row["created_at"] = storage.utc_text(job["created_at"])
+            if job["gpu_wait_until"] is not None:
+                row["gpu_wait_until"] = storage.utc_text(job["gpu_wait_until"])
+            else:
+                row.pop("gpu_wait_until")
             row["result_available"] = job["status"] == billing.DONE and job["created_at"] > cutoff
             rows.append(row)
         return jsonify(rows)
@@ -584,8 +600,9 @@ def create_app(
         with db.transaction() as tx:
             rows = tx.execute(
                 "SELECT job_id, object_key, filename, status, stage, stages, attempt, updated_at, "
-                "claimed_at, error_code, error_message, research_consent, retention_added_at, "
-                "dataset_removed_at, dataset_removed_reason, verified_duration_ms, report_state, "
+                "claimed_at, gpu_wait_until, error_code, error_message, research_consent, "
+                "retention_added_at, dataset_removed_at, dataset_removed_reason, "
+                "verified_duration_ms, report_state, "
                 "report_tries, report_started_at, report_error FROM jobs "
                 "WHERE job_id = CAST(:job_id AS uuid) AND user_id = :user_id "
                 "AND deleted_at IS NULL",
@@ -675,10 +692,19 @@ def create_app(
         job, error = owned_job(job_id)
         if error:
             return error
+        if (
+            job["status"] == billing.QUEUED
+            and job["gpu_wait_until"] is not None
+            and billing.refund_if_gpu_wait_over(db, job["job_id"])
+        ):
+            job, error = owned_job(job_id)
+            if error:
+                return error
         # Consent gates the retention upload, which needs a done job, so it is reported only then.
         hidden = {
             "object_key",
             "claimed_at",
+            "gpu_wait_until",
             "retention_added_at",
             "dataset_removed_at",
             "dataset_removed_reason",
@@ -693,14 +719,14 @@ def create_app(
             for key, value in job.items()
             if key not in hidden and (key != "research_consent" or job["status"] == billing.DONE)
         }
-        return jsonify(
-            {
-                **public,
-                "cancellable": job["status"] == billing.QUEUED
-                and job["verified_duration_ms"] is None,
-                "updated_at": storage.utc_text(job["updated_at"]),
-            }
-        )
+        answer = {
+            **public,
+            "cancellable": job["status"] == billing.QUEUED and job["verified_duration_ms"] is None,
+            "updated_at": storage.utc_text(job["updated_at"]),
+        }
+        if job["gpu_wait_until"] is not None:
+            answer["gpu_wait_until"] = storage.utc_text(job["gpu_wait_until"])
+        return jsonify(answer)
 
     @app.route("/api/jobs/<job_id>/result")
     def job_result(job_id):
@@ -881,7 +907,7 @@ def create_app(
             return error
         user_id, _ = signed_in_user()
         try:
-            cents, reward_from, reason = billing.curve_offer(
+            cents, reason = billing.curve_offer(
                 db,
                 user_id,
                 job["job_id"],
@@ -889,7 +915,6 @@ def create_app(
                 facts,
                 reward_cap,
                 reward_window_days,
-                reward_min_days,
                 length_tolerance_s,
                 min_views=curve_min_views,
             )
@@ -900,7 +925,6 @@ def create_app(
                 "platform": platform,
                 "video_id": video_id,
                 "reward_cents": cents,
-                "reward_from": reward_from,
                 "reason": reason,
                 "checked_views": facts.views if facts else None,
                 "min_views": curve_min_views,
@@ -911,6 +935,39 @@ def create_app(
                 else None,
             }
         )
+
+    @app.route("/api/jobs/<job_id>/retention")
+    def job_retention_curve(job_id):
+        """The newest quality-checked curve stored for the caller's own job (M3l §4)."""
+        job, error = owned_job(job_id)
+        if error:
+            return error
+        with db.transaction() as tx:
+            rows = tx.execute(
+                "SELECT csv_key, video_seconds FROM retention_snapshots "
+                "WHERE job_id = CAST(:job_id AS uuid) "
+                "AND (quality_flags IS NULL OR cardinality(quality_flags) = 0) "
+                "ORDER BY added_at DESC, snapshot_id DESC LIMIT 1",
+                {"job_id": job["job_id"]},
+            )
+        if not rows or not rows[0]["csv_key"]:
+            return _not_found()
+        if s3 is None or not bucket:
+            return _not_configured()
+        snapshot = rows[0]
+        try:
+            text = s3.get_object(Bucket=bucket, Key=snapshot["csv_key"])["Body"].read().decode()
+        except Exception as err:
+            if storage.is_not_found(err):
+                return _not_found()
+            raise
+        duration_s = snapshot["video_seconds"]
+        if duration_s is None and job["verified_duration_ms"] is not None:
+            duration_s = job["verified_duration_ms"] / 1000
+        if duration_s is None:
+            return _not_found()
+        points = results.retention_points(results.parse_retention_csv(text), duration_s)
+        return jsonify({"points": points, "duration_s": duration_s})
 
     @app.route("/api/jobs/<job_id>/retention", methods=["POST"])
     def job_retention(job_id):
@@ -1029,7 +1086,6 @@ def create_app(
                 video_ref=f"{platform}:{video_id}",
                 same_cut=same_cut,
                 source=f"{platform}_api",
-                reward_min_days=reward_min_days,
                 facts=facts,
                 length_tolerance_s=length_tolerance_s,
                 min_views=curve_min_views,

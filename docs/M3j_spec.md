@@ -4,10 +4,9 @@ Status: current design. Builds on M3i (curve collection) and M3f §5 (sharing an
 spec and an older one disagree, this one wins, and the older section is updated to match (§10).
 
 ## Decisions (2 Nov, Josh)
-- The aim is a curve from a video that has been public at least 7 days. For YouTube the server
-  looks the video up (YouTube Data API, API key) and the reward opens 7 days after its publish
-  date, which may already be past. Facebook links, and YouTube lookups that fail, fall back to 7
-  days after the analysis.
+- For YouTube the server looks the video up (YouTube Data API, API key) for its publish date,
+  length and view count. Facebook links, and YouTube lookups that fail, supply unknown facts. A
+  checked view count must reach 1,000 before the curve pays; unknown facts skip the check.
 - One set of reward rules for every source. A source supplies the same facts (publish date, video
   length, view count) or "unknown"; the rules treat "unknown" the same way for all sources.
 - A YouTube video whose length differs from the analysed video by more than 2 s earns no reward:
@@ -61,34 +60,29 @@ Explorer (not confirmed to work).
 ## 5. Reward rules (`billing`, one helper for the check and the save)
 `_curve_reward` takes `facts` (or `None`), `length_tolerance_s` and `min_views` (default
 `DEFAULT_MIN_VIEWS = 1000`, passed by `add_curve`, `curve_offer` and both routes from
-`research.curve_min_views`), and returns `(cents, reward_from, reason)`:
-- `reward_from` = `facts.published_at + reward_min_days` when facts are known, else
-  `created_at + reward_min_days`.
+`research.curve_min_views`), and returns `(cents, reason)`:
 - Conditions, in this order (the first unmet one is the `reason`): `invalid` (quality flags, save
   only); `not_charged`; `already_rewarded` (this job, the same video hash, or the same `video_ref`);
   `not_funded`; `cap_reached`; `length_mismatch` (facts known and either the job has no server-measured
   length or `|duration_s - verified_duration_ms / 1000| > length_tolerance_s`); `too_few_views`
-  (facts known, `facts.views` not None, and `facts.views < min_views`); `too_early` (now, the
-  database's clock, before `reward_from`). A hidden count (`facts.views` None) or unknown facts
-  skip the view condition.
-- `reason` is `None` when it pays; `reward_from` is returned only with `too_early`, or with
-  `too_few_views` when the date is also still ahead. `too_few_views` returns `cents` (what the
-  curve would pay once it qualifies) and the save pays nothing for it.
+  (facts known, `facts.views` not None, and `facts.views < min_views`). A hidden count
+  (`facts.views` None) or unknown facts skip the view condition.
+- `reason` is `None` when it pays. `too_few_views` returns `cents` (what the curve would pay once
+  it qualifies) and the save pays nothing for it.
 - `billing.curve_offer(db, user_id, job_id, video_ref, facts, reward_cap, reward_window_days,
-  reward_min_days, length_tolerance_s, min_views)`: read-only, the same job checks and the same
-  `VideoTaken` / `VideoLinkChanged` refusals as `add_curve` (shared code, not copied), then the
-  helper.
+  length_tolerance_s, min_views)`: read-only, the same job checks and the same `VideoTaken` /
+  `VideoLinkChanged` refusals as `add_curve` (shared code, not copied), then the helper.
 - `add_curve` gains `facts`, `length_tolerance_s` and `min_views` and stores `checked_views`,
   `published_at`, `video_seconds` (null when unknown). Its reply adds `reason`.
-- `list_jobs` drops `curve_reward_from`: before a link there is no date to promise.
-  `curve_reward_cents` is unchanged (ignores the date, the link, the length and the views).
+- `list_jobs` has no `curve_reward_from`. `curve_reward_cents` is unchanged (ignores the link,
+  the length and the views).
 
 ## 6. Routes
 - `POST /api/jobs/<id>/retention/check`, body `{video_url}`: the same job checks as the save
   (404/409), the link (§3 of M3i), the facts (§4), then `curve_offer`. 200 `{platform, video_id,
-  reward_cents, reward_from, reason, published_on, video_seconds, analysed_seconds, checked_views,
-  min_views}`: `reward_cents` is what this curve would give now or from `reward_from` (0 when it
-  cannot); `published_on` is the publish date's UTC day as `YYYY-MM-DD`, `video_seconds` the
+  reward_cents, reason, published_on, video_seconds, analysed_seconds, checked_views, min_views}`:
+  `reward_cents` is what this curve would give now (0 when it cannot); `published_on` is the
+  publish date's UTC day as `YYYY-MM-DD`, `video_seconds` the
   YouTube length and `checked_views` its view count (all with facts only, else null);
   `analysed_seconds` is the server-measured length of the analysed video, for the
   `length_mismatch` line, and `min_views` is `research.curve_min_views`. The length rule uses only
@@ -106,22 +100,19 @@ all nullable.
 
 ## 8. Page (`static/app.html`)
 - **Consent box:** "Share to help improve NeuroLens ([details](/static/privacy.html#sharing)). I own
-  the rights to it." Quiet line: "Add its retention curve once it's been public a week: see real
+  the rights to it." Quiet line: "Add its retention curve once it's reached 1,000 views: see real
   viewers beside the prediction, and get its credit back." `billing.CONSENT_VERSION` becomes
   `"2026-11-03"`.
-- **Entry points:** History row "Get X back", menu "Add audience retention (get X back)", with no
-  date. Results card: "Thanks for sharing. Once it's been public a week, add its retention curve:
-  see real viewers beside the prediction and get X back."
+- **Entry points:** History row "Get X back", menu "Add audience retention (get X back)". Results
+  card: "Thanks for sharing. Once it reaches 1,000 views, add its retention curve: see real viewers
+  beside the prediction and get X back."
 - **Form, step 1:** the video name and the "Video link" field only. On a valid-looking link
   (debounced ~400 ms, and on paste) the page calls `/retention/check` and shows one line:
   - pays now: "Add its curve now and this analysis is free (X back)."
-  - `too_early`: "Add its curve from 14 Nov (a week after it went public) and get X back. Curves
-    added earlier are saved without credit." With unknown facts: "(a week after your analysis)".
   - `length_mismatch`: "This video is 45 s; the one you analysed is 30 s. Its curve is welcome,
     but only the analysed video's curve gets credit back."
-  - `too_few_views`: "This video has 640 views. Add its curve once it has 1,000 and get X back."
-    With `reward_from` too: "This video has 640 views. Add its curve once it has 1,000 views,
-    from 14 Nov (a week after it went public), and get X back."
+  - `too_few_views`: "This video has 640 views. Add its curve once it has 1,000 views and get X
+    back."
   - `cap_reached`: "You've had 5 rewards in the last 30 days. Its curve is still welcome."
   - other reasons: "Its curve is welcome; this one won't get credit back."
   - refusals (not found, taken, link changed): the server's message, and step 2 stays hidden.
@@ -141,19 +132,17 @@ all nullable.
   earlier start is harmless and YouTube's days are Pacific time; endDate = today in the viewer's
   time zone; filters `video==<v>`), each with a Copy button; with Facebook, the query with the id
   filled in and a Copy button. Without values, as now. The last steps say "paste the reply into
-  NeuroLens" (no saving a file). The YouTube section ends "Add it once the video has been public a
-  week (and, on YouTube, has 1,000+ views) to get its credit back."; the Facebook section ends the
-  same way without the view clause.
+  NeuroLens" (no saving a file). The YouTube section ends "Add it once the video has 1,000+ views
+  to get its credit back."; the Facebook section ends "Add it once the video has 1,000 views to get
+  its credit back."
 - **Privacy (`static/privacy.html`):** the section is "Sharing a video" (anchor `#sharing`, with
   the old `#research` anchor kept so old links land). Purpose: help improve NeuroLens, by building
   and testing its own engagement models, which may later be a paid product (notice first). The
   course study and the copy of NeuroLens's result kept for it are removed. What is kept adds the
   checked publish date, length and view count, and an access request's channel link and note
-  (emailed to the team through AWS, kept until the account is deleted). Reward rules: "public at
-  least 7 days (7 days after the analysis when we can't check the publish date)", "the same length
-  as the analysed video, give or take 2 seconds, when we can check it", and "when we can check it,
-  has at least 1,000 views". The test keeping these numbers equal to `config.json` covers 7, 2 and
-  1,000.
+  (emailed to the team through AWS, kept until the account is deleted). Reward rules: "the same
+  length as the analysed video, give or take 2 seconds", and "when we can check it, has at least
+  1,000 views". The test keeping these numbers equal to `config.json` covers 2 and 1,000.
 - **Landing (`static/index.html`):** the label "Shared"; "Add a video's retention curve and earn
   its credit back." The "Your videos" column says "Free to try", "Creators and marketers get 5
   free minutes.*" with a "Get free minutes" button to `/login`, and the columns end with
@@ -169,7 +158,7 @@ all nullable.
   statements name no `academic/*` resource.
 
 ## 10. Older specs updated with this build
-M3i §6 (reward conditions, `reward_from`, `list_jobs`), §7 (entry points, form, copy), §8, §12;
+M3i §6 (reward conditions, `list_jobs`), §7 (entry points, form, copy), §8, §12;
 M3f §5a (box, quiet line, privacy summary, consent version), §5b (shared copy only), §5d (form,
 body, replies), M3a, M3c and M3d where they describe the shared copy or its deletion; M3d §8b
 landing copy.
@@ -181,8 +170,8 @@ Full treatment (money). Behaviour, not call details. The lookup is faked at the 
   JSON, a missing field → `LookupFailed`, and its message never contains the key.
 - Reward rules (PostgreSQL, move dates, never sleep):
   - YouTube published 30 days ago, analysed today → rewarded now;
-  - published 2 days ago, analysed 10 days ago → `too_early`, `reward_from` = publish + 7;
-  - unknown facts → from analysis + 7, as before;
+  - published 2 days ago, analysed 10 days ago → rewarded now;
+  - unknown facts → rewarded now;
   - length 33 s vs analysed 30.1 s → `length_mismatch`, stored, no reward; 31 s → rewarded;
   - unknown facts skip the length check;
   - the check and the save agree for every case above (same inputs, same reason);
@@ -201,11 +190,10 @@ Full treatment (money). Behaviour, not call details. The lookup is faked at the 
   accept a fact from the page. Each must turn a test red.
 
 ## 12. Known limitations (accepted)
-- When the report was downloaded is unknown (the YouTube report holds no date). Downloading early
-  saves the user nothing, since the reward still waits for the date.
+- When the report was downloaded is unknown (the YouTube report holds no date).
 - A YouTube link is the user's word that the report is theirs (no video id in the report; Connect
   YouTube is future work). The length check and the one-account-per-video rule limit misuse.
-- Facebook: no publish date or length; analysis + 7 days; built from Meta's documentation only
+- Facebook: no publish date, length or view count; built from Meta's documentation only
   (M3i §12).
 - The check route spends YouTube quota for a signed-in user; 10,000 a day is far above real use.
   Abuse needs a hostile signed-in account (stopping rule).

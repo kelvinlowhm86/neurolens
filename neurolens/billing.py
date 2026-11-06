@@ -16,7 +16,7 @@ Pure Python (the Lambdas import this): no numpy, no psycopg.
 import json
 import logging
 import uuid
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 
 from neurolens import storage
 from neurolens.pricing import estimate_cost_cents
@@ -37,9 +37,10 @@ SESSION_DAYS = 30
 # The reward preview's defaults when a caller does not supply config.json's research limits.
 DEFAULT_REWARD_CAP = 5
 DEFAULT_REWARD_WINDOW_DAYS = 30
-DEFAULT_REWARD_MIN_DAYS = 7
 DEFAULT_LENGTH_TOLERANCE_S = 2
 DEFAULT_MIN_VIEWS = 1000
+# A dispatched request that has not been claimed this long after its GPU wait is over is refunded.
+GPU_WAIT_GRACE_S = 300
 
 CURVE_REMOVED_MESSAGES = {
     "stopped": "You stopped sharing this video.",
@@ -333,35 +334,24 @@ def _curve_reward(
     same_link_rewarded=False,
     valid=True,
     facts=None,
-    reward_min_days=DEFAULT_REWARD_MIN_DAYS,
     length_tolerance_s=DEFAULT_LENGTH_TOLERANCE_S,
     min_views=DEFAULT_MIN_VIEWS,
     preview=False,
-    now=None,
 ):
-    """The reward a curve would pay, the date it becomes possible and the first refusal (M3j §5).
+    """The reward a curve would pay and the first refusal (M3j §5, M3l §3).
 
     Conditions run in the spec's order: invalid (quality flags, save only), not_charged,
     already_rewarded (this job, the same video hash, or the same rewarded link on a job),
-    not_funded, cap_reached, length_mismatch, too_few_views, too_early (M3k §7). `reward_from` is
-    the publish date plus the minimum days when facts are known, else the analysis date plus them,
-    and is returned with too_early, or with too_few_views when the date is also still ahead.
-    `cents` is what the curve would pay now or from `reward_from` (0 when it cannot), so the
-    check can promise the amount while the save pays only when `reason` is None.
+    not_funded, cap_reached, length_mismatch, too_few_views (M3l §3). `cents` is what the curve
+    pays when `reason` is None, and what a check promises; the save pays only then.
 
-    `preview` ignores the date, the link and the length, which is what `list_jobs` shows before
-    the form is filled in. `now` is the database's clock (`add_curve` and `curve_offer` read it
-    in their transaction), like every other money rule.
+    `preview` ignores the link and the length, which is what `list_jobs` shows before the form is
+    filled in.
     """
-    if facts is not None:
-        reward_from_at = facts.published_at + timedelta(days=reward_min_days)
-    else:
-        reward_from_at = job["created_at"] + timedelta(days=reward_min_days)
-    reward_from = storage.utc_text(reward_from_at)
     cents = job["captured_cents"] or 0
 
-    def refuse(reason, *, date=False):
-        return 0, (reward_from if date else None), reason
+    def refuse(reason):
+        return 0, reason
 
     if not valid:
         return refuse("invalid")
@@ -374,7 +364,7 @@ def _curve_reward(
     if not under_cap:
         return refuse("cap_reached")
     if preview:
-        return cents, None, None
+        return cents, None
     if facts is not None:
         # The server's own measured length only; the page's figure is the user's word. A job
         # with no measured length cannot prove the match, so it is not paid.
@@ -382,10 +372,8 @@ def _curve_reward(
         if analysed_ms is None or abs(facts.duration_s - analysed_ms / 1000) > length_tolerance_s:
             return refuse("length_mismatch")
     if facts is not None and facts.views is not None and facts.views < min_views:
-        return cents, (reward_from if now < reward_from_at else None), "too_few_views"
-    if now < reward_from_at:
-        return cents, reward_from, "too_early"
-    return cents, None, None
+        return cents, "too_few_views"
+    return cents, None
 
 
 def list_jobs(
@@ -395,24 +383,23 @@ def list_jobs(
     *,
     reward_cap=DEFAULT_REWARD_CAP,
     reward_window_days=DEFAULT_REWARD_WINDOW_DAYS,
-    reward_min_days=DEFAULT_REWARD_MIN_DAYS,
 ):
     """The user's jobs, newest first, at most `limit` (M3b §4a, M3f §3, §5d).
 
     Deleted and cancelled jobs are left out. `claimed_at` is UTC text; `cancellable` marks a
     queued job the dispatcher has not priced yet (M3e §8). For a done, shared job, `sharing` is
     true while its shared copy is present, `curve_count` is its stored curves, and
-    `curve_reward_cents` is what a valid curve would return now (0 when it cannot); there is no
-    promised date before the form names a link (M3j §5), and `curve_rewarded` is true once a
-    curve has returned this job's credit. The amount comes from the helper `add_curve` uses; the
-    preview ignores the date, the link and the length until the form supplies them.
+    `curve_reward_cents` is what a valid curve would return now (0 when it cannot);
+    `curve_rewarded` is true once a curve has returned this job's credit. The amount comes from
+    the helper `add_curve` uses; the preview ignores the link and the length until the form
+    supplies them.
     """
     with db.transaction() as tx:
         funded, under_cap = _reward_status(tx, user_id, reward_cap, reward_window_days)
         rows = tx.execute(
             "SELECT j.job_id, j.filename, j.status, j.created_at, j.verified_duration_ms, "
             "j.captured_cents, j.error_code, j.research_consent, j.claimed_at, "
-            "j.curve_rewarded_at, "
+            "j.gpu_wait_until, j.curve_rewarded_at, "
             "(j.status = :queued AND j.verified_duration_ms IS NULL) AS cancellable, "
             "(j.status = :done AND j.research_consent "
             "AND j.dataset_removed_at IS NULL) AS sharing, "
@@ -435,12 +422,11 @@ def list_jobs(
         )
     for row in rows:
         if row["sharing"]:
-            cents, _, _ = _curve_reward(
+            cents, _ = _curve_reward(
                 row,
                 funded=funded,
                 under_cap=under_cap,
                 same_video_rewarded=row["same_video_rewarded"],
-                reward_min_days=reward_min_days,
                 preview=True,
             )
         else:
@@ -929,6 +915,49 @@ def issue_refund(
     return True
 
 
+# ---------------------------------------------------------------- the GPU wait
+
+
+def record_gpu_wait(db, job_id, until):
+    """Record when a dispatched request's GPU wait runs out, while the job is still queued
+    (M3l §2b). False, changing nothing, once a worker has claimed it."""
+    seconds = max(0, round((until - datetime.now(UTC)).total_seconds()))
+    with db.transaction() as tx:
+        rows = tx.execute(
+            "UPDATE jobs SET gpu_wait_until = now() + make_interval(secs => :seconds) "
+            "WHERE job_id = CAST(:job_id AS uuid) AND status = :queued RETURNING job_id",
+            {"job_id": job_id, "seconds": seconds, "queued": QUEUED},
+        )
+    return bool(rows)
+
+
+def refund_if_gpu_wait_over(db, job_id):
+    """Refund a queued, never-claimed job whose recorded GPU wait ended more than the grace ago
+    (M3l §2c). True when this call refunded it; False, changing nothing, otherwise.
+
+    The row lock makes this and a worker's claim mutually exclusive, so exactly one wins.
+    """
+    with db.transaction() as tx:
+        _lock_job_balance(tx, job_id)
+        rows = tx.execute(
+            "SELECT user_id, status, attempt, reserved_cents, claimed_at, "
+            "gpu_wait_until IS NOT NULL AND "
+            "gpu_wait_until + make_interval(secs => :grace) < now() AS expired "
+            "FROM jobs WHERE job_id = CAST(:job_id AS uuid) FOR UPDATE",
+            {"job_id": job_id, "grace": GPU_WAIT_GRACE_S},
+        )
+        job = rows[0] if rows else None
+        if (
+            job is None
+            or job["status"] != QUEUED
+            or job["claimed_at"] is not None
+            or not job["expired"]
+        ):
+            return False
+        _refund(tx, job_id, job, "no_gpu_free", None)
+    return True
+
+
 # ---------------------------------------------------------------- the AI report
 
 
@@ -1107,7 +1136,7 @@ def _curve_state(tx, user_id, job_id, video_ref, *, lock=False):
     rows = tx.execute(
         "SELECT user_id, status, research_consent, dataset_removed_at, "
         "dataset_removed_reason, deleted_at, captured_cents, curve_rewarded_at, video_sha256, "
-        "verified_duration_ms, client_duration_ms, created_at, now() AS db_now "
+        "verified_duration_ms "
         "FROM jobs WHERE job_id = CAST(:job_id AS uuid)" + (" FOR UPDATE" if lock else ""),
         {"job_id": job_id},
     )
@@ -1160,14 +1189,13 @@ def curve_offer(
     facts,
     reward_cap,
     reward_window_days,
-    reward_min_days,
     length_tolerance_s,
     min_views=DEFAULT_MIN_VIEWS,
 ):
     """What `add_curve` would pay for this link, without writing anything (M3j §5-§6).
 
     The same job checks, link refusals and reward helper as the save, so the check's answer and
-    the save's can never disagree. Returns `(cents, reward_from, reason)`.
+    the save's can never disagree. Returns `(cents, reason)`.
     """
     with db.transaction() as tx:
         job, same_video, same_link = _curve_state(tx, user_id, job_id, video_ref)
@@ -1179,10 +1207,8 @@ def curve_offer(
             same_video_rewarded=same_video,
             same_link_rewarded=same_link,
             facts=facts,
-            reward_min_days=reward_min_days,
             length_tolerance_s=length_tolerance_s,
             min_views=min_views,
-            now=job["db_now"],
         )
 
 
@@ -1204,7 +1230,6 @@ def add_curve(
     video_ref,
     same_cut,
     source,
-    reward_min_days,
     facts=None,
     length_tolerance_s=DEFAULT_LENGTH_TOLERANCE_S,
     min_views=DEFAULT_MIN_VIEWS,
@@ -1215,9 +1240,8 @@ def add_curve(
     and link refusals are `_curve_state`'s, shared with `curve_offer` (M3j §5). A curve already
     stored under the same hash, on any job or account, raises DuplicateCurve and stores nothing.
     A valid curve of a charged job returns the captured price once, when the reward rules allow
-    it: at least `reward_min_days` after the publish date when facts are known, else after the
-    analysis, with the video's length within `length_tolerance_s` when it can be checked and at
-    least `min_views` checked views when the count is known (M3k §7), when neither the video hash
+    it: with the video's length within `length_tolerance_s` when it can be checked and at least
+    `min_views` checked views when the count is known (M3l §3), when neither the video hash
     nor the published link (`jobs.curve_reward_ref`) has been rewarded, by an account that has
     had credit beyond the starter and below the per-window cap. The checked facts (views, publish
     date, length) are stored too. All checks run before anything is written, so a refusal stores
@@ -1234,7 +1258,7 @@ def add_curve(
             raise DuplicateCurve("this curve was already added")
 
         funded, under_cap = _reward_status(tx, user_id, reward_cap, reward_window_days)
-        cents, reward_from, reason = _curve_reward(
+        cents, reason = _curve_reward(
             job,
             funded=funded,
             under_cap=under_cap,
@@ -1242,10 +1266,8 @@ def add_curve(
             same_link_rewarded=same_link,
             valid=not quality_flags,
             facts=facts,
-            reward_min_days=reward_min_days,
             length_tolerance_s=length_tolerance_s,
             min_views=min_views,
-            now=job["db_now"],
         )
         reward = cents if reason is None else 0
 
@@ -1288,7 +1310,4 @@ def add_curve(
                 "WHERE job_id = CAST(:job_id AS uuid)",
                 {"job_id": job_id, "video_ref": video_ref},
             )
-    result = {"rewarded_cents": reward, "quality": list(quality_flags), "reason": reason}
-    if reward_from is not None:
-        result["reward_from"] = reward_from
-    return result
+    return {"rewarded_cents": reward, "quality": list(quality_flags), "reason": reason}

@@ -71,6 +71,12 @@ def finish_job(db, s3, bucket, job_id):
         billing.settle_success(db, job_id)
         logger.info(f"{job_id}: result exists, settled")
         return True
+    if billing.refund_if_gpu_wait_over(db, job_id):
+        logger.warning(f"{job_id}: its GPU wait ran out, refunded")
+        storage.delete_job_prefixes(s3, bucket, job_id)
+        if not storage.delete_keys(s3, bucket, storage.job_keys(job_id, state["object_key"])):
+            raise RuntimeError(f"{job_id}: refunded, but S3 could not delete all of its files")
+        return True
     message = _last_error(db, job_id)
     if billing.issue_refund(
         db,

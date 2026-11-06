@@ -112,6 +112,10 @@ def reap(db, s3, bucket, job):
         if billing.settle_success(db, job_id):
             logger.info(f"{job_id}: result exists, settled")
         return
+    if billing.refund_if_gpu_wait_over(db, job_id):
+        logger.warning(f"{job_id}: its GPU wait ran out, refunded")
+        _delete_job_files(s3, bucket, job_id, job["object_key"])
+        return
     if billing.issue_refund(
         db,
         job_id,

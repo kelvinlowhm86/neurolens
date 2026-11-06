@@ -98,15 +98,14 @@ One row per account (the primary key).
     exception is caught, `logger.error("access request email failed for user <user_id>: <type>")`
     (no email address, link or note in the log), and the reply is still 201.
 
-## 7. Reward rule (`billing._curve_reward`, M3j §5)
-- New keyword `min_views` (default `DEFAULT_MIN_VIEWS = 1000`), passed by `add_curve`,
+## 7. Reward rule (`billing._curve_reward`, M3j §5, M3l §3)
+- Keyword `min_views` (default `DEFAULT_MIN_VIEWS = 1000`), passed by `add_curve`,
   `curve_offer` and both routes from `research.curve_min_views`.
-- New condition `too_few_views`, after `length_mismatch` and before `too_early`: facts known,
-  `facts.views` not None, and `facts.views < min_views`. It returns `cents` (what the curve would
-  pay once it qualifies) and `reward_from` only when the date is also still ahead (else null).
+- Condition `too_few_views`, after `length_mismatch`: facts known, `facts.views` not None, and
+  `facts.views < min_views`. It returns `cents` (what the curve would pay once it qualifies).
   The save pays nothing for it and stores the curve as now.
 - `facts.views` None (hidden count) or facts unknown → the condition is skipped.
-- `list_jobs`' preview is unchanged (ignores views, like the date and the length).
+- `list_jobs`' preview is unchanged (ignores views, like the length).
 - `POST /api/jobs/<id>/retention/check` adds `checked_views` (facts only, else null) and
   `min_views` to its reply.
 
@@ -122,16 +121,15 @@ The no-credit panel (shown when the credit is below one video's price) shows one
   curve to get its credit back, or ask the NeuroLens team for more."
 - After a successful request the panel switches to "waiting" without a reload.
 - Retention form line for `too_few_views`: "This video has 640 views. Add its curve once it has
-  1,000 and get X back." With `reward_from` too: "...once it has 1,000 views, from 14 Nov (a week
-  after it went public), and get X back." Reply after save: "Thanks, saved." then the same line.
+  1,000 views and get X back." Reply after save: "Thanks, saved." then the same line.
 
 ## 9. Other pages and tools
 - **Landing (`static/index.html`), Early access:** "Samples" "Open" "Explore every sample without
   an account."; "Your videos" "Free to try" "Creators and marketers get 5 free minutes.*" with a
   button "Get free minutes" to `/login`; "Shared" "Keep going" "Add a video's retention curve and
   earn its credit back."; under the columns, small: "*For channels with 1,000+ followers."
-- **Guide (`static/retention_guide.html`):** the YouTube section's line gains "(and has 1,000+
-  views)"; the Facebook line is unchanged.
+- **Guide (`static/retention_guide.html`):** both sections say to add the curve once the video has
+  1,000 views.
 - **Privacy (`static/privacy.html`):** "What we collect" adds "An access request, if you ask for
   free minutes: your channel link and any note. It is emailed to the NeuroLens team (through
   Amazon Web Services) and kept until you delete your account." The reward rules
@@ -155,8 +153,8 @@ request).
 Full treatment for the reward rule and the grant; light for the rest. Behaviour, not call details.
 - **Reward (PostgreSQL, move dates, never sleep):** checked views 999 → `too_few_views`, no
   credit, curve stored with `checked_views` 999; 1000 → rewarded; hidden views (None) → rewarded;
-  unknown facts (Facebook, failed lookup) → rewarded as before; few views and too early →
-  `too_few_views` with `reward_from`; few views but length mismatch → `length_mismatch`; the check
+  unknown facts (Facebook, failed lookup) → rewarded as before; few views → `too_few_views`; few
+  views but length mismatch → `length_mismatch`; the check
   and the save agree on every case; the existing M3f/M3i/M3j reward tests still pass.
 - **Requests:** a valid request is stored as waiting; each bad link/long note → 400 and
   nothing stored; a second request → 409; not signed in → refused; `/api/me` reports funded and

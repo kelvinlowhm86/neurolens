@@ -250,7 +250,7 @@
   .video-missing { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 22px; text-align: center; font-size: 13px; color: var(--muted); background: var(--well); }
   .brain-panel { flex: 1; min-height: 190px; max-height: 480px; padding-top: 14px; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; }
   .brain-panel-body { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 10px; }
-  .brain-box { position: relative; flex: 1; min-height: 140px; overflow: hidden; }
+  .brain-box { position: relative; flex: 1; min-height: 0; overflow: hidden; }
   .brain-box canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
   .brain-message { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 20px; text-align: center; font-size: 13px; color: var(--muted); }
   .brain-skeleton { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 18px; pointer-events: none; }
@@ -398,6 +398,11 @@
   .parts .parts-row > div { display: flex; flex-direction: column; min-width: 0; }
   .parts h4, .sub h4 { font: 500 12px var(--display); color: var(--ink-2); margin-bottom: 2px; }
   .parts .chart { flex: 1; min-height: 0; }
+  .retention-strip { border-top: 1px solid var(--line); padding-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+  .retention-strip[hidden] { display: none; }
+  .retention-strip h3 { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 8px; font: 600 14px var(--display); }
+  .retention-strip .note { font-size: 12px; color: var(--muted); }
+  .retention-strip .chart { flex: none; height: 78px; }
 
   .end-marker { position: absolute; font-size: 11px; line-height: 1.3; color: var(--ink-2); background: rgba(11,12,14,.9); padding: 0 3px; border-radius: 2px; white-space: nowrap; pointer-events: none; }
   .end-drop { position: absolute; border-left: 1px dotted var(--cool); pointer-events: none; }
@@ -499,6 +504,7 @@
     .strips-wrap { flex: none; }
     .strips { grid-template-columns: 1fr; }
     .strip .chart { height: 110px; flex: none; }
+    .retention-strip .chart { height: 110px; }
     .parts { height: auto; }
     .parts .parts-row { grid-auto-flow: row; grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .parts .chart { height: 100px; flex: none; }
@@ -755,6 +761,10 @@
         <section class="strips-wrap" id="stripsCard">
           <div class="panel-head"><h2>What the brain is doing</h2><span class="spacer"></span><span class="note">Same scale on all three</span></div>
           <div class="strips" id="stripsHost"></div>
+          <div class="retention-strip" id="retentionStrip" hidden>
+            <h3><span>Real viewers</span><span class="note">% still watching</span></h3>
+            <div class="chart" id="retentionChart"></div>
+          </div>
         </section>
       </div>
 
@@ -894,7 +904,7 @@
       <input type="checkbox" id="consentBox">
       <div class="consent-copy">
         <label for="consentBox">Share to help improve NeuroLens (<a href="/static/privacy.html#sharing" target="_blank" rel="noopener">details</a>). I own the rights to it.</label>
-        <p class="consent-note">Add its retention curve once it's been public a week: see real viewers beside the prediction, and get its credit back.</p>
+        <p class="consent-note">Add its retention curve once it's reached 1,000 views: see real viewers beside the prediction, and get its credit back.</p>
       </div>
     </div>
     <div class="actions">
@@ -972,6 +982,7 @@ let comparisonReport = null, comparisonState = '', comparisonStateText = '', com
 let comparisonABNames = { aName: '', bName: '' };
 let comparisonCandidates = [], compareActiveDiff = -1, compareVideoSeq = 0, compareVideoKey = '', compareOffset = 0;
 let progressJobId = null, progressStartedAt = 0, progressStatus = '', progressTimer = null, progressStages = [];
+let progressCreatedAt = 0, progressGpuWaitUntil = null;
 const REDUCED_MOTION = (() => {
   try { return matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { return false; }
 })();
@@ -1504,7 +1515,7 @@ $('signOut').addEventListener('click', async () => {
 });
 
 const RESULT_DAYS = 30;
-const QUEUED_SLOW_MS = 15 * 60000;
+const QUEUED_SLOW_MS = 20 * 60000;
 let historyPollTimer = null, openJobIds = new Set();
 
 async function loadHistory() {
@@ -1847,9 +1858,10 @@ function historyDetail(job) {
   if (job.status === 'queued') {
     if (oldestUnfinishedJob(jobsCache) !== job) return 'In line';
     const mins = minutesSince(job.created_at);
-    if (mins < 1) return 'Waiting for the GPU';
-    const slow = Date.now() - created.getTime() >= QUEUED_SLOW_MS ? ' · slower than usual' : '';
-    return `Waiting for the GPU · ${mins} min${slow}`;
+    if (Date.now() - created.getTime() >= QUEUED_SLOW_MS) {
+      return `GPUs busy · ${mins} min · not charged`;
+    }
+    return mins < 1 ? 'Waiting for the GPU' : `Waiting for the GPU · ${mins} min`;
   }
   if (job.status === 'processing') {
     const mins = job.claimed_at ? ` · ${minutesSince(job.claimed_at)} min` : '';
@@ -2502,6 +2514,7 @@ const FAILURE_TEXTS = {
   stalled: 'Failed',
   upload_not_received: "Upload didn't finish",
   upload_missing: "Upload didn't finish",
+  no_gpu_free: 'No GPU free',
   duration_exceeds_max_estimated: 'Video too long',
   duration_exceeds_max_verified: 'Video too long',
   insufficient_credit: 'Not enough credit',
@@ -2672,6 +2685,8 @@ function stopProgress() {
   progressStatus = '';
   progressStartedAt = 0;
   progressStages = [];
+  progressCreatedAt = 0;
+  progressGpuWaitUntil = null;
   if (progressTabTitle) {
     progressTabTitle = false;
     if (tabTotal === 0 && !tabTitleDone) document.title = 'NeuroLens';
@@ -2703,6 +2718,23 @@ function updateProgressClock() {
   }
   const activeLabel = active ? (active.querySelector('.stage-label')?.textContent || '') : '';
   $('progressCaption').textContent = progressStatus === 'queued' ? 'Waiting for the GPU' : (activeLabel || 'Starting the GPU');
+  updateProgressNote();
+}
+
+function shortClock(value) {
+  const date = value instanceof Date ? value : new Date(value);
+  if (!Number.isFinite(date.getTime())) return '';
+  return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }).toLowerCase();
+}
+
+function updateProgressNote() {
+  if (progressStatus !== 'queued') return;
+  if (Date.now() - progressCreatedAt < QUEUED_SLOW_MS) {
+    $('progressNote').textContent = 'The GPU starts when it is your turn. You can leave; the analysis carries on and the video will be in Your videos.';
+    return;
+  }
+  const until = progressGpuWaitUntil ? ` until ${shortClock(progressGpuWaitUntil)}` : '';
+  $('progressNote').textContent = `GPUs are busy. We'll keep trying${until}. You won't be charged if none frees up.`;
 }
 
 function showProgress(job) {
@@ -2720,6 +2752,8 @@ function showProgress(job) {
   progressStatus = status;
   progressStages = stages;
   progressStartedAt = status === 'processing' ? (Number.isFinite(claimed) && claimed > 0 ? claimed : now) : (Number.isFinite(created) ? created : now);
+  progressCreatedAt = Number.isFinite(created) ? created : now;
+  progressGpuWaitUntil = job.gpu_wait_until || (cached && cached.gpu_wait_until) || null;
 
   if (currentTab !== 'charts') {
     if (currentTab === 'compare') leaveCompareVideos();
@@ -2769,9 +2803,8 @@ function showProgress(job) {
   renderProgressStages(specs);
 
   $('progressStatus').textContent = status === 'queued' ? 'waiting for the GPU' : 'running';
-  $('progressNote').textContent = status === 'queued'
-    ? 'The GPU starts when it is your turn. You can leave; the analysis carries on and the video will be in Your videos.'
-    : 'This page updates itself. You can leave; the analysis carries on and the video will be in Your videos.';
+  if (status === 'queued') updateProgressNote();
+  else $('progressNote').textContent = 'This page updates itself. You can leave; the analysis carries on and the video will be in Your videos.';
   $('progressCancel').hidden = !job.cancellable;
   $('progressCancel').disabled = false;
   updateProgressClock();
@@ -3390,15 +3423,6 @@ function openResult(jobId, result) {
 
 // The results page shows the thank-you card for a shared job until its first snapshot;
 // it and the History row's link and "⋯" item open the same curve form (§5d).
-function rewardDateText(value) {
-  const date = value instanceof Date ? value : new Date(value);
-  if (!Number.isFinite(date.getTime())) return '';
-  const sameYear = date.getFullYear() === new Date().getFullYear();
-  return date.toLocaleDateString('en-GB', sameYear
-    ? { day: 'numeric', month: 'short' }
-    : { day: 'numeric', month: 'short', year: 'numeric' });
-}
-
 let resultCurve = null;
 function showRetention(jobId, title) {
   let cached = null;
@@ -3414,8 +3438,8 @@ function showRetention(jobId, title) {
     const reward = cached && (cached.curve_reward_cents || 0) > 0
       ? creditWords(cached.curve_reward_cents) : null;
     $('retentionCardText').textContent = reward
-      ? `Thanks for sharing. Once it's been public a week, add its retention curve: see real viewers beside the prediction and get ${reward} back.`
-      : "Thanks for sharing. Once it's been public a week, add its retention curve: see real viewers beside the prediction.";
+      ? `Thanks for sharing. Once it reaches 1,000 views, add its retention curve: see real viewers beside the prediction and get ${reward} back.`
+      : "Thanks for sharing. Once it reaches 1,000 views, add its retention curve: see real viewers beside the prediction.";
   }
 }
 function showSampleRetention(ctx) {
@@ -3554,25 +3578,13 @@ function curveTooFewViewsLine(data) {
   if (views == null || minViews == null) {
     return "This video has too few views. Its curve is welcome, but this one won't get credit back yet.";
   }
-  const from = data.reward_from ? rewardDateText(new Date(data.reward_from)) : null;
-  if (from) {
-    const when = data.published_on ? 'it went public' : 'your analysis';
-    return `This video has ${views} views. Add its curve once it has ${minViews} views, from ${from} (a week after ${when}), and ${curveBackText(data.reward_cents)}.`;
-  }
-  return `This video has ${views} views. Add its curve once it has ${minViews} and ${curveBackText(data.reward_cents)}.`;
+  return `This video has ${views} views. Add its curve once it has ${minViews} views and ${curveBackText(data.reward_cents)}.`;
 }
 
 function curveCheckLine(data) {
   if (data.reason === null || data.reason === undefined) {
     const amount = creditWords(data.reward_cents || 0);
     return `Add its curve now and this analysis is free (${amount || 'its credit'} back).`;
-  }
-  if (data.reason === 'too_early') {
-    const from = data.reward_from ? rewardDateText(new Date(data.reward_from)) : null;
-    const when = data.published_on ? 'it went public' : 'your analysis';
-    const lead = from ? `Add its curve from ${from} (a week after ${when})`
-      : `Add its curve a week after ${when}`;
-    return `${lead} and ${curveBackText(data.reward_cents)}. Curves added earlier are saved without credit.`;
   }
   if (data.reason === 'length_mismatch') {
     const lengths = data.video_seconds != null && data.analysed_seconds != null
@@ -3900,6 +3912,7 @@ $('curveSave').addEventListener('click', async () => {
     }
     curveSaved();
     loadHistory();
+    loadRetention(target.jobId);
     loadBalance(outcome.rewarded ? beforeCents : null);
   } catch (e) {
     setCurveMsg("Couldn't reach the server. Please try again.", true);
@@ -4110,6 +4123,13 @@ function renderResult(result, summary, ctx) {
   updateDownloadButton();
   updateSoundLine();
   buildAllCharts();
+  if (ctx.jobId) {
+    loadRetention(ctx.jobId);
+  } else {
+    const sample = ctx.sampleId ? sampleById(ctx.sampleId) : null;
+    if (sample && sample.retention) renderRetentionStrip(sample.retention);
+    else clearRetentionStrip();
+  }
   showCompareRow();
   loadBrain();
   startFirstReveal(ctx);
@@ -4149,6 +4169,8 @@ function clearAllCharts() {
   compareChartRecord = null;
   $('mainChartBox').replaceChildren();
   $('stripsHost').replaceChildren();
+  retentionRequest += 1;
+  clearRetentionStrip();
   $('timeline').replaceChildren();
   $('compareChartBox').replaceChildren();
   $('compareDiffs').replaceChildren();
@@ -4354,7 +4376,7 @@ function drawChart(host, { lines, range, height = 200, axisLabels = false, dark 
     seek(((e.clientX - rect.left) / rect.width) * (T - 1));
   });
 
-  if (scope === 'main' || scope === 'strips' || scope === 'strips-parts') {
+  if (scope === 'main' || scope === 'strips' || scope === 'strips-parts' || scope === 'retention-strip') {
     // Linked hover (Chunk 3 C): the same time on the main chart, the strips and the brain.
     const hoverLine = document.createElement('div');
     hoverLine.className = 'chart-hover-line';
@@ -4829,6 +4851,66 @@ function buildStrips() {
     const lines = [{ values: currentResult.signals[group] || [], colour: 'var(--ink)', width: 1.75 }];
     drawChart(chart, { lines, range, height: 78, dark: true, fill: true, span, scope: 'strips', playhead: 'rgba(236,237,239,.28)' });
   });
+}
+
+function clearRetentionStrip() {
+  clearScope('retention-strip');
+  $('retentionStrip').hidden = true;
+  $('retentionChart').replaceChildren();
+}
+
+function retentionSeries(points, T) {
+  const sorted = (Array.isArray(points) ? points : [])
+    .filter(point => Array.isArray(point) && Number.isFinite(Number(point[0])) && Number.isFinite(Number(point[1])))
+    .map(point => [Number(point[0]), Number(point[1])])
+    .sort((a, b) => a[0] - b[0]);
+  if (!sorted.length) return null;
+  const values = [];
+  let j = 0;
+  for (let t = 0; t < T; t += 1) {
+    while (j < sorted.length - 1 && sorted[j + 1][0] < t) j += 1;
+    const a = sorted[j], b = sorted[j + 1] || a;
+    const span = b[0] - a[0] || 1;
+    const k = Math.max(0, Math.min(1, (t - a[0]) / span));
+    values.push(a[1] + (b[1] - a[1]) * k);
+  }
+  return values;
+}
+
+function renderRetentionStrip(data) {
+  const T = totalSeconds();
+  if (!currentResult || !data || !T || !Number.isFinite(Number(data.duration_s)) || Math.abs(Number(data.duration_s) - T) > 2) {
+    clearRetentionStrip();
+    return;
+  }
+  const values = retentionSeries(data.points, T);
+  if (!values) {
+    clearRetentionStrip();
+    return;
+  }
+  clearScope('retention-strip');
+  $('retentionStrip').hidden = false;
+  drawChart($('retentionChart'), {
+    lines: [{ values: values.map(value => value - 50), colour: 'var(--accent)', width: 1.75 }],
+    range: 50, height: 78, dark: true, fill: true, span: T, scope: 'retention-strip',
+    playhead: 'rgba(236,237,239,.28)',
+  });
+}
+
+let retentionRequest = 0;
+async function loadRetention(jobId) {
+  const seq = ++retentionRequest;
+  clearRetentionStrip();
+  if (!jobId) return;
+  try {
+    const res = await fetch(`/api/jobs/${jobId}/retention`);
+    if (seq !== retentionRequest) return;
+    if (res.status === 401) return window.location.reload();
+    if (!res.ok) return;
+    const data = await res.json();
+    if (seq !== retentionRequest) return;
+    renderRetentionStrip(data);
+  } catch (e) { /* no strip when it cannot be read */ }
 }
 
 function swapParts(group) {
@@ -5330,22 +5412,36 @@ function showCompareRow() {
   const row = $('compareRow'), select = $('compareSelect'), button = $('compareTabBtn');
   const sampleId = currentContext && currentContext.sampleId;
   const jobId = currentContext && currentContext.jobId;
-  const candidates = sampleId
-    ? (samplesData && samplesData.samples || []).filter(s => s.id !== sampleId && s.result)
-    : (signedIn ? (jobsCache || []).filter(j =>
-        j.result_available && j.status === 'done' && j.job_id !== jobId) : []);
-  // A sample with a written comparison comes first, so opening Compare shows that verdict.
+  let candidates = [];
+  let groups = [];
   if (sampleId) {
+    candidates = (samplesData && samplesData.samples || []).filter(s => s.id !== sampleId && s.result);
+    // A sample with a written comparison comes first, so opening Compare shows that verdict.
     const written = new Set((samplesData.comparisons || [])
       .filter(entry => entry.a === sampleId)
       .map(entry => entry.b));
     candidates.sort((x, y) => written.has(y.id) - written.has(x.id));
+    groups = [{ label: 'Samples', items: candidates }];
+  } else {
+    const own = signedIn
+      ? (jobsCache || []).filter(j => j.result_available && j.status === 'done' && j.job_id !== jobId)
+      : [];
+    const samples = (samplesData && samplesData.samples || []).filter(s => s.result);
+    groups = [
+      { label: 'Your videos', items: own },
+      { label: 'Samples', items: samples },
+    ].filter(group => group.items.length);
   }
-  const valueOf = item => sampleId ? item.id : item.job_id;
-  comparisonCandidates = candidates.map(item => ({
+  const valueOf = item => sampleId ? item.id : (item.job_id || item.id);
+  const labelOf = item => sampleId
+    ? (item.title || item.id)
+    : (item.filename || item.title || `Job ${String(valueOf(item)).slice(0, 8)}`);
+  comparisonCandidates = groups.flatMap(group => group.items.map(item => ({
     value: valueOf(item),
-    label: sampleId ? (item.title || item.id) : (item.filename || `Job ${item.job_id.slice(0, 8)}`),
-  }));
+    label: labelOf(item),
+    kind: sampleId ? 'sample' : (item.job_id ? 'job' : 'sample'),
+  })));
+  const allCandidates = comparisonCandidates;
   const kept = comparison
     ? (comparison.kind === 'sample' ? comparison.sampleId : comparison.jobId)
     : '';
@@ -5359,7 +5455,7 @@ function showCompareRow() {
     setupReport(jobId, currentResult);
     if (currentTab === 'compare') setResultTab('charts');
   };
-  if (!currentResult || candidates.length === 0 || (!sampleId && !signedIn)) {
+  if (!currentResult || allCandidates.length === 0 || (!sampleId && !signedIn)) {
     row.hidden = true;
     button.hidden = true;
     select.replaceChildren();
@@ -5372,24 +5468,26 @@ function showCompareRow() {
   const none = document.createElement('option');
   none.value = ''; none.textContent = 'None';
   select.append(none);
-  candidates.forEach(item => {
-    const label = sampleId
-      ? (item.title || item.id)
-      : (item.filename || `Job ${item.job_id.slice(0, 8)}`);
-    const option = document.createElement('option');
-    option.value = valueOf(item);
-    option.textContent = shortName(label);
-    option.title = label;
-    select.append(option);
+  groups.forEach(group => {
+    const host = document.createElement('optgroup');
+    host.label = group.label;
+    group.items.forEach(item => {
+      const label = labelOf(item);
+      const option = document.createElement('option');
+      option.value = valueOf(item);
+      option.textContent = shortName(label);
+      option.title = label;
+      host.append(option);
+    });
+    select.append(host);
   });
-  if (kept && candidates.some(item => valueOf(item) === kept)) {
+  if (kept && allCandidates.some(item => item.value === kept)) {
     select.value = kept;
   } else {
     select.value = '';
     if (comparison) clear();
   }
 }
-
 async function loadComparison() {
   const select = $('compareSelect'), msg = $('compareMsg');
   const id = select.value;
@@ -5422,6 +5520,11 @@ async function loadComparison() {
       if (currentTab === 'compare') setResultTab('charts');
       return;
     }
+    useSampleComparison(sample);
+    return;
+  }
+  const sample = sampleById(id);
+  if (sample && sample.result) {
     useSampleComparison(sample);
     return;
   }
