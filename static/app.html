@@ -90,6 +90,7 @@
   .access-field { display: flex; flex-direction: column; gap: 4px; }
   .access-field span { font-size: 12px; color: var(--muted); }
   .access-field .curve-link, .access-field .curve-report { margin-top: 0; }
+  .curve-link-field { margin-top: 10px; }
   #startupPanel.active { animation: wake-in var(--t-enter) var(--ease-out) 500ms both; }
   @keyframes wake-in { from { opacity: 0; } }
   .startup-trace { width: 168px; height: 26px; margin-top: 4px; color: var(--muted); }
@@ -932,7 +933,9 @@
   <h2 id="curveDialogTitle">Add audience retention</h2>
   <p id="curveVideo"></p>
   <p id="curveSampleNote" hidden>Sample: nothing is sent.</p>
-  <input class="curve-link" id="curveLink" type="text" placeholder="YouTube or Facebook link" autocomplete="url" aria-label="Video link">
+  <label class="access-field curve-link-field" for="curveLink"><span>Where is it published?</span>
+    <input class="curve-link" id="curveLink" type="text" placeholder="YouTube or Facebook link" autocomplete="url">
+  </label>
   <p class="reward-note" id="curveReward"></p>
   <div id="curveStep2" hidden>
     <p>Paste the video's audience-retention report. <a id="curveGuide" href="/static/retention_guide.html" target="_blank" rel="noopener">How to get the report</a></p>
