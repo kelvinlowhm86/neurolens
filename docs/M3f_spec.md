@@ -133,7 +133,7 @@ place in line among other users, waking the database from the landing page.
    scrubber has its own full-width line above the buttons.
 10. **Retention on a result:** the thank-you card (§5d), no box or title.
 11. **Privacy page and retention guide** use the app's dark look and font, plain words ("up to 31
-    days", not S3 rule wording) and the contact address e0297372@u.nus.edu as a mailto link.
+    days", not S3 rule wording) and the contact address joshlum@comp.nus.edu.sg as a mailto link.
 12. **Landing:** "How it works" step 2 ends "It takes a few minutes, and you can watch its
     progress."; a gap between "How it works" and the closing band; the sample credit only in the
     footer.
