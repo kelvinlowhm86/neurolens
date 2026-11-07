@@ -13,7 +13,7 @@ scores rescaled to 0-1). They need their own GPU and model weights and are not p
 
 ## Running `explore.ipynb`
 
-It runs the prototype's pipeline end to end on a sample video. Its outputs use the prototype's maths, not the app's (see "What it shows" in the main README). Follow these steps to run it on a Linux machine with GPU access.
+It runs the prototype's pipeline end to end on a sample video. Its outputs use the prototype's maths, not the app's (see "How it works" in the main README). Follow these steps to run it on a Linux machine with GPU access.
 
 ### Prerequisites
 

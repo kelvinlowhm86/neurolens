@@ -1,27 +1,60 @@
-# NeuroLens: predicted brain response to video
+# NeuroLens
+
+See how a viewer's brain would respond to your video, second by second, before you publish it.
+
+[![CI](https://github.com/kelvinlowhm86/neurolens/actions/workflows/ci.yml/badge.svg)](https://github.com/kelvinlowhm86/neurolens/actions/workflows/ci.yml) [![Live site](https://img.shields.io/badge/live-try%20it-orange)](https://df6girqyykyfa.cloudfront.net) [![Non-commercial](https://img.shields.io/badge/use-non--commercial-lightgrey)](#license)
+
+![NeuroLens analysis view](docs/images/neurolens_app.png)
+
+*The analysis view of the CeraVe ad sample (© CeraVe, shown for non-commercial analysis).*
 
 **Try it live:** https://df6girqyykyfa.cloudfront.net (the samples open without signing in).
 
-## Overview
+## What it does
 
-NeuroLens uses Meta's TRIBE v2 (TRImodal Brain Encoder) to predict, second by second, how an average viewer's brain would respond to a video. It shows predicted brain response relative to typical film and TV viewing: which brain systems respond (seeing, hearing, understanding), the strongest and weakest moments, how much depends on the soundtrack, and a 3D brain map synced to the video.
+NeuroLens is built on Meta's TRIBE v2 (TRImodal Brain Encoder). It predicts, second by second, how an average viewer's brain would respond to a video. It shows which brain systems respond (seeing, hearing and understanding), the strongest and weakest moments, how much depends on the soundtrack, and a 3D brain synced to the video.
 
-It is a virtual pre-test. It does not predict views, retention or sales, and it does not classify emotion. The model gives no evidence for those, so NeuroLens makes no such claim.
+### Features
+
+- Analysis charts and a 3D brain, synced to the video.
+- An AI-written report with timed advice on what to keep and what to change.
+- A written comparison of two videos, including two cuts of one.
+- Real audience retention beside the prediction once a shared video reaches 1,000 views on YouTube or Facebook.
+- Pay per use with credits.
+- Scale-to-zero GPU on AWS.
+
+## Quick start
+
+No GPU, model or AWS account needed. Python 3.12 and Docker (for the database).
+
+```bash
+python3.12 -m venv .venv && source .venv/bin/activate
+pip install -e . -r requirements/dev.txt
+
+# A local PostgreSQL on port 55432, used by the tests and the local stack (once; afterwards `docker start neurolens-test-pg`)
+docker run -d --name neurolens-test-pg -e POSTGRES_PASSWORD=test -p 55432:5432 postgres:16
+export NEUROLENS_TEST_DSN=postgresql://postgres:test@localhost:55432/postgres
+
+python infra/local_stack.py                     # whole product, fake S3/SQS and fake analysis: http://127.0.0.1:5003 (--grant <email> <dollars> adds credit)
+FAKE_INFERENCE=1 python worker.py serve         # only the GPU container, with a fake model
+```
+
+While working, run the file for the part you changed (`pytest tests/test_m3i_curves.py`); it takes seconds. The whole suite (`pytest && ruff check . && ruff format --check .`, about 6 minutes) runs on GitHub on every push and pull request (`.github/workflows/ci.yml`). Without `NEUROLENS_TEST_DSN` the database tests are skipped, not failed, so set it before trusting a local run.
 
 ## Where things live
 
-- `neurolens/`: the Python package for settings, inference, response maths, storage, database, billing, the web app and the SageMaker container.
-- `app.py`, `worker.py`: thin launchers (`python app.py`, port 5003; `python worker.py serve`).
-- `static/`: the page, the hand-built SVG charts and the 3D brain assets.
-- `data/`: sample results (`samples.json`), videos, thumbnails and generated output. See `data/videos/README.md`.
-- `infra/`: Terraform, IAM policies, migrations, the worker image and the operator scripts. See `infra/README.md`.
-- `experiments/`: the report experiments and side trials. See `experiments/README.md`.
-- `notebooks/`: the original local prototype notebooks. See `notebooks/README.md`.
-- `tests/`: pytest; `.github/workflows/ci.yml` runs them on every push. `docs/`: specs, evidence, study materials and the submitted course documents. See `docs/README.md`.
-- `docs/architecture.html`: the architecture page, one clickable diagram of how it runs on AWS (download the repo and open it in a browser; GitHub shows it as code).
-- `trailer/`: the launch video, made with Remotion; separate from the product. See `trailer/README.md`.
+- [`neurolens/`](neurolens/): the Python package for settings, inference, response maths, storage, database, billing, the web app and the SageMaker container.
+- [`app.py`](app.py), [`worker.py`](worker.py): thin launchers (`python app.py`, port 5003; `python worker.py serve`).
+- [`static/`](static/): the page, the hand-built SVG charts and the 3D brain assets.
+- [`data/`](data/): sample results (`samples.json`), videos, thumbnails and generated output. See [`data/videos/README.md`](data/videos/README.md).
+- [`infra/`](infra/): Terraform, IAM policies, migrations, the worker image and the operator scripts. See [`infra/README.md`](infra/README.md).
+- [`experiments/`](experiments/): the report experiments and side trials. See [`experiments/README.md`](experiments/README.md).
+- [`notebooks/`](notebooks/): the original local prototype notebooks. See [`notebooks/README.md`](notebooks/README.md).
+- [`tests/`](tests/): pytest; [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs them on every push. [`docs/`](docs/): specs, evidence, study materials and the submitted course documents. See [`docs/README.md`](docs/README.md).
+- [`docs/architecture.html`](docs/architecture.html): the architecture page, one clickable diagram of how it runs on AWS (download the repo and open it in a browser; GitHub shows it as code).
+- [`trailer/`](trailer/): the launch video, made with Remotion; separate from the product. See [`trailer/README.md`](trailer/README.md).
 
-## What it shows (current design, `docs/M3d_spec.md`)
+## How it works
 
 The model outputs one row per second of video over 20,484 points of the cortex (the fsaverage5 surface: indices 0-10,241 left hemisphere, 10,242-20,483 right). TRIBE v2 was trained on fMRI responses standardised per point, so 0 means typical film/TV viewing: values are shown signed and unscaled, and two videos can be compared directly.
 
@@ -53,24 +86,6 @@ Result format 2 (`results/<job_id>.json`):
 Series order: faces, bodies, scenes, visual, sound, speech, social, see, hear, understand, overall. Values are rounded to 3 decimals. The web app adds a `summary` (the sound share, `audio_dependence`) when it serves a result; it is never stored. Results without `"format": 2` are answered with 410 ("upload the video again").
 
 The raw brain file (`results/<job_id>.brain`) holds the with-audio predictions as float16, shape (T, 20484), with no header. The 3D map reads it, and later changes to the signals need no GPU rerun.
-
-## Run it on a laptop
-
-No GPU, model or AWS account needed. Python 3.12 and Docker (for the database).
-
-```bash
-python3.12 -m venv .venv && source .venv/bin/activate
-pip install -e . -r requirements/dev.txt
-
-# A local PostgreSQL on port 55432, used by the tests and the local stack (once; afterwards `docker start neurolens-test-pg`)
-docker run -d --name neurolens-test-pg -e POSTGRES_PASSWORD=test -p 55432:5432 postgres:16
-export NEUROLENS_TEST_DSN=postgresql://postgres:test@localhost:55432/postgres
-
-python infra/local_stack.py                     # whole product, fake S3/SQS and fake analysis: http://127.0.0.1:5003 (--grant <email> <dollars> adds credit)
-FAKE_INFERENCE=1 python worker.py serve         # only the GPU container, with a fake model
-```
-
-While working, run the file for the part you changed (`pytest tests/test_m3i_curves.py`); it takes seconds. The whole suite (`pytest && ruff check . && ruff format --check .`, about 6 minutes) runs on GitHub on every push and pull request (`.github/workflows/ci.yml`). Without `NEUROLENS_TEST_DSN` the database tests are skipped, not failed, so set it before trusting a local run.
 
 ## Hardware Requirements
 
@@ -120,6 +135,14 @@ terraform -chdir=infra/terraform apply
 The website ships with `infra/deploy_web.sh`, and new database migrations with `infra/apply_schema.py` (`infra/README.md`).
 
 See `infra/terraform/README.md`: setup from an empty account, work sessions and teardown.
+
+## Limits
+
+Predictions describe an average viewer's brain response compared with typical film and TV viewing; they are not forecasts of views, retention or sales, and NeuroLens does not read emotions.
+
+## Design docs
+
+The specs and evidence live in [`docs/`](docs/README.md).
 
 ## License
 
