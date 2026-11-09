@@ -3,15 +3,15 @@
 Target: 450-500 words per presenter (~155 words/min). Slides 1-20 are the talk, 21 is Q&A, 22 the backup recording. `[TBD]` = fill from experiments (edit DATA in gen.py for charts).
 
 
-## P1: 477 words, ~3:04
+## P1: 479 words, ~3:05
 
 **Slide 1: Title** (117 words)
 
 > Good afternoon, everyone, and thank you for joining us. We're team NeuroLens. Over the next fifteen minutes we'll show you a cloud service that sounds a little like science fiction: it predicts how a viewer's brain responds to a video, second by second, without putting anyone inside a scanner. The curve behind me is exactly what our model produces: one reading for every second of a video. I'll set up the problem and the idea. Then my teammates will run the whole thing live, explain the business model, and share how we tested it. Everything you'll see today is running on AWS right now, and you can try it yourself at the address on the last slide.
 
-**Slide 2: Problem** (119 words)
+**Slide 2: Problem** (121 words)
 
-> Let's start with a simple question: how do you know whether an ad works? Surveys are the usual answer, but people are bad at explaining their own reactions. Neuroscience does better. When researchers scan viewers with fMRI, the signal predicts real advertising results better than surveys or traditional biometrics. The catch is on the screen: testing a single commercial costs ten thousand dollars or more, and takes days to weeks. Webcam-based facial coding is cheaper, between about eight hundred and four thousand dollars, but still takes hours to days, and it only sees faces. The last row is our planned price: about one dollar for a thirty-second clip, in minutes. That gap is the whole reason this project exists.
+> Let's start with a simple question: how do you know whether an ad works? Surveys are the usual answer, but people are bad at explaining their own reactions. Neuroscience does better. When researchers scan viewers with fMRI, the signal predicts real advertising results better than surveys or traditional biometrics. The catch is on the screen: testing a single commercial costs ten thousand dollars or more, and takes days to weeks. Webcam-based facial coding is cheaper, between about eight hundred and four thousand dollars, but still takes hours to days, and it only sees faces. The last row is our planned price: one dollar for a thirty-second clip, back in about seven minutes. That gap is the whole reason this project exists.
 
 **Slide 3: Why now** (112 words)
 
@@ -22,7 +22,7 @@ Target: 450-500 words per presenter (~155 words/min). Slides 1-20 are the talk, 
 > So here's NeuroLens, in one line. You upload a video. It goes into TRIBE v2, a research model from Meta that combines three encoders, one for video, one for audio and one for speech, and was trained on real fMRI recordings of people watching films. For every second, it predicts activity at twenty thousand four hundred and eighty-four points on the cortex. We distil that into seven brain areas in three groups, and we do it twice, once with the sound and once muted. At the end, you get three things a creator can use: a timeline you can scrub, a 3D brain synced to the video, and a written report. This is a virtual pre-test, not a prediction of views or sales. I'll hand over to my teammate.
 
 
-## P2: 495 words, ~3:11
+## P2: 496 words, ~3:12
 
 **Slide 5: Users** (120 words)
 
@@ -36,9 +36,9 @@ Target: 450-500 words per presenter (~155 words/min). Slides 1-20 are the talk, 
 
 > The journey has five steps. You sign in with Google. You upload a video, MP4, MOV or WebM up to two minutes, and the price is shown before you commit, with a short window to cancel. A GPU starts on demand and the model scores every second. You can watch live progress, stage by stage. Then you explore: the timeline, the 3D brain, the AI report, and side-by-side comparison. Credit is used in thirty-second steps, so a thirty-second clip costs the smallest unit. Rather than describe it any further, let me show you. I'm going to do this live.
 
-**Slide 8: Demo 1** (161 words)
+**Slide 8: Demo 1** (162 words)
 
-> I'm switching to the live site now. This is the address on the screen, and it's running on AWS in the cloud, not on my laptop. I'll sign in with my Google account. Once I'm in, you can see my credit balance at the top, and the upload area here. I'll choose this thirty-second clip. Notice that before anything is sent, the app tells me exactly how much credit this will use, and I get a short window to cancel. That matters, because GPU time costs real money. I'll confirm. The file goes straight from my browser to cloud storage. Now the job moves through stages: checking the file, waiting for a GPU, and analysing. A GPU is being started for us on demand, because nothing runs while nobody is using the service. We warmed one up before this session, so this takes about a minute. While it processes, I'll hand over to my colleague, who'll show you a finished result.
+> I'm switching to the live site now. This is the address on the screen, and it's running on AWS in the cloud, not on my laptop. I'll sign in with my Google account. Once I'm in, you can see my credit balance at the top, and the upload area here. I'll choose this thirty-second clip. Notice that before anything is sent, the app tells me exactly how much credit this will use, and I get a short window to cancel. That matters, because GPU time costs real money. I'll confirm. The file goes straight from my browser to cloud storage. Now the job moves through stages: checking the file, waiting for a GPU, and analysing. A GPU is being started for us on demand, because nothing runs while nobody is using the service. Even with a GPU already warm, a thirty-second clip takes about seven minutes, so while it processes, I'll hand over to my colleague, who'll show you a finished result.
 
 
 ## P3: 464 words, ~3:00
@@ -60,30 +60,30 @@ Target: 450-500 words per presenter (~155 words/min). Slides 1-20 are the talk, 
 > Briefly, here's what happens behind the scenes. This strip is an illustrative day. An owned GPU, the long grey bar, is paid for all twenty-four hours. Ours, the orange blocks, switches on only around the work: it starts when a video is waiting and stays on for seven idle minutes before shutting itself down. Three guards keep it safe. Every file is checked before a GPU is started. The GPU scales to zero. And a failed job refunds its credit automatically. The full architecture is in our report, so I'll leave it there and pass to my colleague, who'll explain the business behind it.
 
 
-## P4: 491 words, ~3:11
+## P4: 481 words, ~3:07
 
 **Slide 13: Business model** (152 words)
 
 > Thanks. Let's talk about the business model, which comes in two phases, joined by a simple loop. Phase one is where we are today. The model we use, TRIBE v2, is released under a non-commercial licence, so we can't sell access to it, and we haven't. NeuroLens is free to explore: anyone can browse the samples, and creators and marketers with a channel of a thousand or more followers can request five free minutes. Then the loop turns. A creator adds the real audience-retention curve for a video that has been public for a week, and earns that analysis back as credit. For us, that's ground truth: real viewer behaviour to test the predictions against. Phase two is the commercial service. With a commercial licence, we'd sell prepaid credits, charged per second of video. We built and tested that version with Stripe in test mode, and kept it tagged in our repository.
 
-**Slide 14: Unit economics** (113 words)
+**Slide 14: Unit economics** (100 words)
 
-> What does one analysis cost us to deliver? Think of it as a sum, shown on the right. First, what the GPU does: how many GPU seconds a thirty-second video takes, times the hourly price. Second, what it takes to wake the GPU and let it rest: start-up time plus the seven idle minutes. Third, the AI report written by a language model. Fourth, storage and the database. Our preliminary estimate was under a cent of raw GPU for a thirty-second ad, and around ten cents fully loaded. The measured figure is [TBD] per video. Against a planned price of about one dollar per thirty-second video, that gives a gross margin of [TBD].
+> What does one analysis cost us to deliver? Think of it as a sum, shown on the right. A thirty-second video takes about six and a half minutes of GPU time: thirteen cents. Waking the GPU and letting it rest adds ten cents when three videos share a session. Storage and the database are about five dollars a month. So one video costs us about twenty-three cents. Against a price of one dollar, that's a gross margin of about seventy-seven percent, rising to about eighty-six percent when thirty videos share a session. The AI report comes on top of that.
 
-**Slide 15: SaaS vs on-premise** (118 words)
+**Slide 15: SaaS vs on-premise** (121 words)
 
-> Why cloud rather than buying a GPU? This model needs a lot of GPU memory, we measured a peak of almost twenty gigabytes, which is beyond many gaming cards, so on-premise means a professional workstation costing thousands of dollars upfront, plus power and maintenance. Here's the preliminary model. The grey line is that workstation, amortised to about two hundred and twenty-five dollars a month, flat no matter how much you use it. The orange line is cloud: a small fixed platform cost, plus a few cents for each video. They cross at roughly fifteen hundred videos a month. Below that, cloud is cheaper. Above it, owning starts to win. The measured GPU seconds will move that crossing point.
+> Why cloud rather than buying a GPU? We ran the same code on our own machine, a single RTX 4090 with twenty-four gigabytes, which is enough for this model. That rig costs about five thousand dollars upfront. Spread over three years, plus the power it draws while idle, it's about a hundred and fifty-nine dollars a month: the grey line, flat no matter how much you use it. The orange line is AWS: about five dollars a month fixed, plus twenty-three cents for each video. They cross at about six hundred and seventy videos a month. Below that, cloud is cheaper. Above it, owning starts to win. Ad testing comes in bursts, which is exactly where renting by the hour helps.
 
 **Slide 16: Limits** (108 words)
 
 > We also want to be clear about what we don't claim. NeuroLens predicts a typical viewer's brain response, second by second, on one scale for every video. It does not predict views, retention, or sales, and the research model gives no evidence for that, so we don't say it. It isn't emotion classification. It isn't cleared for commercial use, because the model licence is non-commercial, which is why a paid launch needs a new licence. And our usability study was small, five people, enough to find the main problems but not enough for statistical claims. Now I'll pass to my colleague, who'll show you how we tested it.
 
 
-## P5: 492 words, ~3:11
+## P5: 514 words, ~3:19
 
-**Slide 17: Latency** (111 words)
+**Slide 17: Latency** (133 words)
 
-> Thanks. We evaluated the system in three ways. First, speed: how long does a user actually wait? We broke every job into stages: upload, waiting in the queue, downloading to the GPU, the model passes, and writing the results, and we measured them for fifteen, thirty and sixty second clips. Each stacked bar is one clip length. The takeaway is that [TBD: most of the time is the model itself]. It takes about [TBD] seconds of GPU time per second of video on the cloud GPU, compared with roughly five on a local high-end gaming card, per pass. And if no GPU is warm, the cold start adds about [TBD] minutes.
+> Thanks. We evaluated the system in three ways. First, speed: how long does a user actually wait? We ran the same thirty-second clip on our own RTX 4090 and on AWS, and split each job into stages: the upload, waiting in the queue, and the GPU job itself. On AWS the whole job takes about seven minutes, and the upload and queue together are only about twenty seconds. So about ninety-five percent of the wait is the model itself. The cloud GPU, an L4, needs about thirteen seconds of GPU time per second of video, against under four on the RTX 4090, which is why our own machine finishes in about two minutes. And if no GPU is warm, the user first waits about seven and a half minutes for one to start.
 
 **Slide 18: Scaling** (115 words)
 
@@ -109,4 +109,4 @@ Target: 450-500 words per presenter (~155 words/min). Slides 1-20 are the talk, 
 > Press B. Say: 'The live site is having trouble, so here is the recording from this morning.' Then continue with the same talking points as the live demo.
 
 
-**Total: 2419 words, ~15:37**
+**Total: 2434 words, ~15:43**
