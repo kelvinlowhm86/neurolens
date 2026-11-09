@@ -40,7 +40,7 @@ const muteFrom = cuts.mute - f(SFX.mute.HIT_OFFSET);
 const scribbleFrom = moments.weeksStop - f(SFX.scribble.HIT_OFFSET);
 
 export const Trailer: React.FC = () => {
-  return <AbsoluteFill style={{background: '#050607', color: C.text, fontFamily}}>
+  return <AbsoluteFill style={{background: '#000000', color: C.text, fontFamily}}>
     <Audio src={staticFile('music3.wav')} trimBefore={f(MUSIC_START)} volume={(t) => .8 * musicLevel(t) * MASTER} />
     <Audio src={staticFile('music3-muffled.wav')} trimBefore={f(MUSIC_START)} volume={(t) => .8 * (1 - musicLevel(t)) * MASTER} />
     <Sequence from={impactFrom} durationInFrames={impactDuration}>

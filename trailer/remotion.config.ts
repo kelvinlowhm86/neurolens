@@ -10,5 +10,7 @@ Config.setCrf(17);
 Config.setPixelFormat('yuv420p');
 Config.setVideoImageFormat('jpeg');
 Config.setJpegQuality(95);
-Config.setConcurrency(4);
+Config.setConcurrency(2);
+Config.setDelayRenderTimeoutInMilliseconds(120000);
+Config.setTimeoutInMilliseconds(120000);
 Config.setOverwriteOutput(true);

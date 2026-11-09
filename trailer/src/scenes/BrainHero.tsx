@@ -28,10 +28,7 @@ export const BrainHero: React.FC<{start?: number; layout?: 'card' | 'solo'; fram
   const second = sourceStart + frame / fps;
   const drift = Math.sin(progress * Math.PI) * 10;
   const solo = layout === 'solo';
-  return <AbsoluteFill style={{background: '#0E0F11', overflow: 'hidden'}}>
-    <AbsoluteFill style={{background: solo
-      ? 'radial-gradient(ellipse at 50% 47%, rgba(92,106,130,.30), transparent 52%), radial-gradient(ellipse at 50% 50%, rgba(255,138,42,.10), transparent 40%)'
-      : 'radial-gradient(ellipse at 69% 48%, rgba(73,83,97,.13), transparent 54%)'}}/>
+  return <AbsoluteFill style={{background: '#000000', overflow: 'hidden'}}>
     {!solo && <div style={{position: 'absolute', left: 66 - progress * 16, top: 293 - drift, width: 825, height: 464, perspective: 1800, transform: `scale(${1 + progress * .035})`, transformOrigin: 'center'}}>
       <div style={{position: 'absolute', inset: 0, transformStyle: 'preserve-3d', transform: `rotateY(${-13 + progress * 3}deg) rotateX(3deg) rotateZ(-1deg)`}}>
         <div style={{position: 'absolute', inset: -2, borderRadius: 10, background: '#333a42', transform: 'translateZ(-8px)', boxShadow: '0 38px 85px rgba(0,0,0,.72)'}}/>
@@ -48,6 +45,5 @@ export const BrainHero: React.FC<{start?: number; layout?: 'card' | 'solo'; fram
     {data && <ThreeCanvas width={solo ? 1500 : 1200} height={solo ? 1080 : 1040} style={{position: 'absolute', left: solo ? 210 : 770, top: solo ? 0 : 12, pointerEvents: 'none'}} camera={{fov: 28, near: .1, far: 3000, position: [-300, 300, 165], up: [0, 0, 1]}} gl={{alpha: true, antialias: true, preserveDrawingBuffer: true}} dpr={1}>
       <Cortex data={data} second={second} progress={progress}/>
     </ThreeCanvas>}
-    <AbsoluteFill style={{pointerEvents: 'none', background: 'radial-gradient(ellipse at 51% 48%, transparent 38%, rgba(0,0,0,.30) 100%)'}}/>
   </AbsoluteFill>;
 };

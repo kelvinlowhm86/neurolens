@@ -9,7 +9,7 @@ export const Scanner: React.FC<{progress?: number; shot?: number}> = ({progress,
   const frame = useCurrentFrame();
   const {width, height, durationInFrames} = useVideoConfig();
   const fallback = clamp(frame / Math.max(1, durationInFrames - 1));
-  return <AbsoluteFill style={{background: '#0E0F11'}}>
+  return <AbsoluteFill style={{background: '#000000'}}>
     <ThreeCanvas width={width} height={height}
       camera={{position: [8.6, 5.3, 12.6], fov: 34, near: 0.1, far: 65}}
       gl={{antialias: true, alpha: false, powerPreference: 'high-performance'}}

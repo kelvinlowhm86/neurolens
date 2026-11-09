@@ -13,7 +13,7 @@ export const TitleScene: React.FC = () => {
   const g = frame + cuts.title;
   const out = 1 - ease(g, cuts.credits - 8, cuts.credits);
   const glow = g < moments.finalHit ? 0 : 1 - ease(g, moments.finalHit, moments.finalHit + GLOW);
-  return <AbsoluteFill style={{background: '#050607'}}>
+  return <AbsoluteFill style={{background: '#000000'}}>
     <div style={{position: 'absolute', left: 0, right: 0, top: 430, textAlign: 'center', opacity: out, transform: 'translateY(-50%)'}}>
       <div style={{fontSize: 238, lineHeight: 1, fontWeight: 600, letterSpacing: '-.07em', color: C.text,
         textShadow: `0 24px 90px rgba(0,0,0,.8), 0 0 90px rgba(255,138,42,${.45 * glow}), 0 0 ${40 + 60 * glow}px rgba(255,170,90,${.55 * glow})`}}>

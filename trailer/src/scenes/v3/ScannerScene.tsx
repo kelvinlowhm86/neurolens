@@ -30,7 +30,7 @@ export const ScannerScene: React.FC = () => {
     <AbsoluteFill style={{background: 'radial-gradient(ellipse at 50% 53%, transparent 28%, rgba(5,6,8,.42) 100%)'}} />
     <AbsoluteFill style={{background: `radial-gradient(ellipse at 50% 51%, rgba(255,138,42,${glow}), transparent 46%)`, mixBlendMode: 'screen', pointerEvents: 'none'}} />
     <Caption cue={CUE.answer} offset={cuts.scanner} size={96} y={505} maxWidth={1500} />
-    {CUE.build.map((cue) => <Caption key={cue.id} cue={cue} offset={cuts.scanner} size={184} y={540} maxWidth={1760} outFrames={1} />)}
+    {CUE.build.map((cue) => <Caption key={cue.id} cue={cue} offset={cuts.scanner} size={cue.id === "build-weeks" ? 130 : 184} y={540} maxWidth={1760} outFrames={1} />)}
     <Caption cue={CUE.stopA} offset={cuts.scanner} size={132} y={480} maxWidth={1520} outFrames={1} loosen={0} />
     <AbsoluteFill style={{background: '#FFFFFF', opacity: buildFlash * .12, mixBlendMode: 'screen', pointerEvents: 'none'}} />
     <AbsoluteFill style={{background: '#FFF2E2', opacity: whoosh * .92, mixBlendMode: 'screen', pointerEvents: 'none'}} />

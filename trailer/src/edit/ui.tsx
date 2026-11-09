@@ -15,15 +15,13 @@ const {fontFamily} = loadFontFromInfo(localInfo, 'normal', {weights: ['400', '50
 export {fontFamily};
 
 export const C = {
-  bg: '#0E0F11', text: '#ECEDEF', muted: '#A0A6AF', rule: '#24262B',
+  bg: '#000000', text: '#ECEDEF', muted: '#A0A6AF', rule: '#24262B',
   hot: '#FF8A2A', cool: '#6F7E99', surface: '#17181B',
 };
 
 export const PulseStage: React.FC<{children: React.ReactNode}> = ({children}) => {
-  return <AbsoluteFill>
+  return <AbsoluteFill style={{background: '#000000'}}>
     {children}
-    <AbsoluteFill style={{background: 'radial-gradient(ellipse at 52% 48%, transparent 34%, rgba(0,0,0,.42) 100%)', pointerEvents: 'none'}} />
-    <AbsoluteFill style={{background: 'radial-gradient(ellipse at 50% 48%, rgba(255,138,42,.016), transparent 62%)', mixBlendMode: 'screen', pointerEvents: 'none'}} />
   </AbsoluteFill>;
 };
 

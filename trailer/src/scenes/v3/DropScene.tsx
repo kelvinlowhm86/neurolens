@@ -10,7 +10,7 @@ export const DropScene: React.FC = () => {
   const f = useCurrentFrame();
   const g = f + cuts.drop;
   const push = ease(g, cuts.drop, cuts.hooked);
-  return <AbsoluteFill style={{background: '#050607'}}>
+  return <AbsoluteFill style={{background: '#000000'}}>
     <AbsoluteFill style={{transform: `scale(${1.02 + push * .04})`, transformOrigin: '50% 50%'}}>
       <BrainHero start={18} layout="solo" />
     </AbsoluteFill>

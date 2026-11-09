@@ -23,8 +23,7 @@ export const MinutesScene: React.FC = () => {
   const ring = ease(g, cuts.minutes + f(.5), brainAt);
   const toBrain = ease(g, brainAt, brainAt + f(.45));
   const fade = clamp((g - (moments.silence - f(.3))) / (f(.3) - 1));
-  return <AbsoluteFill style={{background: '#0B0C0E'}}>
-    <AbsoluteFill style={{background: 'radial-gradient(ellipse at 50% 40%, rgba(255,138,42,.12), transparent 52%), radial-gradient(ellipse at 76% 64%, rgba(111,126,153,.14), transparent 46%)'}} />
+  return <AbsoluteFill style={{background: '#000000'}}>
     <AbsoluteFill style={{opacity: toBrain, transform: `scale(${.97 + .03 * toBrain})`}}>
       <Sequence from={brainAt - cuts.minutes}>
         <BrainHero start={50} layout="solo" />
@@ -49,6 +48,6 @@ export const MinutesScene: React.FC = () => {
       <div style={{fontSize: wordSize, lineHeight: 1, fontWeight: 600, letterSpacing: '-.065em', color: C.hot, textShadow: '0 24px 90px rgba(0,0,0,.7), 0 0 70px rgba(255,138,42,.25)'}}>{CUE.minutes.text}</div>
     </div>
     <Flash at={cuts.minutes} offset={cuts.minutes} strength={.3} length={8} />
-    <AbsoluteFill style={{background: '#050607', opacity: fade, pointerEvents: 'none'}} />
+    <AbsoluteFill style={{background: '#000000', opacity: fade, pointerEvents: 'none'}} />
   </AbsoluteFill>;
 };

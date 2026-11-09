@@ -20,9 +20,7 @@ export const COLUMN_POS: ReadonlyArray<readonly [number, number]> = [
 export const GROUP_TITLE_Y = 166;
 
 export const SignalField: React.FC = () =>
-  <AbsoluteFill style={{background: C.bg}}>
-    <AbsoluteFill style={{background: 'radial-gradient(ellipse at 50% 50%, rgba(255,138,42,.04), transparent 54%), radial-gradient(ellipse at 18% 16%, rgba(111,126,153,.15), transparent 40%), radial-gradient(ellipse at 84% 82%, rgba(111,126,153,.12), transparent 42%)'}} />
-  </AbsoluteFill>;
+  <AbsoluteFill style={{background: C.bg}} />;
 
 export const GroupTitle: React.FC<{title: string; x: number; color: string; opacity?: number}> = ({title, x, color, opacity = 1}) =>
   <div style={{position: 'absolute', left: x, top: GROUP_TITLE_Y, width: 480, transform: 'translate(-50%,-50%)', textAlign: 'center', opacity, pointerEvents: 'none'}}>

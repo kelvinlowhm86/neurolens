@@ -17,12 +17,12 @@ const cue = (id: string, text: string, start: number, end: number): Cue => ({
 
 export const CUE = {
   openA: cue('open-a', 'You made a video.', 0, 3),
-  openB: cue('open-b', 'Will it grab them?', 3, 6),
+  openB: cue('open-b', 'Will it hold their attention?', 3, 6),
   answer: cue('answer', 'The real answer is in the brain.', 6, 8),
   build: [
     cue('build-lab', 'A lab.', 8, 10),
     cue('build-scanner', 'A scanner.', 10, 12),
-    cue('build-weeks', 'Weeks.', 12, 14),
+    cue('build-weeks', 'Weeks of waiting.', 12, 14),
   ],
   stopA: cue('stop-a', 'What if all you needed', 14, 18.25),
   stopB: cue('stop-b', 'was the video?', 18.25, 20),
