@@ -1822,8 +1822,6 @@ async function start(attempt = 0) {
       const err = await rRes.json().catch(() => ({}));
       return startupFailed('Booth pass unavailable', err.message || 'Scan a new QR code at the booth.', false);
     }
-    params.delete('booth');
-    setParam('booth', null);
   }
   let res;
   try { res = await fetch('/api/me'); } catch (e) { return startupFailed(); }

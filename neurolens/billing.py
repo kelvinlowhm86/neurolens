@@ -1522,14 +1522,6 @@ def redeem_booth_pass(db, pass_id, *, current_user_id=None):
     guest_id = f"{GUEST_PREFIX}{pass_id}"
     with db.transaction() as tx:
         _ensure_booth_pool(tx)
-        if is_booth_guest(current_user_id) and current_user_id != guest_id:
-            active_current = tx.execute(
-                "SELECT deleted_at FROM users WHERE user_id = :user_id",
-                {"user_id": current_user_id},
-            )
-            if active_current and active_current[0]["deleted_at"] is None:
-                return current_user_id
-        pool = _lock_balance(tx, BOOTH_POOL_USER_ID)
         existing = tx.execute(
             "SELECT deleted_at FROM users WHERE user_id = :user_id FOR UPDATE",
             {"user_id": guest_id},
@@ -1538,6 +1530,14 @@ def redeem_booth_pass(db, pass_id, *, current_user_id=None):
             if existing[0]["deleted_at"] is not None:
                 raise BoothPassEnded(f"booth pass {pass_id!r} was deleted")
             return guest_id
+        if is_booth_guest(current_user_id) and current_user_id != guest_id:
+            active_current = tx.execute(
+                "SELECT deleted_at FROM users WHERE user_id = :user_id",
+                {"user_id": current_user_id},
+            )
+            if active_current and active_current[0]["deleted_at"] is None:
+                return current_user_id
+        pool = _lock_balance(tx, BOOTH_POOL_USER_ID)
         if not pool or pool["available_cents"] < BOOTH_PASS_CENTS:
             raise BoothLimitReached("no booth passes remaining")
         _move(tx, BOOTH_POOL_USER_ID, None, "grant", -BOOTH_PASS_CENTS, 0)

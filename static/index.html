@@ -456,7 +456,7 @@ const brainView = createBrainView(brainBox, $('brainMessage'));
 let brainShown = false;
 
 const curve = {
-  values: [], duration: 0, moments: [], width: 0, height: 84, mid: 42, range: 0.4,
+  values: [], withSound: null, withoutSound: null, duration: 0, moments: [], width: 0, height: 84, mid: 42, range: 0.4,
   full: '', lastPos: -1, active: -1, ready: false
 };
 
@@ -731,7 +731,9 @@ function measureCurve() {
   curvePlay.setAttribute('y1', '0');
   curvePlay.setAttribute('y2', curve.height.toFixed(1));
   let largest = 0.0001;
-  for (const value of curve.values) largest = Math.max(largest, Math.abs(value));
+  for (const s of [curve.withSound, curve.withoutSound]) {
+    if (s) for (const value of s) largest = Math.max(largest, Math.abs(value));
+  }
   curve.range = Math.max(0.15, largest * 1.15);
   curve.full = buildPath(curve.values.length - 1);
   curveGhost.setAttribute('d', curve.full);
@@ -785,14 +787,27 @@ function updateCurve(seconds) {
   updateCallout(seconds);
 }
 
+function syncCurveAudioMode() {
+  if (!curve.ready) return;
+  const next = (heroVideo.muted && curve.withoutSound) ? curve.withoutSound : curve.withSound;
+  if (!next || next === curve.values) return;
+  curve.values = next;
+  measureCurve();
+  updateCurve(Number.isFinite(heroVideo.currentTime) ? heroVideo.currentTime : 0);
+}
+
 function setupCurve(sample) {
   const signals = sample.result && sample.result.signals;
-  const values = signals && Array.isArray(signals.overall) ? signals.overall : null;
-  if (!values || values.length < 2 || !values.every(value => Number.isFinite(value))) {
+  const mutedSignals = sample.result && sample.result.signals_without_audio;
+  const withSound = signals && finiteSeries(signals.overall);
+  const withoutSound = mutedSignals && finiteSeries(mutedSignals.overall);
+  if (!withSound) {
     curveBox.hidden = true;
     return;
   }
-  curve.values = values;
+  curve.withSound = withSound;
+  curve.withoutSound = withoutSound || withSound;
+  curve.values = heroVideo.muted ? curve.withoutSound : curve.withSound;
   curve.duration = Number(sample.result && sample.result.duration_seconds) || 0;
   const report = sample.report && typeof sample.report === 'object' ? sample.report : null;
   curve.moments = report && Array.isArray(report.moments)
@@ -989,6 +1004,7 @@ soundToggle.addEventListener('click', event => {
   event.stopPropagation();
   heroVideo.muted = !heroVideo.muted;
   renderSoundToggle();
+  syncCurveAudioMode();
 });
 
 heroVideo.addEventListener('click', () => {
