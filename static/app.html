@@ -978,7 +978,7 @@
   </div>
   <div class="booth-help" id="boothHelp" hidden>
     <p><strong>QR &amp; Passes:</strong> Each phone gets 1 pass (2 min credit). The QR auto-rotates as soon as a new device claims it. Re-scanning on the same phone keeps its existing session without using another pass (clear browser site data to reset a test phone). <strong>Stop passes</strong> sets remaining passes to 0.</p>
-    <p><strong>GPU endpoint (current/desired):</strong> <strong>0 (Auto-scale)</strong> scales to 0 ($0/hr) when idle and wakes a GPU (~4–5 min cold start) on upload. <strong>Keep 1 / 2 GPUs</strong> starts and holds 1 or 2 GPUs warm for 6 hours (~30–60s per video, no cold start) before auto-reverting to 0.</p>
+    <p><strong>GPU endpoint:</strong> <strong>0 (Auto-scale)</strong> scales to 0 ($0/hr) when idle and wakes a GPU (~4–5 min cold start) on upload. <strong>Keep 1 / 2 GPUs</strong> starts and holds 1 or 2 GPUs warm for 6 hours (~30–60s per video, no cold start) before auto-reverting to 0.</p>
     <p><strong>Grant credit:</strong> Adds permanent minutes to any signed-in email (leave blank for your own account).</p>
   </div>
   <p>Scan with your phone camera to get a 2-minute pass and analyse your own videos.</p>
@@ -1447,12 +1447,18 @@ function formatBoothGpuStatus(gpu, warmTarget, videosRunning) {
   if (warmTarget === 1 && cur > 1 && videosRunning > 1) {
     return `${readyLabel} · 2nd stops after queue`;
   }
-  if (queued != null && queued !== des) {
-    return queued > cur ? `Starting (${cur}/${queued} ready)…` : `Stopping to ${queued} after update…`;
-  }
-  if (gpu.status === 'Updating' || gpu.status === 'Creating' || gpu.status === 'SystemUpdating' || cur !== target) {
-    if (target > cur) return `Starting (${cur}/${target} ready)…`;
-    if (target < cur) return target === 0 ? `Stopping (${cur}→0)…` : `Scaling down (${cur}→${target})…`;
+  if (gpu.status === 'Updating' || gpu.status === 'Creating' || gpu.status === 'SystemUpdating' || cur !== target || (queued != null && queued !== des)) {
+    if (target > cur) {
+      if (cur === 0 && target === 1) return '0 ready · starting 1st GPU…';
+      if (cur === 0 && target === 2) return '0 ready · starting 2 GPUs…';
+      if (cur === 1 && target === 2) return '1 GPU ready · starting 2nd…';
+      return `${readyLabel} · starting…`;
+    }
+    if (target < cur) {
+      if (target === 0) return `${readyLabel} · stopping…`;
+      if (cur === 2 && target === 1) return '2 GPUs ready · stopping 2nd…';
+      return `${readyLabel} · scaling down…`;
+    }
     return `Updating (${readyLabel})…`;
   }
   return readyLabel;
