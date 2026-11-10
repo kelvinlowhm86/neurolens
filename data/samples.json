@@ -1741,45 +1741,45 @@
         "audio_dependence": 0.0
       },
       "report": {
-        "headline": "Face sequences earn the strongest signals. The spinning brain finale loses visual engagement right before the CTA.",
-        "summary": "Close-up animated faces drive the two clearest engagement peaks in the video, and the muted-signal demo confirms the visuals hold up independently. The abstract brain animation runs over 13 seconds without a face, so the visual channel slides below typical through the credibility payoff. Getting a face into the Minutes reveal is the most direct fix.",
+        "headline": "Close-up character beats drive the highest engagement, while text-only title cards dip briefly between scenes.",
+        "summary": "Expressive character close-ups from Sintel and Big Buck Bunny drive the two strongest engagement peaks, and the muted-signal demo confirms the visual cut holds up on its own. Brief text-on-black transitions dip the visual channel between beats, where keeping motion on screen would hold attention through the handoff.",
         "moments": [
           {
             "start": 24,
             "end": 27,
             "what_happens": "Big Buck Bunny fills the frame as a butterfly lands on its head.",
-            "brain_response": "Face and body signals reach the video's highest levels here. A close-up animated face with moment-to-moment action is the single strongest visual engagement driver in the whole piece.",
+            "brain_response": "Face and body signals reach the trailer's highest levels here. A close-up expressive character with clear focal motion is the strongest engagement driver in the cut.",
             "suggestion": null
           },
           {
             "start": 32,
             "end": 38,
-            "what_happens": "Labels float onto a black screen naming each brain-signal category.",
-            "brain_response": "Face and visual channels drop well below typical while audio stays elevated. The section explaining what brain signals measure has nothing human for the brain to actually process visually.",
-            "suggestion": "Layer each label over a one-second clip that exemplifies that category so the visual channel tracks the concept being introduced."
+            "what_happens": "Signal labels appear over a dark backdrop between clips.",
+            "brain_response": "Visual and face channels dip briefly while the audio track carries the beat, since the screen switches to pure typography with no scene or character to process.",
+            "suggestion": "Keep a subtle clip or 3D brain in motion behind the labels so the visual channel stays engaged during the transition."
           },
           {
             "start": 40,
             "end": 45,
-            "what_happens": "Bunny close-up in garden; on-screen graph shows with-sound vs muted comparison.",
-            "brain_response": "The muted prediction tracks slightly above the with-sound prediction throughout this stretch, confirming the visual storytelling carries the scene on its own. The product demo works exactly as claimed.",
+            "what_happens": "Garden close-up with the on-screen sound vs. muted comparison.",
+            "brain_response": "Both the with-sound and without-sound curves stay well above typical viewing throughout this sequence, showing the visual storytelling carries the scene independently.",
             "suggestion": null
           },
           {
             "start": 54,
             "end": 67,
-            "what_happens": "Spinning brain model holds while text reveals the brain-scan credibility claim and Minutes payoff.",
-            "brain_response": "Visual and face channels slide steadily below typical across all 13 seconds, running in the opposite direction from the story's climactic beat. No face means nothing for the visual brain to anchor to.",
-            "suggestion": "Cut to a character or human face reacting as the Minutes counter completes. Even two seconds of a face landing on the result would hold the visual channel through the close."
+            "what_happens": "3D brain model rotates while captions introduce the workflow payoff.",
+            "brain_response": "Audio and language regions stay active on the voiceover while face-selective areas ease back during the extended 3D graphics hold.",
+            "suggestion": "Intercut a brief character or creator reaction shot before the final call to action to re-anchor face-selective attention."
           }
         ],
         "strengths": [
-          "The hooked-versus-drift bunny sequence is the video's engagement peak, making the product concept tangible rather than abstract.",
-          "The side-by-side opening comparison sustains well-above-typical engagement longer than any other single segment, with Sintel's face doing heavy visual lifting."
+          "The opening Sintel and Big Buck Bunny sequences establish immediate visual and emotional engagement well above typical viewing.",
+          "The with-sound vs. muted comparison beat sustains strong visual cortex activity on its own, proving the point of the demo visually."
         ],
         "improvements": [
-          "The spinning brain model holds the frame for over 13 seconds at the end, so visual engagement falls well below typical exactly when viewers should be most committed to acting.",
-          "The sub-signals label reveal is the one place where story and brain arc pull apart most: the topic is brain signals, but there is nothing human on screen for the brain to process."
+          "Text-only transitions over a dark background briefly drop visual cortex engagement between the main film clips.",
+          "Holding on the 3D brain graphic for 13 seconds leaves face-selective areas quiet right before the closing call to action."
         ],
         "model": "us.anthropic.claude-sonnet-4-6",
         "created_at": "2026-11-10T16:16:01Z"
