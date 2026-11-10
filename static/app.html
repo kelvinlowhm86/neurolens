@@ -1430,7 +1430,19 @@ $('deleteJobBtn').addEventListener('click', () => { if (deleteTarget) deleteJob(
 closeOnBackdrop(deleteJobDialog);
 
 const boothDialog = $('boothDialog');
-let boothPassId = null, boothNextPass = null, boothPollTimer = null, boothClaimedTimer = null, boothPollTick = 0, boothGpuInfo = null;
+let boothPassId = null, boothNextPass = null, boothPollTimer = null, boothClaimedTimer = null, boothPollTick = 0, boothGpuInfo = null, boothLastStats = null, boothActionSeq = 0, boothPendingWarm = null;
+function setBoothGpuButtons(warmTarget) {
+  [
+    ['boothGpu1', warmTarget === 1],
+    ['boothGpu2', warmTarget === 2],
+    ['boothGpu0', warmTarget === 0],
+  ].forEach(([id, active]) => {
+    const btn = $(id);
+    if (!btn) return;
+    btn.classList.toggle('active', active);
+    btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+  });
+}
 function formatBoothGpuStatus(gpu, warmTarget, videosRunning) {
   if (!gpu || typeof gpu.status !== 'string') {
     return warmTarget > 0 ? `Target: ${warmTarget} GPU${warmTarget === 1 ? '' : 's'}` : 'Auto-scale';
@@ -1439,7 +1451,7 @@ function formatBoothGpuStatus(gpu, warmTarget, videosRunning) {
   const cur = Number.isInteger(gpu.current) ? gpu.current : 0;
   const des = Number.isInteger(gpu.desired) ? gpu.desired : 0;
   const queued = Number.isInteger(gpu.queued_desired) ? gpu.queued_desired : null;
-  const target = queued != null ? queued : des;
+  const target = boothPendingWarm != null ? boothPendingWarm : (queued != null ? queued : des);
   const readyLabel = `${cur} GPU${cur === 1 ? '' : 's'} ready`;
   if (warmTarget === 0 && cur > 0 && videosRunning > 0) {
     return `${readyLabel} · stops after queue`;
@@ -1447,7 +1459,7 @@ function formatBoothGpuStatus(gpu, warmTarget, videosRunning) {
   if (warmTarget === 1 && cur > 1 && videosRunning > 1) {
     return `${readyLabel} · 2nd stops after queue`;
   }
-  if (gpu.status === 'Updating' || gpu.status === 'Creating' || gpu.status === 'SystemUpdating' || cur !== target || (queued != null && queued !== des)) {
+  if (boothPendingWarm != null || gpu.status === 'Updating' || gpu.status === 'Creating' || gpu.status === 'SystemUpdating' || cur !== target || (queued != null && queued !== des)) {
     if (target > cur) {
       if (cur === 0 && target === 1) return '0 ready · starting 1st GPU…';
       if (cur === 0 && target === 2) return '0 ready · starting 2 GPUs…';
@@ -1459,12 +1471,14 @@ function formatBoothGpuStatus(gpu, warmTarget, videosRunning) {
       if (cur === 2 && target === 1) return '2 GPUs ready · stopping 2nd…';
       return `${readyLabel} · scaling down…`;
     }
+    if (boothPendingWarm != null) return `${readyLabel}`;
     return `Updating (${readyLabel})…`;
   }
   return readyLabel;
 }
 function renderBoothStats(stats) {
   if (!stats) return;
+  boothLastStats = stats;
   $('boothStats').innerHTML = [
     `<span>Claimed: <strong>${stats.passes_claimed}</strong></span>`,
     `<span>Remaining: <strong>${stats.passes_remaining}</strong></span>`,
@@ -1478,28 +1492,25 @@ function renderBoothStats(stats) {
   $('boothDaysBody').innerHTML = days.map(d => (
     `<tr><td>${d.date}</td><td>${d.passes}</td><td>${d.videos_done}</td><td>${d.reports_ready}</td><td>${d.comparisons_ready}</td></tr>`
   )).join('');
-  const warmTarget = Number.isInteger(stats.gpu_warm_target) ? stats.gpu_warm_target : 0;
+  const warmTarget = boothPendingWarm != null
+    ? boothPendingWarm
+    : (Number.isInteger(stats.gpu_warm_target) ? stats.gpu_warm_target : 0);
   if (stats.gpu && typeof stats.gpu.status === 'string') {
     boothGpuInfo = stats.gpu;
   }
   $('boothGpuStatus').textContent = formatBoothGpuStatus(boothGpuInfo, warmTarget, stats.videos_running || 0);
-  [
-    ['boothGpu1', warmTarget === 1],
-    ['boothGpu2', warmTarget === 2],
-    ['boothGpu0', warmTarget === 0],
-  ].forEach(([id, active]) => {
-    const btn = $(id);
-    if (!btn) return;
-    btn.classList.toggle('active', active);
-    btn.setAttribute('aria-pressed', active ? 'true' : 'false');
-  });
+  setBoothGpuButtons(warmTarget);
 }
-async function prefetchNextBoothQr() {
+async function prefetchNextBoothQr(withStats = false) {
   try {
-    const res = await postJSON('/api/booth/pass', { prefetch: true });
+    const q = withStats ? '?gpu=1' : '';
+    const res = await postJSON(`/api/booth/pass${q}`, { prefetch: !withStats });
     if (!res.ok) return;
     const data = await res.json().catch(() => null);
-    if (data && data.pass_id && data.qr_svg) boothNextPass = data;
+    if (data && data.pass_id && data.qr_svg) {
+      boothNextPass = data;
+      if (data.stats) renderBoothStats(data.stats);
+    }
   } catch (e) { /* background prefetch only */ }
 }
 async function loadBoothQr(claimedFlash = false) {
@@ -1542,6 +1553,7 @@ async function pollBoothStats() {
     return;
   }
   try {
+    const seqAtStart = boothActionSeq;
     const wantGpu = (boothPollTick++ % 6 === 0) ? '1' : '';
     const qs = new URLSearchParams();
     if (boothPassId) qs.set('pass_id', boothPassId);
@@ -1550,7 +1562,9 @@ async function pollBoothStats() {
     const res = await fetch(`/api/booth/stats${q}`);
     if (res.ok) {
       const stats = await res.json();
-      renderBoothStats(stats);
+      if (seqAtStart === boothActionSeq) {
+        renderBoothStats(stats);
+      }
       if (stats.pass_claimed && boothPassId) {
         boothPassId = null;
         $('boothClaimedMsg').hidden = false;
@@ -1566,26 +1580,49 @@ async function pollBoothStats() {
   }
 }
 async function postBoothAction(payload) {
+  const mySeq = ++boothActionSeq;
   $('boothErrorMsg').hidden = true;
   try {
     const res = await postJSON('/api/booth/passes', payload);
     const data = await res.json().catch(() => ({}));
     if (res.status === 401) return window.location.reload();
+    if (mySeq !== boothActionSeq) return null;
+    boothPendingWarm = null;
     if (!res.ok) {
       $('boothErrorMsg').textContent = data.message || `Couldn't update booth (HTTP ${res.status}).`;
       $('boothErrorMsg').hidden = false;
+      if (boothLastStats) renderBoothStats(boothLastStats);
       return null;
     }
     renderBoothStats(data);
     return data;
   } catch (e) {
-    $('boothErrorMsg').textContent = "Couldn't reach the server. Please try again.";
-    $('boothErrorMsg').hidden = false;
+    if (mySeq === boothActionSeq) {
+      boothPendingWarm = null;
+      $('boothErrorMsg').textContent = "Couldn't reach the server. Please try again.";
+      $('boothErrorMsg').hidden = false;
+      if (boothLastStats) renderBoothStats(boothLastStats);
+    }
     return null;
   }
 }
-function adjustBoothPasses(delta) { return postBoothAction({ delta }); }
-function setBoothGpu(gpu_desired) { return postBoothAction({ gpu_desired }); }
+function adjustBoothPasses(delta) {
+  if (boothLastStats && Number.isInteger(boothLastStats.passes_remaining)) {
+    const nextRem = delta === 0 ? 0 : boothLastStats.passes_remaining + delta;
+    renderBoothStats({ ...boothLastStats, passes_remaining: nextRem });
+  }
+  return postBoothAction({ delta });
+}
+function setBoothGpu(gpu_desired) {
+  boothPendingWarm = gpu_desired;
+  setBoothGpuButtons(gpu_desired);
+  $('boothGpuStatus').textContent = formatBoothGpuStatus(
+    boothGpuInfo,
+    gpu_desired,
+    (boothLastStats && boothLastStats.videos_running) || 0
+  );
+  return postBoothAction({ gpu_desired });
+}
 async function grantBoothCredit(minutes) {
   const email = ($('boothGrantEmail').value || '').trim() || (me && me.email) || '';
   if (!email) return;
@@ -1849,6 +1886,7 @@ function showApp(meJson) {
   $('accountEmail').textContent = guest ? '' : me.email;
   $('accountWrap').hidden = guest;
   $('boothQrBtn').hidden = !me.booth_admin;
+  if (me.booth_admin && !boothNextPass) prefetchNextBoothQr(true);
   $('topUpload').innerHTML = 'Upload <span class="bar-hide-sm">a video</span>';
   $('topUpload').hidden = false;
   $('uploadZone').classList.remove('hidden');
