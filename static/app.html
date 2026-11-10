@@ -1444,37 +1444,27 @@ function setBoothGpuButtons(warmTarget) {
   });
 }
 function formatBoothGpuStatus(gpu, warmTarget, videosRunning) {
-  if (!gpu || typeof gpu.status !== 'string') {
-    return warmTarget > 0 ? `Target: ${warmTarget} GPU${warmTarget === 1 ? '' : 's'}` : 'Auto-scale';
-  }
-  if (gpu.status === 'local') return 'Local mode';
-  const cur = Number.isInteger(gpu.current) ? gpu.current : 0;
-  const des = Number.isInteger(gpu.desired) ? gpu.desired : 0;
-  const queued = Number.isInteger(gpu.queued_desired) ? gpu.queued_desired : null;
-  const target = boothPendingWarm != null ? boothPendingWarm : (queued != null ? queued : des);
-  const readyLabel = `${cur} GPU${cur === 1 ? '' : 's'} ready`;
-  if (warmTarget === 0 && cur > 0 && videosRunning > 0) {
-    return `${readyLabel} · stops after queue`;
-  }
-  if (warmTarget === 1 && cur > 1 && videosRunning > 1) {
-    return `${readyLabel} · 2nd stops after queue`;
-  }
-  if (boothPendingWarm != null || gpu.status === 'Updating' || gpu.status === 'Creating' || gpu.status === 'SystemUpdating' || cur !== target || (queued != null && queued !== des)) {
-    if (target > cur) {
-      if (cur === 0 && target === 1) return '0 ready · starting 1st GPU…';
-      if (cur === 0 && target === 2) return '0 ready · starting 2 GPUs…';
-      if (cur === 1 && target === 2) return '1 GPU ready · starting 2nd…';
-      return `${readyLabel} · starting…`;
+  const cur = (gpu && Number.isInteger(gpu.current)) ? gpu.current : 0;
+  const readyWord = `${cur} GPU${cur === 1 ? '' : 's'} ready`;
+  const shortReady = `${cur} ready`;
+  if (gpu && gpu.status === 'local') return 'Local mode';
+  if (warmTarget === 0) {
+    if (cur === 0) {
+      return videosRunning > 0 ? '0 ready · starting for video…' : '0 GPUs ready';
     }
-    if (target < cur) {
-      if (target === 0) return `${readyLabel} · stopping…`;
-      if (cur === 2 && target === 1) return '2 GPUs ready · stopping 2nd…';
-      return `${readyLabel} · scaling down…`;
-    }
-    if (boothPendingWarm != null) return `${readyLabel}`;
-    return `Updating (${readyLabel})…`;
+    return videosRunning > 0 ? `${shortReady} · stops after video` : `${shortReady} · stopping to 0…`;
   }
-  return readyLabel;
+  if (warmTarget === 1) {
+    if (cur === 0) return '0 ready · starting 1 GPU…';
+    if (cur === 1) return '1 GPU ready';
+    return videosRunning > 1 ? '2 ready · 2nd stops after video' : '2 ready · stopping 2nd GPU…';
+  }
+  if (warmTarget === 2) {
+    if (cur === 0) return '0 ready · starting 2 GPUs…';
+    if (cur === 1) return '1 ready · starting 2nd GPU…';
+    return '2 GPUs ready';
+  }
+  return readyWord;
 }
 function renderBoothStats(stats) {
   if (!stats) return;
