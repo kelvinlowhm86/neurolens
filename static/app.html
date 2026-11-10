@@ -223,6 +223,7 @@
   .booth-section-head strong { color: var(--ink); font-family: var(--mono); font-weight: 500; }
   .booth-controls { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
   .booth-controls button { font-size: 12px; padding: 5px 10px; min-height: 30px; }
+  .booth-controls button.active { border-color: var(--accent); color: var(--ink); background: rgba(255, 138, 42, .14); }
   .job-toast { position: fixed; left: 50%; bottom: max(18px, env(safe-area-inset-bottom, 18px)); transform: translateX(-50%); z-index: 60; background: rgba(19, 22, 27, .94); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border: 1px solid rgba(255, 138, 42, .55); border-radius: 6px; padding: 10px 12px; display: flex; align-items: center; gap: 12px; box-shadow: 0 16px 40px rgba(0, 0, 0, .65), 0 0 24px rgba(255, 138, 42, .18); color: var(--ink); width: min(420px, calc(100vw - 24px)); animation: toast-in 260ms var(--ease-out); }
   .job-toast[hidden] { display: none; }
   @keyframes toast-in { from { opacity: 0; transform: translate(-50%, 12px) scale(.98); } to { opacity: 1; transform: translate(-50%, 0) scale(1); } }
@@ -1411,7 +1412,7 @@ $('deleteJobBtn').addEventListener('click', () => { if (deleteTarget) deleteJob(
 closeOnBackdrop(deleteJobDialog);
 
 const boothDialog = $('boothDialog');
-let boothPassId = null, boothNextPass = null, boothPollTimer = null, boothClaimedTimer = null, boothPollTick = 0;
+let boothPassId = null, boothNextPass = null, boothPollTimer = null, boothClaimedTimer = null, boothPollTick = 0, boothGpuInfo = null;
 function renderBoothStats(stats) {
   if (!stats) return;
   $('boothStats').innerHTML = [
@@ -1430,10 +1431,23 @@ function renderBoothStats(stats) {
   const warmTarget = Number.isInteger(stats.gpu_warm_target) ? stats.gpu_warm_target : 0;
   const modeLabel = warmTarget > 0 ? `Keep ${warmTarget} warm (6h)` : 'Auto-scale';
   if (stats.gpu && typeof stats.gpu.status === 'string') {
-    $('boothGpuStatus').textContent = `${stats.gpu.status} · ${stats.gpu.current}/${stats.gpu.desired} · ${modeLabel}`;
+    boothGpuInfo = stats.gpu;
+  }
+  if (boothGpuInfo && typeof boothGpuInfo.status === 'string') {
+    $('boothGpuStatus').textContent = `${boothGpuInfo.status} · ${boothGpuInfo.current}/${boothGpuInfo.desired} · ${modeLabel}`;
   } else {
     $('boothGpuStatus').textContent = modeLabel;
   }
+  [
+    ['boothGpu1', warmTarget === 1],
+    ['boothGpu2', warmTarget === 2],
+    ['boothGpu0', warmTarget === 0],
+  ].forEach(([id, active]) => {
+    const btn = $(id);
+    if (!btn) return;
+    btn.classList.toggle('active', active);
+    btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+  });
 }
 async function prefetchNextBoothQr() {
   try {
