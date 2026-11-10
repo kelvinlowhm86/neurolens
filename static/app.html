@@ -93,10 +93,18 @@
   .curve-link-field { margin-top: 10px; }
   #startupPanel.active { animation: wake-in var(--t-enter) var(--ease-out) 500ms both; }
   @keyframes wake-in { from { opacity: 0; } }
-  .startup-trace { width: 168px; height: 26px; margin-top: 4px; color: var(--muted); }
-  .startup-trace path { fill: none; stroke: currentColor; stroke-width: 1.2; vector-effect: non-scaling-stroke; }
-  #startupPanel.active .startup-trace { animation: wake-breathe 2.4s var(--ease-io) infinite; }
-  @keyframes wake-breathe { from, to { opacity: .35; } 50% { opacity: .85; } }
+  .wake-bar { position: relative; height: 26px; margin-top: 4px; display: flex; align-items: center; }
+  .wake-bar[hidden] { display: none; }
+  .wake-track { position: relative; width: 100%; height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; }
+  .wake-fill { height: 100%; width: 100%; border-radius: 2px; background: linear-gradient(90deg, rgba(255,138,42,.35), var(--accent)); transform-origin: left; transform: scaleX(var(--wake-p, .06)); transition: transform 220ms var(--ease-out); }
+  .wake-brain { position: absolute; top: 50%; left: calc(var(--wake-p, .06) * 100%); width: 22px; height: 16px; transform: translate(-50%, -50%); color: var(--accent); filter: drop-shadow(0 0 6px rgba(255,138,42,.55)); transition: left 220ms var(--ease-out); pointer-events: none; }
+  .wake-brain svg { width: 100%; height: 100%; display: block; }
+  .history-loading { display: flex; flex-direction: column; gap: 6px; padding: 6px 2px 2px; animation: wake-in var(--t-enter) var(--ease-out) 150ms both; }
+  .history-loading[hidden] { display: none; }
+  .history-loading span { font-size: 12px; color: var(--muted); }
+  @media (prefers-reduced-motion: reduce) {
+    .wake-fill, .wake-brain { transition: none; }
+  }
   .box .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 2px; align-items: center; }
   .box a:not(.btn-white) { color: var(--ink); }
   #signedOutNote:empty { display: none; }
@@ -279,8 +287,11 @@
   .tl-right { display: flex; gap: 8px; align-items: center; }
   .tl-time { font: 500 13px var(--mono); font-variant-numeric: tabular-nums; color: var(--muted); min-width: 92px; text-align: right; }
   .tl-track { position: relative; height: 24px; cursor: pointer; touch-action: none; }
-  .tl-track::before, .tl-track i { content: ''; position: absolute; left: 0; right: 0; top: 50%; height: 4px; margin-top: -2px; border-radius: 2px; background: var(--line); }
+  .tl-track::before, .tl-track i { content: ''; position: absolute; left: 0; right: 0; top: 50%; height: 4px; margin-top: -2px; border-radius: 2px; background: var(--line); transition: height 120ms var(--ease-out), margin-top 120ms var(--ease-out); }
+  .tl-track:hover::before, .tl-track:hover i, .tl-track.dragging::before, .tl-track.dragging i { height: 6px; margin-top: -3px; border-radius: 3px; }
   .tl-track i { background: var(--accent); transform-origin: left; transform: scaleX(0); }
+  .tl-thumb { position: absolute; top: 50%; left: 0; width: 11px; height: 11px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 2px var(--bg); transform: translate(-50%, -50%) scale(0); opacity: 0; transition: transform 120ms var(--ease-out), opacity 120ms var(--ease-out); pointer-events: none; }
+  .tl-track:hover .tl-thumb, .tl-track.dragging .tl-thumb { transform: translate(-50%, -50%) scale(1); opacity: 1; }
 
   .report-body { flex: 1; min-height: 0; display: none; flex-direction: column; gap: 16px; }
   .report-body.active { display: flex; }
@@ -604,7 +615,10 @@
       <div class="box active" id="startupPanel">
         <h2 id="startupTitle">Waking up</h2>
         <p id="startupText">Usually under a minute.</p>
-        <svg class="startup-trace" id="startupTrace" viewBox="0 0 168 26" aria-hidden="true"><path d="M2 13 H166"></path></svg>
+        <div class="wake-bar" id="startupTrace" aria-hidden="true">
+          <div class="wake-track"><div class="wake-fill"></div></div>
+          <span class="wake-brain"><svg viewBox="0 0 400 250"><path d="M70,140 C52,96 82,52 140,40 C186,22 250,24 300,46 C346,66 368,104 362,140 C358,170 336,186 310,190 C300,206 280,214 258,210 C236,224 196,226 172,212 C140,214 112,204 96,186 C78,176 72,160 70,140 Z" fill="var(--panel-solid)" stroke="currentColor" stroke-width="22"/><path d="M190,46 C200,90 210,130 200,190 M130,115 C175,110 225,115 285,130" fill="none" stroke="currentColor" stroke-width="16" stroke-linecap="round"/></svg></span>
+        </div>
         <div class="actions"><button class="btn-ghost" id="startupRetry" hidden>Try again</button></div>
       </div>
 
@@ -650,6 +664,13 @@
 
         <div class="box" id="historyPanel">
           <div class="panel-head"><span>Your videos</span><span class="spacer"></span><span class="mono" id="historyCount"></span></div>
+          <div class="history-loading" id="historyLoading" hidden>
+            <div class="wake-bar" id="historyWakeBar" aria-hidden="true">
+              <div class="wake-track"><div class="wake-fill"></div></div>
+              <span class="wake-brain"><svg viewBox="0 0 400 250"><path d="M70,140 C52,96 82,52 140,40 C186,22 250,24 300,46 C346,66 368,104 362,140 C358,170 336,186 310,190 C300,206 280,214 258,210 C236,224 196,226 172,212 C140,214 112,204 96,186 C78,176 72,160 70,140 Z" fill="var(--panel-solid)" stroke="currentColor" stroke-width="22"/><path d="M190,46 C200,90 210,130 200,190 M130,115 C175,110 225,115 285,130" fill="none" stroke="currentColor" stroke-width="16" stroke-linecap="round"/></svg></span>
+            </div>
+            <span>Waking up…</span>
+          </div>
           <div id="historyList"></div>
           <p class="history-empty" id="historyEmpty" hidden>No analyses yet.</p>
           <p id="historyNote"></p>
@@ -1436,7 +1457,26 @@ const refreshAccount = () => { loadBalance(); loadHistory(); };
 const clearSignedInHint = () => { document.cookie = 'nl_signed_in=; Max-Age=0; path=/'; };
 
 const STARTUP_RETRIES = 3, STARTUP_RETRY_MS = 5000;
+let startupWakeTimer = null, startupWakeStart = 0;
+function startWakeBar(el, resetTime = true) {
+  if (!el) return null;
+  if (resetTime || !startupWakeStart) startupWakeStart = performance.now();
+  const started = resetTime ? performance.now() : startupWakeStart;
+  const update = () => {
+    const s = (performance.now() - started) / 1000;
+    const p = Math.min(0.92, 0.08 + 0.84 * (1 - Math.exp(-s / 6.5)));
+    el.style.setProperty('--wake-p', p.toFixed(3));
+  };
+  update();
+  return setInterval(update, 180);
+}
+function stopWakeBar(el, timer) {
+  if (timer) clearInterval(timer);
+  if (el) el.style.setProperty('--wake-p', '1');
+}
 function startupFailed() {
+  stopWakeBar($('startupTrace'), startupWakeTimer);
+  startupWakeTimer = null;
   $('startupTitle').textContent = 'Something went wrong';
   $('startupText').textContent = 'Please try again in a minute.';
   $('startupTrace').hidden = true;
@@ -1448,10 +1488,23 @@ async function start(attempt = 0) {
   $('startupText').textContent = 'Usually under a minute.';
   $('startupTrace').hidden = false;
   $('startupRetry').hidden = true;
+  if (attempt === 0 || !startupWakeTimer) {
+    if (startupWakeTimer) clearInterval(startupWakeTimer);
+    startupWakeTimer = startWakeBar($('startupTrace'), attempt === 0);
+  }
   let res;
   try { res = await fetch('/api/me'); } catch (e) { return startupFailed(); }
-  if (res.status === 200) return showApp(await res.json());
-  if (res.status === 401) { clearSignedInHint(); return showSignedOut(); }
+  if (res.status === 200) {
+    stopWakeBar($('startupTrace'), startupWakeTimer);
+    startupWakeTimer = null;
+    return showApp(await res.json());
+  }
+  if (res.status === 401) {
+    stopWakeBar($('startupTrace'), startupWakeTimer);
+    startupWakeTimer = null;
+    clearSignedInHint();
+    return showSignedOut();
+  }
   if (res.status === 503 && attempt < STARTUP_RETRIES) {
     return setTimeout(() => start(attempt + 1), STARTUP_RETRY_MS);
   }
@@ -1467,6 +1520,7 @@ function showSignedOut() {
   $('startupPanel').classList.remove('active');
   $('signInPanel').classList.add('active');
   applyChooser();
+  $('historyLoading').hidden = true;
   $('historyEmpty').hidden = true;
   $('noCreditPanel').classList.remove('active');
   $('accountEmail').textContent = '';
@@ -1493,7 +1547,8 @@ function showApp(meJson) {
   $('historyPanel').classList.add('active');
   $('headerMeta').textContent = '';
   showBalance();
-  loadLimits().then(loadHistory); // history rows show credit, which needs the price
+  loadLimits();
+  loadHistory();
   const jobParam = params.get('job');
   if (jobParam && /^[0-9a-f-]{36}$/i.test(jobParam)) trackJob(jobParam);
   if (params.get('upload')) {
@@ -1522,15 +1577,27 @@ $('signOut').addEventListener('click', async () => {
 
 const RESULT_DAYS = 30;
 const QUEUED_SLOW_MS = 20 * 60000;
-let historyPollTimer = null, openJobIds = new Set();
+let historyPollTimer = null, openJobIds = new Set(), historyLoadedOnce = false, historyWakeTimer = null;
 
 async function loadHistory() {
   if (!signedIn) return;
+  if (!historyLoadedOnce && !$('historyList').children.length) {
+    $('historyLoading').hidden = false;
+    $('historyEmpty').hidden = true;
+    if (!historyWakeTimer) historyWakeTimer = startWakeBar($('historyWakeBar'), true);
+  }
   try {
     const res = await fetch('/api/jobs');
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    historyLoadedOnce = true;
+    stopWakeBar($('historyWakeBar'), historyWakeTimer);
+    historyWakeTimer = null;
+    $('historyLoading').hidden = true;
     renderHistory(await res.json());
   } catch (e) {
+    stopWakeBar($('historyWakeBar'), historyWakeTimer);
+    historyWakeTimer = null;
+    $('historyLoading').hidden = true;
     $('historyPanel').classList.add('active');
     $('historyEmpty').hidden = true;
     $('historyNote').textContent = "Couldn't load your earlier analyses.";
@@ -4973,10 +5040,14 @@ function buildTimeline() {
     <div class="tl-right"><span class="tl-time" id="tlTime"></span><button class="tl-btn" id="tlSound" aria-label="Sound on"></button></div>`;
   const track = $('tlTrack');
   const fill = document.createElement('i');
-  track.append(fill);
+  const thumb = document.createElement('span');
+  thumb.className = 'tl-thumb';
+  track.append(fill, thumb);
   playheads.push({ scope: 'timeline', fn: t => {
     const T = totalSeconds();
-    fill.style.transform = `scaleX(${T > 1 ? Math.max(0, Math.min(1, t / (T - 1))) : 0})`;
+    const frac = T > 1 ? Math.max(0, Math.min(1, t / (T - 1))) : 0;
+    fill.style.transform = `scaleX(${frac})`;
+    thumb.style.left = `${(frac * 100).toFixed(2)}%`;
   } });
   $('tlPlay').addEventListener('click', togglePlay);
   const snd = $('tlSound');
@@ -4989,11 +5060,18 @@ function buildTimeline() {
     const rect = track.getBoundingClientRect();
     if (rect.width) seek(((e.clientX - rect.left) / rect.width) * (totalSeconds() - 1));
   };
+  const endDrag = () => {
+    track.classList.remove('dragging');
+    track.onpointermove = null;
+  };
   track.addEventListener('pointerdown', e => {
+    track.classList.add('dragging');
     track.setPointerCapture(e.pointerId);
+    drag(e);
     track.onpointermove = drag;
   });
-  track.addEventListener('pointerup', () => { track.onpointermove = null; });
+  track.addEventListener('pointerup', endDrag);
+  track.addEventListener('pointercancel', endDrag);
   updateTransport();
 }
 
