@@ -224,6 +224,14 @@
   .booth-controls { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
   .booth-controls button { font-size: 12px; padding: 5px 10px; min-height: 30px; }
   .booth-controls button.active { border-color: var(--accent); color: var(--ink); background: rgba(255, 138, 42, .14); }
+  .booth-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+  .booth-head h2 { margin-bottom: 0; }
+  .booth-help-btn { width: 24px; height: 24px; min-height: 24px; padding: 0; border-radius: 50%; border: 1px solid var(--line); background: var(--well); color: var(--muted); font: 600 12px/1 var(--mono); display: inline-flex; align-items: center; justify-content: center; flex: none; }
+  .booth-help-btn:hover, .booth-help-btn[aria-expanded="true"] { border-color: var(--accent); color: var(--ink); background: rgba(255, 138, 42, .14); }
+  .booth-help { margin: 8px 0 10px; padding: 10px 12px; background: var(--well); border: 1px solid var(--line); border-radius: var(--radius); font-size: 12px; color: var(--ink-2); line-height: 1.5; }
+  .booth-help[hidden] { display: none; }
+  .booth-help p + p { margin-top: 6px; }
+  .booth-help strong { color: var(--ink); font-weight: 600; }
   .job-toast { position: fixed; left: 50%; bottom: max(18px, env(safe-area-inset-bottom, 18px)); transform: translateX(-50%); z-index: 60; background: rgba(19, 22, 27, .94); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border: 1px solid rgba(255, 138, 42, .55); border-radius: 6px; padding: 10px 12px; display: flex; align-items: center; gap: 12px; box-shadow: 0 16px 40px rgba(0, 0, 0, .65), 0 0 24px rgba(255, 138, 42, .18); color: var(--ink); width: min(420px, calc(100vw - 24px)); animation: toast-in 260ms var(--ease-out); }
   .job-toast[hidden] { display: none; }
   @keyframes toast-in { from { opacity: 0; transform: translate(-50%, 12px) scale(.98); } to { opacity: 1; transform: translate(-50%, 0) scale(1); } }
@@ -620,7 +628,7 @@
   <a class="brand" href="/">NeuroLens</a>
   <span class="header-meta" id="headerMeta"></span>
   <div class="spacer"></div>
-  <button class="btn-ghost" id="boothQrBtn" type="button" hidden>Booth QR</button>
+  <button class="btn-ghost" id="boothQrBtn" type="button" hidden>Demo pass</button>
   <span class="credit" id="balance"></span>
   <div class="account-wrap" id="accountWrap" hidden>
     <button class="account" id="account" aria-haspopup="menu" aria-expanded="false" aria-controls="accountMenu">
@@ -664,7 +672,7 @@
         </button>
         <div class="box" id="noCreditPanel">
           <div id="accessGuest" hidden>
-            <p>You've used your 2-minute booth pass. Ask the booth team if you'd like to try another clip.</p>
+            <p>You've used your 2-minute demo pass. Ask the NeuroLens team if you'd like to try another clip.</p>
           </div>
           <div id="accessFunded" hidden>
             <p>You've used your credit. Add a shared video's retention curve to get its credit back, or ask the NeuroLens team for more.</p>
@@ -962,9 +970,17 @@
 </dialog>
 
 <dialog class="modal" id="boothDialog" aria-labelledby="boothDialogTitle">
-  <h2 id="boothDialogTitle">Booth visitor pass (2 min)</h2>
+  <div class="booth-head">
+    <h2 id="boothDialogTitle">Live demo pass (2 min)</h2>
+    <button class="booth-help-btn" id="boothHelpBtn" type="button" aria-expanded="false" aria-controls="boothHelp" title="How this panel works">?</button>
+  </div>
+  <div class="booth-help" id="boothHelp" hidden>
+    <p><strong>QR &amp; Passes:</strong> Each phone gets 1 pass (2 min credit). The QR auto-rotates as soon as a new device claims it. Re-scanning on the same phone keeps its existing session without using another pass (clear browser site data to reset a test phone). <strong>Stop passes</strong> sets remaining passes to 0.</p>
+    <p><strong>GPU endpoint (current/desired):</strong> <strong>0 (Auto-scale)</strong> scales to 0 ($0/hr) when idle and wakes a GPU (~4–5 min cold start) on upload. <strong>Keep 1 / 2 GPUs</strong> starts and holds 1 or 2 GPUs warm for 6 hours (~30–60s per video, no cold start) before auto-reverting to 0.</p>
+    <p><strong>Grant credit:</strong> Adds permanent minutes to any signed-in email (leave blank for your own account).</p>
+  </div>
   <p>Scan with your phone camera to get a 2-minute pass and analyse your own videos.</p>
-  <div class="booth-qr-box" id="boothQrBox" aria-label="Booth QR code"></div>
+  <div class="booth-qr-box" id="boothQrBox" aria-label="Demo pass QR code"></div>
   <p class="booth-claimed" id="boothClaimedMsg" hidden>✓ Pass claimed — fresh QR ready</p>
   <p class="error" id="boothErrorMsg" hidden></p>
   <div class="booth-stats" id="boothStats"></div>
@@ -1562,6 +1578,11 @@ function openBoothDialog() {
   pollBoothStats();
 }
 $('boothQrBtn').addEventListener('click', openBoothDialog);
+$('boothHelpBtn').addEventListener('click', () => {
+  const open = $('boothHelp').hidden;
+  $('boothHelp').hidden = !open;
+  $('boothHelpBtn').setAttribute('aria-expanded', open ? 'true' : 'false');
+});
 $('boothNewQr').addEventListener('click', () => loadBoothQr(false));
 $('boothAdd5').addEventListener('click', () => adjustBoothPasses(5));
 $('boothAdd10').addEventListener('click', () => adjustBoothPasses(10));

@@ -5,8 +5,8 @@ Operator scripts and the AWS resources they drive. AWS commands run with the pro
 
 ## Every work session
 
-- `Booth QR` button in the web header (visible when signed in with a booth-admin email):
-  - Dispenses 2-minute QR visitor passes (1 pass per phone, auto-rotating every 0.5 s when scanned) with `+5 passes`, `+10 passes` and `Stop passes` controls.
+- `Demo pass` button in the web header (visible when signed in with an admin email):
+  - Dispenses 2-minute QR demo passes (1 pass per phone, auto-rotating every 0.5 s when scanned) with `+5 passes`, `+10 passes` and `Stop passes` controls, plus a built-in `?` help cheat-sheet.
   - Controls GPU warmth (`Keep 1 GPU`, `Keep 2 GPUs` for 6 hours, or `0 (Auto-scale)`), grants account credit by email (`+5 min`, `+10 min`), and shows live SGT per-day funnel stats.
   - Admin emails are stored as SHA-256 hashes in `BOOTH_ADMIN_HASHES` (`neurolens/web/app.py`). To generate a hash for a new admin email:
     `python3 -c 'import hashlib; print(hashlib.sha256(b"you@example.com").hexdigest())'`
