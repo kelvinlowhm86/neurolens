@@ -1742,7 +1742,7 @@
       },
       "report": {
         "headline": "Expressive character cuts drive the strongest peaks, while the 13-second 3D brain hold before the close can be tightened.",
-        "summary": "Close-up character beats from Sintel and Big Buck Bunny drive the two highest engagement peaks, and stark typography-on-black transitions cleanly hand the narrative load to the audio track. Tightening the 13-second spinning 3D brain sequence right before the closing title card is the cleanest way to carry peak momentum into the call to action.",
+        "summary": "Close-up character beats from Sintel and Big Buck Bunny drive the two highest engagement peaks, and stark typography-on-black transitions let the instrumental soundtrack carry the pacing between cuts. Tightening the 13-second spinning 3D brain sequence right before the closing title card is the cleanest way to carry peak momentum into the call to action.",
         "moments": [
           {
             "start": 24,
@@ -1755,14 +1755,14 @@
             "start": 54,
             "end": 67,
             "what_happens": "3D brain model rotates for 13 seconds through the workflow reveal.",
-            "brain_response": "Audio and language regions stay active on the voiceover while visual and face-selective areas gradually ease back across the extended 13-second hold.",
-            "suggestion": "Trim 3 seconds from the 3D rotation so the final title card lands while the voiceover peak is still high."
+            "brain_response": "Auditory regions stay elevated on the musical build while visual and face-selective areas gradually ease back across the extended 13-second 3D hold.",
+            "suggestion": "Trim 3 seconds from the 3D rotation so the final title card lands while the soundtrack peak is still high."
           },
           {
             "start": 32,
             "end": 38,
             "what_happens": "Stark typography on a black backdrop names each brain-signal category.",
-            "brain_response": "Auditory and speech regions carry the beat while visual cortex resets on the clean black frame, giving the eye breathing room before the next film cut.",
+            "brain_response": "Auditory regions carry the beat on the score while the visual cortex resets on the clean black frame, giving the eye breathing room before the next film cut.",
             "suggestion": null
           },
           {
