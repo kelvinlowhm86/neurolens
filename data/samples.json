@@ -1741,44 +1741,37 @@
         "audio_dependence": 0.0
       },
       "report": {
-        "headline": "Expressive character cuts drive the strongest peaks, while the 13-second 3D brain hold before the close can be tightened.",
-        "summary": "Close-up character beats from Sintel and Big Buck Bunny drive the two highest engagement peaks, and stark typography-on-black transitions let the instrumental soundtrack carry the pacing between cuts. Tightening the 13-second spinning 3D brain sequence right before the closing title card is the cleanest way to carry peak momentum into the call to action.",
+        "headline": "Face sequences earn the strongest signals. The spinning brain finale loses visual engagement right before the CTA.",
+        "summary": "Close-up animated faces drive the two clearest engagement peaks in the video, and the muted-signal demo confirms the visuals hold up independently. The abstract brain animation runs over 13 seconds without a face, so the visual channel slides below typical through the credibility payoff. Getting a face into the Minutes reveal is the most direct fix.",
         "moments": [
           {
             "start": 24,
             "end": 27,
             "what_happens": "Big Buck Bunny fills the frame as a butterfly lands on its head.",
-            "brain_response": "Face and body signals reach the trailer's highest levels here. A close-up expressive character with clear focal motion is the strongest engagement driver in the cut.",
+            "brain_response": "Face and body signals reach the video's highest levels here. A close-up animated face with moment-to-moment action is the single strongest visual engagement driver in the whole piece.",
             "suggestion": null
           },
           {
             "start": 54,
             "end": 67,
-            "what_happens": "3D brain model rotates for 13 seconds through the workflow reveal.",
-            "brain_response": "Auditory regions stay elevated on the musical build while visual and face-selective areas gradually ease back across the extended 13-second 3D hold.",
-            "suggestion": "Trim 3 seconds from the 3D rotation so the final title card lands while the soundtrack peak is still high."
-          },
-          {
-            "start": 32,
-            "end": 38,
-            "what_happens": "Stark typography on a black backdrop names each brain-signal category.",
-            "brain_response": "Auditory regions carry the beat on the score while the visual cortex resets on the clean black frame, giving the eye breathing room before the next film cut.",
-            "suggestion": null
+            "what_happens": "Spinning brain model holds while text reveals the brain-scan credibility claim and Minutes payoff.",
+            "brain_response": "Visual and face channels slide steadily below typical across all 13 seconds, running in the opposite direction from the story's climactic beat. No face means nothing for the visual brain to anchor to.",
+            "suggestion": "Cut to a character or human face reacting as the Minutes counter completes. Even two seconds of a face landing on the result would hold the visual channel through the close."
           },
           {
             "start": 40,
             "end": 45,
-            "what_happens": "Garden close-up with the on-screen sound vs. muted comparison.",
-            "brain_response": "Both the with-sound and without-sound curves stay well above typical viewing throughout this sequence, showing the visual storytelling carries the scene independently.",
+            "what_happens": "Bunny close-up in garden; on-screen graph shows with-sound vs muted comparison.",
+            "brain_response": "The muted prediction tracks slightly above the with-sound prediction throughout this stretch, confirming the visual storytelling carries the scene on its own. The product demo works exactly as claimed.",
             "suggestion": null
           }
         ],
         "strengths": [
-          "The opening Sintel and Big Buck Bunny sequences establish immediate visual and emotional engagement well above typical viewing.",
-          "The with-sound vs. muted comparison beat sustains strong visual cortex activity on its own, proving the point of the demo visually."
+          "The hooked-versus-drift bunny sequence is the video's engagement peak, making the product concept tangible rather than abstract.",
+          "The side-by-side opening comparison sustains well-above-typical engagement longer than any other single segment, with Sintel's face doing heavy visual lifting."
         ],
         "improvements": [
-          "Holding on the spinning 3D brain graphic for 13 seconds lets visual engagement ease back right before the closing call to action."
+          "The spinning brain model holds the frame for over 13 seconds at the end, so visual engagement falls well below typical exactly when viewers should be most committed to acting."
         ],
         "model": "us.anthropic.claude-sonnet-4-6",
         "created_at": "2026-11-10T16:16:01Z"
