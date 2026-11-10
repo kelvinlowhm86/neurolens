@@ -41,11 +41,25 @@ DEFAULT_LENGTH_TOLERANCE_S = 2
 DEFAULT_MIN_VIEWS = 1000
 # A dispatched request that has not been claimed this long after its GPU wait is over is refunded.
 GPU_WAIT_GRACE_S = 300
+# STePS booth guest passes: 2 minutes ($4 / 400 cents) per visitor pass, 10 passes initially.
+BOOTH_POOL_USER_ID = "booth-pool"
+BOOTH_POOL_EMAIL = "booth-pool@booth.local"
+BOOTH_PASS_CENTS = 400
+BOOTH_INITIAL_PASSES = 10
+GUEST_PREFIX = "guest-"
 
 CURVE_REMOVED_MESSAGES = {
     "stopped": "You stopped sharing this video.",
     "no_curve": "This video's shared copy was deleted after 90 days without a curve.",
 }
+
+
+class BoothLimitReached(Exception):
+    """All available booth passes in the pool have been claimed."""
+
+
+class BoothPassEnded(Exception):
+    """A guest account that was already deleted cannot be re-opened."""
 
 
 class InsufficientCredit(Exception):
@@ -1314,3 +1328,229 @@ def add_curve(
                 {"job_id": job_id, "video_ref": video_ref},
             )
     return {"rewarded_cents": reward, "quality": list(quality_flags), "reason": reason}
+
+
+# ---------------------------------------------------------------- STePS booth guest passes
+
+
+def is_booth_guest(user_id):
+    """True when `user_id` is an ephemeral booth guest account."""
+    return isinstance(user_id, str) and user_id.startswith(GUEST_PREFIX)
+
+
+def _ensure_booth_pool(tx):
+    """Create the booth pass pool once with the initial 10 passes."""
+    _create_user(tx, BOOTH_POOL_USER_ID, BOOTH_POOL_EMAIL, BOOTH_INITIAL_PASSES * BOOTH_PASS_CENTS)
+
+
+def _read_booth_gpu_warm(tx):
+    """Return the active booth GPU keep-warm target (0, 1, or 2), expiring 6 hours after click."""
+    rows = tx.execute(
+        "SELECT session_hash, "
+        "(last_seen_at < now() - make_interval(hours => 6)) AS expired "
+        "FROM sessions WHERE user_id = :user_id LIMIT 1",
+        {"user_id": BOOTH_POOL_USER_ID},
+    )
+    if not rows:
+        return 0
+    sh = rows[0]["session_hash"]
+    target = 1 if sh == "booth-gpu-warm-1" else (2 if sh == "booth-gpu-warm-2" else 0)
+    if target == 0 or rows[0]["expired"]:
+        tx.execute(
+            "DELETE FROM sessions WHERE user_id = :user_id",
+            {"user_id": BOOTH_POOL_USER_ID},
+        )
+        return 0
+    return target
+
+
+def set_booth_gpu_warm(db, target):
+    """Set the booth GPU keep-warm target (0 for auto-scale, or 1 / 2 to hold warm)."""
+    if type(target) is not int or target not in (0, 1, 2):
+        raise ValueError(f"target must be 0, 1 or 2, not {target!r}")
+    with db.transaction() as tx:
+        _ensure_booth_pool(tx)
+        tx.execute(
+            "DELETE FROM sessions WHERE user_id = :user_id",
+            {"user_id": BOOTH_POOL_USER_ID},
+        )
+        if target in (1, 2):
+            tx.execute(
+                "INSERT INTO sessions (session_hash, user_id, last_seen_at) "
+                "VALUES (:session_hash, :user_id, now())",
+                {
+                    "session_hash": f"booth-gpu-warm-{target}",
+                    "user_id": BOOTH_POOL_USER_ID,
+                },
+            )
+        return _read_booth_stats(tx)
+
+
+def _read_booth_stats(tx, *, check_pass_id=None):
+    pool = tx.execute(
+        "SELECT available_cents FROM balances WHERE user_id = :user_id",
+        {"user_id": BOOTH_POOL_USER_ID},
+    )
+    remaining = (pool[0]["available_cents"] if pool else 0) // BOOTH_PASS_CENTS
+    prefix = f"{GUEST_PREFIX}%"
+    claimed = tx.execute(
+        "SELECT count(*) AS n FROM users WHERE user_id LIKE :prefix",
+        {"prefix": prefix},
+    )[0]["n"]
+    job_counts = tx.execute(
+        "SELECT "
+        "count(*) FILTER (WHERE status = :done) AS videos_done, "
+        "count(*) FILTER (WHERE status IN (:queued, :processing)) AS videos_running, "
+        "count(*) FILTER (WHERE report_state = :ready) AS reports_ready "
+        "FROM jobs WHERE user_id LIKE :prefix AND deleted_at IS NULL",
+        {
+            "prefix": prefix,
+            "done": DONE,
+            "queued": QUEUED,
+            "processing": PROCESSING,
+            "ready": "ready",
+        },
+    )[0]
+    comparisons_ready = tx.execute(
+        "SELECT count(*) AS n FROM comparisons c "
+        "JOIN jobs j ON j.job_id = c.job_a "
+        "WHERE j.user_id LIKE :prefix AND c.state = :ready",
+        {"prefix": prefix, "ready": "ready"},
+    )[0]["n"]
+    pass_days = tx.execute(
+        "SELECT CAST((created_at AT TIME ZONE :tz) AS date) AS day, count(*) AS n "
+        "FROM users WHERE user_id LIKE :prefix GROUP BY day",
+        {"prefix": prefix, "tz": "Asia/Singapore"},
+    )
+    job_days = tx.execute(
+        "SELECT CAST((created_at AT TIME ZONE :tz) AS date) AS day, "
+        "count(*) FILTER (WHERE status = :done) AS videos_done, "
+        "count(*) FILTER (WHERE report_state = :ready) AS reports_ready "
+        "FROM jobs WHERE user_id LIKE :prefix AND deleted_at IS NULL GROUP BY day",
+        {"prefix": prefix, "tz": "Asia/Singapore", "done": DONE, "ready": "ready"},
+    )
+    comp_days = tx.execute(
+        "SELECT CAST((c.started_at AT TIME ZONE :tz) AS date) AS day, count(*) AS n "
+        "FROM comparisons c JOIN jobs j ON j.job_id = c.job_a "
+        "WHERE j.user_id LIKE :prefix AND c.state = :ready GROUP BY day",
+        {"prefix": prefix, "tz": "Asia/Singapore", "ready": "ready"},
+    )
+    by_day = {}
+    for row in pass_days:
+        day = str(row["day"])
+        by_day.setdefault(
+            day,
+            {
+                "date": day,
+                "passes": 0,
+                "videos_done": 0,
+                "reports_ready": 0,
+                "comparisons_ready": 0,
+            },
+        )["passes"] = row["n"]
+    for row in job_days:
+        day = str(row["day"])
+        entry = by_day.setdefault(
+            day,
+            {
+                "date": day,
+                "passes": 0,
+                "videos_done": 0,
+                "reports_ready": 0,
+                "comparisons_ready": 0,
+            },
+        )
+        entry["videos_done"] = row["videos_done"]
+        entry["reports_ready"] = row["reports_ready"]
+    for row in comp_days:
+        day = str(row["day"])
+        by_day.setdefault(
+            day,
+            {
+                "date": day,
+                "passes": 0,
+                "videos_done": 0,
+                "reports_ready": 0,
+                "comparisons_ready": 0,
+            },
+        )["comparisons_ready"] = row["n"]
+    days = [by_day[k] for k in sorted(by_day, reverse=True)]
+    pass_claimed = False
+    if isinstance(check_pass_id, str) and check_pass_id:
+        guest_id = f"{GUEST_PREFIX}{check_pass_id}"
+        pass_claimed = bool(
+            tx.execute(
+                "SELECT 1 AS present FROM users WHERE user_id = :user_id LIMIT 1",
+                {"user_id": guest_id},
+            )
+        )
+    return {
+        "passes_claimed": claimed,
+        "passes_remaining": remaining,
+        "videos_done": job_counts["videos_done"],
+        "videos_running": job_counts["videos_running"],
+        "reports_ready": job_counts["reports_ready"],
+        "comparisons_ready": comparisons_ready,
+        "days": days,
+        "gpu_warm_target": _read_booth_gpu_warm(tx),
+        "pass_claimed": pass_claimed,
+    }
+
+
+def booth_stats(db, *, check_pass_id=None):
+    """Anonymous booth pass and job totals across `guest-*` accounts."""
+    with db.transaction() as tx:
+        _ensure_booth_pool(tx)
+        return _read_booth_stats(tx, check_pass_id=check_pass_id)
+
+
+def adjust_booth_passes(db, delta_passes):
+    """Add `delta_passes` (> 0) to the booth pool, or clear remaining passes when 0."""
+    if not isinstance(delta_passes, int) or isinstance(delta_passes, bool) or delta_passes < 0:
+        raise ValueError(f"delta_passes must be a non-negative integer, not {delta_passes!r}")
+    with db.transaction() as tx:
+        _ensure_booth_pool(tx)
+        pool = _lock_balance(tx, BOOTH_POOL_USER_ID)
+        avail = pool["available_cents"] if pool else 0
+        if delta_passes == 0:
+            if avail > 0:
+                _move(tx, BOOTH_POOL_USER_ID, None, "grant", -avail, 0)
+        else:
+            _move(tx, BOOTH_POOL_USER_ID, None, "grant", delta_passes * BOOTH_PASS_CENTS, 0)
+        return _read_booth_stats(tx)
+
+
+def redeem_booth_pass(db, pass_id, *, current_user_id=None):
+    """Redeem one booth QR pass into an isolated `guest-<pass_id>` user with 2 min of credit.
+
+    Idempotent: re-scanning the same QR code returns the existing guest user without consuming a
+    second pass from the pool. If the caller already has an active `guest-*` session on their
+    device (`current_user_id`), returns that existing guest account so closing the tab and
+    scanning a new QR code brings them back to their videos without consuming another pass.
+    Raises BoothPassEnded if that guest account was deleted, or BoothLimitReached if the pool has
+    no remaining passes.
+    """
+    guest_id = f"{GUEST_PREFIX}{pass_id}"
+    with db.transaction() as tx:
+        _ensure_booth_pool(tx)
+        if is_booth_guest(current_user_id) and current_user_id != guest_id:
+            active_current = tx.execute(
+                "SELECT deleted_at FROM users WHERE user_id = :user_id",
+                {"user_id": current_user_id},
+            )
+            if active_current and active_current[0]["deleted_at"] is None:
+                return current_user_id
+        pool = _lock_balance(tx, BOOTH_POOL_USER_ID)
+        existing = tx.execute(
+            "SELECT deleted_at FROM users WHERE user_id = :user_id FOR UPDATE",
+            {"user_id": guest_id},
+        )
+        if existing:
+            if existing[0]["deleted_at"] is not None:
+                raise BoothPassEnded(f"booth pass {pass_id!r} was deleted")
+            return guest_id
+        if not pool or pool["available_cents"] < BOOTH_PASS_CENTS:
+            raise BoothLimitReached("no booth passes remaining")
+        _move(tx, BOOTH_POOL_USER_ID, None, "grant", -BOOTH_PASS_CENTS, 0)
+        _create_user(tx, guest_id, f"{guest_id}@booth.local", BOOTH_PASS_CENTS)
+    return guest_id

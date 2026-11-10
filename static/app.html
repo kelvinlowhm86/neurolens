@@ -208,6 +208,33 @@
   .modal .field-row { margin-top: 12px; }
   .modal .actions { display: flex; gap: 8px; align-items: center; margin-top: 12px; }
   .modal a { color: inherit; }
+  .booth-qr-box { width: 224px; height: 224px; margin: 14px auto; padding: 10px; background: #fff; border-radius: var(--radius); display: flex; align-items: center; justify-content: center; }
+  .booth-qr-box svg { width: 100%; height: 100%; display: block; }
+  .booth-claimed { text-align: center; font: 600 13px var(--display); color: var(--accent); margin-bottom: 6px; }
+  .booth-stats { margin-top: 12px; padding: 10px 12px; background: var(--well); border: 1px solid var(--line); border-radius: var(--radius); font: 12px/1.6 var(--mono); color: var(--ink-2); display: flex; flex-wrap: wrap; gap: 6px 14px; }
+  .booth-stats strong { color: var(--ink); font-weight: 500; }
+  .booth-days { width: 100%; margin-top: 10px; border-collapse: collapse; font: 11.5px/1.5 var(--mono); color: var(--ink-2); }
+  .booth-days th, .booth-days td { padding: 4px 6px; text-align: right; border-bottom: 1px solid var(--line); }
+  .booth-days th:first-child, .booth-days td:first-child { text-align: left; }
+  .booth-days th { color: var(--muted); font-weight: 500; }
+  .booth-days[hidden] { display: none; }
+  .booth-section { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); }
+  .booth-section-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+  .booth-section-head strong { color: var(--ink); font-family: var(--mono); font-weight: 500; }
+  .booth-controls { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+  .booth-controls button { font-size: 12px; padding: 5px 10px; min-height: 30px; }
+  .job-toast { position: fixed; left: 50%; bottom: max(18px, env(safe-area-inset-bottom, 18px)); transform: translateX(-50%); z-index: 60; background: rgba(19, 22, 27, .94); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border: 1px solid rgba(255, 138, 42, .55); border-radius: 6px; padding: 10px 12px; display: flex; align-items: center; gap: 12px; box-shadow: 0 16px 40px rgba(0, 0, 0, .65), 0 0 24px rgba(255, 138, 42, .18); color: var(--ink); width: min(420px, calc(100vw - 24px)); animation: toast-in 260ms var(--ease-out); }
+  .job-toast[hidden] { display: none; }
+  @keyframes toast-in { from { opacity: 0; transform: translate(-50%, 12px) scale(.98); } to { opacity: 1; transform: translate(-50%, 0) scale(1); } }
+  .job-toast-thumb { width: 48px; height: 32px; border-radius: 3px; background: var(--well); border: 1px solid var(--line); overflow: hidden; flex: none; position: relative; display: grid; place-items: center; color: var(--accent); }
+  .job-toast-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .job-toast-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+  .job-toast-kicker { font: 600 10.5px/1.2 var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--accent); display: flex; align-items: center; gap: 5px; }
+  .job-toast-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 8px var(--accent); flex: none; }
+  .job-toast-title { font: 600 13.5px/1.25 var(--display); color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .job-toast .btn-white { padding: 6px 12px; min-height: 30px; font-size: 12px; flex: none; white-space: nowrap; }
+  .job-toast-close { background: none; border: 0; color: var(--muted); padding: 4px 6px; font-size: 16px; line-height: 1; flex: none; border-radius: var(--radius); }
+  .job-toast-close:hover { color: var(--ink); background: rgba(255,255,255,.06); }
   .choice-row { margin-top: 12px; }
   .choice-row > span { display: block; font-size: 12.5px; color: var(--muted); margin-bottom: 6px; }
   .choices { display: flex; gap: 6px; flex-wrap: wrap; }
@@ -592,6 +619,7 @@
   <a class="brand" href="/">NeuroLens</a>
   <span class="header-meta" id="headerMeta"></span>
   <div class="spacer"></div>
+  <button class="btn-ghost" id="boothQrBtn" type="button" hidden>Booth QR</button>
   <span class="credit" id="balance"></span>
   <div class="account-wrap" id="accountWrap" hidden>
     <button class="account" id="account" aria-haspopup="menu" aria-expanded="false" aria-controls="accountMenu">
@@ -634,6 +662,9 @@
           <span class="up-sub" id="limitsText">MP4, MOV or WebM</span>
         </button>
         <div class="box" id="noCreditPanel">
+          <div id="accessGuest" hidden>
+            <p>You've used your 2-minute booth pass. Ask the booth team if you'd like to try another clip.</p>
+          </div>
           <div id="accessFunded" hidden>
             <p>You've used your credit. Add a shared video's retention curve to get its credit back, or ask the NeuroLens team for more.</p>
           </div>
@@ -915,7 +946,7 @@
     </div>
     <div class="batch-list" id="batchList"></div>
     <div class="batch-total" id="batchTotal" hidden></div>
-    <div class="consent-row">
+    <div class="consent-row" hidden>
       <input type="checkbox" id="consentBox">
       <div class="consent-copy">
         <label for="consentBox">Share to help improve NeuroLens (<a href="/static/privacy.html#sharing" target="_blank" rel="noopener">details</a>). I own the rights to it.</label>
@@ -928,6 +959,54 @@
     </div>
   </div>
 </dialog>
+
+<dialog class="modal" id="boothDialog" aria-labelledby="boothDialogTitle">
+  <h2 id="boothDialogTitle">Booth visitor pass (2 min)</h2>
+  <p>Scan with your phone camera to get a 2-minute pass and analyse your own videos.</p>
+  <div class="booth-qr-box" id="boothQrBox" aria-label="Booth QR code"></div>
+  <p class="booth-claimed" id="boothClaimedMsg" hidden>✓ Pass claimed — fresh QR ready</p>
+  <p class="error" id="boothErrorMsg" hidden></p>
+  <div class="booth-stats" id="boothStats"></div>
+  <table class="booth-days" id="boothDays" hidden>
+    <thead><tr><th>Date (SGT)</th><th>Passes</th><th>Videos</th><th>Reports</th><th>Compares</th></tr></thead>
+    <tbody id="boothDaysBody"></tbody>
+  </table>
+  <div class="booth-controls">
+    <button class="btn-ghost" id="boothAdd5" type="button">+5 passes</button>
+    <button class="btn-ghost" id="boothAdd10" type="button">+10 passes</button>
+    <button class="btn-danger" id="boothStop" type="button">Stop passes</button>
+  </div>
+  <div class="booth-section">
+    <div class="booth-section-head"><span>GPU endpoint</span><strong id="boothGpuStatus">—</strong></div>
+    <div class="booth-controls">
+      <button class="btn-ghost" id="boothGpu1" type="button">Keep 1 GPU</button>
+      <button class="btn-ghost" id="boothGpu2" type="button">Keep 2 GPUs</button>
+      <button class="btn-ghost" id="boothGpu0" type="button">0 (Auto-scale)</button>
+    </div>
+  </div>
+  <div class="booth-section">
+    <div class="booth-section-head"><span>Grant account credit</span><strong id="boothGrantMsg"></strong></div>
+    <div class="field-row" style="margin-top:6px">
+      <input id="boothGrantEmail" type="email" placeholder="Email (blank = my account)" autocomplete="off">
+      <button class="btn-ghost" id="boothGrant5" type="button">+5 min</button>
+      <button class="btn-ghost" id="boothGrant10" type="button">+10 min</button>
+    </div>
+  </div>
+  <div class="actions">
+    <button class="btn-white" id="boothNewQr" type="button">New QR</button>
+    <button class="btn-ghost" id="boothClose" type="button">Close</button>
+  </div>
+</dialog>
+
+<div class="job-toast" id="jobReadyToast" role="status" aria-live="polite" hidden>
+  <div class="job-toast-thumb" id="jobReadyThumb" aria-hidden="true">✓</div>
+  <div class="job-toast-body">
+    <span class="job-toast-kicker"><i class="job-toast-dot"></i>Analysis ready</span>
+    <span class="job-toast-title" id="jobReadyText">Your video</span>
+  </div>
+  <button class="btn-white" id="jobReadyOpen" type="button">View result</button>
+  <button class="job-toast-close" id="jobReadyDismiss" type="button" aria-label="Dismiss">×</button>
+</div>
 
 <dialog class="modal" id="stopShareDialog" aria-labelledby="stopShareTitle">
   <h2 id="stopShareTitle">Stop sharing</h2>
@@ -1331,6 +1410,144 @@ $('deleteJobCancel').addEventListener('click', () => {
 $('deleteJobBtn').addEventListener('click', () => { if (deleteTarget) deleteJob(deleteTarget); });
 closeOnBackdrop(deleteJobDialog);
 
+const boothDialog = $('boothDialog');
+let boothPassId = null, boothPollTimer = null, boothClaimedTimer = null, boothPollTick = 0;
+function renderBoothStats(stats) {
+  if (!stats) return;
+  $('boothStats').innerHTML = [
+    `<span>Claimed: <strong>${stats.passes_claimed}</strong></span>`,
+    `<span>Remaining: <strong>${stats.passes_remaining}</strong></span>`,
+    `<span>In GPU queue: <strong>${stats.videos_running}</strong></span>`,
+    `<span>Videos done: <strong>${stats.videos_done}</strong></span>`,
+    `<span>AI reports: <strong>${stats.reports_ready}</strong></span>`,
+    `<span>Compares: <strong>${stats.comparisons_ready || 0}</strong></span>`,
+  ].join('');
+  const days = Array.isArray(stats.days) ? stats.days : [];
+  $('boothDays').hidden = days.length === 0;
+  $('boothDaysBody').innerHTML = days.map(d => (
+    `<tr><td>${d.date}</td><td>${d.passes}</td><td>${d.videos_done}</td><td>${d.reports_ready}</td><td>${d.comparisons_ready}</td></tr>`
+  )).join('');
+  const warmTarget = Number.isInteger(stats.gpu_warm_target) ? stats.gpu_warm_target : 0;
+  const modeLabel = warmTarget > 0 ? `Keep ${warmTarget} warm (6h)` : 'Auto-scale';
+  if (stats.gpu && typeof stats.gpu.status === 'string') {
+    $('boothGpuStatus').textContent = `${stats.gpu.status} · ${stats.gpu.current}/${stats.gpu.desired} · ${modeLabel}`;
+  } else {
+    $('boothGpuStatus').textContent = modeLabel;
+  }
+}
+async function loadBoothQr(claimedFlash = false) {
+  $('boothErrorMsg').hidden = true;
+  $('boothNewQr').disabled = true;
+  if (!claimedFlash) $('boothClaimedMsg').hidden = true;
+  try {
+    const res = await postJSON('/api/booth/pass', {});
+    const data = await res.json().catch(() => ({}));
+    if (res.status === 401) return window.location.reload();
+    if (!res.ok) {
+      $('boothErrorMsg').textContent = data.message || `Couldn't generate QR (HTTP ${res.status}).`;
+      $('boothErrorMsg').hidden = false;
+      return;
+    }
+    boothPassId = data.pass_id;
+    $('boothQrBox').innerHTML = data.qr_svg || '';
+    renderBoothStats(data.stats);
+  } catch (e) {
+    $('boothErrorMsg').textContent = "Couldn't reach the server. Please try again.";
+    $('boothErrorMsg').hidden = false;
+  } finally {
+    $('boothNewQr').disabled = false;
+  }
+}
+async function pollBoothStats() {
+  if (!boothDialog.open) return;
+  if (document.visibilityState === 'hidden') {
+    clearTimeout(boothPollTimer);
+    boothPollTimer = setTimeout(pollBoothStats, 2000);
+    return;
+  }
+  try {
+    const wantGpu = (boothPollTick++ % 6 === 0) ? '1' : '';
+    const qs = new URLSearchParams();
+    if (boothPassId) qs.set('pass_id', boothPassId);
+    if (wantGpu) qs.set('gpu', '1');
+    const q = qs.toString() ? `?${qs.toString()}` : '';
+    const res = await fetch(`/api/booth/stats${q}`);
+    if (res.ok) {
+      const stats = await res.json();
+      renderBoothStats(stats);
+      if (stats.pass_claimed && boothPassId) {
+        boothPassId = null;
+        $('boothClaimedMsg').hidden = false;
+        clearTimeout(boothClaimedTimer);
+        boothClaimedTimer = setTimeout(() => { $('boothClaimedMsg').hidden = true; }, 3500);
+        await loadBoothQr(true);
+      }
+    }
+  } catch (e) { /* keep polling while open */ }
+  if (boothDialog.open) {
+    clearTimeout(boothPollTimer);
+    boothPollTimer = setTimeout(pollBoothStats, 500);
+  }
+}
+async function postBoothAction(payload) {
+  $('boothErrorMsg').hidden = true;
+  try {
+    const res = await postJSON('/api/booth/passes', payload);
+    const data = await res.json().catch(() => ({}));
+    if (res.status === 401) return window.location.reload();
+    if (!res.ok) {
+      $('boothErrorMsg').textContent = data.message || `Couldn't update booth (HTTP ${res.status}).`;
+      $('boothErrorMsg').hidden = false;
+      return null;
+    }
+    renderBoothStats(data);
+    return data;
+  } catch (e) {
+    $('boothErrorMsg').textContent = "Couldn't reach the server. Please try again.";
+    $('boothErrorMsg').hidden = false;
+    return null;
+  }
+}
+function adjustBoothPasses(delta) { return postBoothAction({ delta }); }
+function setBoothGpu(gpu_desired) { return postBoothAction({ gpu_desired }); }
+async function grantBoothCredit(minutes) {
+  const email = ($('boothGrantEmail').value || '').trim() || (me && me.email) || '';
+  if (!email) return;
+  $('boothGrantMsg').textContent = 'Adding…';
+  const data = await postBoothAction({ grant_email: email, minutes });
+  if (data && data.granted) {
+    $('boothGrantMsg').textContent = `✓ +${data.granted.minutes} min`;
+    if (me && email.toLowerCase() === String(me.email || '').toLowerCase()) loadBalance();
+  } else {
+    $('boothGrantMsg').textContent = '';
+  }
+}
+function openBoothDialog() {
+  if (!boothDialog.open) boothDialog.showModal();
+  $('boothGrantMsg').textContent = '';
+  boothPollTick = 0;
+  loadBoothQr(false);
+  clearTimeout(boothPollTimer);
+  pollBoothStats();
+}
+$('boothQrBtn').addEventListener('click', openBoothDialog);
+$('boothNewQr').addEventListener('click', () => loadBoothQr(false));
+$('boothAdd5').addEventListener('click', () => adjustBoothPasses(5));
+$('boothAdd10').addEventListener('click', () => adjustBoothPasses(10));
+$('boothStop').addEventListener('click', () => adjustBoothPasses(0));
+$('boothGpu1').addEventListener('click', () => setBoothGpu(1));
+$('boothGpu2').addEventListener('click', () => setBoothGpu(2));
+$('boothGpu0').addEventListener('click', () => setBoothGpu(0));
+$('boothGrant5').addEventListener('click', () => grantBoothCredit(5));
+$('boothGrant10').addEventListener('click', () => grantBoothCredit(10));
+$('boothClose').addEventListener('click', () => boothDialog.close());
+boothDialog.addEventListener('close', () => {
+  clearTimeout(boothPollTimer);
+  boothPollTimer = null;
+  clearTimeout(boothClaimedTimer);
+});
+closeOnBackdrop(boothDialog);
+
 function setViewName(name) {
   const player = name === 'player';
   $('chooser').hidden = player;
@@ -1340,7 +1557,10 @@ function setViewName(name) {
   $('appShell').classList.toggle('view-chooser', !player);
 }
 
+const isBoothGuest = () => !!(me && typeof me.user_id === 'string' && me.user_id.startsWith('guest-'));
+
 function accessState() {
+  if (isBoothGuest()) return 'guest';
   const access = (me && me.access) || {};
   if (access.funded || access.request === 'granted') return 'funded';
   if (access.request === 'waiting') return 'waiting';
@@ -1355,6 +1575,7 @@ function updateNoCreditPanel() {
   $('noCreditPanel').classList.toggle('active', show);
   if (!show) return;
   const state = accessState();
+  $('accessGuest').hidden = state !== 'guest';
   $('accessRequest').hidden = state !== 'request';
   $('accessWaiting').hidden = state !== 'waiting';
   $('accessDeclined').hidden = state !== 'declined';
@@ -1464,13 +1685,13 @@ function stopWakeBar(el, timer) {
   if (timer) clearInterval(timer);
   if (el) el.style.setProperty('--wake-p', '1');
 }
-function startupFailed() {
+function startupFailed(title = 'Something went wrong', text = 'Please try again in a minute.', canRetry = true) {
   stopWakeBar($('startupTrace'), startupWakeTimer);
   startupWakeTimer = null;
-  $('startupTitle').textContent = 'Something went wrong';
-  $('startupText').textContent = 'Please try again in a minute.';
+  $('startupTitle').textContent = title;
+  $('startupText').textContent = text;
   $('startupTrace').hidden = true;
-  $('startupRetry').hidden = false;
+  $('startupRetry').hidden = !canRetry;
 }
 async function start(attempt = 0) {
   $('startupPanel').classList.add('active');
@@ -1481,6 +1702,18 @@ async function start(attempt = 0) {
   if (attempt === 0 || !startupWakeTimer) {
     if (startupWakeTimer) clearInterval(startupWakeTimer);
     startupWakeTimer = startWakeBar($('startupTrace'), attempt === 0);
+  }
+  const boothToken = params.get('booth');
+  if (boothToken) {
+    let rRes;
+    try { rRes = await postJSON('/api/wake', { booth: boothToken }); } catch (e) { return startupFailed(); }
+    if (rRes.status === 503 && attempt < STARTUP_RETRIES) {
+      return setTimeout(() => start(attempt + 1), STARTUP_RETRY_MS);
+    }
+    if (!rRes.ok) {
+      const err = await rRes.json().catch(() => ({}));
+      return startupFailed('Booth pass unavailable', err.message || 'Scan a new QR code at the booth.', false);
+    }
   }
   let res;
   try { res = await fetch('/api/me'); } catch (e) { return startupFailed(); }
@@ -1514,6 +1747,7 @@ function showSignedOut() {
   $('noCreditPanel').classList.remove('active');
   $('accountEmail').textContent = '';
   $('accountWrap').hidden = true;
+  $('boothQrBtn').hidden = true;
   $('balance').textContent = '';
   $('topUpload').textContent = 'Sign in';
   $('topUpload').hidden = false;
@@ -1528,8 +1762,10 @@ function showApp(meJson) {
   $('startupPanel').classList.remove('active');
   $('signInPanel').classList.remove('active');
   applyChooser();
-  $('accountEmail').textContent = me.email;
-  $('accountWrap').hidden = false;
+  const guest = isBoothGuest();
+  $('accountEmail').textContent = guest ? '' : me.email;
+  $('accountWrap').hidden = guest;
+  $('boothQrBtn').hidden = !me.booth_admin;
   $('topUpload').innerHTML = 'Upload <span class="bar-hide-sm">a video</span>';
   $('topUpload').hidden = false;
   $('uploadZone').classList.remove('hidden');
@@ -1611,7 +1847,7 @@ function reconcileRows(list, entries) {
 
 function updateSamplesFirst(jobs) {
   const hasFinished = jobs.some(job => job.status === 'done' && job.result_available);
-  $('appShell').classList.toggle('samples-first', !hasFinished);
+  $('appShell').classList.toggle('samples-first', !hasFinished && !isBoothGuest());
 }
 
 function renderHistory(jobs) {
@@ -1648,11 +1884,51 @@ function renderHistory(jobs) {
   const openNow = new Set(
     jobs.filter(job => job.status === 'queued' || job.status === 'processing').map(job => job.job_id),
   );
+  const finishedJob = jobs.find(
+    job => openJobIds.has(job.job_id) && job.status === 'done' && job.result_available && trackedJob !== job.job_id,
+  );
+  if (finishedJob) showJobReadyToast(finishedJob);
   if ([...openJobIds].some(jobId => !openNow.has(jobId))) loadBalance();
   openJobIds = openNow;
   clearTimeout(historyPollTimer);
   if (openNow.size > 0 || uploadQueue.length > 0) historyPollTimer = setTimeout(loadHistory, POLL_MS);
 }
+
+let readyToastJob = null, readyToastTimer = null;
+function hideJobReadyToast() {
+  clearTimeout(readyToastTimer);
+  readyToastTimer = null;
+  $('jobReadyToast').hidden = true;
+  readyToastJob = null;
+}
+function showJobReadyToast(job) {
+  readyToastJob = job;
+  const label = videoBaseName(job.filename || 'Your video');
+  $('jobReadyText').textContent = shortName(label, 30);
+  const thumbBox = $('jobReadyThumb');
+  thumbBox.replaceChildren();
+  const local = localFrames.get(job.job_id);
+  const img = document.createElement('img');
+  img.alt = '';
+  img.src = local || `/api/jobs/${job.job_id}/thumbnail`;
+  img.addEventListener('error', () => { img.remove(); thumbBox.textContent = '✓'; });
+  thumbBox.append(img);
+  $('jobReadyToast').hidden = false;
+  clearTimeout(readyToastTimer);
+  readyToastTimer = setTimeout(hideJobReadyToast, 12000);
+}
+$('jobReadyOpen').addEventListener('click', () => {
+  const job = readyToastJob;
+  hideJobReadyToast();
+  if (job) openJob(job);
+});
+$('jobReadyDismiss').addEventListener('click', hideJobReadyToast);
+// When a phone visitor returns from another app or locked screen, re-check unfinished jobs at once.
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible' || !signedIn) return;
+  if (openJobIds.size > 0 || uploadQueue.length > 0) loadHistory();
+  if (trackedJob) pollJob(trackedJob);
+});
 
 // The user's oldest unfinished job carries the waiting clock; the rest are just "In line".
 // The list is newest first, so among equal created_at times the last one in the list is the oldest.
@@ -1831,6 +2107,7 @@ function historyRow(job) {
 }
 
 function openJob(job) {
+  hideJobReadyToast();
   resetUI();
   if (job.status === 'queued' || job.status === 'processing') {
     showProgress(job);

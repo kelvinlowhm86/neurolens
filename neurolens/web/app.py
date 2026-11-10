@@ -8,6 +8,7 @@ history and CSV export, uploads refused while GPU work is paused.
 """
 
 import hashlib
+import hmac
 import json
 import logging
 import math
@@ -25,6 +26,7 @@ from neurolens import (
     access,
     billing,
     pricing,
+    qr,
     report_prompt,
     results,
     scaling,
@@ -54,10 +56,37 @@ RETENTION_PUBLISHED = {"week", "month", "older"}
 DEFAULT_REWARD_CAP = 5
 DEFAULT_REWARD_WINDOW_DAYS = 30
 JOB_ACTIVE_MESSAGE = "This video is still waiting or being processed. Try again when it finishes."
+# SHA-256 hex digests of lowercased, stripped booth-admin emails (so raw emails never sit in git).
+# Add one with: python3 -c 'import hashlib; print(hashlib.sha256(b"you@example.com").hexdigest())'
+BOOTH_ADMIN_HASHES = frozenset(
+    {
+        "1913f1aa43f6f0cbfdedd18e5842e072a830000008ba7e1191c682a900c2a852",
+        "0326082fc86908b10234f55a7b34359a883f16e2b3701b2da1124ac2dd933754",
+        "29b946a2e02413f159b8db47288f2f8813de733828476bfdbb0dc13c4cc9284f",
+    }
+)
+BOOTH_ADJUST_DELTAS = (0, 5, 10)
+
+
+def is_booth_admin(email):
+    if not isinstance(email, str) or not email:
+        return False
+    digest = hashlib.sha256(email.strip().lower().encode()).hexdigest()
+    return digest in BOOTH_ADMIN_HASHES
 
 
 def _is_number(value):
     return isinstance(value, int | float) and not isinstance(value, bool) and math.isfinite(value)
+
+
+def _is_uuid(value):
+    if not isinstance(value, str):
+        return False
+    try:
+        uuid.UUID(value)
+        return True
+    except ValueError:
+        return False
 
 
 def _error(code, message, status=400, **extra):
@@ -225,10 +254,12 @@ def create_app(
     curve_min_views = research_cfg.get("curve_min_views", billing.DEFAULT_MIN_VIEWS)
     static_dir = root / "static"
     autoscaling = None
+    sagemaker = None
     if gpu_endpoint:
         import boto3
 
         autoscaling = boto3.client("application-autoscaling", region_name=region)
+        sagemaker = boto3.client("sagemaker", region_name=region)
     cognito_idp = None
     user_pool_id = None
     if cognito:
@@ -278,9 +309,9 @@ def create_app(
 
     def signed_in_user():
         """(user_id, email) of the caller. Dev mode creates its user with the starter credit on
-        first sight; a Cognito user was created at sign-in."""
+        first sight; a Cognito user or booth guest was created at sign-in / pass redemption."""
         user_id, email = auth.current_user()
-        if cognito:
+        if cognito or billing.is_booth_guest(user_id):
             return user_id, email
         with known_lock:
             known = user_id in known_users
@@ -289,6 +320,23 @@ def create_app(
             with known_lock:
                 known_users.add(user_id)
         return user_id, email
+
+    def _sign_booth_pass(pass_id):
+        key = str(app.secret_key).encode("utf-8")
+        sig = hmac.new(key, pass_id.encode("utf-8"), hashlib.sha256).hexdigest()[:16]
+        return f"{pass_id}.{sig}"
+
+    def _verify_booth_pass(token):
+        if not isinstance(token, str) or "." not in token:
+            return None
+        pass_id, sig = token.rsplit(".", 1)
+        if not _is_uuid(pass_id):
+            return None
+        key = str(app.secret_key).encode("utf-8")
+        expected = hmac.new(key, pass_id.encode("utf-8"), hashlib.sha256).hexdigest()[:16]
+        if not hmac.compare_digest(sig, expected):
+            return None
+        return pass_id.lower()
 
     @app.route("/")
     def index():
@@ -371,10 +419,51 @@ def create_app(
             limits["max_batch_files"] = max_batch_files
         return jsonify(limits)
 
+    def _gpu_status():
+        if sagemaker is None or not gpu_endpoint:
+            return {"status": "local", "current": 0, "desired": 0}
+        try:
+            desc = sagemaker.describe_endpoint(EndpointName=gpu_endpoint)
+            variants = desc.get("ProductionVariants") or []
+            v = variants[0] if variants else {}
+            return {
+                "status": desc.get("EndpointStatus", "Unknown"),
+                "current": v.get("CurrentInstanceCount", 0),
+                "desired": v.get("DesiredInstanceCount", 0),
+            }
+        except Exception:
+            logger.exception("Could not read SageMaker endpoint status")
+            return {"status": "unknown", "current": 0, "desired": 0}
+
     @app.route("/api/wake", methods=["POST"])
     def wake():
-        """Start Aurora's resume from the landing page's first interaction. The page ignores the
-        answer; a failed wake is logged and still answers 204."""
+        """Start Aurora's resume from the landing page's first interaction, or redeem a booth QR
+        pass when `{"booth": token}` is sent."""
+        data = request.get_json(silent=True) if request.is_json else None
+        if isinstance(data, dict) and "booth" in data:
+            if db is None:
+                return _not_configured()
+            pass_id = _verify_booth_pass(data.get("booth"))
+            if pass_id is None:
+                return _error("invalid_booth_pass", "This booth QR pass is not valid.", status=400)
+            caller = auth.current_user()
+            current_uid = caller[0] if caller else None
+            try:
+                guest_id = billing.redeem_booth_pass(db, pass_id, current_user_id=current_uid)
+            except billing.BoothLimitReached:
+                return _error(
+                    "booth_limit_reached",
+                    "All booth passes have been claimed for now. Ask the booth team for more!",
+                    status=409,
+                )
+            except billing.BoothPassEnded:
+                return _error(
+                    "booth_pass_ended",
+                    "This booth session has ended. Scan a new QR code at the booth.",
+                    status=410,
+                )
+            auth.start_session(db, guest_id)
+            return auth.set_signed_in_hint(jsonify({"user_id": guest_id}))
         if db is not None:
             try:
                 db.wake()
@@ -387,17 +476,132 @@ def create_app(
         if db is None:
             return _not_configured()
         user_id, email = signed_in_user()
+        payload = {
+            "user_id": user_id,
+            "email": email,
+            "balance": billing.get_balance(db, user_id),
+            "access": {
+                "funded": billing.is_funded(db, user_id),
+                "request": access.request_status(db, user_id),
+            },
+        }
+        if is_booth_admin(email):
+            payload["booth_admin"] = True
+        return jsonify(payload)
+
+    @app.route("/api/booth/pass", methods=["POST"])
+    def booth_pass():
+        if db is None:
+            return _not_configured()
+        _, email = signed_in_user()
+        if not is_booth_admin(email):
+            return _error("forbidden", "Booth QR is only available to booth admins.", status=403)
+        pass_id = str(uuid.uuid4())
+        token = _sign_booth_pass(pass_id)
+        base_url = auth_cfg.get("public_base_url") or request.host_url.rstrip("/")
+        url = f"{base_url}/app?booth={token}"
+        stats = billing.booth_stats(db)
+        if request.args.get("gpu") == "1":
+            stats["gpu"] = _gpu_status()
         return jsonify(
             {
-                "user_id": user_id,
-                "email": email,
-                "balance": billing.get_balance(db, user_id),
-                "access": {
-                    "funded": billing.is_funded(db, user_id),
-                    "request": access.request_status(db, user_id),
-                },
+                "pass_id": pass_id,
+                "token": token,
+                "url": url,
+                "qr_svg": qr.svg(url),
+                "stats": stats,
             }
         )
+
+    @app.route("/api/booth/stats")
+    def booth_stats_route():
+        if db is None:
+            return _not_configured()
+        _, email = signed_in_user()
+        if not is_booth_admin(email):
+            return _error(
+                "forbidden", "Booth stats are only available to booth admins.", status=403
+            )
+        pass_id = request.args.get("pass_id")
+        if pass_id is not None and not _is_uuid(pass_id):
+            pass_id = None
+        stats = billing.booth_stats(db, check_pass_id=pass_id)
+        if request.args.get("gpu") == "1":
+            gpu = _gpu_status()
+            warm_target = stats.get("gpu_warm_target", 0)
+            if (
+                warm_target in (1, 2)
+                and sagemaker is not None
+                and gpu_endpoint
+                and gpu.get("desired", 0) < warm_target
+            ):
+                try:
+                    sagemaker.update_endpoint_weights_and_capacities(
+                        EndpointName=gpu_endpoint,
+                        DesiredWeightsAndCapacities=[
+                            {"VariantName": "main", "DesiredInstanceCount": warm_target}
+                        ],
+                    )
+                    gpu["desired"] = warm_target
+                except Exception:
+                    logger.exception("Could not re-assert booth GPU warm target")
+            stats["gpu"] = gpu
+        return jsonify(stats)
+
+    @app.route("/api/booth/passes", methods=["POST"])
+    def booth_passes_adjust():
+        if db is None:
+            return _not_configured()
+        _, email = signed_in_user()
+        if not is_booth_admin(email):
+            return _error(
+                "forbidden", "Booth passes can only be changed by booth admins.", status=403
+            )
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict):
+            return _error("invalid_request", "The request body must be a JSON object.")
+        if "gpu_desired" in data:
+            desired = data.get("gpu_desired")
+            if type(desired) is not int or desired not in (0, 1, 2):
+                return _error("invalid_request", "gpu_desired must be 0, 1 or 2.")
+            stats = billing.set_booth_gpu_warm(db, desired)
+            if sagemaker is not None and gpu_endpoint:
+                try:
+                    sagemaker.update_endpoint_weights_and_capacities(
+                        EndpointName=gpu_endpoint,
+                        DesiredWeightsAndCapacities=[
+                            {"VariantName": "main", "DesiredInstanceCount": desired}
+                        ],
+                    )
+                except Exception as err:
+                    return _error("gpu_update_failed", str(err), status=409)
+            stats["gpu"] = _gpu_status()
+            return jsonify(stats)
+        if "grant_email" in data:
+            target_email = (data.get("grant_email") or "").strip() or email
+            minutes = data.get("minutes")
+            if type(minutes) is not int or minutes not in (2, 5, 10):
+                return _error("invalid_request", "minutes must be 2, 5 or 10.")
+            cents = minutes * 60 * pricing.CENTS_PER_BLOCK // pricing.BLOCK_SECONDS
+            try:
+                billing.grant_credit(db, target_email, cents)
+            except LookupError:
+                return _error(
+                    "user_not_found",
+                    f"No account found for {target_email}. Have them sign in first.",
+                    status=404,
+                )
+            stats = billing.booth_stats(db)
+            stats["granted"] = {
+                "email": target_email,
+                "minutes": minutes,
+                "cents": cents,
+            }
+            return jsonify(stats)
+        delta = data.get("delta")
+        if type(delta) is not int or delta not in BOOTH_ADJUST_DELTAS:
+            return _error("invalid_request", "delta must be 0, 5 or 10.")
+        return jsonify(billing.adjust_booth_passes(db, delta))
 
     @app.route("/api/access-request", methods=["POST"])
     def access_request():
@@ -492,6 +696,8 @@ def create_app(
                 )
 
         user_id, _ = signed_in_user()
+        if billing.is_booth_guest(user_id):
+            research_consent = False
         if research_consent and data.get("consent_version") != billing.CONSENT_VERSION:
             return _error("consent_outdated", "Please refresh the page.", status=409)
         job_id = str(uuid.uuid4())

@@ -165,9 +165,9 @@ def current_user():
     from the database, never the cookie.
     """
     auth = current_app.config["NEUROLENS_AUTH"]
-    if auth["mode"] == "dev":
-        return auth["dev_user_id"], auth["dev_email"]
     token = session.get(SESSION_TOKEN_KEY)
+    if auth["mode"] == "dev" and not (isinstance(token, str) and token):
+        return auth["dev_user_id"], auth["dev_email"]
     db = _database()
     if not isinstance(token, str) or not token or db is None:
         return None

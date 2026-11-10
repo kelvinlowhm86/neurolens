@@ -8,20 +8,19 @@ of credit, M3b/M3c; early access by request, M3k), and the experiment scripts in
 **A proposal:** the team running M4 may change any part of it; the report states what was
 actually done.
 
-**Ground rules:** region `us-east-1`, the CLI profile of the account in use. **No new product features:**
-problems the booth or the experiments find go in the report as future work. Every GPU session's
+**Ground rules:** region `us-east-1`, the CLI profile of the account in use. Every GPU session's
 cost estimate is stated, and agreed by the team, before it starts; every session ends with
-`infra/stop_work.sh` (`docs/session_checklist.md`).
+`infra/stop_work.sh` (or `0 (Auto-scale)` in the Booth QR admin modal; `docs/session_checklist.md`).
 
 ## 1. Scope
-**In scope:** the booth at STePS and its anonymous survey (§2); Experiments 1–3 (§3); what the report takes from them (§4); merging the working branch into `main` (§5); teardown when the team
+**In scope:** the booth at STePS (including the Booth QR visitor passes and admin modal) and its anonymous survey (§2); Experiments 1–3 (§3); what the report takes from them (§4); merging the working branch into `main` (§5); teardown when the team
 decides (§6).
 
-**Out of scope:** in-app study code (consent screens, participant flags, timing); study scripts
-beyond the survey form; new experiment tooling unless an experiment cannot be run without it.
+**Out of scope:** study scripts beyond the survey form; new experiment tooling unless an experiment cannot be run without it.
 
 ## 2. STePS booth (11 Nov, the whole event)
-A drop-in table at STePS: visitors try NeuroLens on a team laptop, then fill in a short anonymous survey.
+A drop-in table at STePS: visitors try NeuroLens on a team laptop or scan the live Booth QR code on their phone, then fill in a short anonymous survey.
+- **Booth QR passes & Admin controls:** Booth admins (`BOOTH_ADMIN_HASHES` in `neurolens/web/app.py`) open the **Booth QR** modal in the web app to display an auto-rotating QR code (polled every 0.5 s). Scanning the QR code on a phone redeems a 2-minute (`400` cents) guest session (`guest-<pass_id>`, 1 pass per phone, `research_consent = False` forced on all guest uploads). Inside the same modal, admins can adjust the pass pool (`+5 passes`, `+10 passes`, `Stop passes`), control GPU warmth (`Keep 1 GPU`, `Keep 2 GPUs` for 6 hours, or `0 (Auto-scale)`), grant account credit by email (`+5 min`, `+10 min`), and view live + per-day (`Asia/Singapore`) funnel totals.
 - **Survey:** `docs/study/questionnaire.md` is the form's text and settings; `docs/study/make_form.gs`
   builds it in Google Forms (keep the two in step). It collects no email or name. It asks for
   consent (a required tick), what the visitor did, the 10 SUS items in the standard order,

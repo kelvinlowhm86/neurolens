@@ -8,7 +8,7 @@ own database rather than the backlog metric the scale-in alarm uses.
 import logging
 import os
 
-from neurolens import lambdas
+from neurolens import billing, lambdas
 from neurolens.billing import STALE_AFTER_S
 
 logger = logging.getLogger(__name__)
@@ -23,8 +23,10 @@ def _scalable_target_id(endpoint):
 
 
 def _work_possible(db):
-    """True when a live claim, a dispatched request or recent activity says work is coming."""
+    """True when a live claim, a dispatched request, recent activity, or an active booth
+    keep-warm setting says work is coming."""
     with db.transaction() as tx:
+        warm = billing._read_booth_gpu_warm(tx)
         rows = tx.execute(
             "SELECT "
             "EXISTS(SELECT 1 FROM jobs WHERE status = :processing "
@@ -42,7 +44,7 @@ def _work_possible(db):
                 "quiet": QUIET_S,
             },
         )
-    return bool(rows[0]["live"] or rows[0]["dispatched"] or rows[0]["recent"])
+    return bool(warm > 0 or rows[0]["live"] or rows[0]["dispatched"] or rows[0]["recent"])
 
 
 def check(db, *, sagemaker, appscaling, endpoint):

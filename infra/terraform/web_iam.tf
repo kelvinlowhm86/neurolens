@@ -64,6 +64,16 @@ locals {
         Resource = "*"
       },
       {
+        # Booth admin GPU status and warm/stop controls.
+        Sid    = "BoothEndpointStatusAndWarmth"
+        Effect = "Allow"
+        Action = [
+          "sagemaker:DescribeEndpoint",
+          "sagemaker:UpdateEndpointWeightsAndCapacities",
+        ]
+        Resource = local.endpoint_arn
+      },
+      {
         # Deleting a video or the whole account removes its upload, result and research
         # prefix (M3f §5c). Missing keys are fine.
         Sid    = "DeleteJobFiles"
