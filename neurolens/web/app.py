@@ -519,6 +519,48 @@ def create_app(
             payload["stats"] = stats
         return jsonify(payload)
 
+    def _sync_gpu_capacity(stats, *, allow_error=False):
+        """Reconcile SageMaker's desired capacity with the saved booth warm target (`0`, `1`, `2`)
+        without interrupting active jobs or throwing an error while SageMaker is mid-update."""
+        gpu = _gpu_status()
+        if sagemaker is None or not gpu_endpoint:
+            return gpu, None
+        warm_target = stats.get("gpu_warm_target", 0)
+        videos_running = stats.get("videos_running", 0)
+        desired = gpu.get("desired", 0)
+        need_update = False
+        if warm_target in (1, 2):
+            if desired < warm_target:
+                need_update = True
+            elif desired > warm_target and videos_running <= warm_target:
+                need_update = True
+        elif warm_target == 0 and desired > 0 and videos_running == 0:
+            need_update = True
+        if not need_update:
+            return gpu, None
+        if gpu.get("status") in ("Updating", "Creating", "SystemUpdating"):
+            gpu["queued_desired"] = warm_target
+            return gpu, None
+        try:
+            sagemaker.update_endpoint_weights_and_capacities(
+                EndpointName=gpu_endpoint,
+                DesiredWeightsAndCapacities=[
+                    {"VariantName": "main", "DesiredInstanceCount": warm_target}
+                ],
+            )
+            gpu["desired"] = warm_target
+            gpu["status"] = "Updating"
+        except Exception as err:
+            msg = str(err)
+            if "in-progress" in msg.lower() or "updating" in msg.lower():
+                gpu["status"] = "Updating"
+                gpu["queued_desired"] = warm_target
+                return gpu, None
+            if allow_error:
+                return gpu, _error("gpu_update_failed", msg, status=409)
+            logger.exception("Could not reconcile booth GPU warm target")
+        return gpu, None
+
     @app.route("/api/booth/stats")
     def booth_stats_route():
         if db is None:
@@ -533,24 +575,7 @@ def create_app(
             pass_id = None
         stats = billing.booth_stats(db, check_pass_id=pass_id)
         if request.args.get("gpu") == "1":
-            gpu = _gpu_status()
-            warm_target = stats.get("gpu_warm_target", 0)
-            if (
-                warm_target in (1, 2)
-                and sagemaker is not None
-                and gpu_endpoint
-                and gpu.get("desired", 0) < warm_target
-            ):
-                try:
-                    sagemaker.update_endpoint_weights_and_capacities(
-                        EndpointName=gpu_endpoint,
-                        DesiredWeightsAndCapacities=[
-                            {"VariantName": "main", "DesiredInstanceCount": warm_target}
-                        ],
-                    )
-                    gpu["desired"] = warm_target
-                except Exception:
-                    logger.exception("Could not re-assert booth GPU warm target")
+            gpu, _ = _sync_gpu_capacity(stats)
             stats["gpu"] = gpu
         return jsonify(stats)
 
@@ -571,17 +596,10 @@ def create_app(
             if type(desired) is not int or desired not in (0, 1, 2):
                 return _error("invalid_request", "gpu_desired must be 0, 1 or 2.")
             stats = billing.set_booth_gpu_warm(db, desired)
-            if sagemaker is not None and gpu_endpoint:
-                try:
-                    sagemaker.update_endpoint_weights_and_capacities(
-                        EndpointName=gpu_endpoint,
-                        DesiredWeightsAndCapacities=[
-                            {"VariantName": "main", "DesiredInstanceCount": desired}
-                        ],
-                    )
-                except Exception as err:
-                    return _error("gpu_update_failed", str(err), status=409)
-            stats["gpu"] = _gpu_status()
+            gpu, err_resp = _sync_gpu_capacity(stats, allow_error=True)
+            if err_resp is not None:
+                return err_resp
+            stats["gpu"] = gpu
             return jsonify(stats)
         if "grant_email" in data:
             target_email = (data.get("grant_email") or "").strip() or email

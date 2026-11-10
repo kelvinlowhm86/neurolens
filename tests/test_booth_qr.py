@@ -198,3 +198,76 @@ def test_cognito_signed_out_visitor_can_redeem_booth_pass(
     me = cognito_client.get("/api/me")
     assert me.status_code == 200
     assert me.get_json()["user_id"].startswith("guest-")
+
+
+def test_gpu_warm_queues_while_updating_and_scales_down_when_idle(
+    aws, db, make_cfg, tmp_path, booth_admin_patch, monkeypatch
+):
+    import boto3
+
+    class FakeSageMaker:
+        def __init__(self):
+            self.status = "Updating"
+            self.current = 0
+            self.desired = 1
+            self.updates = []
+
+        def describe_endpoint(self, EndpointName):
+            return {
+                "EndpointStatus": self.status,
+                "ProductionVariants": [
+                    {
+                        "VariantName": "main",
+                        "CurrentInstanceCount": self.current,
+                        "DesiredInstanceCount": self.desired,
+                    }
+                ],
+            }
+
+        def update_endpoint_weights_and_capacities(self, EndpointName, DesiredWeightsAndCapacities):
+            if self.status != "InService":
+                raise RuntimeError("Cannot update in-progress endpoint")
+            target = DesiredWeightsAndCapacities[0]["DesiredInstanceCount"]
+            self.updates.append(target)
+            self.desired = target
+
+    sm = FakeSageMaker()
+    real_client = boto3.client
+
+    def fake_client(service, *args, **kwargs):
+        if service == "sagemaker":
+            return sm
+        return real_client(service, *args, **kwargs)
+
+    monkeypatch.setattr(boto3, "client", fake_client)
+    cfg = make_cfg(
+        auth={"mode": "dev", "dev_user_id": "admin-1", "dev_email": ADMIN_EMAIL},
+        aws={"s3_bucket": aws.bucket, "gpu_endpoint": "neurolens"},
+    )
+    app = create_app(cfg=cfg, data_dir=tmp_path / "data", db=db, s3_client=aws.s3)
+    app.config["TESTING"] = True
+    admin = app.test_client()
+
+    # Clicking Keep 2 GPUs while endpoint is Updating succeeds without 409 and queues target=2.
+    res = admin.post("/api/booth/passes", json={"gpu_desired": 2})
+    assert res.status_code == 200
+    body = res.get_json()
+    assert body["gpu_warm_target"] == 2
+    assert body["gpu"]["queued_desired"] == 2
+    assert sm.updates == []
+
+    # Switching to 0 (Auto-scale) while still Updating also succeeds and queues target=0.
+    res0 = admin.post("/api/booth/passes", json={"gpu_desired": 0})
+    assert res0.status_code == 200
+    body0 = res0.get_json()
+    assert body0["gpu_warm_target"] == 0
+    assert body0["gpu"]["queued_desired"] == 0
+    assert sm.updates == []
+
+    # Once SageMaker finishes booting into InService (current=1, desired=1) and queue is empty,
+    # the next ?gpu=1 poll automatically scales it down to 0.
+    sm.status = "InService"
+    sm.current = 1
+    polled = admin.get("/api/booth/stats?gpu=1").get_json()
+    assert sm.updates == [0]
+    assert polled["gpu"]["desired"] == 0

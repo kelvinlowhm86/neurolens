@@ -208,24 +208,26 @@
   .modal .field-row { margin-top: 12px; }
   .modal .actions { display: flex; gap: 8px; align-items: center; margin-top: 12px; }
   .modal a { color: inherit; }
-  .booth-qr-box { width: 224px; height: 224px; margin: 14px auto; padding: 10px; background: #fff; border-radius: var(--radius); display: flex; align-items: center; justify-content: center; }
+  .booth-qr-box { width: 172px; height: 172px; margin: 8px auto; padding: 8px; background: #fff; border-radius: var(--radius); display: flex; align-items: center; justify-content: center; }
   .booth-qr-box svg { width: 100%; height: 100%; display: block; }
-  .booth-claimed { text-align: center; font: 600 13px var(--display); color: var(--accent); margin-bottom: 6px; }
-  .booth-stats { margin-top: 12px; padding: 10px 12px; background: var(--well); border: 1px solid var(--line); border-radius: var(--radius); font: 12px/1.6 var(--mono); color: var(--ink-2); display: flex; flex-wrap: wrap; gap: 6px 14px; }
+  .booth-claimed { text-align: center; font: 600 12.5px var(--display); color: var(--accent); margin-bottom: 4px; }
+  .booth-stats { margin-top: 8px; padding: 7px 10px; background: var(--well); border: 1px solid var(--line); border-radius: var(--radius); font: 11.5px/1.45 var(--mono); color: var(--ink-2); display: flex; flex-wrap: wrap; gap: 4px 12px; }
   .booth-stats strong { color: var(--ink); font-weight: 500; }
-  .booth-days { width: 100%; margin-top: 10px; border-collapse: collapse; font: 11.5px/1.5 var(--mono); color: var(--ink-2); }
-  .booth-days th, .booth-days td { padding: 4px 6px; text-align: right; border-bottom: 1px solid var(--line); }
+  .booth-days { width: 100%; margin-top: 6px; border-collapse: collapse; font: 11px/1.35 var(--mono); color: var(--ink-2); }
+  .booth-days th, .booth-days td { padding: 3px 5px; text-align: right; border-bottom: 1px solid var(--line); }
   .booth-days th:first-child, .booth-days td:first-child { text-align: left; }
   .booth-days th { color: var(--muted); font-weight: 500; }
   .booth-days[hidden] { display: none; }
-  .booth-section { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); }
-  .booth-section-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+  .booth-section { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); }
+  .booth-section-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
   .booth-section-head strong { color: var(--ink); font-family: var(--mono); font-weight: 500; }
-  .booth-controls { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
-  .booth-controls button { font-size: 12px; padding: 5px 10px; min-height: 30px; }
+  .booth-controls { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+  .booth-controls button { font-size: 12px; padding: 4px 9px; min-height: 28px; }
   .booth-controls button.active { border-color: var(--accent); color: var(--ink); background: rgba(255, 138, 42, .14); }
-  .booth-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+  .booth-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
   .booth-head h2 { margin-bottom: 0; }
+  #boothDialog { padding: 14px 18px; width: min(460px, calc(100vw - 24px)); }
+  #boothDialog .actions { margin-top: 10px; }
   .booth-help-btn { width: 24px; height: 24px; min-height: 24px; padding: 0; border-radius: 50%; border: 1px solid var(--line); background: var(--well); color: var(--muted); font: 600 12px/1 var(--mono); display: inline-flex; align-items: center; justify-content: center; flex: none; }
   .booth-help-btn:hover, .booth-help-btn[aria-expanded="true"] { border-color: var(--accent); color: var(--ink); background: rgba(255, 138, 42, .14); }
   .booth-help { margin: 8px 0 10px; padding: 10px 12px; background: var(--well); border: 1px solid var(--line); border-radius: var(--radius); font-size: 12px; color: var(--ink-2); line-height: 1.5; }
@@ -1429,6 +1431,32 @@ closeOnBackdrop(deleteJobDialog);
 
 const boothDialog = $('boothDialog');
 let boothPassId = null, boothNextPass = null, boothPollTimer = null, boothClaimedTimer = null, boothPollTick = 0, boothGpuInfo = null;
+function formatBoothGpuStatus(gpu, warmTarget, videosRunning) {
+  if (!gpu || typeof gpu.status !== 'string') {
+    return warmTarget > 0 ? `Target: ${warmTarget} GPU${warmTarget === 1 ? '' : 's'}` : 'Auto-scale';
+  }
+  if (gpu.status === 'local') return 'Local mode';
+  const cur = Number.isInteger(gpu.current) ? gpu.current : 0;
+  const des = Number.isInteger(gpu.desired) ? gpu.desired : 0;
+  const queued = Number.isInteger(gpu.queued_desired) ? gpu.queued_desired : null;
+  const target = queued != null ? queued : des;
+  const readyLabel = `${cur} GPU${cur === 1 ? '' : 's'} ready`;
+  if (warmTarget === 0 && cur > 0 && videosRunning > 0) {
+    return `${readyLabel} · stops after queue`;
+  }
+  if (warmTarget === 1 && cur > 1 && videosRunning > 1) {
+    return `${readyLabel} · 2nd stops after queue`;
+  }
+  if (queued != null && queued !== des) {
+    return queued > cur ? `Starting (${cur}/${queued} ready)…` : `Stopping to ${queued} after update…`;
+  }
+  if (gpu.status === 'Updating' || gpu.status === 'Creating' || gpu.status === 'SystemUpdating' || cur !== target) {
+    if (target > cur) return `Starting (${cur}/${target} ready)…`;
+    if (target < cur) return target === 0 ? `Stopping (${cur}→0)…` : `Scaling down (${cur}→${target})…`;
+    return `Updating (${readyLabel})…`;
+  }
+  return readyLabel;
+}
 function renderBoothStats(stats) {
   if (!stats) return;
   $('boothStats').innerHTML = [
@@ -1445,15 +1473,10 @@ function renderBoothStats(stats) {
     `<tr><td>${d.date}</td><td>${d.passes}</td><td>${d.videos_done}</td><td>${d.reports_ready}</td><td>${d.comparisons_ready}</td></tr>`
   )).join('');
   const warmTarget = Number.isInteger(stats.gpu_warm_target) ? stats.gpu_warm_target : 0;
-  const modeLabel = warmTarget > 0 ? `Keep ${warmTarget} warm (6h)` : 'Auto-scale';
   if (stats.gpu && typeof stats.gpu.status === 'string') {
     boothGpuInfo = stats.gpu;
   }
-  if (boothGpuInfo && typeof boothGpuInfo.status === 'string') {
-    $('boothGpuStatus').textContent = `${boothGpuInfo.status} · ${boothGpuInfo.current}/${boothGpuInfo.desired} · ${modeLabel}`;
-  } else {
-    $('boothGpuStatus').textContent = modeLabel;
-  }
+  $('boothGpuStatus').textContent = formatBoothGpuStatus(boothGpuInfo, warmTarget, stats.videos_running || 0);
   [
     ['boothGpu1', warmTarget === 1],
     ['boothGpu2', warmTarget === 2],
