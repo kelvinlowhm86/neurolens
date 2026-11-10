@@ -11,6 +11,8 @@ from neurolens import report_prompt, results
 
 
 SHOWN = ["see", "hear", "understand", "overall"]
+SUB_SIGNALS = ["faces", "bodies", "scenes", "visual", "sound", "speech", "social"]
+TABLE_COLUMNS = [*SHOWN, "muted_overall", *SUB_SIGNALS]
 
 
 def make_result(duration=3):
@@ -36,13 +38,14 @@ def test_series_table_has_one_row_per_second_in_header_order():
     assert "duration_seconds 4" in lines[0]
     assert "last_second 3" in lines[0]
     header = lines[1].split()
-    assert header == ["t", *SHOWN, "muted_overall"]
+    assert header == ["t", *TABLE_COLUMNS]
     rows = [line.split() for line in lines[2:]]
     assert len(rows) == 4
     for second, row in enumerate(rows):
         assert int(row[0]) == second
         expected = [result["signals"][name][second] for name in SHOWN]
         expected.append(result["muted"]["overall"][second])
+        expected.extend(result["signals"][name][second] for name in SUB_SIGNALS)
         assert [float(cell) for cell in row[1:]] == pytest.approx(expected)
 
 
@@ -128,7 +131,7 @@ def test_series_table_first_line_counts_seconds_against_typical():
         "Seconds above / near / below typical: see 1/3/1, hear 1/4/1, "
         "understand 0/6/0, overall 6/0/0."
     )
-    assert lines[1].split() == ["t", *SHOWN, "muted_overall"]
+    assert lines[1].split() == ["t", *TABLE_COLUMNS]
 
 
 def test_comparison_table_counts_over_the_shared_seconds_only():

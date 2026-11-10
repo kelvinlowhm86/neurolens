@@ -665,11 +665,11 @@
         <button class="btn-ghost" id="btnNew">Back</button>
       </div>
       <section class="video-panel">
-        <div class="panel-head"><span>Video</span><span class="spacer"></span><span class="mono" id="videoClock"></span></div>
         <div class="video-box" id="videoBox">
           <video id="videoPlayer" playsinline muted preload="auto"></video><!-- preload: the whole clip downloads up front so chart clicks jump at once -->
           <div class="video-missing" id="videoMissing" hidden></div>
         </div>
+        <div class="timeline" id="timeline"></div>
       </section>
       <div class="sample-meta" id="sampleMeta"></div>
       <section class="brain-panel">
@@ -685,7 +685,6 @@
           <span class="brain-hint">Drag to rotate</span>
         </div>
       </section>
-      <div class="timeline" id="timeline"></div>
       <div class="retention-card" id="retentionCard" hidden>
         <p id="retentionCardText"></p>
         <button class="btn-ghost" id="retentionCardBtn" type="button">Add audience retention</button>
@@ -5065,8 +5064,6 @@ function updateReadouts(t) {
   }
   const second = $('overallSecond');
   if (second) second.textContent = fmt(t);
-  const clock = $('videoClock');
-  if (clock) clock.textContent = currentResult ? `${fmt(t)} / ${fmt(totalSeconds())}` : '';
 }
 
 function updateBrainValues(t) {
@@ -5425,12 +5422,11 @@ function showCompareRow() {
   let candidates = [];
   let groups = [];
   if (sampleId) {
-    candidates = (samplesData && samplesData.samples || []).filter(s => s.id !== sampleId && s.result);
-    // A sample with a written comparison comes first, so opening Compare shows that verdict.
-    const written = new Set((samplesData.comparisons || [])
+    // A sample compares only with another sample that has a stored comparison with it.
+    const written = new Set((samplesData && samplesData.comparisons || [])
       .filter(entry => entry.a === sampleId)
       .map(entry => entry.b));
-    candidates.sort((x, y) => written.has(y.id) - written.has(x.id));
+    candidates = (samplesData && samplesData.samples || []).filter(s => written.has(s.id) && s.result);
     groups = [{ label: 'Samples', items: candidates }];
   } else {
     const own = signedIn
@@ -5845,7 +5841,6 @@ function resetUI() {
   $('stripsCard').hidden = false;
   $('brainSecond').textContent = '';
   $('brainValues').replaceChildren();
-  $('videoClock').textContent = '';
   $('sampleMeta').textContent = '';
   $('clipTitle').textContent = '';
   $('clipTitle').title = '';

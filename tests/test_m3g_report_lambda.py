@@ -413,12 +413,14 @@ def test_build_request_carries_the_results_numbers():
     assert lines[0].startswith("duration_seconds 3, last_second 2.")
     header = lines[1].split()
     shown = ["see", "hear", "understand", "overall"]
-    assert header == ["t", *shown, "muted_overall"]
+    sub = ["faces", "bodies", "scenes", "visual", "sound", "speech", "social"]
+    assert header == ["t", *shown, "muted_overall", *sub]
     rows = [line.split() for line in lines[2:]]
     assert [int(row[0]) for row in rows] == [0, 1, 2]
     for second, row in enumerate(rows):
         expected = [result["signals"][name][second] for name in shown]
         expected.append(result["muted"]["overall"][second])
+        expected.extend(result["signals"][name][second] for name in sub)
         assert [float(cell) for cell in row[1:]] == pytest.approx(expected)
     assert "summary" not in table
 
