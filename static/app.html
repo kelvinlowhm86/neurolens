@@ -224,6 +224,8 @@
   .booth-controls { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
   .booth-controls button { font-size: 12px; padding: 4px 9px; min-height: 28px; }
   .booth-controls button.active { border-color: var(--accent); color: var(--ink); background: rgba(255, 138, 42, .14); }
+  .booth-controls button.btn-danger.active { border-color: var(--danger); color: var(--danger); background: rgba(248, 113, 113, .14); }
+  #boothDialog .field-row button { font-size: 12px; padding: 4px 9px; min-height: 28px; white-space: nowrap; }
   .booth-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
   .booth-head h2 { margin-bottom: 0; }
   #boothDialog { padding: 14px 18px; width: min(460px, calc(100vw - 24px)); }
@@ -1826,6 +1828,8 @@ async function start(attempt = 0) {
       const err = await rRes.json().catch(() => ({}));
       return startupFailed('Booth pass unavailable', err.message || 'Scan a new QR code at the booth.', false);
     }
+    const rData = await rRes.json().catch(() => ({}));
+    if (rData && rData.booth) setParam('booth', rData.booth);
   }
   let res;
   try { res = await fetch('/api/me'); } catch (e) { return startupFailed(); }

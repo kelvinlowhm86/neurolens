@@ -467,7 +467,10 @@ def create_app(
                     status=410,
                 )
             auth.start_session(db, guest_id)
-            return auth.set_signed_in_hint(jsonify({"user_id": guest_id}))
+            actual_pass_id = guest_id.removeprefix(billing.GUEST_PREFIX)
+            return auth.set_signed_in_hint(
+                jsonify({"user_id": guest_id, "booth": _sign_booth_pass(actual_pass_id)})
+            )
         if db is not None:
             try:
                 db.wake()

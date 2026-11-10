@@ -86,7 +86,7 @@ def test_admin_can_create_pass_adjust_pool_and_visitor_can_redeem(
     redeemed = visitor.post("/api/wake", json={"booth": token})
     assert redeemed.status_code == 200
     guest_id = f"guest-{pass_id}"
-    assert redeemed.get_json() == {"user_id": guest_id}
+    assert redeemed.get_json() == {"user_id": guest_id, "booth": token}
 
     # Visitor is now signed in as guest-<pass_id> with 2 minutes (400 cents) of credit.
     assert billing.BOOTH_PASS_CENTS == 400
@@ -98,14 +98,14 @@ def test_admin_can_create_pass_adjust_pool_and_visitor_can_redeem(
     # Re-scanning or refreshing with the same token is idempotent and does not use a second pass.
     redeemed_again = visitor.post("/api/wake", json={"booth": token})
     assert redeemed_again.status_code == 200
-    assert redeemed_again.get_json() == {"user_id": guest_id}
+    assert redeemed_again.get_json() == {"user_id": guest_id, "booth": token}
 
     # If the visitor closed their phone tab and scans a brand-new QR code on the same phone,
     # their existing guest session is preserved and the new pass is not consumed.
     fresh_pass = admin.post("/api/booth/pass", json={}).get_json()
     rescan_different = visitor.post("/api/wake", json={"booth": fresh_pass["token"]})
     assert rescan_different.status_code == 200
-    assert rescan_different.get_json() == {"user_id": guest_id}
+    assert rescan_different.get_json() == {"user_id": guest_id, "booth": token}
 
     stats_after = admin.get(f"/api/booth/stats?pass_id={pass_id}").get_json()
     assert stats_after["pass_claimed"] is True
