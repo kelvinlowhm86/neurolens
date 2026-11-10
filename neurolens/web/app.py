@@ -395,9 +395,13 @@ def create_app(
 
     @app.route("/logout", methods=["POST"])
     def logout():
+        caller = auth.current_user()
+        is_guest = caller is not None and billing.is_booth_guest(caller[0])
         auth.end_session(db)
         return auth.clear_signed_in_hint(
-            jsonify({"logout_url": auth.logout_url(auth_cfg) if cognito else "/"})
+            jsonify(
+                {"logout_url": auth.logout_url(auth_cfg) if (cognito and not is_guest) else "/"}
+            )
         )
 
     @app.route("/api/limits")
@@ -496,22 +500,24 @@ def create_app(
         _, email = signed_in_user()
         if not is_booth_admin(email):
             return _error("forbidden", "Booth QR is only available to booth admins.", status=403)
+        data = request.get_json(silent=True) if request.is_json else None
+        prefetch = isinstance(data, dict) and bool(data.get("prefetch"))
         pass_id = str(uuid.uuid4())
         token = _sign_booth_pass(pass_id)
         base_url = auth_cfg.get("public_base_url") or request.host_url.rstrip("/")
         url = f"{base_url}/app?booth={token}"
-        stats = billing.booth_stats(db)
-        if request.args.get("gpu") == "1":
-            stats["gpu"] = _gpu_status()
-        return jsonify(
-            {
-                "pass_id": pass_id,
-                "token": token,
-                "url": url,
-                "qr_svg": qr.svg(url),
-                "stats": stats,
-            }
-        )
+        payload = {
+            "pass_id": pass_id,
+            "token": token,
+            "url": url,
+            "qr_svg": qr.svg(url),
+        }
+        if not prefetch:
+            stats = billing.booth_stats(db)
+            if request.args.get("gpu") == "1":
+                stats["gpu"] = _gpu_status()
+            payload["stats"] = stats
+        return jsonify(payload)
 
     @app.route("/api/booth/stats")
     def booth_stats_route():

@@ -1411,7 +1411,7 @@ $('deleteJobBtn').addEventListener('click', () => { if (deleteTarget) deleteJob(
 closeOnBackdrop(deleteJobDialog);
 
 const boothDialog = $('boothDialog');
-let boothPassId = null, boothPollTimer = null, boothClaimedTimer = null, boothPollTick = 0;
+let boothPassId = null, boothNextPass = null, boothPollTimer = null, boothClaimedTimer = null, boothPollTick = 0;
 function renderBoothStats(stats) {
   if (!stats) return;
   $('boothStats').innerHTML = [
@@ -1435,12 +1435,28 @@ function renderBoothStats(stats) {
     $('boothGpuStatus').textContent = modeLabel;
   }
 }
+async function prefetchNextBoothQr() {
+  try {
+    const res = await postJSON('/api/booth/pass', { prefetch: true });
+    if (!res.ok) return;
+    const data = await res.json().catch(() => null);
+    if (data && data.pass_id && data.qr_svg) boothNextPass = data;
+  } catch (e) { /* background prefetch only */ }
+}
 async function loadBoothQr(claimedFlash = false) {
   $('boothErrorMsg').hidden = true;
-  $('boothNewQr').disabled = true;
   if (!claimedFlash) $('boothClaimedMsg').hidden = true;
+  if (boothNextPass && boothNextPass.pass_id && boothNextPass.qr_svg) {
+    const next = boothNextPass;
+    boothNextPass = null;
+    boothPassId = next.pass_id;
+    $('boothQrBox').innerHTML = next.qr_svg;
+    prefetchNextBoothQr();
+    return;
+  }
+  $('boothNewQr').disabled = true;
   try {
-    const res = await postJSON('/api/booth/pass', {});
+    const res = await postJSON('/api/booth/pass', { prefetch: true });
     const data = await res.json().catch(() => ({}));
     if (res.status === 401) return window.location.reload();
     if (!res.ok) {
@@ -1450,7 +1466,8 @@ async function loadBoothQr(claimedFlash = false) {
     }
     boothPassId = data.pass_id;
     $('boothQrBox').innerHTML = data.qr_svg || '';
-    renderBoothStats(data.stats);
+    if (data.stats) renderBoothStats(data.stats);
+    prefetchNextBoothQr();
   } catch (e) {
     $('boothErrorMsg').textContent = "Couldn't reach the server. Please try again.";
     $('boothErrorMsg').hidden = false;
@@ -1714,6 +1731,8 @@ async function start(attempt = 0) {
       const err = await rRes.json().catch(() => ({}));
       return startupFailed('Booth pass unavailable', err.message || 'Scan a new QR code at the booth.', false);
     }
+    params.delete('booth');
+    setParam('booth', null);
   }
   let res;
   try { res = await fetch('/api/me'); } catch (e) { return startupFailed(); }

@@ -1393,30 +1393,6 @@ def _read_booth_stats(tx, *, check_pass_id=None):
     )
     remaining = (pool[0]["available_cents"] if pool else 0) // BOOTH_PASS_CENTS
     prefix = f"{GUEST_PREFIX}%"
-    claimed = tx.execute(
-        "SELECT count(*) AS n FROM users WHERE user_id LIKE :prefix",
-        {"prefix": prefix},
-    )[0]["n"]
-    job_counts = tx.execute(
-        "SELECT "
-        "count(*) FILTER (WHERE status = :done) AS videos_done, "
-        "count(*) FILTER (WHERE status IN (:queued, :processing)) AS videos_running, "
-        "count(*) FILTER (WHERE report_state = :ready) AS reports_ready "
-        "FROM jobs WHERE user_id LIKE :prefix AND deleted_at IS NULL",
-        {
-            "prefix": prefix,
-            "done": DONE,
-            "queued": QUEUED,
-            "processing": PROCESSING,
-            "ready": "ready",
-        },
-    )[0]
-    comparisons_ready = tx.execute(
-        "SELECT count(*) AS n FROM comparisons c "
-        "JOIN jobs j ON j.job_id = c.job_a "
-        "WHERE j.user_id LIKE :prefix AND c.state = :ready",
-        {"prefix": prefix, "ready": "ready"},
-    )[0]["n"]
     pass_days = tx.execute(
         "SELECT CAST((created_at AT TIME ZONE :tz) AS date) AS day, count(*) AS n "
         "FROM users WHERE user_id LIKE :prefix GROUP BY day",
@@ -1425,9 +1401,17 @@ def _read_booth_stats(tx, *, check_pass_id=None):
     job_days = tx.execute(
         "SELECT CAST((created_at AT TIME ZONE :tz) AS date) AS day, "
         "count(*) FILTER (WHERE status = :done) AS videos_done, "
+        "count(*) FILTER (WHERE status IN (:queued, :processing)) AS videos_running, "
         "count(*) FILTER (WHERE report_state = :ready) AS reports_ready "
         "FROM jobs WHERE user_id LIKE :prefix AND deleted_at IS NULL GROUP BY day",
-        {"prefix": prefix, "tz": "Asia/Singapore", "done": DONE, "ready": "ready"},
+        {
+            "prefix": prefix,
+            "tz": "Asia/Singapore",
+            "done": DONE,
+            "queued": QUEUED,
+            "processing": PROCESSING,
+            "ready": "ready",
+        },
     )
     comp_days = tx.execute(
         "SELECT CAST((c.started_at AT TIME ZONE :tz) AS date) AS day, count(*) AS n "
@@ -1435,6 +1419,11 @@ def _read_booth_stats(tx, *, check_pass_id=None):
         "WHERE j.user_id LIKE :prefix AND c.state = :ready GROUP BY day",
         {"prefix": prefix, "tz": "Asia/Singapore", "ready": "ready"},
     )
+    claimed = sum(row["n"] for row in pass_days)
+    videos_done = sum(row["videos_done"] for row in job_days)
+    videos_running = sum(row["videos_running"] for row in job_days)
+    reports_ready = sum(row["reports_ready"] for row in job_days)
+    comparisons_ready = sum(row["n"] for row in comp_days)
     by_day = {}
     for row in pass_days:
         day = str(row["day"])
@@ -1487,9 +1476,9 @@ def _read_booth_stats(tx, *, check_pass_id=None):
     return {
         "passes_claimed": claimed,
         "passes_remaining": remaining,
-        "videos_done": job_counts["videos_done"],
-        "videos_running": job_counts["videos_running"],
-        "reports_ready": job_counts["reports_ready"],
+        "videos_done": videos_done,
+        "videos_running": videos_running,
+        "reports_ready": reports_ready,
         "comparisons_ready": comparisons_ready,
         "days": days,
         "gpu_warm_target": _read_booth_gpu_warm(tx),
