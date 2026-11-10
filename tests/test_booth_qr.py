@@ -114,12 +114,18 @@ def test_admin_can_create_pass_adjust_pool_and_visitor_can_redeem(
     assert len(stats_after["days"]) == 1
     assert stats_after["days"][0]["passes"] == 1
 
-    # Admin can grant credit to an account directly from the Booth modal.
+    # Admin can grant credit to an account directly from the Booth modal, and reset it to 0.
     granted = admin.post(
         "/api/booth/passes",
         json={"grant_email": ADMIN_EMAIL, "minutes": 5},
     ).get_json()
     assert granted["granted"] == {"email": ADMIN_EMAIL, "minutes": 5, "cents": 1000}
+    zeroed = admin.post(
+        "/api/booth/passes",
+        json={"grant_email": ADMIN_EMAIL, "minutes": 0},
+    ).get_json()
+    assert zeroed["granted"] == {"email": ADMIN_EMAIL, "minutes": 0, "cents": 0}
+    assert admin.get("/api/me").get_json()["balance"]["available_cents"] == 0
 
     # Admin can set GPU warm target (1, 2, or 0 for auto-scale) and gpu_guard respects it.
     warm1 = admin.post("/api/booth/passes", json={"gpu_desired": 1}).get_json()

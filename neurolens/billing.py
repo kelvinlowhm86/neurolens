@@ -303,6 +303,20 @@ def grant_credit(db, email, cents):
     return user_id
 
 
+def reset_credit(db, email):
+    """Zero out the available credit of the user with this email (any letter case) via a negative
+    `grant` ledger row. Returns the user ID."""
+    with db.transaction() as tx:
+        user_id = _user_by_email(tx, email)
+        if user_id is None:
+            raise LookupError(f"no user with email {email!r}")
+        bal = _lock_balance(tx, user_id)
+        avail = bal["available_cents"] if bal else 0
+        if avail > 0:
+            _move(tx, user_id, None, "grant", -avail, 0)
+    return user_id
+
+
 def _has_funding(tx, user_id):
     """True when the account has had credit beyond the starter (M3k §6)."""
     return bool(

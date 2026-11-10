@@ -630,7 +630,7 @@
   <a class="brand" href="/">NeuroLens</a>
   <span class="header-meta" id="headerMeta"></span>
   <div class="spacer"></div>
-  <button class="btn-ghost" id="boothQrBtn" type="button" hidden>Demo pass</button>
+  <button class="btn-ghost" id="boothQrBtn" type="button" hidden>Admin</button>
   <span class="credit" id="balance"></span>
   <div class="account-wrap" id="accountWrap" hidden>
     <button class="account" id="account" aria-haspopup="menu" aria-expanded="false" aria-controls="accountMenu">
@@ -973,15 +973,15 @@
 
 <dialog class="modal" id="boothDialog" aria-labelledby="boothDialogTitle">
   <div class="booth-head">
-    <h2 id="boothDialogTitle">Live demo pass (2 min)</h2>
+    <h2 id="boothDialogTitle">Admin controls</h2>
     <button class="booth-help-btn" id="boothHelpBtn" type="button" aria-expanded="false" aria-controls="boothHelp" title="How this panel works">?</button>
   </div>
   <div class="booth-help" id="boothHelp" hidden>
-    <p><strong>QR &amp; Passes:</strong> Each phone gets 1 pass (2 min credit). The QR auto-rotates as soon as a new device claims it. Re-scanning on the same phone keeps its existing session without using another pass (clear browser site data to reset a test phone). <strong>Stop passes</strong> sets remaining passes to 0.</p>
+    <p><strong>QR &amp; Passes:</strong> Each QR pass grants 2 min credit and auto-rotates as soon as a device claims it. Copying the phone link to a laptop opens the same session. <strong>Stop passes</strong> sets remaining passes to 0.</p>
     <p><strong>GPU endpoint:</strong> <strong>0 (Auto-scale)</strong> scales to 0 ($0/hr) when idle and wakes a GPU (~4–5 min cold start) on upload. <strong>Keep 1 / 2 GPUs</strong> starts and holds 1 or 2 GPUs warm for 6 hours (~30–60s per video, no cold start) before auto-reverting to 0.</p>
-    <p><strong>Grant credit:</strong> Adds permanent minutes to any signed-in email (leave blank for your own account).</p>
+    <p><strong>Account credit:</strong> Adds permanent minutes or resets available credit to 0 for any signed-in email (leave blank for your own account).</p>
   </div>
-  <p>Scan with your phone camera to get a 2-minute pass and analyse your own videos.</p>
+  <p>Live demo pass (2 min) — scan with phone camera:</p>
   <div class="booth-qr-box" id="boothQrBox" aria-label="Demo pass QR code"></div>
   <p class="booth-claimed" id="boothClaimedMsg" hidden>✓ Pass claimed — fresh QR ready</p>
   <p class="error" id="boothErrorMsg" hidden></p>
@@ -1004,11 +1004,12 @@
     </div>
   </div>
   <div class="booth-section">
-    <div class="booth-section-head"><span>Grant account credit</span><strong id="boothGrantMsg"></strong></div>
+    <div class="booth-section-head"><span>Account credit</span><strong id="boothGrantMsg"></strong></div>
     <div class="field-row" style="margin-top:6px">
       <input id="boothGrantEmail" type="email" placeholder="Email (blank = my account)" autocomplete="off">
       <button class="btn-ghost" id="boothGrant5" type="button">+5 min</button>
       <button class="btn-ghost" id="boothGrant10" type="button">+10 min</button>
+      <button class="btn-danger" id="boothGrant0" type="button">Reset (0)</button>
     </div>
   </div>
   <div class="actions">
@@ -1616,10 +1617,12 @@ function setBoothGpu(gpu_desired) {
 async function grantBoothCredit(minutes) {
   const email = ($('boothGrantEmail').value || '').trim() || (me && me.email) || '';
   if (!email) return;
-  $('boothGrantMsg').textContent = 'Adding…';
+  $('boothGrantMsg').textContent = minutes === 0 ? 'Resetting…' : 'Adding…';
   const data = await postBoothAction({ grant_email: email, minutes });
   if (data && data.granted) {
-    $('boothGrantMsg').textContent = `✓ +${data.granted.minutes} min`;
+    $('boothGrantMsg').textContent = data.granted.minutes === 0
+      ? '✓ Reset to 0 min'
+      : `✓ +${data.granted.minutes} min`;
     if (me && email.toLowerCase() === String(me.email || '').toLowerCase()) loadBalance();
   } else {
     $('boothGrantMsg').textContent = '';
@@ -1648,6 +1651,7 @@ $('boothGpu2').addEventListener('click', () => setBoothGpu(2));
 $('boothGpu0').addEventListener('click', () => setBoothGpu(0));
 $('boothGrant5').addEventListener('click', () => grantBoothCredit(5));
 $('boothGrant10').addEventListener('click', () => grantBoothCredit(10));
+$('boothGrant0').addEventListener('click', () => grantBoothCredit(0));
 $('boothClose').addEventListener('click', () => boothDialog.close());
 boothDialog.addEventListener('close', () => {
   clearTimeout(boothPollTimer);

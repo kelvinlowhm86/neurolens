@@ -602,11 +602,14 @@ def create_app(
         if "grant_email" in data:
             target_email = (data.get("grant_email") or "").strip() or email
             minutes = data.get("minutes")
-            if type(minutes) is not int or minutes not in (2, 5, 10):
-                return _error("invalid_request", "minutes must be 2, 5 or 10.")
+            if type(minutes) is not int or minutes not in (0, 2, 5, 10):
+                return _error("invalid_request", "minutes must be 0, 2, 5 or 10.")
             cents = minutes * 60 * pricing.CENTS_PER_BLOCK // pricing.BLOCK_SECONDS
             try:
-                billing.grant_credit(db, target_email, cents)
+                if minutes == 0:
+                    billing.reset_credit(db, target_email)
+                else:
+                    billing.grant_credit(db, target_email, cents)
             except LookupError:
                 return _error(
                     "user_not_found",

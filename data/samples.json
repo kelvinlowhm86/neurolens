@@ -1741,8 +1741,8 @@
         "audio_dependence": 0.0
       },
       "report": {
-        "headline": "Close-up character beats drive the highest engagement, while text-only title cards dip briefly between scenes.",
-        "summary": "Expressive character close-ups from Sintel and Big Buck Bunny drive the two strongest engagement peaks, and the muted-signal demo confirms the visual cut holds up on its own. Brief text-on-black transitions dip the visual channel between beats, where keeping motion on screen would hold attention through the handoff.",
+        "headline": "Expressive character cuts drive the strongest peaks, while the 13-second 3D brain hold before the close can be tightened.",
+        "summary": "Close-up character beats from Sintel and Big Buck Bunny drive the two highest engagement peaks, and stark typography-on-black transitions cleanly hand the narrative load to the audio track. Tightening the 13-second spinning 3D brain sequence right before the closing title card is the cleanest way to carry peak momentum into the call to action.",
         "moments": [
           {
             "start": 24,
@@ -1752,11 +1752,18 @@
             "suggestion": null
           },
           {
+            "start": 54,
+            "end": 67,
+            "what_happens": "3D brain model rotates for 13 seconds through the workflow reveal.",
+            "brain_response": "Audio and language regions stay active on the voiceover while visual and face-selective areas gradually ease back across the extended 13-second hold.",
+            "suggestion": "Trim 3 seconds from the 3D rotation so the final title card lands while the voiceover peak is still high."
+          },
+          {
             "start": 32,
             "end": 38,
-            "what_happens": "Signal labels appear over a dark backdrop between clips.",
-            "brain_response": "Visual and face channels dip briefly while the audio track carries the beat, since the screen switches to pure typography with no scene or character to process.",
-            "suggestion": "Keep a subtle clip or 3D brain in motion behind the labels so the visual channel stays engaged during the transition."
+            "what_happens": "Stark typography on a black backdrop names each brain-signal category.",
+            "brain_response": "Auditory and speech regions carry the beat while visual cortex resets on the clean black frame, giving the eye breathing room before the next film cut.",
+            "suggestion": null
           },
           {
             "start": 40,
@@ -1764,13 +1771,6 @@
             "what_happens": "Garden close-up with the on-screen sound vs. muted comparison.",
             "brain_response": "Both the with-sound and without-sound curves stay well above typical viewing throughout this sequence, showing the visual storytelling carries the scene independently.",
             "suggestion": null
-          },
-          {
-            "start": 54,
-            "end": 67,
-            "what_happens": "3D brain model rotates while captions introduce the workflow payoff.",
-            "brain_response": "Audio and language regions stay active on the voiceover while face-selective areas ease back during the extended 3D graphics hold.",
-            "suggestion": "Intercut a brief character or creator reaction shot before the final call to action to re-anchor face-selective attention."
           }
         ],
         "strengths": [
@@ -1778,8 +1778,7 @@
           "The with-sound vs. muted comparison beat sustains strong visual cortex activity on its own, proving the point of the demo visually."
         ],
         "improvements": [
-          "Text-only transitions over a dark background briefly drop visual cortex engagement between the main film clips.",
-          "Holding on the 3D brain graphic for 13 seconds leaves face-selective areas quiet right before the closing call to action."
+          "Holding on the spinning 3D brain graphic for 13 seconds lets visual engagement ease back right before the closing call to action."
         ],
         "model": "us.anthropic.claude-sonnet-4-6",
         "created_at": "2026-11-10T16:16:01Z"
