@@ -4388,11 +4388,12 @@ function drawChart(host, { lines, range, height = 200, axisLabels = false, dark 
         const markRect = mark.getBoundingClientRect();
         const width = tip.offsetWidth;
         const height = tip.offsetHeight;
+        const minLeft = yLabels ? 46 : 4;
         let left = markRect.left - hostRect.left + markRect.width / 2 - width / 2;
-        left = Math.max(4, Math.min(host.clientWidth - width - 4, left));
+        left = Math.max(minLeft, Math.min(host.clientWidth - width - 4, left));
         let top = markRect.top - hostRect.top - height - 8;
-        if (top < 4) top = markRect.bottom - hostRect.top + 8;
-        top = Math.max(4, Math.min(host.clientHeight - height - 4, top));
+        if (top < -36) top = markRect.bottom - hostRect.top + 8;
+        top = Math.max(-36, Math.min(host.clientHeight - height - 4, top));
         tip.style.left = `${left}px`;
         tip.style.top = `${top}px`;
       };

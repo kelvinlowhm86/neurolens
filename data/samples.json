@@ -2664,17 +2664,17 @@
         "summary": "The opening and fan-interaction sequence earn genuinely above-typical engagement, driven by faces and bodies on screen. Once the camera moves inside without people, the brain's response slides steadily through the back half and the CTA lands when attention is already fading. Put someone in the interior shots and lead the CTA with a person, not a logo close-up.",
         "moments": [
           {
-            "start": 5,
-            "end": 8,
-            "what_happens": "Two people pose and laugh with the G-Dragon cardboard standee outside.",
-            "brain_response": "Bodies signal hits its highest point in the whole video here, with faces strong too. The human playfulness in front of the branded standee is what earns that peak, not the decor alone.",
-            "suggestion": null
-          },
-          {
             "start": 3,
             "end": 4,
             "what_happens": "Camera reveals the MCG heart floor graphic then the full decorated interior wall.",
             "brain_response": "Scenes signal is climbing and overall is well above typical. The environment is visually novel and dense with branding, pulling the viewer through the reveal.",
+            "suggestion": null
+          },
+          {
+            "start": 5,
+            "end": 8,
+            "what_happens": "Two people pose and laugh with the G-Dragon cardboard standee outside.",
+            "brain_response": "Bodies signal hits its highest point in the whole video here, with faces strong too. The human playfulness in front of the branded standee is what earns that peak, not the decor alone.",
             "suggestion": null
           },
           {
