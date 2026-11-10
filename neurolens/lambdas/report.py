@@ -329,6 +329,7 @@ def write_report(job_id, db, s3, bucket, client, cfg):
             logger.warning(f"{job_id}: report was not a usable answer: {problem}")
             return
 
+        answer["moments"] = sorted(answer["moments"], key=lambda m: (m["start"], m["end"]))
         stored = {**answer, **extras}
         key = f"results/{job_id}.report.json"
         s3.put_object(

@@ -88,8 +88,9 @@ How to write a report that gives genuine value:
     natural language (no em dashes).
   * summary: 2 to 3 crisp sentences (under 65 words total) stating what works, where the edit loses
     steam, and the main fix.
-  * moments: pick the 3 to 5 most revealing turning points (within {MIN_MOMENTS} to {MAX_MOMENTS}
-    non-overlapping whole-second spans 0 to last_second, start <= end). For each moment:
+  * moments: pick the 3 to 5 most revealing turning points in chronological order (within
+    {MIN_MOMENTS} to {MAX_MOMENTS} non-overlapping whole-second spans 0 to last_second,
+    start <= end, ordered by start second). For each moment:
     - what_happens: 1 short sentence (under 20 words) naming what is on screen.
     - brain_response: 1 to 2 crisp sentences (under 40 words) explaining why the brain responded
       that way in plain language.
@@ -148,9 +149,9 @@ How to write a comparison that gives genuine value:
     language (no em dashes).
   * summary: 2 to 3 crisp sentences (under 75 words total) stating how [A] and [B] relate and why
     one pulls ahead or where they trade leads.
-  * differences: 1 to {MAX_DIFFERENCES} non-overlapping differences (start/end whole seconds
-    within each video's 0..last_second, or null when a scene exists only in the other cut). For
-    each difference:
+  * differences: 1 to {MAX_DIFFERENCES} non-overlapping differences in chronological order
+    (start/end whole seconds within each video's 0..last_second, or null when a scene exists only
+    in the other cut). For each difference:
     - what_differs: 1 short sentence (under 25 words) naming what differs on screen.
     - brain_response: 1 to 2 crisp sentences (under 40 words) explaining how and why the brain
       response differs.
