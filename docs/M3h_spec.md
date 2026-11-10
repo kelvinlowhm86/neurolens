@@ -144,12 +144,10 @@ Shared builders, used by both requests:
   typical: see A/N/B, hear A/N/B, understand A/N/B, overall A/N/B.`, the counts of seconds judged
   as the table shows each value (rounded to 2 dp; near is within 0.05 of 0, above and below are
   beyond it; None and seconds past a series' end are skipped), then a header
-  row `t` see hear understand overall `muted_overall` (the seven sub-signals and the duplicate
-  `sound` column are left out: with them the writer drifted to a big sub-signal and called it
-  seeing), then one row per second `t = 0 .. n-1`: `t`
+  row `t` see hear understand overall `muted_overall` faces bodies scenes visual sound speech
+  social, then one row per second `t = 0 .. n-1`: `t`
   right-aligned to 3, then each value formatted `+0.00`, space-separated. A missing value is left
-  blank (only `muted_overall` can be shorter, as the muted pass is cut to the shared length, and
-  it is the last column). The counts serve whole-video claims in headlines (which group leads),
+  blank. The counts serve whole-video claims in headlines (which group leads),
   which the writer miscounted by hand (audit 31 Oct).
 - `words_block(words, label=None)`: `[Video <label> ]spoken words:` then `<start 2 dp> s: <word>`
   lines; omitted when there are no words.
@@ -157,7 +155,8 @@ Shared builders, used by both requests:
   s` then its base64 JPEG image block.
 
 - `comparison_table(a, b)`: one block, one row per second up to the longer video:
-  `t` then `A_x B_x` pairs for see, hear, understand, overall, muted_overall; cells past the
+  `t` then `A_x B_x` pairs for see, hear, understand, overall, muted_overall, faces, bodies,
+  scenes, visual, sound, speech, social; cells past the
   shorter video are blank, so a second sits beside the same second of the other video. Its first
   line ends with the seconds above / near / below typical for each video's overall, then
   `Over the shared seconds 0-<m-1>: A higher in <x>, B higher in <y>, within 0.05 in <z>.`,
@@ -168,8 +167,8 @@ Shared builders, used by both requests:
 
 `build_request(result, frames, words)` (single, M3g §5b) = words + frames + table, no label.
 `build_comparison_request(a, b)`, each a `(result, frames, words)`, returns
-`(COMPARISON_PROMPT, content)`: A's words and frames, then B's, labelled `A` / `B`, then the one
-`comparison_table`. The table comes last, right before the answer.
+`(COMPARISON_PROMPT, content)`: A's words, frames and per-second `series_table`, then B's,
+labelled `A` / `B`, then the one `comparison_table`. The table comes last, right before the answer.
 
 `COMPARISON_PROMPT` (module constant; the laptop trial's accepted text):
 ```
@@ -312,10 +311,11 @@ Modest changes; the redesign comes later.
 - Single report, sample: the Report tab shows the sample's stored `report` with the same
   rendering as a job's report, no button; a sample without one shows "No report for this
   sample." A job keeps M3g §6.
-- Compare for samples: while a sample is open and there are at least two samples, the "Compare
-  with…" row lists the other samples, for every visitor, signed in or not. Picking one uses its
+- Compare for samples: while a sample is open, the Compare tab and "Compare with…" row are shown
+  only when `samples.json` carries a stored written comparison (`comparisons`) for that sample,
+  listing only the paired sample(s). Picking one uses its
   result from `samples.json` (no fetch): the same curve overlay and comparison view as a job
-  comparison. Swap stays jobs-only. Jobs are compared only with jobs, samples only with samples.
+  comparison. Swap stays jobs-only.
 - The comparison and all its states live only in the Compare tab; the Report tab always shows
   the open video's own report (or its states). The comparison stays selected while visiting
   Analysis or Report, and clearing it (None) returns to Analysis. There is no "Full report" link.

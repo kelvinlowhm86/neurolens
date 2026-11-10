@@ -151,9 +151,10 @@ is never treated as stale.
   model need not work it out) and the seconds above / near / below typical for each group and
   overall, judged as the table shows each value (rounded to 2 dp; near is within 0.05 of 0;
   None and seconds past a series' end are skipped), a header row, then one row per second with
-  `t`, the three groups, `overall` and `muted_overall`, each `+0.00`. One row per second, never
-  one list per signal (the model misread values by position and invented numbers, laptop trial,
-  29 Oct), and the sub-signals are left out (the model called a large sub-signal "seeing"). The
+  `t`, the three groups (`see`, `hear`, `understand`), `overall`, `muted_overall`, and the seven
+  sub-signals (`faces`, `bodies`, `scenes`, `visual`, `sound`, `speech`, `social`), each `+0.00`.
+  One row per second, never one list per signal (the model misread values by position and invented
+  numbers, laptop trial, 29 Oct). The
   counts serve whole-video claims in headlines (which group leads), which the writer miscounted
   by hand (audit 31 Oct).
 
