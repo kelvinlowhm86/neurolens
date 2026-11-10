@@ -798,7 +798,7 @@ function syncCurveAudioMode() {
 
 function setupCurve(sample) {
   const signals = sample.result && sample.result.signals;
-  const mutedSignals = sample.result && sample.result.signals_without_audio;
+  const mutedSignals = sample.result && (sample.result.muted || sample.result.signals_without_audio);
   const withSound = signals && finiteSeries(signals.overall);
   const withoutSound = mutedSignals && finiteSeries(mutedSignals.overall);
   if (!withSound) {
