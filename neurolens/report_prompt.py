@@ -318,7 +318,14 @@ def _plain_letters(text, flip):
     """The [A]/[B] markers turned into the shown letters (M3h §2): with flip the opened video
     (stored B) is A, so [A] becomes B and [B] becomes A; else [A] becomes A and [B] B."""
     first, second = ("B", "A") if flip else ("A", "B")
-    return text.replace("[A]", first).replace("[B]", second)
+    out = text.replace("[A]", first).replace("[B]", second)
+    if flip:
+        out = out.replace("B and A ", "A and B ")
+        if ": B " in out and ", A " in out:
+            prefix, rest = out.split(": B ", 1)
+            b_part, a_part = rest.split(", A ", 1)
+            out = f"{prefix}: A {a_part}, B {b_part}"
+    return out
 
 
 def orient_comparison(report, flip):
