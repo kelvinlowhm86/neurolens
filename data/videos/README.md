@@ -1,7 +1,7 @@
 # Sample videos
 
-This directory is gitignored except this file and `SOURCES.md`; the clips themselves are about 75 MB.
-`data/samples.json` holds the nine public samples (each with its inline result, summary and
+This directory is gitignored except this file and `SOURCES.md`; the clips themselves are about 85 MB.
+`data/samples.json` holds the ten public samples (each with its inline result, summary and
 report) and two stored sample-pair comparisons, and the thumbnails under `data/output/` are pushed, so the dashboard renders its charts on
 a fresh clone. Everything else is git-ignored. On a fresh clone, a sample's video file, brain file,
 CSV and PDF (under `data/output/<id>/`) are missing, so video playback and the brain map, CSV and
@@ -17,6 +17,7 @@ cerave_30s.mp4
 cerave_76s.mp4
 medishield_30s.mp4
 medishield_60s.mp4
+neurolens_trailer_720p.mp4
 sintel_trailer_720p.mp4
 tiktok_ZSg5soxrR.mp4
 tiktok_ZSg5tbDx8.mp4

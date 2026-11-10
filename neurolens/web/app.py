@@ -530,9 +530,7 @@ def create_app(
         desired = gpu.get("desired", 0)
         need_update = False
         if warm_target in (1, 2):
-            if desired < warm_target:
-                need_update = True
-            elif desired > warm_target and videos_running <= warm_target:
+            if desired != warm_target:
                 need_update = True
         elif warm_target == 0 and desired > 0 and videos_running == 0:
             need_update = True

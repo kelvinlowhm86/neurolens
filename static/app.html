@@ -1457,7 +1457,7 @@ function formatBoothGpuStatus(gpu, warmTarget, videosRunning) {
   if (warmTarget === 1) {
     if (cur === 0) return '0 ready · starting 1 GPU…';
     if (cur === 1) return '1 GPU ready';
-    return videosRunning > 1 ? '2 ready · 2nd stops after video' : '2 ready · stopping 2nd GPU…';
+    return '2 ready · stopping 2nd GPU…';
   }
   if (warmTarget === 2) {
     if (cur === 0) return '0 ready · starting 2 GPUs…';
