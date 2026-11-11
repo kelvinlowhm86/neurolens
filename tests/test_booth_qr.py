@@ -64,6 +64,7 @@ def test_admin_can_create_pass_adjust_pool_and_visitor_can_redeem(
     pass_id = pass_data["pass_id"]
     token = pass_data["token"]
     assert pass_id in pass_data["url"]
+    assert pass_data["url"].endswith("&scan=1")
     assert pass_data["qr_svg"].startswith("<svg")
     assert pass_data["stats"] == {
         "passes_claimed": 0,
@@ -103,16 +104,32 @@ def test_admin_can_create_pass_adjust_pool_and_visitor_can_redeem(
     # If the visitor closed their phone tab and scans a brand-new QR code on the same phone,
     # their existing guest session is preserved and the new pass is not consumed.
     fresh_pass = admin.post("/api/booth/pass", json={}).get_json()
-    rescan_different = visitor.post("/api/wake", json={"booth": fresh_pass["token"]})
+    rescan_different = visitor.post("/api/wake", json={"booth": fresh_pass["token"], "scan": True})
     assert rescan_different.status_code == 200
     assert rescan_different.get_json() == {"user_id": guest_id, "booth": token}
 
+    # Copying the address-bar URL (without scan=1) to a laptop joins the exact same guest session.
+    laptop = app.test_client()
+    joined_laptop = laptop.post("/api/wake", json={"booth": token, "scan": False})
+    assert joined_laptop.status_code == 200
+    assert joined_laptop.get_json() == {"user_id": guest_id, "booth": token}
+
+    # If a second stranger's phone scans the exact same QR code (scan=True) at the same moment,
+    # it automatically mints a separate guest session from the pool instead of sharing.
+    stranger2 = app.test_client()
+    stranger2_res = stranger2.post("/api/wake", json={"booth": token, "scan": True})
+    assert stranger2_res.status_code == 200
+    stranger2_data = stranger2_res.get_json()
+    assert stranger2_data["user_id"].startswith("guest-")
+    assert stranger2_data["user_id"] != guest_id
+    assert stranger2_data["booth"] != token
+
     stats_after = admin.get(f"/api/booth/stats?pass_id={pass_id}").get_json()
     assert stats_after["pass_claimed"] is True
-    assert stats_after["passes_claimed"] == 1
-    assert stats_after["passes_remaining"] == billing.BOOTH_INITIAL_PASSES - 1
+    assert stats_after["passes_claimed"] == 2
+    assert stats_after["passes_remaining"] == billing.BOOTH_INITIAL_PASSES - 2
     assert len(stats_after["days"]) == 1
-    assert stats_after["days"][0]["passes"] == 1
+    assert stats_after["days"][0]["passes"] == 2
 
     # Admin can grant credit to an account directly from the Booth modal, and reset it to 0.
     granted = admin.post(
@@ -137,9 +154,9 @@ def test_admin_can_create_pass_adjust_pool_and_visitor_can_redeem(
 
     # Admin can add +5, +10, and stop passes (0).
     plus5 = admin.post("/api/booth/passes", json={"delta": 5}).get_json()
-    assert plus5["passes_remaining"] == billing.BOOTH_INITIAL_PASSES - 1 + 5
+    assert plus5["passes_remaining"] == billing.BOOTH_INITIAL_PASSES - 2 + 5
     plus10 = admin.post("/api/booth/passes", json={"delta": 10}).get_json()
-    assert plus10["passes_remaining"] == billing.BOOTH_INITIAL_PASSES - 1 + 15
+    assert plus10["passes_remaining"] == billing.BOOTH_INITIAL_PASSES - 2 + 15
     stopped = admin.post("/api/booth/passes", json={"delta": 0}).get_json()
     assert stopped["passes_remaining"] == 0
 

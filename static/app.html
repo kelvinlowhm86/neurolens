@@ -1812,6 +1812,8 @@ function startupFailed(title = 'Something went wrong', text = 'Please try again 
   $('startupTrace').hidden = true;
   $('startupRetry').hidden = !canRetry;
 }
+let boothScanOnLoad = params.get('scan') === '1';
+if (params.has('scan')) setParam('scan', null);
 async function start(attempt = 0) {
   $('startupPanel').classList.add('active');
   $('startupTitle').textContent = 'Waking up';
@@ -1825,7 +1827,7 @@ async function start(attempt = 0) {
   const boothToken = params.get('booth');
   if (boothToken) {
     let rRes;
-    try { rRes = await postJSON('/api/wake', { booth: boothToken }); } catch (e) { return startupFailed(); }
+    try { rRes = await postJSON('/api/wake', { booth: boothToken, scan: boothScanOnLoad }); } catch (e) { return startupFailed(); }
     if (rRes.status === 503 && attempt < STARTUP_RETRIES) {
       return setTimeout(() => start(attempt + 1), STARTUP_RETRY_MS);
     }
@@ -1833,6 +1835,7 @@ async function start(attempt = 0) {
       const err = await rRes.json().catch(() => ({}));
       return startupFailed('Booth pass unavailable', err.message || 'Scan a new QR code at the booth.', false);
     }
+    boothScanOnLoad = false;
     const rData = await rRes.json().catch(() => ({}));
     if (rData && rData.booth) setParam('booth', rData.booth);
   }

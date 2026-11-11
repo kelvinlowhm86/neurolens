@@ -452,8 +452,11 @@ def create_app(
                 return _error("invalid_booth_pass", "This booth QR pass is not valid.", status=400)
             caller = auth.current_user()
             current_uid = caller[0] if caller else None
+            is_scan = bool(data.get("scan"))
             try:
-                guest_id = billing.redeem_booth_pass(db, pass_id, current_user_id=current_uid)
+                guest_id = billing.redeem_booth_pass(
+                    db, pass_id, current_user_id=current_uid, is_scan=is_scan
+                )
             except billing.BoothLimitReached:
                 return _error(
                     "booth_limit_reached",
@@ -508,7 +511,7 @@ def create_app(
         pass_id = str(uuid.uuid4())
         token = _sign_booth_pass(pass_id)
         base_url = auth_cfg.get("public_base_url") or request.host_url.rstrip("/")
-        url = f"{base_url}/app?booth={token}"
+        url = f"{base_url}/app?booth={token}&scan=1"
         payload = {
             "pass_id": pass_id,
             "token": token,

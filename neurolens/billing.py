@@ -1523,15 +1523,15 @@ def adjust_booth_passes(db, delta_passes):
         return _read_booth_stats(tx)
 
 
-def redeem_booth_pass(db, pass_id, *, current_user_id=None):
+def redeem_booth_pass(db, pass_id, *, current_user_id=None, is_scan=False):
     """Redeem one booth QR pass into an isolated `guest-<pass_id>` user with 2 min of credit.
 
-    Idempotent: re-scanning the same QR code returns the existing guest user without consuming a
-    second pass from the pool. If the caller already has an active `guest-*` session on their
-    device (`current_user_id`), returns that existing guest account so closing the tab and
-    scanning a new QR code brings them back to their videos without consuming another pass.
-    Raises BoothPassEnded if that guest account was deleted, or BoothLimitReached if the pool has
-    no remaining passes.
+    Idempotent for the same device or shared link (`is_scan=False`): opening a copied URL without
+    `&scan=1` joins the existing guest user without consuming a second pass. If two strangers scan
+    the same QR code (`is_scan=True`) simultaneously, the second phone automatically mints a fresh
+    `guest-<new_uuid>` pass from the pool so strangers never share a session. If the caller already
+    has an active `guest-*` session on their device (`current_user_id`), returns that existing
+    guest account without consuming another pass.
     """
     guest_id = f"{GUEST_PREFIX}{pass_id}"
     with db.transaction() as tx:
@@ -1543,7 +1543,8 @@ def redeem_booth_pass(db, pass_id, *, current_user_id=None):
         if existing:
             if existing[0]["deleted_at"] is not None:
                 raise BoothPassEnded(f"booth pass {pass_id!r} was deleted")
-            return guest_id
+            if current_user_id == guest_id or not is_scan:
+                return guest_id
         if is_booth_guest(current_user_id) and current_user_id != guest_id:
             active_current = tx.execute(
                 "SELECT deleted_at FROM users WHERE user_id = :user_id",
@@ -1551,6 +1552,9 @@ def redeem_booth_pass(db, pass_id, *, current_user_id=None):
             )
             if active_current and active_current[0]["deleted_at"] is None:
                 return current_user_id
+        if existing:
+            pass_id = str(uuid.uuid4())
+            guest_id = f"{GUEST_PREFIX}{pass_id}"
         pool = _lock_balance(tx, BOOTH_POOL_USER_ID)
         if not pool or pool["available_cents"] < BOOTH_PASS_CENTS:
             raise BoothLimitReached("no booth passes remaining")
