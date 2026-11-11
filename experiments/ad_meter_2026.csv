@@ -1,0 +1,31 @@
+rank,score,group,brand,title,youtube_id,aired_seconds,clip
+1,4.00,top,Budweiser,American Icons,VCMXA2fy7qk,60,01_budweiser
+2,3.80,top,Lay's,Last Harvest,EBnLXlvrNng,60,02_lays
+3,3.50,top,Pepsi,The Choice,7vKCq52wWUY,30,03_pepsi
+4,3.48,top,Dunkin',Good Will Dunkin',qbnEi6H8wuo,60,04_dunkin
+5,3.47,top,Michelob Ultra,The ULTRA Instructor,lEpdRH88yTg,60,05_michelob_ultra
+6,3.43,top,Xfinity,Jurassic Park ... Works,CIBxv8pIT_g,60,06_xfinity
+7,3.39,top,Novartis,Relax Your Tight End,lMTcZb48aVU,60,07_novartis
+8,3.38,top,NFL,Champion,ZmjX1S0VLq4,60,08_nfl_champion
+9,3.35,top,Bud Light,Keg,SXlV_Fs7Ibs,60,09_bud_light
+10,3.33,top,Ring,Be A Hero In Your Neighborhood,OheUzrXsKrY,30,10_ring
+10,3.33,top,Amazon Alexa,Alexaaaa+,ha92_hfK9Po,60,10_alexa
+12,3.27,top,Rocket and Redfin,America Needs Neighbors Like You,VvEFiLqsCDw,60,12_rocket_redfin
+13,3.26,top,State Farm,Stop Livin' on a Prayer,0CchfpoWO9w,60,13_state_farm
+14,3.25,top,Dove,The Game is Ours,84MCtvXCt9E,30,14_dove
+14,3.25,top,Uber Eats,Hungry for the Truth,vEFUlSYbzM8,60,14_uber_eats
+40,2.55,bottom,Fanatics Sportsbook,Bet On Kendall,0n5KfmK9oWY,30,40_fanatics
+41,2.51,bottom,Hims & Hers,Rich People Live Longer,aZ7Z5LTJWHM,60,41_hims_hers
+41,2.51,bottom,Nerds,Taste Buds,XOIHAAuMwPI,30,41_nerds
+43,2.50,bottom,DraftKings,DraftKings Live-ish Super Bowl LX,7DRqC0Udopg,30,43_draftkings
+44,2.49,bottom,Oakley Meta,Athletic Intelligence is Here - Part Two,XeohGXelSVs,30,44_oakley_meta_part2
+45,2.48,bottom,OpenAI,You Can Just Build Things,aCN9iCXNJqQ,60,45_openai
+46,2.45,bottom,Anthropic,Can I get a six pack quickly?,mOr39bQmlhE,30,46_anthropic
+46,2.45,bottom,Oakley Meta,Athletic Intelligence is Here - Part One,dv8y32t-1Mo,30,46_oakley_meta_part1
+46,2.45,bottom,Novo Nordisk,A New Way to Wegovy,Uk_ZUYegt14,90,46_wegovy
+49,2.44,bottom,Poppi,Make it poppi,yGyHMvUWuCY,30,49_poppi
+50,2.38,bottom,Wix,Wix Harmony: The New Way to Create,rRo5spaBfbo,30,50_wix
+51,2.32,bottom,Salesforce,@MrBeast's Vault,Lp9OEfkWfLI,30,51_salesforce
+52,2.23,bottom,Ro,Healthier on Ro,tqXOcRtZoow,30,52_ro
+53,2.18,bottom,Svedka,Shake Your Bots Off,pkeWRI2yJGM,30,53_svedka
+54,2.06,bottom,Coinbase,Everybody Coinbase,ox__f7ZdFyM,60,54_coinbase

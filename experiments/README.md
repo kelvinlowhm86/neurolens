@@ -56,9 +56,48 @@ CSV's `gpu_name` names a different card.
 - `gaze_trial.py CLIP [CLIP ...] --out data/experiment_results/gaze_trial`: ViNet-S saliency
   heatmaps; `gaze_trial.sbatch` runs it on Slurm and fetches the model. Reads
   `data/videos/gaze/*.mp4`, writes `data/experiment_results/gaze_trial/`.
-- `run_clips.py CLIP [CLIP ...] --out data/experiment_results/run_clips_cerave`: brain response
-  for local clips; `run_clips.sbatch` runs it on Slurm, and it also works on a laptop with
-  `FAKE_INFERENCE=1`. Reads `data/videos/cerave_*.mp4`, writes
-  `data/experiment_results/run_clips_cerave/`.
+- `run_clips.py CLIP [CLIP ...] --out DIR`: brain response for local clips, one `DIR/<clip>.json`
+  each; `run_clips.sbatch` runs it on Slurm with the same arguments, and it also works on a laptop
+  with `FAKE_INFERENCE=1`.
 
 The `*.sbatch` files are Slurm submission scripts; submit them from the repo root.
+
+## Ad Meter pilot (local + Slurm)
+
+Question: does the predicted brain response separate well-liked from disliked ads, and does it do
+so better than measures that need no brain model? The ads are the top 15 and bottom 15 of USA
+Today's Ad Meter for Super Bowl LX (2026), in the cut that aired. `ad_meter_2026.csv` lists them
+with their rank, score and YouTube source. The clips are third-party: they stay local under
+`data/videos/ad_meter_2026/` (git-ignored) and are never published.
+
+The rule, fixed before any result was seen:
+
+- Main score per ad: the mean of the overall signal (with sound). Tested one way only: higher
+  means better liked.
+- Measure: pick one top ad and one bottom ad at random; how often does the top ad score higher?
+  (the AUC; 0.5 is a coin flip).
+- Simple measures compared against it: ad length, share of frames with a face (YuNet), mean
+  loudness, cuts per second. Each may count in either direction; the best of the four is the bar.
+
+| Main score's AUC | Verdict |
+|---|---|
+| below 0.60 | No signal |
+| 0.60 to below 0.70 | Unclear |
+| 0.70 or above, and above the best simple measure | Real hint (worth a run on about 150 ads) |
+| 0.70 or above, but not above the best simple measure | Adds nothing over simple measures |
+
+The other NeuroLens scores in the report (share of seconds above typical, first 5 seconds, each
+signal's mean) are secondary and never decide the verdict. Limits: Ad Meter measures liking, not
+sales; comparing only the best and worst flatters any method; 30 ads is a small sample.
+
+Steps (results land in `data/experiment_results/ad_meter_2026/`):
+
+1. Download each clip named in `ad_meter_2026.csv` as `data/videos/ad_meter_2026/<clip>.mp4`:
+   `yt-dlp -f "bv*[height<=720][vcodec^=avc1]+ba[ext=m4a]/b[height<=720][ext=mp4]" --merge-output-format mp4 -o "<clip>.%(ext)s" "https://www.youtube.com/watch?v=<youtube_id>"`
+2. Brain response, on Slurm:
+   `sbatch --time=03:00:00 experiments/run_clips.sbatch data/videos/ad_meter_2026/*.mp4 --out data/experiment_results/ad_meter_2026`
+3. Simple measures, on the laptop (needs `opencv-python-headless`, pinned in
+   `gaze_trial_requirements.txt`; fetches the 0.2 MB YuNet model once, SHA-256 checked):
+   `python experiments/ad_meter_baseline.py data/videos/ad_meter_2026/*.mp4 --out data/experiment_results/ad_meter_2026/baseline.csv`
+4. Verdict:
+   `python experiments/ad_meter_analyse.py --ads experiments/ad_meter_2026.csv --brain data/experiment_results/ad_meter_2026 --baseline data/experiment_results/ad_meter_2026/baseline.csv --out data/experiment_results/ad_meter_2026/verdict.md`

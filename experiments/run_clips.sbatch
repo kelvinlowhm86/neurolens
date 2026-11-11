@@ -8,8 +8,10 @@
 #SBATCH --output=run_clips_%j.log
 #
 # Brain response for local clips (experiments/run_clips.py).
-# Submit from the repo root:  sbatch experiments/run_clips.sbatch
-# The first run downloads the model weights into ./models.
+# Submit from the repo root, with run_clips.py's own arguments:
+#   sbatch experiments/run_clips.sbatch CLIP [CLIP ...] --out DIR
+# A longer batch needs a longer limit: sbatch --time=03:00:00 experiments/run_clips.sbatch ...
+# (a rerun skips the clips already done). The first run downloads the model weights into ./models.
 
 set -euo pipefail
 cd "$SLURM_SUBMIT_DIR"
@@ -27,7 +29,6 @@ for tool in ffmpeg ffprobe; do
     fi
 done
 
-python experiments/run_clips.py data/videos/cerave_*.mp4 \
-    --out data/experiment_results/run_clips_cerave
+python experiments/run_clips.py "$@"
 
 echo RUN_CLIPS_DONE
