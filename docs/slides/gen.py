@@ -62,8 +62,6 @@ add("P5","Conclusion",pad("<div class='fill'>"+R(0,"<h1>A $10,000 brain study,<b
 "To wrap up. NeuroLens predicts a viewer's brain response to a video and returns it in about seven minutes for about one dollar, where an fMRI study costs ten thousand dollars or more and takes weeks. Below 670 videos a month, renting a GPU costs less than owning one. The trade-off is the wait: after a quiet spell, the first video waits about six minutes. The model predicts an average viewer, not views or sales. Our next steps are a commercial licence, the scaled-up design once we have built and measured it, and fixing what our usability study found. Thank you for listening. We'd be happy to take your questions.")
 add("P5","Q&amp;A",pad("<div class='fill'>"+R(0,"<h1>Thank you.<br><em>Questions?</em></h1>")+R(1,"<p class='hl2' style='font-size:60px;margin-top:70px;font-weight:500'>df6girqyykyfa.cloudfront.net</p>")+R(2,"<p class='mono' style='margin-top:18px'>Code · github.com/kelvinlowhm86/neurolens</p>")+"</div>"),
 "Open for questions. Keep answers ready on: why this model and its licence, what the prediction does and does not mean, the cloud design and the cold-start wait, why SageMaker rather than Spot or our own GPU pool (production design slide), how refunds work, and what the experiments showed.","title")
-add("ALL","Backup",pad("<div class='fill'>"+R(0,"<h1>Recorded demo</h1>")+R(1,"<p class='sub'>[Embed the recorded demo of slides 8–11 here]</p>")+"</div>"),
-"Press B. Say: 'The live site is having trouble, so here is the recording from this morning.' Then continue with the same talking points as the live demo.","demo")
 # ---------------- build ----------------
 esc=lambda x: html.escape(x,quote=True)
 words=lambda s: len(re.findall(r"\S+",s))
@@ -73,7 +71,7 @@ for i,(p,l,b,sc,k) in enumerate(S,1):
     kick=f"<div class='kicker'>{i:02d} · {l}</div>" if l else ""
     out.append(f"<section class='slide {k}'>{kick}<div class='who'>{p}{' · '+SECT[p] if p in SECT else ''}</div>{b}<div class='pgn'>{i}/{N}</div><template><span class='m'>{p} · {w} words · ~{sec}s</span> {esc(sc)}</template></section>")
 open('Slides.html','w').write(open('template.html').read().replace('%%SLIDES%%','\n'.join(out)).replace('%%DATA%%',json.dumps(DATA)))
-md=["# NeuroLens: presentation script\n",f"Target: 450-500 words per presenter (~{WPM} words/min). Slides 1-19 are the talk (19 is Q&A), 20 is the backup recording. `[TBD]` = fill from the usability study (edit DATA in gen.py for charts). Numbers come from the final report.\n"]
+md=["# NeuroLens: presentation script\n",f"Target: 450-500 words per presenter (~{WPM} words/min). Slides 1-18 are the talk, 19 is Q&A. `[TBD]` = fill from the usability study (edit DATA in gen.py for charts). Numbers come from the final report.\n"]
 cur=None
 for i,(p,l,b,sc,k) in enumerate(S,1):
     if p!=cur: md.append(f"\n## {p}{' · '+SECT[p] if p in SECT else ''}: {per[p][0]} words, ~{per[p][1]//60}:{per[p][1]%60:02d}\n"); cur=p

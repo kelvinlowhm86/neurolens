@@ -1,6 +1,6 @@
 # NeuroLens: presentation script
 
-Target: 450-500 words per presenter (~155 words/min). Slides 1-19 are the talk (19 is Q&A), 20 is the backup recording. `[TBD]` = fill from the usability study (edit DATA in gen.py for charts). Numbers come from the final report.
+Target: 450-500 words per presenter (~155 words/min). Slides 1-18 are the talk, 19 is Q&A. `[TBD]` = fill from the usability study (edit DATA in gen.py for charts). Numbers come from the final report.
 
 
 ## P1 · Business need: 492 words, ~3:10
@@ -92,13 +92,6 @@ Target: 450-500 words per presenter (~155 words/min). Slides 1-19 are the talk (
 **Slide 19: Q&amp;A** (49 words)
 
 > Open for questions. Keep answers ready on: why this model and its licence, what the prediction does and does not mean, the cloud design and the cold-start wait, why SageMaker rather than Spot or our own GPU pool (production design slide), how refunds work, and what the experiments showed.
-
-
-## ALL: 28 words, ~0:11
-
-**Slide 20: Backup** (28 words)
-
-> Press B. Say: 'The live site is having trouble, so here is the recording from this morning.' Then continue with the same talking points as the live demo.
 
 
 **Total: 2244 words, ~14:28**
