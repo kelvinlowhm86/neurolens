@@ -79,7 +79,7 @@ h1 em{font-style:normal;color:var(--accent)}
 
 /* === DEMO SCREENS === */
 .shot{position:absolute;border:1px solid var(--line);box-shadow:0 30px 90px rgba(0,0,0,.55);border-radius:4px;overflow:hidden}
-.shot img{display:block;width:100%}
+.shot img{display:block;width:100%}.shot a{display:block;cursor:pointer}
 .cap{position:absolute;font:500 22px var(--mono);color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
 .cues{position:absolute;right:140px;top:250px;width:330px;font-size:34px;line-height:1.35}
 .cues li{list-style:none;margin-bottom:34px;padding-left:46px;position:relative}
@@ -162,7 +162,7 @@ const VIZ={
   svg.append(el('text',{x:X(xm),y:Y(P.onprem)+44,class:'tx','text-anchor':'end'},'owned RTX 4090 rig ≈ $'+P.onprem+' a month, flat'));
   svg.append(el('text',{x:X(xm),y:Y(P.fixed+P.perVideo*xm)-22,class:'tx','text-anchor':'end',fill:'#FF8A2A'},'AWS: $'+P.fixed+' fixed + $'+P.perVideo.toFixed(2)+' per video'));
   h.append(svg)},
- sus(s){const D=DATA.sus;$('.sc',s).textContent=D.score==null?'[TBD]':D.score;const d=$('.dots',s);d.innerHTML='';for(let k=0;k<5;k++){const e=document.createElement('i');if(D.success!=null&&k<D.success)e.className='f';d.append(e)}}
+ sus(s){const D=DATA.sus;$('.sc',s).textContent=D.score==null?'[TBD]':D.score;}
 };
 
 /* === NAVIGATION === */
