@@ -45,57 +45,49 @@ Target: 450-500 words per presenter (~155 words/min). Slides 1-19 are the talk, 
 > Why cloud rather than buying a GPU? We priced a machine with one RTX 4090 at five thousand dollars, with a three-year life. The model peaked at 19.9 gigabytes, so a 24 gigabyte card is enough. With idle power, that is about one hundred fifty-nine dollars a month, flat, and almost nothing per video, about a third of a cent of electricity. AWS has no hardware cost and about five dollars a month fixed, but twenty-three cents a video. The lines cross at 670 videos a month. Below that, renting by the hour is cheaper, and ad testing comes in bursts: thirty versions one week, none the next month. Above it, owning wins: at a thousand videos a month over three years, that is about fifty-eight hundred dollars owned against eighty-five hundred on AWS. The price of renting is a wait, which you'll see in the demo and our results. Over to my colleague, who'll show it live.
 
 
-## P3 · Demo: 421 words, ~2:43
+## P3 · Demo: 493 words, ~3:11
 
-**Slide 10: Demo** (241 words)
+**Slide 10: Demo** (493 words)
 
-> Thanks. This is the real site, running on AWS, and the picture is a link to it. I sign in with Google and upload a thirty-second clip. The app shows the price first, one dollar for each started thirty seconds, with a short window to cancel, because GPU time costs money. I confirm, and the file goes straight to cloud storage. We warmed a GPU up, but a warm job still takes about seven minutes, so I'll leave it running and open a finished sample: the thirty-second CeraVe ad. The video plays beside a 3D brain synced to it. The orange line is the overall predicted response against typical viewing. Around second six, when the actor holds up the product and looks at the camera, it peaks. Underneath are the three groups we just met, seeing, hearing and understanding, on the same scale, so you can see which one drives the peak. Towards the end it falls below typical, on the product card with no face or speech. The toggle shows the video without sound, and the page says forty-six percent of the response comes from the soundtrack. The Report tab is written by an AI model that reads the brain data and frames together and names specific seconds. The Compare tab sets the thirty-second cut beside the longer cut, with a verdict. And a text file renamed to MP4 is rejected within seconds, before any GPU starts, with nothing charged.
-
-**Slide 11: Architecture** (100 words)
-
-> Analysing a video takes minutes, longer than a web request can wait, so the website never waits for the GPU. Follow the numbers. The browser loads the page through CloudFront, one, and uploads straight to S3, two. S3 puts a notice on a queue, three. A Lambda function checks the video, prices it and checks the credit, then submits it to a SageMaker endpoint, four. The GPU reads the video and writes the result back to S3, five. Credit lives in a database: reserved at the start, then charged or refunded exactly once, six, so a failed job costs nothing.
-
-**Slide 12: GPU on demand** (80 words)
-
-> The GPU is the expensive part. On this illustrative day, an owned GPU, the grey bar, is paid for around the clock. Ours, the orange blocks, starts only when a video is waiting and stops after seven idle minutes, so the service costs about five dollars a month when idle. The price is the wait: after a quiet spell, the first video waits about six minutes for a GPU. I'll pass to my colleague, who'll show how we evaluated it.
+> Thanks. Now let me show you the real thing. This is the live site, running on AWS, and the picture on the slide is a link to it. I'll sign in with Google; email and password works too. Up here is my credit balance, and below it the upload area. I'll pick a thirty-second clip. Before anything is sent, the app tells me exactly what it will cost: one dollar for each started thirty seconds. I get a short window to cancel, because GPU time costs real money, and then I confirm. The file goes straight from my browser to cloud storage, and the job moves through stages I can watch: checking the file, waiting for a GPU, and analysing. We warmed a GPU up before this session, but even warm, a thirty-second clip takes about seven minutes, so I'll leave it running and open a finished sample: the thirty-second CeraVe ad, one of our free samples. On the left, the video plays with a 3D brain synced to it, and you can drag the brain to rotate it. Everything on the right follows the playhead. The orange line is the overall predicted response of an average viewer, compared with typical viewing. Around second six, when the actor holds up the product and looks at the camera, it peaks, and the label says well above typical. The orange dots mark moments the system flags as notable, and the strip of frames underneath shows what was on screen at each point. Now the three groups we just met. Seeing, hearing and understanding sit on the same scale, so you can see which one drives the peak. Here it is seeing and hearing together, the face and the voice, and you can open each group to see its parts. Towards the end the line falls below typical, on the closing product card, with no face and no speech. The toggle shows the same video without sound. That is the second pass I described, and the page tells us forty-six percent of the response comes from the soundtrack. Numbers are useful, but creators want advice. The Report tab is written by an AI model that reads the brain data and the video frames together. It lists strengths and improvements, then specific moments, with the second each one starts, what is on screen, and what the brain is doing. The Compare tab puts two videos side by side: here, the thirty-second cut against the longer cut of the same ad. The verdict says the short cut's direct opening gives it an early edge, but the two finish close. You can also download the results. One last thing people ask: what if someone uploads something that is not a video? I'll try a text file renamed to MP4. It is rejected within seconds, before any GPU starts, and nothing is charged. Failed jobs are refunded automatically too. Over to my colleague, who will show how we evaluated it.
 
 
 ## P4 · Evaluation: 402 words, ~2:36
 
-**Slide 13: Validation** (152 words)
+**Slide 11: Validation** (152 words)
 
 > Thanks. Now evaluation, starting with a simple question: how do we know it works? There are three layers. The model: its accuracy on new videos, new tasks and new people was shown by Meta's team in the TRIBE v2 paper. We did not repeat that against real scans, and we did not test whether the predictions relate to views, retention or sales, so we make no such claim. Our pipeline: we ran the same code and the same clip on our own RTX 4090 and on AWS, and across all eleven series, with and without sound, no value differs by more than 0.005. For billing, 77 of 80 automated refund tests refunded a failed job exactly once; the other three stopped on a GPU-library error during setup, and we did not kill a job on the live site. About 1,200 automated tests cover the code. Our users: the usability results come last.
 
-**Slide 14: Latency** (98 words)
+**Slide 12: Latency** (98 words)
 
 > Next, speed. We ran the same code and the same thirty-second clip on a machine we own and on AWS. The GPUs differ, so GPU work is compared per second of video: 3.7 seconds on the RTX 4090, against 10.7 on an A10G on AWS. End to end, a warm thirty-second clip takes 128 seconds on our machine and 415 on AWS. Upload takes about three seconds, the wait before the GPU starts about nineteen, and the rest is the model. After a long idle, the first video takes about 779 seconds, because a GPU has to start.
 
-**Slide 15: Scaling** (65 words)
+**Slide 13: Scaling** (65 words)
 
 > Next, load. What happens when several people upload at once? We sent five uploads at the same time. Both setups run one job at a time, so the jobs queue. On AWS they finished about 323 seconds apart, the last after 2,145 seconds. On our machine the last finished after 575. Nothing was dropped. Serving more people at once would need a GPU quota increase.
 
-**Slide 16: Usability** (87 words)
+**Slide 14: Usability** (87 words)
 
 > Last, usability. At our booth, [N] visitors tried NeuroLens, a small formative test, and answered the System Usability Scale. The average product scores sixty-eight, and eighty is usually read as very good. Our mean score was [TBD], with a range of [TBD]. [x] percent said it showed them something they had not noticed, and [y] percent would pay one dollar to analyse a thirty-second video. One person said: [TBD quote]. The biggest issue raised was [TBD]. Now my colleague will cover ethics and where this goes next.
 
 
 ## P5 · Conclusion: 473 words, ~3:03
 
-**Slide 17: Limits and ethics** (161 words)
+**Slide 15: Limits and ethics** (161 words)
 
 > Thanks. Ethics and limits. What it is: an average viewer's predicted brain response, second by second, on one scale for every video, a virtual pre-test for editing. What it isn't: a prediction of views or sales, which we did not test. It isn't instant, since the first video after a quiet spell waits about six minutes for a GPU. And our usability study was small, enough to find the main problems but not to make statistical claims. On ethics: TRIBE v2 is non-commercial, so a paid launch needs a licence from Meta or a different model. No real person is scanned or profiled, because the model predicts an average viewer from the video alone. Still, a tool that shows what holds attention could be used to hold it at any cost, so we position it for checking edits, not for manipulating individuals. Our booth survey was anonymous and asked for consent first, and our report declares how we used AI tools.
 
-**Slide 18: Where next** (153 words)
+**Slide 16: Where next** (153 words)
 
 > Where does this go next? Our proof of concept runs one GPU at a time. The preliminary report described a larger design: containers behind a load balancer and a pool of EC2 GPU workers that scales with the queue. We built part of it, then moved the GPU to SageMaker after three findings. Spot did not deliver: all twenty-six launches failed for lack of capacity, and Spot was only one to nine percent cheaper. A smaller GPU is enough, since the model peaked at about twenty gigabytes. And the GPU sets the speed: an L40S finished a 119 second clip in 491 seconds, against 1,540 on an L4. The larger design adds about seventy dollars a month of fixed cost, so it only pays off above roughly a thousand videos a month. At today's volume SageMaker is the better choice, and the first step is to build it and measure its start-up time.
 
-**Slide 19: Conclusion** (110 words)
+**Slide 17: Conclusion** (110 words)
 
 > To wrap up. NeuroLens predicts a viewer's brain response to a video and returns it in about seven minutes for about one dollar, where an fMRI study costs ten thousand dollars or more and takes weeks. Below 670 videos a month, renting a GPU costs less than owning one. The trade-off is the wait: after a quiet spell, the first video waits about six minutes. The model predicts an average viewer, not views or sales. Our next steps are a commercial licence, the scaled-up design once we have built and measured it, and fixing what our usability study found. Thank you for listening. We'd be happy to take your questions.
 
-**Slide 20: Q&amp;A** (49 words)
+**Slide 18: Q&amp;A** (49 words)
 
 > Open for questions. Keep answers ready on: why this model and its licence, what the prediction does and does not mean, the cloud design and the cold-start wait, why SageMaker rather than Spot or our own GPU pool (production design slide), how refunds work, and what the experiments showed.
 
 
-**Total: 2164 words, ~13:58**
+**Total: 2236 words, ~14:26**
