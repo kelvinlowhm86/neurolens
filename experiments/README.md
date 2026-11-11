@@ -56,9 +56,10 @@ CSV's `gpu_name` names a different card.
 - `gaze_trial.py CLIP [CLIP ...] --out data/experiment_results/gaze_trial`: ViNet-S saliency
   heatmaps; `gaze_trial.sbatch` runs it on Slurm and fetches the model. Reads
   `data/videos/gaze/*.mp4`, writes `data/experiment_results/gaze_trial/`.
-- `run_clips.py CLIP [CLIP ...] --out DIR`: brain response for local clips, one `DIR/<clip>.json`
-  each; `run_clips.sbatch` runs it on Slurm with the same arguments, and it also works on a laptop
-  with `FAKE_INFERENCE=1`.
+- `run_clips.py CLIP [CLIP ...] --out DIR [--save-predictions]`: brain response for local clips,
+  one `DIR/<clip>.json` each; `--save-predictions` adds `DIR/<clip>.npy`, the prediction for every
+  point of the brain surface. `run_clips.sbatch` runs it on Slurm with the same arguments, and it
+  also works on a laptop with `FAKE_INFERENCE=1`.
 
 The `*.sbatch` files are Slurm submission scripts; submit them from the repo root.
 
@@ -95,7 +96,8 @@ Steps (results land in `data/experiment_results/ad_meter_2026/`):
 1. Download each clip named in `ad_meter_2026.csv` as `data/videos/ad_meter_2026/<clip>.mp4`:
    `yt-dlp -f "bv*[height<=720][vcodec^=avc1]+ba[ext=m4a]/b[height<=720][ext=mp4]" --merge-output-format mp4 -o "<clip>.%(ext)s" "https://www.youtube.com/watch?v=<youtube_id>"`
 2. Brain response, on Slurm:
-   `sbatch --time=03:00:00 experiments/run_clips.sbatch data/videos/ad_meter_2026/*.mp4 --out data/experiment_results/ad_meter_2026`
+   `sbatch --time=03:00:00 experiments/run_clips.sbatch data/videos/ad_meter_2026/*.mp4 --out data/experiment_results/ad_meter_2026 --save-predictions`
+   (the saved predictions allow exploratory region groupings later; they never decide the verdict)
 3. Simple measures, on the laptop (needs `opencv-python-headless`, pinned in
    `gaze_trial_requirements.txt`; fetches the 0.2 MB YuNet model once, SHA-256 checked):
    `python experiments/ad_meter_baseline.py data/videos/ad_meter_2026/*.mp4 --out data/experiment_results/ad_meter_2026/baseline.csv`
