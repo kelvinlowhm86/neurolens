@@ -1415,7 +1415,8 @@ def _read_booth_stats(tx, *, check_pass_id=None):
     job_days = tx.execute(
         "SELECT CAST((created_at AT TIME ZONE :tz) AS date) AS day, "
         "count(*) FILTER (WHERE status = :done) AS videos_done, "
-        "count(*) FILTER (WHERE status IN (:queued, :processing)) AS videos_running, "
+        "count(*) FILTER (WHERE status = :processing "
+        "OR (status = :queued AND verified_duration_ms IS NOT NULL)) AS videos_running, "
         "count(*) FILTER (WHERE report_state = :ready) AS reports_ready "
         "FROM jobs WHERE user_id LIKE :prefix AND deleted_at IS NULL GROUP BY day",
         {
