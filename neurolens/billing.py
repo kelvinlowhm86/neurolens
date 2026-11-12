@@ -1361,7 +1361,7 @@ def _read_booth_gpu_warm(tx):
     """Return the active booth GPU keep-warm target (0, 1, or 2), expiring 6 hours after click."""
     rows = tx.execute(
         "SELECT session_hash, "
-        "(last_seen_at < now() - make_interval(hours => 6)) AS expired "
+        "(last_seen_at < now() - interval '6 hours') AS expired "
         "FROM sessions WHERE user_id = :user_id LIMIT 1",
         {"user_id": BOOTH_POOL_USER_ID},
     )
