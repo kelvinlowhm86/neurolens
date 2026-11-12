@@ -147,7 +147,6 @@ const VIZ={
   svg.append(el('text',{x:X(xm),y:Y(P.onprem)+44,class:'tx','text-anchor':'end'},'owned RTX 4090 rig ≈ $'+P.onprem+' a month, flat'));
   svg.append(el('text',{x:X(xm),y:Y(P.fixed+P.perVideo*xm)-22,class:'tx','text-anchor':'end',fill:'#FF8A2A'},'AWS: $'+P.fixed+' fixed + $'+P.perVideo.toFixed(2)+' per video'));
   h.append(svg)},
- sus(s){const D=DATA.sus;$('.sc',s).textContent=D.score==null?'[TBD]':D.score;}
 };
 
 /* === NAVIGATION === */
