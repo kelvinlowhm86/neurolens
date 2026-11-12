@@ -46,6 +46,7 @@ BOOTH_POOL_USER_ID = "booth-pool"
 BOOTH_POOL_EMAIL = "booth-pool@booth.local"
 BOOTH_PASS_CENTS = 400
 BOOTH_INITIAL_PASSES = 10
+BOOTH_GPU_WARM_HOURS = 6
 GUEST_PREFIX = "guest-"
 
 CURVE_REMOVED_MESSAGES = {
@@ -1358,12 +1359,13 @@ def _ensure_booth_pool(tx):
 
 
 def _read_booth_gpu_warm(tx):
-    """Return the active booth GPU keep-warm target (0, 1, or 2), expiring 6 hours after click."""
+    """Return the active booth GPU keep-warm target (0, 1, or 2), expiring
+    BOOTH_GPU_WARM_HOURS after the click."""
     rows = tx.execute(
         "SELECT session_hash, "
-        "(last_seen_at < now() - interval '6 hours') AS expired "
+        "(last_seen_at < now() - make_interval(hours => CAST(:hours AS integer))) AS expired "
         "FROM sessions WHERE user_id = :user_id LIMIT 1",
-        {"user_id": BOOTH_POOL_USER_ID},
+        {"user_id": BOOTH_POOL_USER_ID, "hours": BOOTH_GPU_WARM_HOURS},
     )
     if not rows:
         return 0
