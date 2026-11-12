@@ -171,7 +171,16 @@ for i,(p,l,b,sc,k) in enumerate(S,1):
     w=words(sc); sec=round(w/WPM*60); per.setdefault(p,[0,0]); per[p][0]+=w; per[p][1]+=sec
     kick=f"<div class='kicker'>{i:02d} · {l}</div>" if l else ""
     out.append(f"<section class='slide {k}'>{kick}<div class='who'>{SECT.get(p,'')}</div>{b}<div class='pgn'>{i}/{N}</div><template><span class='m'>{p} · {w} words · ~{sec}s</span> {esc(sc)}</template></section>")
-open('Slides.html','w').write(open('template.html').read().replace('%%SLIDES%%','\n'.join(out)).replace('%%DATA%%',json.dumps(DATA)))
+import base64, mimetypes
+def datauri(path):
+    mime=mimetypes.guess_type(path)[0] or 'application/octet-stream'
+    return f"data:{mime};base64,"+base64.b64encode(open(path,'rb').read()).decode()
+page=open('template.html').read().replace('%%SLIDES%%','\n'.join(out)).replace('%%DATA%%',json.dumps(DATA))
+# Standalone file: inline the fonts (fonts/fonts.css) and every img/ reference
+fontcss=re.sub(r"url\((fonts/[^)]+)\)",lambda m:f"url({datauri(m.group(1))})",open('fonts/fonts.css').read())
+page=re.sub(r'<link href="https://fonts.googleapis.com[^>]*>',lambda m:"<style>"+fontcss+"</style>",page)
+page=re.sub(r"""(src|href)=(['"])(img/[\w.\-]+)\2""",lambda m:f"{m.group(1)}={m.group(2)}{datauri(m.group(3))}{m.group(2)}",page)
+open('Slides.html','w').write(page)
 md=["# NeuroLens: presentation script\n",f"Target: 450-500 words per presenter (~{WPM} words/min). Slides 1-{N-1} are the talk, {N} is Q&A. `[TBD]` = fill from the usability study (edit DATA in gen.py for charts). Numbers come from the final report.\n"]
 cur=None
 for i,(p,l,b,sc,k) in enumerate(S,1):
