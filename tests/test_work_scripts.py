@@ -423,15 +423,14 @@ def test_stop_waits_for_an_updating_endpoint_that_settles_to_zero(sandbox):
     assert r.find("sagemaker", "update-endpoint-weights-and-capacities") == []
 
 
-def test_stop_updates_only_after_an_updating_endpoint_becomes_inservice(sandbox):
-    updating_for = 2
-    r = sandbox("stop_work.sh", healthy_world(instances=1, updating_for=updating_for))
+def test_stop_sends_desired_zero_while_the_endpoint_is_still_updating(sandbox):
+    # 9 Nov: AWS's own scale-down after 0/0 failed silently while the script only waited.
+    r = sandbox("stop_work.sh", healthy_world(instances=1, desired=1, updating_for=3))
     assert r.code == 0, r.err
     assert "ALL STOPPED" in r.out
     updates = r.find("sagemaker", "update-endpoint-weights-and-capacities")
-    assert len(updates) == 1
     describes = r.find("sagemaker", "describe-endpoint")
-    assert len([d for d in describes if d < updates[0]]) >= updating_for + 1
+    assert updates and updates[0] < describes[1]
 
 
 def test_stop_endpoint_stuck_updating_is_not_confirmed(sandbox):

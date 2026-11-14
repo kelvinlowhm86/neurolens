@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Emergency pause (docs/M3e_spec.md §6b): no GPU may start or stay on, and no keep-warm survives.
 # It deletes the keep-warm action before scaling down, then reads the target back.
-# AWS refuses a capacity change while the endpoint is updating, so it then waits for the
-# endpoint to settle before setting its desired count to 0.
+# It then sends desired count 0 on every poll until the endpoint reads InService at 0/0; a refusal
+# because an update is in progress just means trying again.
 # Prints ALL STOPPED only when every step succeeded; otherwise NOT CONFIRMED and exit 1.
 set -uo pipefail
 
@@ -71,36 +71,33 @@ for _ in $(seq 1 90); do
   [ "${DESIRED:-}" = "None" ] && DESIRED=0
   [ "${CURRENT:-}" = "None" ] && CURRENT=0
   case "$STATUS" in
-    Creating|Updating|SystemUpdating)
-      sleep 10
-      ;;
-    InService)
-      if [ "$DESIRED" = "0" ] && [ "$CURRENT" = "0" ]; then
-        LEFT_LOOP=1
-        break
-      fi
-      if [ "$DESIRED" != "0" ]; then
-        if ! UPDATE_ERR=$(aws sagemaker update-endpoint-weights-and-capacities \
-            --endpoint-name "$ENDPOINT" \
-            --desired-weights-and-capacities "VariantName=$VARIANT_MAIN,DesiredInstanceCount=0" 2>&1 1>/dev/null); then
-          case "$UPDATE_ERR" in
-            *in-progress*) ;;
-            *)
-              problem "could not set the endpoint's desired instance count to 0: $UPDATE_ERR"
-              LEFT_LOOP=1
-              break
-              ;;
-          esac
-        fi
-      fi
-      sleep 10
-      ;;
+    Creating|Updating|SystemUpdating|InService) ;;
     *)
       problem "the endpoint is in status ${STATUS:-unknown}; it must reach InService with 0 instances"
       LEFT_LOOP=1
       break
       ;;
   esac
+  if [ "$STATUS" = "InService" ] && [ "$DESIRED" = "0" ] && [ "$CURRENT" = "0" ]; then
+    LEFT_LOOP=1
+    break
+  fi
+  # Resend on every poll, whatever the status: AWS's own attempt after 0/0 can fail silently.
+  if [ "$DESIRED" != "0" ]; then
+    if ! UPDATE_ERR=$(aws sagemaker update-endpoint-weights-and-capacities \
+        --endpoint-name "$ENDPOINT" \
+        --desired-weights-and-capacities "VariantName=$VARIANT_MAIN,DesiredInstanceCount=0" 2>&1 1>/dev/null); then
+      case "$UPDATE_ERR" in
+        *in-progress*) ;;
+        *)
+          problem "could not set the endpoint's desired instance count to 0: $UPDATE_ERR"
+          LEFT_LOOP=1
+          break
+          ;;
+      esac
+    fi
+  fi
+  sleep 10
 done
 if [ "$LEFT_LOOP" != 1 ]; then
   problem "the endpoint is still ${STATUS:-unknown} with ${CURRENT:-?} instance(s) after 15 min"

@@ -56,6 +56,27 @@ resource "aws_cloudwatch_metric_alarm" "gpu_guard_stopped" {
   tags          = { Milestone = "M3e" }
 }
 
+# Two stops within 30 minutes mean the first did not work: after a real stop, new work keeps the
+# guard away for 30 minutes. AWS accepting the call is no proof the GPU stops.
+resource "aws_cloudwatch_metric_alarm" "gpu_guard_stuck" {
+  alarm_name        = "neurolens-gpu-guard-stuck"
+  alarm_description = "The NeuroLens GPU guard asked the GPU to stop twice in 30 minutes, so the first stop did not work and the GPU may still be billing. Run infra/stop_work.sh; if the GPU is still there, delete the neurolens endpoint by hand (SageMaker console) and re-apply Terraform later."
+
+  namespace   = "NeuroLens"
+  metric_name = "GpuGuardStopped"
+  statistic   = "Sum"
+
+  period              = 1800
+  evaluation_periods  = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  threshold           = 2
+  treat_missing_data  = "notBreaching"
+
+  alarm_actions = [aws_sns_topic.alerts.arn]
+  ok_actions    = [aws_sns_topic.alerts.arn]
+  tags          = { Milestone = "M3e" }
+}
+
 # The error alarm above catches a run that fails, not one that never happens. Lambda publishes no
 # Invocations datapoint in a period with none, so missing data counts as breaching.
 resource "aws_cloudwatch_metric_alarm" "gpu_guard_not_running" {

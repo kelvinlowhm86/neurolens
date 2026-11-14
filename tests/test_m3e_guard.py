@@ -14,14 +14,22 @@ ENDPOINT = "neurolens-gpu-test"
 
 
 class FakeSageMaker:
-    def __init__(self, instances):
+    def __init__(self, instances, desired=None):
         self.instances = instances
+        self.desired = instances if desired is None else desired
         self.endpoints = []
         self.updates = []
 
     def describe_endpoint(self, **kwargs):
         self.endpoints.append(kwargs)
-        return {"ProductionVariants": [{"CurrentInstanceCount": self.instances}]}
+        return {
+            "ProductionVariants": [
+                {
+                    "CurrentInstanceCount": self.instances,
+                    "DesiredInstanceCount": self.desired,
+                }
+            ]
+        }
 
     def update_endpoint_weights_and_capacities(self, **kwargs):
         self.updates.append(kwargs)
@@ -44,9 +52,9 @@ def gpu_guard():
     return gpu_guard
 
 
-def run_check(db, *, instances=1, min_capacity=0):
+def run_check(db, *, instances=1, desired=None, min_capacity=0):
     module = gpu_guard()
-    sagemaker = FakeSageMaker(instances)
+    sagemaker = FakeSageMaker(instances, desired)
     appscaling = FakeAppScaling(min_capacity)
     stopped = module.check(db, sagemaker=sagemaker, appscaling=appscaling, endpoint=ENDPOINT)
     return stopped, sagemaker, appscaling
@@ -61,6 +69,29 @@ def stop_call():
 
 def test_no_instance_means_no_stop(db):
     stopped, sagemaker, _ = run_check(db, instances=0)
+    assert stopped is False
+    assert sagemaker.updates == []
+
+
+def test_an_unfilled_start_stops_once(db):
+    stopped, sagemaker, _ = run_check(db, instances=0, desired=1)
+    assert stopped is True
+    assert sagemaker.updates == [stop_call()]
+
+
+def test_an_unfilled_start_with_a_dispatched_job_does_not_stop(db, pg, new_job):
+    job_id, _ = new_job()
+    pg.conn.execute(
+        "UPDATE jobs SET verified_duration_ms = 3000 WHERE job_id = %s::uuid", (job_id,)
+    )
+    pg.age(job_id, updated_s=31 * 60, created_s=2 * 60 * 60)
+    stopped, sagemaker, _ = run_check(db, instances=0, desired=1)
+    assert stopped is False
+    assert sagemaker.updates == []
+
+
+def test_an_unfilled_start_with_keep_warm_does_not_stop(db):
+    stopped, sagemaker, _ = run_check(db, instances=0, desired=1, min_capacity=1)
     assert stopped is False
     assert sagemaker.updates == []
 
@@ -121,7 +152,7 @@ def test_all_clear_stops_once_and_logs_the_marker(db, caplog):
     stopped, sagemaker, appscaling = run_check(db)
     assert stopped is True
     assert sagemaker.updates == [stop_call()]
-    assert "GPU_GUARD_STOPPED" in caplog.text
+    assert "GPU_GUARD_STOPPED 1 1" in caplog.text
     call = appscaling.calls[0]
     assert call["ServiceNamespace"] == "sagemaker"
     assert call["ResourceIds"] == [f"endpoint/{ENDPOINT}/variant/main"]
