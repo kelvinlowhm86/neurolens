@@ -51,12 +51,6 @@ export const SHOTS: Shot[] = [
     segments: [seg(6.6, 1, 4.8)],
   },
   {
-    id: 'waiting', src: 'walkthrough/s5_waiting.mp4', start: 23,
-    base: {x: 1000, y: 470, w: 1900, h: 860},
-    states: [{at: 0, cx: 1950, cy: 900, zoom: 1}, {at: 1, cx: 1950, cy: 900, zoom: 1.04}],
-    segments: [seg(2, 1, 5)],
-  },
-  {
     id: 'brain', src: 'walkthrough/s8.mp4', start: 47,
     base: {x: 140, y: 1220, w: 560, h: 520},
     states: [{at: 0, cx: 420, cy: 1480, zoom: 1}, {at: 1, cx: 420, cy: 1480, zoom: 1.04}],
@@ -64,25 +58,13 @@ export const SHOTS: Shot[] = [
   },
 ];
 
-export const MUTE_DROP = 56.6;
+export const MUTE_DROP = 56.2;
 
 export const STILLS: Still[] = [
   {
-    id: 'headline', img: 'walkthrough/captures/home_headline.png', w: 1470, h: 366, start: 2.5, dur: 4.5,
-    cams: [{at: 0, cx: .5, cy: .5, zoom: 1}, {at: 2.6, cx: .5, cy: .5, zoom: 1.06}],
-  },
-  {
-    id: 'chart-open', img: 'walkthrough/captures/chart.png', w: 3006, h: 1335, start: 7, dur: 4.4,
-    cams: [{at: 0, cx: .5, cy: .5, zoom: 1}, {at: 1.5, cx: .3, cy: .45, zoom: 1.5}],
-  },
-  {
-    id: 'brain-open', img: 'walkthrough/captures/brain.png', w: 1137, h: 1311, start: 11.4, dur: 3.6,
-    cams: [{at: 0, cx: .5, cy: .4, zoom: 1}, {at: 1.2, cx: .5, cy: .4, zoom: 1.12}],
-  },
-  {
-    id: 'chart', img: 'walkthrough/captures/chart.png', w: 3006, h: 1335, start: 29.2, dur: 8.8,
-    cams: [{at: 0, cx: .5, cy: .5, zoom: 1}, {at: 5.6, cx: .3, cy: .4, zoom: 1.7}],
-    spots: [{from: 1.2, to: 4.4, x: .82, y: .02, w: .17, h: .09}, {from: 6.9, to: 8.6, x: .02, y: .47, w: .5, h: .08}],
+    id: 'chart', img: 'walkthrough/captures/chart.png', w: 3006, h: 1335, start: 34.4, dur: 3.6,
+    cams: [{at: 0, cx: .5, cy: .5, zoom: 1}, {at: 1.0, cx: .3, cy: .42, zoom: 1.6}],
+    spots: [{from: 1.6, to: 3.4, x: .02, y: .47, w: .5, h: .08}],
   },
   {
     id: 'seeing', img: 'walkthrough/captures/strip_seeing.png', w: 948, h: 777, start: 38, dur: 2.4,
@@ -109,11 +91,6 @@ export const STILLS: Still[] = [
     spots: [{from: 1.2, to: 3.1, x: .0, y: .68, w: 1, h: .26}],
   },
   {
-    id: 'muted', img: 'walkthrough/captures/chart_muted.png', w: 3006, h: 1335, start: 55, dur: 3.5,
-    cams: [{at: 0, cx: .3, cy: .3, zoom: 1.6}, {at: 1.9, cx: .5, cy: .5, zoom: 1}],
-    spots: [{from: .4, to: 1.7, x: .2, y: .09, w: .14, h: .06}],
-  },
-  {
     id: 'compare', img: 'walkthrough/captures/compare_chart.png', w: 2451, h: 639, start: 58.5, dur: 3.6,
     cams: [{at: 0, cx: .5, cy: .5, zoom: 1}, {at: 1.4, cx: .3, cy: .55, zoom: 1.35}],
   },
@@ -122,18 +99,14 @@ export const STILLS: Still[] = [
     cams: [{at: 0, cx: .5, cy: .5, zoom: 1}],
     spots: [{from: .9, to: 3.7, x: .0, y: .33, w: 1, h: .2}],
   },
-  {
-    id: 'close-chart', img: 'walkthrough/captures/chart.png', w: 3006, h: 1335, start: 103, dur: 7,
-    cams: [{at: 0, cx: .5, cy: .5, zoom: 1.08}, {at: 1.5, cx: .5, cy: .5, zoom: 1}],
-  },
 ];
 
 export type Voice = {line: number; at: number; from: number; to: number};
 export const VOICE: Voice[] = [
-  {line: 1, at: 2.5, from: 0, to: 4.21},
-  {line: 2, at: 7.02, from: 4.37, to: 8.45},
-  {line: 3, at: 11.46, from: 8.81, to: 12.51},
-  {line: 4, at: 15.2, from: 13.37, to: 14.79},
+  {line: 1, at: 1.5, from: 0, to: 4.21},
+  {line: 2, at: 6.02, from: 4.37, to: 8.45},
+  {line: 3, at: 10.46, from: 8.81, to: 12.51},
+  {line: 4, at: 15.8, from: 13.37, to: 14.79},
   {line: 5, at: 18.2, from: 15.03, to: 18.23},
   {line: 6, at: 23, from: 18.43, to: 22.03},
   {line: 7, at: 29.2, from: 22.33, to: 30.79},
@@ -166,38 +139,44 @@ export type Card = {
   sub?: string;
 };
 export const CARDS: Card[] = [
-  {id: 'open', start: 0, end: 2.5, kind: 'chapter', parts: [{text: 'Watch a '}, {text: 'brain', hot: true}, {text: ' watch your video.'}]},
-  {id: 'wordmark', start: 15, end: 17, kind: 'wordmark', lead: 'Introducing', title: 'NeuroLens'},
-  {id: 'use', start: 17, end: 18.2, kind: 'chapter', parts: [{text: 'Use', hot: true}, {text: ' it'}]},
+  {id: 'hook-title', start: 14.2, end: 15.6, kind: 'chapter', parts: [{text: 'Watch a '}, {text: 'brain', hot: true}, {text: ' watch your video.'}]},
+  {id: 'wordmark', start: 15.6, end: 17.4, kind: 'wordmark', lead: 'Introducing', title: 'NeuroLens'},
+  {id: 'use', start: 17.4, end: 18.2, kind: 'chapter', parts: [{text: 'Use', hot: true}, {text: ' it'}]},
   {id: 'read', start: 28, end: 29.2, kind: 'chapter', parts: [{text: 'Read', hot: true}, {text: ' it'}]},
   {id: 'built', start: 66, end: 67.5, kind: 'chapter', parts: [{text: 'How it\u2019s '}, {text: 'built', hot: true}]},
-  {id: 'close', start: 110, end: 116, kind: 'close', title: 'NeuroLens', sub: 'Explore the samples at the link below'},
 ];
 
+export const HOOK = {start: 0, end: 14.2, reveal: 10.46};
+export const FLOW = {start: 29.2, end: 34.4};
+export const STEPS = {start: 23, end: 28};
+export const SPLIT = {start: 55, end: 58.5};
+export const REPRISE = {start: 103, end: 110};
+export const CLOSE = {start: 110, end: 116};
+export const SCENES = {HOOK, FLOW, STEPS, SPLIT, REPRISE, CLOSE};
+
 export const ROWS: {label: string; mid: number}[] = [
-  {label: 'open-card', mid: 1.25},
-  {label: 'headline', mid: 4.75},
-  {label: 'chart-open', mid: 9.2},
-  {label: 'brain-open', mid: 13.2},
-  {label: 'wordmark', mid: 16},
-  {label: 'use-card', mid: 17.6},
+  {label: 'hook', mid: 7.1},
+  {label: 'hook-title', mid: 14.9},
+  {label: 'wordmark', mid: 16.5},
+  {label: 'use-card', mid: 17.8},
   {label: 'upload', mid: 20.6},
-  {label: 'waiting', mid: 25.5},
+  {label: 'steps', mid: 25.5},
   {label: 'read-card', mid: 28.6},
-  {label: 'chart', mid: 33.6},
+  {label: 'flow', mid: 31.8},
+  {label: 'chart', mid: 36.2},
   {label: 'seeing', mid: 39.2},
   {label: 'parts', mid: 41.7},
   {label: 'moment', mid: 45},
   {label: 'brain', mid: 48.5},
   {label: 'report-head', mid: 50.9},
   {label: 'report-moment', mid: 53.4},
-  {label: 'muted', mid: 56.75},
+  {label: 'split', mid: 56.75},
   {label: 'compare', mid: 60.3},
   {label: 'verdict', mid: 64.05},
   {label: 'built-card', mid: 66.75},
   {label: 'diagram', mid: 85.25},
-  {label: 'close-chart', mid: 106.5},
-  {label: 'close-card', mid: 113},
+  {label: 'reprise', mid: 106.5},
+  {label: 'close', mid: 113},
 ];
 
 export const DIAGRAM = {
@@ -246,6 +225,7 @@ export function checkCoverage() {
     })),
     ...STILLS.map((s) => ({id: s.id, start: s.start, end: s.start + s.dur})),
     {id: 'diagram', start: DIAGRAM.start, end: DIAGRAM.end},
+    ...Object.entries(SCENES).map(([id, s]) => ({id: id.toLowerCase(), start: s.start, end: s.end})),
   ];
   for (let i = 0; i < layers.length; i++) {
     for (let j = i + 1; j < layers.length; j++) {

@@ -3,12 +3,18 @@ import {
   AbsoluteFill, Audio, Easing, Sequence, interpolate, staticFile, useCurrentFrame,
 } from 'remotion';
 import {C, fontFamily} from '../edit/ui';
+import {Close} from './Close';
 import {Diagram} from './Diagram';
+import {Flow} from './Flow';
+import {Hook} from './Hook';
 import {Fade, ShotLayer} from './Panel';
+import {SceneLayer} from './Scene';
+import {Split} from './Split';
+import {Steps} from './Steps';
 import {StillLayer} from './Still';
 import {
-  CARDS, Card, DIAGRAM_POPS, DURATION_S, FADE, FPS, MUSIC, MUSIC_JOIN, MUTE_DROP, SHOTS, STILLS,
-  Sfx, VOICE, sec,
+  CARDS, Card, DIAGRAM_POPS, DURATION_S, FADE, FPS, MUSIC, MUSIC_JOIN, MUTE_DROP, SCENES, SHOTS,
+  STILLS, Sfx, VOICE, sec,
 } from './timeline';
 
 const clamp = (x: number, a = 0, b = 1) => Math.max(a, Math.min(b, x));
@@ -130,19 +136,16 @@ const Music: React.FC = () => {
 
 const sfxList = (): Sfx[] => {
   const list: Sfx[] = [];
-  list.push({at: MUTE_DROP, src: 'sfx/mute_chime.wav', volume: 0.3});
-  for (const c of CARDS) {
-    if (c.kind === 'chapter' && c.id !== 'open') {
-      list.push({at: c.start - 0.25, src: 'walkthrough/sfx/whoosh.mp3', volume: 0.3});
-    }
+  for (const id of ['use', 'read', 'built']) {
+    const card = CARDS.find((c) => c.id === id);
+    if (card) list.push({at: card.start - 0.25, src: 'walkthrough/sfx/whoosh.mp3', volume: 0.25});
   }
   const wordmark = CARDS.find((c) => c.kind === 'wordmark');
-  if (wordmark) list.push({at: wordmark.start, src: 'sfx/impact.mp3', volume: 0.5});
-  const brain = SHOTS.find((s) => s.id === 'brain');
-  if (brain) list.push({at: brain.start - 0.6, src: 'walkthrough/sfx/swell.mp3', volume: 0.25});
-  for (const at of DIAGRAM_POPS) list.push({at, src: 'walkthrough/sfx/pop.mp3', volume: 0.3});
-  const close = CARDS.find((c) => c.kind === 'close');
-  if (close) list.push({at: close.start, src: 'walkthrough/sfx/resolve.mp3', volume: 0.4});
+  if (wordmark) list.push({at: wordmark.start, src: 'sfx/impact.mp3', volume: 0.45});
+  list.push({at: MUTE_DROP, src: 'sfx/mute_chime.wav', volume: 0.3});
+  list.push({at: SCENES.HOOK.reveal - 0.8, src: 'walkthrough/sfx/swell.mp3', volume: 0.22});
+  for (const at of DIAGRAM_POPS) list.push({at, src: 'walkthrough/sfx/pop.mp3', volume: 0.18});
+  list.push({at: SCENES.CLOSE.start, src: 'walkthrough/sfx/resolve.mp3', volume: 0.35});
   return list;
 };
 const SFX = sfxList();
@@ -167,6 +170,12 @@ export const Walkthrough: React.FC = () => {
 
     {SHOTS.map((shot) => <ShotLayer key={shot.id} shot={shot} />)}
     {STILLS.map((still) => <StillLayer key={still.id} still={still} />)}
+    <SceneLayer start={SCENES.HOOK.start} end={SCENES.HOOK.end}><Hook mode="hook" /></SceneLayer>
+    <SceneLayer start={SCENES.STEPS.start} end={SCENES.STEPS.end}><Steps /></SceneLayer>
+    <SceneLayer start={SCENES.FLOW.start} end={SCENES.FLOW.end}><Flow /></SceneLayer>
+    <SceneLayer start={SCENES.SPLIT.start} end={SCENES.SPLIT.end}><Split /></SceneLayer>
+    <SceneLayer start={SCENES.REPRISE.start} end={SCENES.REPRISE.end}><Hook mode="reprise" /></SceneLayer>
+    <SceneLayer start={SCENES.CLOSE.start} end={SCENES.CLOSE.end}><Close /></SceneLayer>
     <DiagramLayer />
     {CARDS.map((card) => <CardLayer key={card.id} card={card} />)}
   </AbsoluteFill>;
