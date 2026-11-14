@@ -50,7 +50,8 @@
         "cloudfront:UpdateOriginAccessControl", "cloudfront:DeleteOriginAccessControl",
         "cloudfront:ListOriginAccessControls", "cloudfront:ListCachePolicies",
         "cloudfront:GetCachePolicy", "cloudfront:ListOriginRequestPolicies",
-        "cloudfront:GetOriginRequestPolicy", "cloudfront:ListDistributions"
+        "cloudfront:GetOriginRequestPolicy", "cloudfront:ListDistributions",
+        "cloudfront:GetDistribution"
       ],
       "Resource": "*"
     },
