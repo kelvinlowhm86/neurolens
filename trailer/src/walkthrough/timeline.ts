@@ -82,13 +82,9 @@ export const STILLS: Still[] = [
     spots: [{from: 2.1, to: 3.9, x: .06, y: .32, w: .3, h: .28}],
   },
   {
-    id: 'report-head', img: 'walkthrough/captures/report_head.png', w: 2313, h: 141, start: 50, dur: 1.8,
-    cams: [{at: 0, cx: .5, cy: .45, zoom: 1}, {at: .3, cx: .5, cy: .45, zoom: 1.04}],
-  },
-  {
-    id: 'report-moment', img: 'walkthrough/captures/report_moment_1.png', w: 2313, h: 480, start: 51.8, dur: 3.2,
+    id: 'report-moment', img: 'walkthrough/captures/report_moment_1.png', w: 2313, h: 480, start: 50, dur: 5,
     cams: [{at: 0, cx: .5, cy: .5, zoom: 1}],
-    spots: [{from: 1.2, to: 3.1, x: .0, y: .68, w: 1, h: .26}],
+    spots: [{from: 2.6, to: 4.9, x: .0, y: .68, w: 1, h: .26}],
   },
   {
     id: 'compare', img: 'walkthrough/captures/compare_chart.png', w: 2451, h: 639, start: 58.5, dur: 3.6,
@@ -168,8 +164,7 @@ export const ROWS: {label: string; mid: number}[] = [
   {label: 'parts', mid: 41.7},
   {label: 'moment', mid: 45},
   {label: 'brain', mid: 48.5},
-  {label: 'report-head', mid: 50.9},
-  {label: 'report-moment', mid: 53.4},
+  {label: 'report-moment', mid: 52.5},
   {label: 'split', mid: 56.75},
   {label: 'compare', mid: 60.3},
   {label: 'verdict', mid: 64.05},

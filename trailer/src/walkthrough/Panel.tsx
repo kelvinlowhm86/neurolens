@@ -3,7 +3,7 @@ import {
   AbsoluteFill, Easing, OffthreadVideo, Sequence, interpolate, staticFile, useCurrentFrame,
 } from 'remotion';
 import {
-  FADE, HEIGHT, PANEL_MAX_H, PANEL_MAX_W, Shot, SOURCE_H, SOURCE_W, TOP_CROP,
+  FADE, FPS, HEIGHT, PANEL_MAX_H, PANEL_MAX_W, Shot, SOURCE_H, SOURCE_W, TOP_CROP,
   WIDTH, sec,
 } from './timeline';
 
@@ -48,7 +48,9 @@ const cropAt = (shot: Shot, p: number) => {
 
 const ShotContent: React.FC<{shot: Shot; total: number}> = ({shot, total}) => {
   const f = useCurrentFrame();
-  const p = total <= 1 ? 0 : clamp(f / (total - 1), 0, 1);
+  // Hold ~1 s at each end; the eased move happens in between.
+  const hold = Math.min(FPS, Math.floor(total / 4));
+  const p = total <= 2 * hold + 1 ? 0 : clamp((f - hold) / (total - 1 - 2 * hold), 0, 1);
   const crop = cropAt(shot, p);
   const panel = fitPanel(shot.base.w / shot.base.h);
   const scaleX = panel.w / crop.w;
