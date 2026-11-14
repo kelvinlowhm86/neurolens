@@ -70,11 +70,18 @@ def check(db, *, sagemaker, appscaling, endpoint):
     if _work_possible(db):
         return False
 
-    sagemaker.update_endpoint_weights_and_capacities(
-        EndpointName=endpoint,
-        DesiredWeightsAndCapacities=[{"VariantName": VARIANT, "DesiredInstanceCount": 0}],
-    )
+    # Logged before the call: the stuck alarm counts decisions to stop, and a stop still in
+    # progress from the last run refuses this one.
     logger.warning(f"GPU_GUARD_STOPPED {instances} {desired}")
+    try:
+        sagemaker.update_endpoint_weights_and_capacities(
+            EndpointName=endpoint,
+            DesiredWeightsAndCapacities=[{"VariantName": VARIANT, "DesiredInstanceCount": 0}],
+        )
+    except Exception as exc:
+        if "in-progress" not in str(exc):
+            raise
+        logger.warning(f"GPU_GUARD_STOP_IN_PROGRESS {exc}")
     return True
 
 

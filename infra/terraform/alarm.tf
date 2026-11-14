@@ -66,10 +66,13 @@ resource "aws_cloudwatch_metric_alarm" "gpu_guard_stuck" {
   metric_name = "GpuGuardStopped"
   statistic   = "Sum"
 
-  period              = 1800
-  evaluation_periods  = 1
+  # 2 of 3 ten-minute windows (the guard runs once per window): a sliding 30 minutes, so two
+  # stops either side of a clock boundary still count.
+  period              = 600
+  evaluation_periods  = 3
+  datapoints_to_alarm = 2
   comparison_operator = "GreaterThanOrEqualToThreshold"
-  threshold           = 2
+  threshold           = 1
   treat_missing_data  = "notBreaching"
 
   alarm_actions = [aws_sns_topic.alerts.arn]

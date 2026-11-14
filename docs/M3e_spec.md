@@ -175,14 +175,14 @@ The same rules as the old `verify` (length limit first, then record the duration
   - no dispatched job waiting: no `queued` job with `verified_duration_ms` set and `created_at` within 3 hours (the dispatcher gives no request longer, §3 step 7);
   - no job of any status has `updated_at` within 30 minutes.
 
-  It then logs `GPU_GUARD_STOPPED <instance count> <desired count>`.
+  It logs `GPU_GUARD_STOPPED <instance count> <desired count>` before the call, so a refusal because the last stop is still in progress (logged, not raised) still counts; any other refusal fails the run.
 - **Reads our database, not the backlog metric** that the scale-in alarm uses, so one broken signal cannot blind both.
 - A job created in the last 30 minutes blocks it, because `reserve` sets `updated_at`. So it never stops a GPU that a fresh upload is waiting for.
 - **A dispatched job waiting blocks it:** a slow start-up can pass 30 minutes (provisioning up to 10, model loading up to 30) while the job waits for it, and stopping the GPU then would only make SageMaker start it again. The rule reads our database, so it does not depend on what `DescribeEndpoint` reports while an instance starts.
 - **It is never more eager than SageMaker:** the 30-minute quiet rule means it acts at least 30 minutes after the last job activity, while scale-in acts after 7.
 - **Alarms:**
   - a log metric filter on `GPU_GUARD_STOPPED` feeds the alarm `neurolens-gpu-guard-stopped`, which emails the alerts topic (the normal scale-in failed, so a person should look);
-  - the same metric feeds `neurolens-gpu-guard-stuck` when it sums to 2 or more in 30 minutes: the guard had to stop twice, so its first stop did not work (after a real stop, new work keeps the guard away for 30 minutes). AWS accepting the call is no proof the GPU stops; this email says a person must delete the endpoint by hand;
+  - the same metric feeds `neurolens-gpu-guard-stuck` when 2 of the last 3 ten-minute windows have a stop: the guard had to stop twice, so its first stop did not work (after a real stop, new work keeps the guard away for 30 minutes). AWS accepting the call is no proof the GPU stops; this email says a person must delete the endpoint by hand;
   - the guard's own failures use the existing per-Lambda error alarm;
   - a missing run (EventBridge not invoking) uses an alarm on its `Invocations` < 1 in 30 minutes, the pattern of `breaker_not_running`.
 - **Permissions:** `sagemaker:DescribeEndpoint` and `sagemaker:UpdateEndpointWeightsAndCapacities` on our endpoint only, plus `application-autoscaling:DescribeScalableTargets`.

@@ -14,8 +14,9 @@ ENDPOINT = "neurolens-gpu-test"
 
 
 class FakeSageMaker:
-    def __init__(self, instances, desired=None):
+    def __init__(self, instances, desired=None, refuse=None):
         self.instances = instances
+        self.refuse = refuse
         self.desired = instances if desired is None else desired
         self.endpoints = []
         self.updates = []
@@ -33,6 +34,8 @@ class FakeSageMaker:
 
     def update_endpoint_weights_and_capacities(self, **kwargs):
         self.updates.append(kwargs)
+        if self.refuse:
+            raise RuntimeError(self.refuse)
         return {}
 
 
@@ -52,9 +55,9 @@ def gpu_guard():
     return gpu_guard
 
 
-def run_check(db, *, instances=1, desired=None, min_capacity=0):
+def run_check(db, *, instances=1, desired=None, min_capacity=0, refuse=None):
     module = gpu_guard()
-    sagemaker = FakeSageMaker(instances, desired)
+    sagemaker = FakeSageMaker(instances, desired, refuse)
     appscaling = FakeAppScaling(min_capacity)
     stopped = module.check(db, sagemaker=sagemaker, appscaling=appscaling, endpoint=ENDPOINT)
     return stopped, sagemaker, appscaling
@@ -175,3 +178,19 @@ def test_handler_stops_the_endpoint_named_in_the_environment(aws, db, monkeypatc
     assert sagemaker.updates == [stop_call()]
     assert sagemaker.endpoints == [{"EndpointName": ENDPOINT}]
     assert appscaling.calls[0]["ResourceIds"] == [f"endpoint/{ENDPOINT}/variant/main"]
+
+
+def test_a_stop_refused_as_in_progress_is_still_counted(db, caplog):
+    # The stuck alarm must see a GPU the last stop has not removed yet.
+    caplog.set_level(logging.WARNING)
+    refusal = "ValidationException: Cannot update while an update is in-progress"
+    stopped, _, _ = run_check(db, instances=1, desired=0, refuse=refusal)
+    assert stopped is True
+    assert "GPU_GUARD_STOPPED 1 0" in caplog.text
+
+
+def test_any_other_refusal_fails_loudly(db):
+    import pytest
+
+    with pytest.raises(RuntimeError):
+        run_check(db, instances=1, refuse="AccessDeniedException")
