@@ -135,12 +135,12 @@ svg.focus .node:not(.on) { opacity: 0.35; }
 <div class="wrap">
   <header>
     <h1>NeuroLens on AWS</h1>
-    <p>A website on Lambda handles sign-in and credit; a SageMaker GPU starts only when a video waits.</p>
+    <p>A website on Lambda handles sign-in and credit; a SageMaker GPU starts only when a video waits, or when an admin keeps one warm for a live event.</p>
   </header>
 
   <section aria-label="Design principles">
     <div class="principles">
-      <button class="principle" data-principle="pay" aria-pressed="false"><strong>Pay only while working</strong><span>The GPU starts when a video waits and stops after 7 idle minutes. The catch: the first video after a quiet spell waits about 10 minutes.</span></button>
+      <button class="principle" data-principle="pay" aria-pressed="false"><strong>Pay only while working</strong><span>The GPU starts when a video waits and stops after 7 idle minutes. The catch: the first video after a quiet spell waits about 10 minutes, unless an admin keeps a GPU warm for a few hours during an event.</span></button>
       <button class="principle" data-principle="once" aria-pressed="false"><strong>Every video is charged or refunded exactly once</strong><span>One job claim; every balance change recorded.</span></button>
       <button class="principle" data-principle="private" aria-pressed="false"><strong>Nothing exposed</strong><span>Three guarded entrances; no database network entrance.</span></button>
     </div>
@@ -284,7 +284,7 @@ svg.focus .node:not(.on) { opacity: 0.35; }
     "h": 90,
     "t": "GPU",
     "s": "SageMaker Async · g6e L40S",
-    "s2": "fallback GPUs · at most one"
+    "s2": "fallback GPUs · one by default"
   },
   "errorsns": {
     "x": 710,
@@ -1364,7 +1364,7 @@ svg.focus .node:not(.on) { opacity: 0.35; }
     "core": "Lets you upload a video and read its brain-response chart.",
     "here": [
       "Uploads straight to S3 with a short-lived permit after credit is reserved.",
-      "Offers sharing at upload and an audience-retention curve later. <details><summary>Sharing rules</summary>A valid curve returns the video’s credit once, if it has been public 7 days and meets the length and 1,000-view checks when we can check them. Stopping sharing starts deletion; the reaper retries unfinished deletes.</details>"
+      "Offers sharing at upload and an audience-retention curve later. <details><summary>Sharing rules</summary>A valid curve returns the video’s credit once, if it meets the length and 1,000-view checks when we can check them. Stopping sharing starts deletion; the reaper retries unfinished deletes.</details>"
     ],
     "cost": "$0 of AWS compute runs in the browser.",
     "what": "Your web browser: displays the page and sends requests."
@@ -1402,7 +1402,7 @@ svg.focus .node:not(.on) { opacity: 0.35; }
   "webfn": {
     "core": "Checks identity and ownership before reserving credit or showing a job.",
     "here": [
-      "Flask on Lambda serves short bursts; checks sessions and job ownership. The team grants credit with a script.",
+      "Flask on Lambda serves short bursts; checks sessions and job ownership. The team grants credit with a script or from the admin controls.",
       "Sessions last 30 days of inactivity; sign-out deletes the row immediately. <details><summary>Limited permissions</summary>An account without credit cannot submit paid work; job lookups show only its own jobs. Each Lambda has a role limited to its task; none has general administration rights. A browser session gives no AWS permission to invoke SageMaker or query Aurora directly.</details>"
     ],
     "cost": "$0 compute while no requests run.",
@@ -1462,7 +1462,7 @@ svg.focus .node:not(.on) { opacity: 0.35; }
   "gpu": {
     "core": "Runs the model on demand and returns to zero when idle.",
     "here": [
-      "Runs our container on at most one GPU (g6e L40S first, then fallback types); cold upload-to-start takes about 10 minutes.",
+      "Runs our container on one GPU by default, two only if the account's quota allows (g6e L40S first, then fallback types); cold upload-to-start takes about 10 minutes.",
       "Claims a job, saves results, then charges or refunds. <details><summary>One owner, limited access</summary>Only one container can hold a database claim. Publishing a result and ending a job check whether it already finished; every balance change has a ledger row. Loaded weights serve consecutive videos. The container role can access only required S3 folders and authorized Data API calls; it cannot change roles or scaling policies.</details>"
     ],
     "cost": "$2.61 per GPU-hour on g6e (estimate).",
@@ -1541,7 +1541,7 @@ svg.focus .node:not(.on) { opacity: 0.35; }
     "core": "Stops an idle GPU if normal scale-down fails.",
     "here": [
       "Every 10 minutes, checks live claims, dispatched work and recent database activity.",
-      "After a quiet period, requests zero capacity and emails; independent of scaling metrics. <details><summary>Narrow permissions</summary>Its SageMaker actions can inspect and stop only this endpoint. An upload racing the final check stays queued; it may cause another cold start but is charged at most once.</details>"
+      "After a quiet period with no keep-warm set, requests zero capacity and emails; independent of scaling metrics. <details><summary>Narrow permissions</summary>Its SageMaker actions can inspect and stop only this endpoint. An upload racing the final check stays queued; it may cause another cold start but is charged at most once.</details>"
     ],
     "cost": "$0 Lambda compute between checks; database wake-ups still bill.",
     "what": "A scheduled Lambda: runs a short checking program at set times."
@@ -1584,7 +1584,7 @@ svg.focus .node:not(.on) { opacity: 0.35; }
         "e_token",
         "e_webdb"
       ],
-      "c": "Sign in with Google or email through Cognito. The web app stores a session lasting 30 days of inactivity."
+      "c": "Sign in with Google or email through Cognito (event guests scan a QR pass instead). The web app stores a session lasting 30 days of inactivity."
     },
     {
       "e": [
@@ -1592,7 +1592,7 @@ svg.focus .node:not(.on) { opacity: 0.35; }
         "e_api",
         "e_webdb"
       ],
-      "c": "Pick a video; optionally share it. The web app reserves estimated credit and gives a 5-minute upload permit. The team grants credit with a script."
+      "c": "Pick a video; optionally share it. The web app reserves estimated credit and gives a 5-minute upload permit. The team grants credit with a script or from the admin controls."
     },
     {
       "e": [

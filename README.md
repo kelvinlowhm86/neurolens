@@ -51,7 +51,7 @@ While working, run the file for the part you changed (`pytest tests/test_m3i_cur
 - [`experiments/`](experiments/): the report experiments and side trials. See [`experiments/README.md`](experiments/README.md).
 - [`notebooks/`](notebooks/): the original local prototype notebooks. See [`notebooks/README.md`](notebooks/README.md).
 - [`tests/`](tests/): pytest; [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs them on every push. [`docs/`](docs/): specs, evidence, study materials and the submitted course documents. See [`docs/README.md`](docs/README.md).
-- [`docs/architecture.html`](docs/architecture.html): the architecture page, one clickable diagram of how it runs on AWS (download the repo and open it in a browser; GitHub shows it as code).
+- [`docs/architecture.html`](docs/architecture.html): the architecture page, the clickable version of the diagram in [How it runs](#how-it-runs) (download the repo and open it in a browser; GitHub shows it as code).
 - [`trailer/`](trailer/): the launch video, made with Remotion; separate from the product. See [`trailer/README.md`](trailer/README.md).
 
 ## How it works
@@ -123,6 +123,30 @@ TRIBE v2 itself (`facebook/tribev2`) is freely downloadable under CC BY-NC 4.0.
 ## Deploying on AWS
 
 Two roles appear in these docs. **The account owner** owns the AWS account and grants access. **The operator** sets up and deploys NeuroLens in that account, and also handles alerts and access requests (the account-owner guide, `infra/iam/ACCOUNT_OWNER.md`, calls them the deployer).
+
+### How it runs
+
+A website on Lambda handles sign-in and credit; the GPU starts only when a video is waiting and stops after 7 idle minutes. Each video is charged once on success or refunded on failure.
+
+```mermaid
+flowchart TB
+    U["Your browser"] -->|HTTPS| CF["CloudFront<br/>page + API address"]
+    CF --> W["Web app<br/>Lambda · Flask"]
+    W -->|sign-in| COG["Cognito<br/>Google or email"]
+    W -->|sessions, credit, jobs| DB[("Aurora database<br/>Data API only")]
+    U -->|"upload with a 5-min permit"| S3[("S3 bucket<br/>uploads · results")]
+    S3 -->|new upload| Q["Job queue<br/>SQS"]
+    Q --> D["Dispatcher<br/>Lambda · checks credit"]
+    D -->|"submit, start GPU"| GPU["GPU<br/>SageMaker async · L40S<br/>starts on demand"]
+    GPU <-->|video in, result out| S3
+    GPU -->|"claim, charge or refund"| DB
+    W -->|written report| R["AI report<br/>Lambda · Bedrock"]
+    A["Scaling alarms + GPU guard"] -.->|"stop after 7 idle min"| GPU
+```
+
+For every part, its limits and what happens when something breaks, open the clickable diagram [`docs/architecture.html`](docs/architecture.html) in a browser.
+
+### Shipping changes
 
 The GPU runs in a SageMaker asynchronous endpoint. After the first-time setup (`infra/terraform/README.md`), shipping a new GPU image is three steps:
 
