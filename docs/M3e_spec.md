@@ -157,7 +157,7 @@ The same rules as the old `verify` (length limit first, then record the duration
 - **`stop_work.sh`** (emergency pause):
   - deletes any keep-warm scheduled action first, so it cannot fire after the pause; none existing (`ObjectNotFoundException`, the normal case) is not a problem;
   - sets the scalable target's max and min to 0, reads the target back and fails loudly unless both are 0;
-  - then polls `DescribeEndpoint` (every 10 s, up to 15 min). AWS refuses a capacity change while the endpoint is updating, and setting the target to 0/0 often starts such an update itself, so the script waits while the status is `Creating`, `Updating` or `SystemUpdating`; once `InService`, it calls `UpdateEndpointWeightsAndCapacities(DesiredInstanceCount=0)` only if the desired count is not already 0 (a refusal that names an in-progress update just means waiting again; any other failure is a problem). Any other status (`Failed`, `RollingBack`, `OutOfService`, `Deleting`) is a problem;
+  - then polls `DescribeEndpoint` (every 10 s, up to 15 min) and, on every poll where the desired count is not 0, sends `UpdateEndpointWeightsAndCapacities(DesiredInstanceCount=0)`, whatever the status. Setting the target to 0/0 makes AWS try the same change itself, and that attempt can fail silently, so the script never relies on it. A refusal that names an in-progress update just means trying again on the next poll; any other failure is a problem. `Creating`, `Updating` and `SystemUpdating` mean keep polling; any other status than these and `InService` (`Failed`, `RollingBack`, `OutOfService`, `Deleting`) is a problem;
   - prints `ALL STOPPED` only when the endpoint is `InService` with desired and current count 0. Still updating or above 0 after 15 min is a problem that names the last status and count.
 
   A running job dies and is refunded (§5). Uploads are refused while paused (§8), and one already uploading when the pause starts is refunded by the dispatcher (§3 step 8).
@@ -169,19 +169,20 @@ The same rules as the old `verify` (length limit first, then record the duration
 
 ### 6c. GPU guard (`neurolens/lambdas/gpu_guard.py`, every 10 minutes)
 - **Stops the GPU** (`UpdateEndpointWeightsAndCapacities(DesiredInstanceCount=0)`) when all of these hold:
-  - `DescribeEndpoint` shows at least one instance;
+  - `DescribeEndpoint` shows at least one instance, or a desired count of at least one (a start AWS has not yet been able to fill: with no GPU free it keeps trying, and the GPU would arrive later with nobody waiting for it);
   - the scalable target's min is 0 (no keep-warm);
   - no live claim: no `processing` job with `updated_at` within 90 s (the heartbeat is 50 s, so a dead worker's row does not keep the GPU on);
   - no dispatched job waiting: no `queued` job with `verified_duration_ms` set and `created_at` within 3 hours (the dispatcher gives no request longer, §3 step 7);
   - no job of any status has `updated_at` within 30 minutes.
 
-  It then logs `GPU_GUARD_STOPPED <instance count>`.
+  It then logs `GPU_GUARD_STOPPED <instance count> <desired count>`.
 - **Reads our database, not the backlog metric** that the scale-in alarm uses, so one broken signal cannot blind both.
 - A job created in the last 30 minutes blocks it, because `reserve` sets `updated_at`. So it never stops a GPU that a fresh upload is waiting for.
 - **A dispatched job waiting blocks it:** a slow start-up can pass 30 minutes (provisioning up to 10, model loading up to 30) while the job waits for it, and stopping the GPU then would only make SageMaker start it again. The rule reads our database, so it does not depend on what `DescribeEndpoint` reports while an instance starts.
 - **It is never more eager than SageMaker:** the 30-minute quiet rule means it acts at least 30 minutes after the last job activity, while scale-in acts after 7.
 - **Alarms:**
   - a log metric filter on `GPU_GUARD_STOPPED` feeds the alarm `neurolens-gpu-guard-stopped`, which emails the alerts topic (the normal scale-in failed, so a person should look);
+  - the same metric feeds `neurolens-gpu-guard-stuck` when it sums to 2 or more in 30 minutes: the guard had to stop twice, so its first stop did not work (after a real stop, new work keeps the guard away for 30 minutes). AWS accepting the call is no proof the GPU stops; this email says a person must delete the endpoint by hand;
   - the guard's own failures use the existing per-Lambda error alarm;
   - a missing run (EventBridge not invoking) uses an alarm on its `Invocations` < 1 in 30 minutes, the pattern of `breaker_not_running`.
 - **Permissions:** `sagemaker:DescribeEndpoint` and `sagemaker:UpdateEndpointWeightsAndCapacities` on our endpoint only, plus `application-autoscaling:DescribeScalableTargets`.
