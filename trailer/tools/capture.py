@@ -18,6 +18,8 @@ SITE = "https://df6girqyykyfa.cloudfront.net"
 OUT = Path(__file__).resolve().parents[1] / "public" / "walkthrough" / "captures"
 SCALE = 3
 VIEWPORT = {"width": 1470, "height": 900}
+# Text-heavy panels: a narrower page wraps them into compact blocks that read large on screen.
+NARROW = {"width": 860, "height": 1100}
 
 # Hide page chrome that must never appear in a crop.
 HIDE_CSS = """
@@ -80,6 +82,8 @@ def capture_result(page: Page) -> None:
     page.wait_for_timeout(2000)
     shot(page, "#chartCard", "chart_muted")
 
+
+def capture_report(page: Page) -> None:
     open_sample(page, "Swee Choon", 10)
     page.locator("#reportTabBtn").click()
     page.wait_for_timeout(3000)
@@ -98,7 +102,6 @@ def capture_compare(page: Page) -> None:
     page.wait_for_timeout(8000)
     shot(page, "#compareVerdict", "compare_verdict")
     shot(page, ".compare-chart-panel", "compare_chart")
-    shot(page, "#compareVideos", "compare_videos")
 
 
 def main() -> int:
@@ -106,10 +109,12 @@ def main() -> int:
     with sync_playwright() as pw:
         browser = pw.chromium.launch(channel="chrome", headless=True)
         page = browser.new_page(viewport=VIEWPORT, device_scale_factor=SCALE)
+        narrow = browser.new_page(viewport=NARROW, device_scale_factor=SCALE)
         try:
-            for step in (capture_home, capture_result, capture_compare):
+            for step, target in ((capture_home, page), (capture_result, page),
+                                 (capture_report, narrow), (capture_compare, narrow)):
                 print(step.__name__)
-                step(page)
+                step(target)
         finally:
             browser.close()
     return 0

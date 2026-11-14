@@ -2,9 +2,8 @@ import React from 'react';
 import {
   AbsoluteFill, Easing, OffthreadVideo, Sequence, interpolate, staticFile, useCurrentFrame,
 } from 'remotion';
-import {C} from '../edit/ui';
 import {
-  FADE, FPS, HEIGHT, PANEL_MAX_H, PANEL_MAX_W, Rect, Shot, SOURCE_H, SOURCE_W, TOP_CROP,
+  FADE, HEIGHT, PANEL_MAX_H, PANEL_MAX_W, Shot, SOURCE_H, SOURCE_W, TOP_CROP,
   WIDTH, sec,
 } from './timeline';
 
@@ -47,41 +46,6 @@ const cropAt = (shot: Shot, p: number) => {
   return {x, y, w, h};
 };
 
-const sourceToPanel = (x: number, y: number, crop: Rect, panel: {w: number; h: number}) => ({
-  x: (x - crop.x) * (panel.w / crop.w),
-  y: (y - crop.y) * (panel.h / crop.h),
-});
-
-export const sourceTimeToLocal = (shot: Shot, t: number) => {
-  let acc = 0;
-  for (const s of shot.segments) {
-    const end = s.sourceStart + (s.frames / FPS) * s.rate;
-    if (t >= s.sourceStart && t <= end) {
-      return acc + ((t - s.sourceStart) / s.rate) * FPS;
-    }
-    acc += s.frames;
-  }
-  return null;
-};
-
-const Ring: React.FC<{
-  f: number; shot: Shot; crop: Rect; panel: {w: number; h: number};
-}> = ({f, shot, crop, panel}) => {
-  const ring = (shot.rings ?? []).map((r) => ({r, local: sourceTimeToLocal(shot, r.sourceTime)}))
-    .find(({local}) => local !== null && f >= local && f < local + 15);
-  if (!ring || ring.local === null) return null;
-  const age = clamp((f - ring.local) / 15, 0, 1);
-  const pos = sourceToPanel(ring.r.x, ring.r.y, crop, panel);
-  const size = 60;
-  return <div style={{
-    position: 'absolute', left: pos.x, top: pos.y, width: size, height: size,
-    transform: `translate(-50%, -50%) scale(${0.08 + age * 0.92})`,
-    borderRadius: '50%', border: `3px solid ${C.hot}`,
-    opacity: (1 - age) * 0.92,
-    boxShadow: '0 0 20px rgba(255,138,42,.5)',
-  }} />;
-};
-
 const ShotContent: React.FC<{shot: Shot; total: number}> = ({shot, total}) => {
   const f = useCurrentFrame();
   const p = total <= 1 ? 0 : clamp(f / (total - 1), 0, 1);
@@ -116,7 +80,6 @@ const ShotContent: React.FC<{shot: Shot; total: number}> = ({shot, total}) => {
           />
         </Sequence>;
       })}
-      <Ring f={f} shot={shot} crop={crop} panel={panel} />
       <div style={{position: 'absolute', inset: 0, borderRadius: 18, boxShadow: 'inset 0 0 0 1px rgba(255,255,255,.05)'}} />
     </div>
   </AbsoluteFill>;

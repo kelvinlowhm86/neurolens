@@ -6,8 +6,8 @@ export const SOURCE_H = 1912;
 export const DURATION_S = 116;
 export const DURATION = DURATION_S * FPS;
 export const FADE = 12;
-export const PANEL_MAX_W = 1680;
-export const PANEL_MAX_H = 860;
+export const PANEL_MAX_W = 1760;
+export const PANEL_MAX_H = 940;
 export const TOP_CROP = 240;
 
 export const sec = (s: number) => Math.round(s * FPS);
@@ -15,7 +15,6 @@ export const sec = (s: number) => Math.round(s * FPS);
 export type Rect = {x: number; y: number; w: number; h: number};
 export type CropState = {at: number; cx: number; cy: number; zoom: number};
 export type Segment = {sourceStart: number; rate: number; frames: number};
-export type Ring = {sourceTime: number; x: number; y: number};
 export type Shot = {
   id: string;
   src: string;
@@ -23,7 +22,19 @@ export type Shot = {
   base: Rect;
   states: CropState[];
   segments: Segment[];
-  rings?: Ring[];
+};
+
+export type Cam = {at: number; cx: number; cy: number; zoom: number};
+export type Spot = {from: number; to: number; x: number; y: number; w: number; h: number};
+export type Still = {
+  id: string;
+  img: string;
+  w: number;
+  h: number;
+  start: number;
+  dur: number;
+  cams: Cam[];
+  spots?: Spot[];
 };
 
 const seg = (sourceStart: number, rate: number, seconds: number): Segment => ({
@@ -34,95 +45,86 @@ const seg = (sourceStart: number, rate: number, seconds: number): Segment => ({
 
 export const SHOTS: Shot[] = [
   {
-    id: 's1-open', src: 'walkthrough/s1.mp4', start: 2.5,
-    base: {x: 220, y: 490, w: 2500, h: 1280},
-    states: [{at: 0, cx: 1470, cy: 1130, zoom: 1}, {at: 1, cx: 1470, cy: 1140, zoom: 1.05}],
-    segments: [seg(0, 0.68, 12.5)],
-  },
-  {
     id: 'upload', src: 'walkthrough/s3_upload.mp4', start: 18.2,
-    base: {x: 870, y: 805, w: 1200, h: 615},
-    states: [{at: 0, cx: 1470, cy: 1112, zoom: 1}, {at: 1, cx: 1450, cy: 1150, zoom: 1.08}],
-    segments: [seg(0, 2.5, 4.8)],
-    rings: [{sourceTime: 10.7, x: 1157, y: 1310}],
+    base: {x: 1060, y: 800, w: 860, h: 520},
+    states: [{at: 0, cx: 1470, cy: 1060, zoom: 1}, {at: 1, cx: 1460, cy: 1080, zoom: 1.05}],
+    segments: [seg(6.6, 1, 4.8)],
   },
   {
     id: 'waiting', src: 'walkthrough/s5_waiting.mp4', start: 23,
-    base: {x: 880, y: 460, w: 2030, h: 1040},
-    states: [{at: 0, cx: 1895, cy: 980, zoom: 1}, {at: 1, cx: 1895, cy: 980, zoom: 1.02}],
-    segments: [seg(3, 1, 1.2)],
+    base: {x: 1000, y: 470, w: 1900, h: 860},
+    states: [{at: 0, cx: 1950, cy: 900, zoom: 1}, {at: 1, cx: 1950, cy: 900, zoom: 1.04}],
+    segments: [seg(2, 1, 5)],
   },
   {
-    id: 'progress', src: 'walkthrough/s5_progress.mp4', start: 24.2,
-    base: {x: 880, y: 460, w: 2030, h: 1040},
-    states: [{at: 0, cx: 1895, cy: 980, zoom: 1.02}, {at: 1, cx: 1895, cy: 1000, zoom: 1.04}],
-    segments: [seg(0, 1, 1), seg(1, 20, 1)],
+    id: 'brain', src: 'walkthrough/s8.mp4', start: 47,
+    base: {x: 140, y: 1220, w: 560, h: 520},
+    states: [{at: 0, cx: 420, cy: 1480, zoom: 1}, {at: 1, cx: 420, cy: 1480, zoom: 1.04}],
+    segments: [seg(5, 1, 3)],
+  },
+];
+
+export const MUTE_DROP = 56.6;
+
+export const STILLS: Still[] = [
+  {
+    id: 'headline', img: 'walkthrough/captures/home_headline.png', w: 1470, h: 366, start: 2.5, dur: 4.5,
+    cams: [{at: 0, cx: .5, cy: .5, zoom: 1}, {at: 2.6, cx: .5, cy: .5, zoom: 1.06}],
   },
   {
-    id: 'result', src: 'walkthrough/s5_result.mp4', start: 26.2,
-    base: {x: 880, y: 460, w: 2030, h: 1040},
-    states: [{at: 0, cx: 1900, cy: 990, zoom: 1.01}, {at: 1, cx: 1915, cy: 1020, zoom: 1.04}],
-    segments: [seg(0, 1, 1.8)],
+    id: 'chart-open', img: 'walkthrough/captures/chart.png', w: 3006, h: 1335, start: 7, dur: 4.4,
+    cams: [{at: 0, cx: .5, cy: .5, zoom: 1}, {at: 1.5, cx: .3, cy: .45, zoom: 1.5}],
   },
   {
-    id: 's6-zoom', src: 'walkthrough/s6.mp4', start: 29.2,
-    base: {x: 840, y: 650, w: 2100, h: 1100},
-    states: [{at: 0, cx: 1890, cy: 950, zoom: 1}, {at: 1, cx: 1890, cy: 1430, zoom: 1.03}],
-    segments: [seg(0, 1, 8.8)],
+    id: 'brain-open', img: 'walkthrough/captures/brain.png', w: 1137, h: 1311, start: 11.4, dur: 3.6,
+    cams: [{at: 0, cx: .5, cy: .4, zoom: 1}, {at: 1.2, cx: .5, cy: .4, zoom: 1.12}],
   },
   {
-    id: 's6-seeing', src: 'walkthrough/s6.mp4', start: 38,
-    base: {x: 870, y: 1212, w: 1370, h: 700},
-    states: [{at: 0, cx: 1555, cy: 1562, zoom: 1}, {at: 1, cx: 1500, cy: 1580, zoom: 1.06}],
-    segments: [seg(16, 1, 5)],
-    rings: [{sourceTime: 17.5, x: 1446, y: 1450}],
+    id: 'chart', img: 'walkthrough/captures/chart.png', w: 3006, h: 1335, start: 29.2, dur: 8.8,
+    cams: [{at: 0, cx: .5, cy: .5, zoom: 1}, {at: 5.6, cx: .3, cy: .4, zoom: 1.7}],
+    spots: [{from: 1.2, to: 4.4, x: .82, y: .02, w: .17, h: .09}, {from: 6.9, to: 8.6, x: .02, y: .47, w: .5, h: .08}],
   },
   {
-    id: 's7-moment', src: 'walkthrough/s7.mp4', start: 43,
-    base: {x: 900, y: 600, w: 1900, h: 800},
-    states: [{at: 0, cx: 1850, cy: 1000, zoom: 1}, {at: 1, cx: 1750, cy: 1050, zoom: 1.15}],
-    segments: [seg(3, 2.25, 4)],
-    rings: [{sourceTime: 4, x: 1287, y: 753}],
+    id: 'seeing', img: 'walkthrough/captures/strip_seeing.png', w: 948, h: 777, start: 38, dur: 2.4,
+    cams: [{at: 0, cx: .5, cy: .5, zoom: 1}],
+    spots: [{from: .6, to: 2.2, x: .68, y: .02, w: .31, h: .12}],
   },
   {
-    id: 's8-brain', src: 'walkthrough/s8.mp4', start: 47,
-    base: {x: 20, y: 1150, w: 800, h: 750},
-    states: [{at: 0, cx: 420, cy: 1525, zoom: 1}, {at: 1, cx: 420, cy: 1500, zoom: 1.05}],
-    segments: [seg(5, 3.333, 3)],
-    rings: [{sourceTime: 5, x: 400, y: 1500}],
+    id: 'parts', img: 'walkthrough/captures/strips_open.png', w: 3006, h: 861, start: 40.4, dur: 2.6,
+    cams: [{at: 0, cx: .38, cy: .5, zoom: 1.25}],
+    spots: [{from: .8, to: 2.5, x: .0, y: .18, w: .75, h: .55}],
   },
   {
-    id: 's9-report', src: 'walkthrough/s9.mp4', start: 50,
-    base: {x: 860, y: 500, w: 2000, h: 950},
-    states: [{at: 0, cx: 1850, cy: 900, zoom: 1}, {at: 1, cx: 1850, cy: 1200, zoom: 1.15}],
-    segments: [seg(0, 2.8, 5)],
-    rings: [{sourceTime: 9.5, x: 1010, y: 993}],
+    id: 'moment', img: 'walkthrough/captures/chart_moment.png', w: 3006, h: 1335, start: 43, dur: 4,
+    cams: [{at: 0, cx: .5, cy: .5, zoom: 1}, {at: .8, cx: .22, cy: .45, zoom: 2.2}],
+    spots: [{from: 2.1, to: 3.9, x: .06, y: .32, w: .3, h: .28}],
   },
   {
-    id: 's10-mute', src: 'walkthrough/s10.mp4', start: 55,
-    base: {x: 840, y: 480, w: 2100, h: 950},
-    states: [{at: 0, cx: 1875, cy: 920, zoom: 1}, {at: 1, cx: 1850, cy: 1100, zoom: 1.15}],
-    segments: [seg(2, 2.286, 3.5)],
-    rings: [{sourceTime: 4, x: 1320, y: 619}],
+    id: 'report-head', img: 'walkthrough/captures/report_head.png', w: 2313, h: 141, start: 50, dur: 1.8,
+    cams: [{at: 0, cx: .5, cy: .45, zoom: 1}, {at: .3, cx: .5, cy: .45, zoom: 1.04}],
   },
   {
-    id: 's11-compare', src: 'walkthrough/s11.mp4', start: 58.5,
-    base: {x: 30, y: 400, w: 2880, h: 1060},
-    states: [{at: 0, cx: 1470, cy: 930, zoom: 1}, {at: 1, cx: 1470, cy: 960, zoom: 1.05}],
-    segments: [seg(1, 1, 3.5)],
-    rings: [{sourceTime: 2, x: 2652, y: 558}],
+    id: 'report-moment', img: 'walkthrough/captures/report_moment_1.png', w: 2313, h: 480, start: 51.8, dur: 3.2,
+    cams: [{at: 0, cx: .5, cy: .5, zoom: 1}],
+    spots: [{from: 1.2, to: 3.1, x: .0, y: .68, w: 1, h: .26}],
   },
   {
-    id: 's11b-verdict', src: 'walkthrough/s11b.mp4', start: 62,
-    base: {x: 40, y: 660, w: 2860, h: 800},
-    states: [{at: 0, cx: 1470, cy: 1060, zoom: 1}, {at: 1, cx: 1470, cy: 1040, zoom: 1.06}],
-    segments: [seg(4, 1, 4)],
+    id: 'muted', img: 'walkthrough/captures/chart_muted.png', w: 3006, h: 1335, start: 55, dur: 3.5,
+    cams: [{at: 0, cx: .3, cy: .3, zoom: 1.6}, {at: 1.9, cx: .5, cy: .5, zoom: 1}],
+    spots: [{from: .4, to: 1.7, x: .2, y: .09, w: .14, h: .06}],
   },
   {
-    id: 's1-close', src: 'walkthrough/s1.mp4', start: 103,
-    base: {x: 220, y: 490, w: 2500, h: 1280},
-    states: [{at: 0, cx: 1470, cy: 1140, zoom: 1.05}, {at: 1, cx: 1470, cy: 1130, zoom: 1}],
-    segments: [seg(0, 1, 7)],
+    id: 'compare', img: 'walkthrough/captures/compare_chart.png', w: 2451, h: 639, start: 58.5, dur: 3.6,
+    cams: [{at: 0, cx: .5, cy: .5, zoom: 1}, {at: 1.4, cx: .3, cy: .55, zoom: 1.35}],
+  },
+  {
+    id: 'verdict', img: 'walkthrough/captures/compare_verdict.png', w: 2451, h: 579, start: 62.1, dur: 3.9,
+    cams: [{at: 0, cx: .5, cy: .5, zoom: 1}],
+    spots: [{from: .9, to: 3.7, x: .0, y: .33, w: 1, h: .2}],
+  },
+  {
+    id: 'close-chart', img: 'walkthrough/captures/chart.png', w: 3006, h: 1335, start: 103, dur: 7,
+    cams: [{at: 0, cx: .5, cy: .5, zoom: 1.08}, {at: 1.5, cx: .5, cy: .5, zoom: 1}],
   },
 ];
 
@@ -174,22 +176,27 @@ export const CARDS: Card[] = [
 
 export const ROWS: {label: string; mid: number}[] = [
   {label: 'open-card', mid: 1.25},
-  {label: 's1-open', mid: 8.75},
+  {label: 'headline', mid: 4.75},
+  {label: 'chart-open', mid: 9.2},
+  {label: 'brain-open', mid: 13.2},
   {label: 'wordmark', mid: 16},
   {label: 'use-card', mid: 17.6},
   {label: 'upload', mid: 20.6},
-  {label: 'wait-progress-result', mid: 25.5},
+  {label: 'waiting', mid: 25.5},
   {label: 'read-card', mid: 28.6},
-  {label: 's6-zoom', mid: 33.6},
-  {label: 's6-seeing', mid: 40.5},
-  {label: 's7-moment', mid: 45},
-  {label: 's8-brain', mid: 48.5},
-  {label: 's9-report', mid: 52.5},
-  {label: 's10-mute', mid: 56.75},
-  {label: 's11-compare', mid: 62.25},
+  {label: 'chart', mid: 33.6},
+  {label: 'seeing', mid: 39.2},
+  {label: 'parts', mid: 41.7},
+  {label: 'moment', mid: 45},
+  {label: 'brain', mid: 48.5},
+  {label: 'report-head', mid: 50.9},
+  {label: 'report-moment', mid: 53.4},
+  {label: 'muted', mid: 56.75},
+  {label: 'compare', mid: 60.3},
+  {label: 'verdict', mid: 64.05},
   {label: 'built-card', mid: 66.75},
   {label: 'diagram', mid: 85.25},
-  {label: 's1-close', mid: 106.5},
+  {label: 'close-chart', mid: 106.5},
   {label: 'close-card', mid: 113},
 ];
 
@@ -228,3 +235,30 @@ export const DIAGRAM_APPEAR = {
   watchdogA: DIAGRAM.line19 + 0.1,
 };
 export const DIAGRAM_POPS = Object.values(DIAGRAM_APPEAR);
+
+// Visual layers must not overlap (cards are excluded: their fades cross over neighbours).
+export function checkCoverage() {
+  const layers = [
+    ...SHOTS.map((s) => ({
+      id: s.id,
+      start: s.start,
+      end: s.start + s.segments.reduce((a, seg) => a + seg.frames, 0) / FPS,
+    })),
+    ...STILLS.map((s) => ({id: s.id, start: s.start, end: s.start + s.dur})),
+    {id: 'diagram', start: DIAGRAM.start, end: DIAGRAM.end},
+  ];
+  for (let i = 0; i < layers.length; i++) {
+    for (let j = i + 1; j < layers.length; j++) {
+      const a = layers[i];
+      const b = layers[j];
+      const overlap = Math.min(a.end, b.end) - Math.max(a.start, b.start);
+      if (overlap > 0.05) {
+        throw new Error(
+          `Visual layers overlap by ${overlap.toFixed(2)}s: ${a.id} (${a.start}-${a.end}) and ${b.id} (${b.start}-${b.end})`,
+        );
+      }
+    }
+  }
+}
+
+checkCoverage();

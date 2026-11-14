@@ -4,9 +4,11 @@ import {
 } from 'remotion';
 import {C, fontFamily} from '../edit/ui';
 import {Diagram} from './Diagram';
-import {Fade, ShotLayer, sourceTimeToLocal} from './Panel';
+import {Fade, ShotLayer} from './Panel';
+import {StillLayer} from './Still';
 import {
-  CARDS, Card, DIAGRAM_POPS, DURATION_S, FADE, FPS, MUSIC, MUSIC_JOIN, SHOTS, Sfx, VOICE, sec,
+  CARDS, Card, DIAGRAM_POPS, DURATION_S, FADE, FPS, MUSIC, MUSIC_JOIN, MUTE_DROP, SHOTS, STILLS,
+  Sfx, VOICE, sec,
 } from './timeline';
 
 const clamp = (x: number, a = 0, b = 1) => Math.max(a, Math.min(b, x));
@@ -126,19 +128,9 @@ const Music: React.FC = () => {
   </>;
 };
 
-const TAP = 'walkthrough/sfx/tap.mp3';
 const sfxList = (): Sfx[] => {
   const list: Sfx[] = [];
-  for (const shot of SHOTS) {
-    for (const r of shot.rings ?? []) {
-      const local = sourceTimeToLocal(shot, r.sourceTime);
-      if (local === null) throw new Error(`ring outside shot ${shot.id}`);
-      const at = shot.start + local / FPS;
-      list.push(shot.id === 's10-mute'
-        ? {at, src: 'sfx/mute_chime.wav', volume: 0.35}
-        : {at, src: TAP, volume: 0.45});
-    }
-  }
+  list.push({at: MUTE_DROP, src: 'sfx/mute_chime.wav', volume: 0.3});
   for (const c of CARDS) {
     if (c.kind === 'chapter' && c.id !== 'open') {
       list.push({at: c.start - 0.25, src: 'walkthrough/sfx/whoosh.mp3', volume: 0.3});
@@ -146,8 +138,8 @@ const sfxList = (): Sfx[] => {
   }
   const wordmark = CARDS.find((c) => c.kind === 'wordmark');
   if (wordmark) list.push({at: wordmark.start, src: 'sfx/impact.mp3', volume: 0.5});
-  const brain = SHOTS.find((s) => s.id === 's8-brain');
-  if (brain) list.push({at: brain.start - 1.6, src: 'walkthrough/sfx/swell.mp3', volume: 0.25});
+  const brain = SHOTS.find((s) => s.id === 'brain');
+  if (brain) list.push({at: brain.start - 0.6, src: 'walkthrough/sfx/swell.mp3', volume: 0.25});
   for (const at of DIAGRAM_POPS) list.push({at, src: 'walkthrough/sfx/pop.mp3', volume: 0.3});
   const close = CARDS.find((c) => c.kind === 'close');
   if (close) list.push({at: close.start, src: 'walkthrough/sfx/resolve.mp3', volume: 0.4});
@@ -174,6 +166,7 @@ export const Walkthrough: React.FC = () => {
     })}
 
     {SHOTS.map((shot) => <ShotLayer key={shot.id} shot={shot} />)}
+    {STILLS.map((still) => <StillLayer key={still.id} still={still} />)}
     <DiagramLayer />
     {CARDS.map((card) => <CardLayer key={card.id} card={card} />)}
   </AbsoluteFill>;
