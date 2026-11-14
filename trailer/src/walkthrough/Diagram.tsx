@@ -1,7 +1,7 @@
 import React from 'react';
 import {AbsoluteFill, Easing, interpolate, useCurrentFrame} from 'remotion';
 import {C, fontFamily} from '../edit/ui';
-import {DIAGRAM, FPS} from './timeline';
+import {DIAGRAM, DIAGRAM_APPEAR, FPS} from './timeline';
 
 const easeOut = (t: number, a: number, b: number) =>
   interpolate(t, [a, b], [0, 1], {
@@ -24,35 +24,29 @@ const Box: React.FC<{
       ? `0 0 0 1px ${C.hot}, 0 0 34px rgba(255,138,42,.30)`
       : '0 12px 30px rgba(0,0,0,.32)',
     display: 'flex', flexDirection: 'column', justifyContent: 'center',
-    alignItems: label ? 'flex-start' : 'center', padding: '0 18px',
+    alignItems: label ? 'flex-start' : 'center', padding: '0 22px',
     fontFamily, boxSizing: 'border-box',
   }}>
     <div style={{
-      fontSize: 21, lineHeight: 1.1, fontWeight: 600, letterSpacing: '-0.025em',
+      fontSize: 34, lineHeight: 1.1, fontWeight: 600, letterSpacing: '-0.025em',
       color: C.text, textAlign: label ? 'left' : 'center',
     }}>{title}</div>
     {label ? <div style={{
-      marginTop: 8, fontSize: 11.5, lineHeight: 1.35, color: C.muted,
+      marginTop: 10, fontSize: 20, lineHeight: 1.35, color: C.muted,
       letterSpacing: '-0.005em',
     }}>{label}</div> : null}
   </div>;
 };
 
 const Arrow: React.FC<{d: string; opacity: number}> = ({d, opacity}) =>
-  <path d={d} fill="none" stroke="#4B515A" strokeWidth={1.2}
+  <path d={d} fill="none" stroke="#4B515A" strokeWidth={2}
     markerEnd="url(#arrow)" opacity={opacity} />;
 
 export const Diagram: React.FC = () => {
   const f = useCurrentFrame();
   const t = DIAGRAM.start + f / FPS;
 
-  const viewerA = DIAGRAM.start + 0.25;
-  const websiteA = DIAGRAM.start + 1.8;
-  const queueA = DIAGRAM.line16 + 0.2;
-  const gpuA = DIAGRAM.line16 + 1.15;
-  const creditsA = DIAGRAM.line17 + 0.1;
-  const reportA = DIAGRAM.line18 + 0.15;
-  const watchdogA = DIAGRAM.line19 + 0.1;
+  const {viewerA, websiteA, queueA, gpuA, creditsA, reportA, watchdogA} = DIAGRAM_APPEAR;
 
   const pulsePhase = (t - (DIAGRAM.line15 + 0.15)) / 0.55;
   const pulse = pulsePhase > 0 && pulsePhase < 1 ? Math.sin(pulsePhase * Math.PI) : 0;
@@ -71,82 +65,79 @@ export const Diagram: React.FC = () => {
   const plus = easeOut(t, DIAGRAM.line17 + 3.0, DIAGRAM.line17 + 3.4);
   const check = easeOut(t, DIAGRAM.line19 + 2.0, DIAGRAM.line19 + 2.6);
   const frameP = easeOut(t, DIAGRAM.line20 + 0.1, DIAGRAM.line20 + 0.9);
-  const settle = easeOut(t, DIAGRAM.line20 + 0.1, DIAGRAM.line20 + 1.0);
 
   const watchLine = easeOut(t, DIAGRAM.line19 + 0.6, DIAGRAM.line19 + 1.1);
 
   return <AbsoluteFill style={{background: '#000', fontFamily, color: C.text}}>
     <div style={{
-      position: 'absolute', left: 70, top: 300, width: 1780, height: 470,
+      position: 'absolute', left: 80, top: 150, width: 1760, height: 760,
       borderRadius: 20, border: `1px solid ${C.rule}`, opacity: frameP,
       boxShadow: '0 30px 90px rgba(0,0,0,.6)',
     }} />
     <div style={{
-      position: 'absolute', left: 102, top: 318, opacity: frameP,
-      fontSize: 26, fontWeight: 600, letterSpacing: '-0.03em', color: C.text,
+      position: 'absolute', left: 112, top: 190, opacity: frameP,
+      fontSize: 34, fontWeight: 600, letterSpacing: '-0.03em', color: C.text,
     }}>Terraform</div>
     <div style={{
-      position: 'absolute', left: 102, top: 716, opacity: frameP,
-      fontSize: 13, color: C.muted, letterSpacing: '-0.005em',
+      position: 'absolute', left: 112, top: 840, opacity: frameP,
+      fontSize: 20, color: C.muted, letterSpacing: '-0.005em',
     }}>one command up, one command down</div>
 
     <div style={{
       position: 'absolute', inset: 0,
-      transform: `scale(${1 - settle * 0.055}) translateY(${-settle * 8}px)`,
-      transformOrigin: '50% 50%',
     }}>
       <svg width={1920} height={1080} style={{position: 'absolute', inset: 0, overflow: 'visible'}}>
         <defs>
           <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5"
-            markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            markerWidth="9" markerHeight="9" orient="auto-start-reverse">
             <path d="M 0 0 L 10 5 L 0 10 z" fill="#4B515A" />
           </marker>
         </defs>
-        <Arrow d="M 390 435 L 460 435" opacity={easeOut(t, websiteA, websiteA + 0.4)} />
-        <Arrow d="M 710 435 L 780 435" opacity={easeOut(t, queueA, queueA + 0.4)} />
-        <Arrow d="M 1010 435 L 1080 435" opacity={easeOut(t, gpuA, gpuA + 0.4)} />
-        <Arrow d="M 1330 435 L 1400 435" opacity={easeOut(t, reportA, reportA + 0.4)} />
-        <Arrow d="M 840 590 L 840 532 L 1205 532 L 1205 490" opacity={watchLine} />
+        <Arrow d="M 420 375 L 465 375" opacity={easeOut(t, websiteA, websiteA + 0.4)} />
+        <Arrow d="M 765 375 L 810 375" opacity={easeOut(t, queueA, queueA + 0.4)} />
+        <Arrow d="M 1110 375 L 1155 375" opacity={easeOut(t, gpuA, gpuA + 0.4)} />
+        <Arrow d="M 1455 375 L 1500 375" opacity={easeOut(t, reportA, reportA + 0.4)} />
+        <Arrow d="M 955 560 L 955 505 L 1305 505 L 1305 450" opacity={watchLine} />
       </svg>
 
-      <Box x={140} y={380} w={250} h={110} title="Viewer's browser"
+      <Box x={120} y={300} w={300} h={150} title="Viewer's browser"
         t={t} appear={viewerA} />
-      <Box x={460} y={380} w={250} h={110} title="Website"
+      <Box x={465} y={300} w={300} h={150} title="Website"
         label="CloudFront + Lambda (Flask)" t={t} appear={websiteA}
         glow={pulse * 0.8} />
-      <Box x={780} y={380} w={230} h={110} title="Queue" label="SQS"
+      <Box x={810} y={300} w={300} h={150} title="Queue" label="SQS"
         t={t} appear={queueA} />
-      <Box x={1080} y={380} w={250} h={110} title="GPU"
+      <Box x={1155} y={300} w={300} h={150} title="GPU"
         label="SageMaker, scales to zero" t={t} appear={gpuA} glow={glow} />
-      <Box x={1400} y={380} w={250} h={110} title="Report"
+      <Box x={1500} y={300} w={300} h={150} title="Report"
         label={'Bedrock \u00b7 Claude'} t={t} appear={reportA} />
-      <Box x={1080} y={590} w={250} h={100} title="Credits"
+      <Box x={1155} y={560} w={300} h={150} title="Credits"
         label="Aurora Serverless" t={t} appear={creditsA} />
-      <Box x={700} y={590} w={280} h={100} title="Watchdog"
+      <Box x={810} y={560} w={290} h={150} title="Watchdog"
         label="EventBridge, every 10 min" t={t} appear={watchdogA} />
 
       <div style={{
-        position: 'absolute', left: 1010 + travel * 70, top: 435,
+        position: 'absolute', left: 1110 + travel * 45, top: 375,
         width: 10, height: 10, borderRadius: 5, background: C.hot,
         transform: 'translate(-50%, -50%)', opacity: travel > 0 && travel < 1 ? 1 : 0,
         boxShadow: '0 0 14px rgba(255,138,42,.7)',
       }} />
 
       <div style={{
-        position: 'absolute', left: 1360, top: 606, fontFamily, fontWeight: 500,
-        fontSize: 14, color: C.hot, fontVariantNumeric: 'tabular-nums',
+        position: 'absolute', left: 1483, top: 606, fontFamily, fontWeight: 500,
+        fontSize: 24, color: C.hot, fontVariantNumeric: 'tabular-nums',
         opacity: minus, transform: `translateY(${(1 - minus) * 5}px)`,
       }}>{'\u22121 min'}</div>
       <div style={{
-        position: 'absolute', left: 1360, top: 640, fontFamily, fontWeight: 500,
-        fontSize: 14, color: C.hot, fontVariantNumeric: 'tabular-nums',
+        position: 'absolute', left: 1483, top: 648, fontFamily, fontWeight: 500,
+        fontSize: 24, color: C.hot, fontVariantNumeric: 'tabular-nums',
         opacity: plus, transform: `translateY(${(1 - plus) * 5}px)`,
       }}>{'+1 min \u21ba'}</div>
 
       <svg width={1920} height={1080} style={{position: 'absolute', inset: 0, overflow: 'visible'}}>
-        <polyline points="936,614 946,624 964,600" fill="none" stroke={C.hot}
+        <polyline points="1030,612 1045,627 1074,592" fill="none" stroke={C.hot}
           strokeWidth={3} strokeLinecap="round" strokeLinejoin="round"
-          strokeDasharray={44} strokeDashoffset={44 * (1 - check)} opacity={check > 0 ? 1 : 0} />
+          strokeDasharray={68} strokeDashoffset={68 * (1 - check)} opacity={check > 0 ? 1 : 0} />
       </svg>
     </div>
   </AbsoluteFill>;

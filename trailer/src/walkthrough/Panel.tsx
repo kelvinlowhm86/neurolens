@@ -52,7 +52,7 @@ const sourceToPanel = (x: number, y: number, crop: Rect, panel: {w: number; h: n
   y: (y - crop.y) * (panel.h / crop.h),
 });
 
-const sourceTimeToLocal = (shot: Shot, t: number) => {
+export const sourceTimeToLocal = (shot: Shot, t: number) => {
   let acc = 0;
   for (const s of shot.segments) {
     const end = s.sourceStart + (s.frames / FPS) * s.rate;

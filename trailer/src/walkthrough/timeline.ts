@@ -35,33 +35,33 @@ const seg = (sourceStart: number, rate: number, seconds: number): Segment => ({
 export const SHOTS: Shot[] = [
   {
     id: 's1-open', src: 'walkthrough/s1.mp4', start: 2.5,
-    base: {x: 300, y: 700, w: 2380, h: 1110},
-    states: [{at: 0, cx: 1490, cy: 1255, zoom: 1}, {at: 1, cx: 1540, cy: 1240, zoom: 1.1}],
+    base: {x: 220, y: 490, w: 2500, h: 1280},
+    states: [{at: 0, cx: 1470, cy: 1130, zoom: 1}, {at: 1, cx: 1470, cy: 1140, zoom: 1.05}],
     segments: [seg(0, 0.68, 12.5)],
   },
   {
     id: 'upload', src: 'walkthrough/s3_upload.mp4', start: 18.2,
-    base: {x: 825, y: 760, w: 1300, h: 730},
-    states: [{at: 0, cx: 1525, cy: 1130, zoom: 1}, {at: 1, cx: 1465, cy: 1250, zoom: 1.15}],
+    base: {x: 870, y: 805, w: 1200, h: 615},
+    states: [{at: 0, cx: 1470, cy: 1112, zoom: 1}, {at: 1, cx: 1450, cy: 1150, zoom: 1.08}],
     segments: [seg(0, 2.5, 4.8)],
     rings: [{sourceTime: 10.7, x: 1157, y: 1310}],
   },
   {
     id: 'waiting', src: 'walkthrough/s5_waiting.mp4', start: 23,
-    base: {x: 900, y: 420, w: 1950, h: 1050},
-    states: [{at: 0, cx: 1875, cy: 945, zoom: 1}, {at: 1, cx: 1875, cy: 945, zoom: 1.03}],
+    base: {x: 880, y: 460, w: 2030, h: 1040},
+    states: [{at: 0, cx: 1895, cy: 980, zoom: 1}, {at: 1, cx: 1895, cy: 980, zoom: 1.02}],
     segments: [seg(3, 1, 1.2)],
   },
   {
     id: 'progress', src: 'walkthrough/s5_progress.mp4', start: 24.2,
-    base: {x: 900, y: 420, w: 1950, h: 1050},
-    states: [{at: 0, cx: 1875, cy: 945, zoom: 1.02}, {at: 1, cx: 1875, cy: 1020, zoom: 1.06}],
+    base: {x: 880, y: 460, w: 2030, h: 1040},
+    states: [{at: 0, cx: 1895, cy: 980, zoom: 1.02}, {at: 1, cx: 1895, cy: 1000, zoom: 1.04}],
     segments: [seg(0, 1, 1), seg(1, 20, 1)],
   },
   {
     id: 'result', src: 'walkthrough/s5_result.mp4', start: 26.2,
-    base: {x: 860, y: 420, w: 2050, h: 1050},
-    states: [{at: 0, cx: 1890, cy: 945, zoom: 1.02}, {at: 1, cx: 1880, cy: 1020, zoom: 1.1}],
+    base: {x: 880, y: 460, w: 2030, h: 1040},
+    states: [{at: 0, cx: 1900, cy: 990, zoom: 1.01}, {at: 1, cx: 1915, cy: 1020, zoom: 1.04}],
     segments: [seg(0, 1, 1.8)],
   },
   {
@@ -72,8 +72,8 @@ export const SHOTS: Shot[] = [
   },
   {
     id: 's6-seeing', src: 'walkthrough/s6.mp4', start: 38,
-    base: {x: 840, y: 1250, w: 1250, h: 650},
-    states: [{at: 0, cx: 1455, cy: 1550, zoom: 1}, {at: 1, cx: 1455, cy: 1570, zoom: 1.08}],
+    base: {x: 870, y: 1212, w: 1370, h: 700},
+    states: [{at: 0, cx: 1555, cy: 1562, zoom: 1}, {at: 1, cx: 1500, cy: 1580, zoom: 1.06}],
     segments: [seg(16, 1, 5)],
     rings: [{sourceTime: 17.5, x: 1446, y: 1450}],
   },
@@ -86,8 +86,8 @@ export const SHOTS: Shot[] = [
   },
   {
     id: 's8-brain', src: 'walkthrough/s8.mp4', start: 47,
-    base: {x: 20, y: 1080, w: 800, h: 780},
-    states: [{at: 0, cx: 420, cy: 1470, zoom: 1}, {at: 1, cx: 420, cy: 1480, zoom: 1.12}],
+    base: {x: 20, y: 1150, w: 800, h: 750},
+    states: [{at: 0, cx: 420, cy: 1525, zoom: 1}, {at: 1, cx: 420, cy: 1500, zoom: 1.05}],
     segments: [seg(5, 3.333, 3)],
     rings: [{sourceTime: 5, x: 400, y: 1500}],
   },
@@ -107,21 +107,21 @@ export const SHOTS: Shot[] = [
   },
   {
     id: 's11-compare', src: 'walkthrough/s11.mp4', start: 58.5,
-    base: {x: 0, y: 380, w: 2940, h: 1200},
-    states: [{at: 0, cx: 1470, cy: 950, zoom: 1}, {at: 1, cx: 1470, cy: 1020, zoom: 1.08}],
+    base: {x: 30, y: 400, w: 2880, h: 1060},
+    states: [{at: 0, cx: 1470, cy: 930, zoom: 1}, {at: 1, cx: 1470, cy: 960, zoom: 1.05}],
     segments: [seg(1, 1, 3.5)],
     rings: [{sourceTime: 2, x: 2652, y: 558}],
   },
   {
     id: 's11b-verdict', src: 'walkthrough/s11b.mp4', start: 62,
-    base: {x: 0, y: 520, w: 2940, h: 1050},
-    states: [{at: 0, cx: 1470, cy: 1040, zoom: 1}, {at: 1, cx: 1470, cy: 1100, zoom: 1.1}],
+    base: {x: 40, y: 660, w: 2860, h: 800},
+    states: [{at: 0, cx: 1470, cy: 1060, zoom: 1}, {at: 1, cx: 1470, cy: 1040, zoom: 1.06}],
     segments: [seg(4, 1, 4)],
   },
   {
     id: 's1-close', src: 'walkthrough/s1.mp4', start: 103,
-    base: {x: 300, y: 700, w: 2380, h: 1110},
-    states: [{at: 0, cx: 1490, cy: 1255, zoom: 1}, {at: 1, cx: 1490, cy: 1255, zoom: 1}],
+    base: {x: 220, y: 490, w: 2500, h: 1280},
+    states: [{at: 0, cx: 1470, cy: 1140, zoom: 1.05}, {at: 1, cx: 1470, cy: 1130, zoom: 1}],
     segments: [seg(0, 1, 7)],
   },
 ];
@@ -203,3 +203,28 @@ export const DIAGRAM = {
   line20: 95.44,
   end: 103,
 };
+
+// Music edit: the track is advanced 1 s so its return lands on the wordmark (15 s),
+// then a repetitive middle stretch is cut so the video ends on the track's own ending.
+export const MUSIC = {
+  offset: 1,        // track second played at video 0
+  cutFrom: 50.3,    // track second where the cut starts (start of a quiet dip)
+  cutTo: 78.0,      // track second the music resumes from (end of the next dip)
+  xfade: 1,         // crossfade across the join, seconds
+};
+// Video second where the join happens.
+export const MUSIC_JOIN = MUSIC.cutFrom - MUSIC.offset;
+
+export type Sfx = {at: number; src: string; volume: number};
+
+// When each diagram box appears (video seconds); each gets a soft pop.
+export const DIAGRAM_APPEAR = {
+  viewerA: DIAGRAM.start + 0.25,
+  websiteA: DIAGRAM.start + 1.8,
+  queueA: DIAGRAM.line16 + 0.2,
+  gpuA: DIAGRAM.line16 + 1.15,
+  creditsA: DIAGRAM.line17 + 0.1,
+  reportA: DIAGRAM.line18 + 0.15,
+  watchdogA: DIAGRAM.line19 + 0.1,
+};
+export const DIAGRAM_POPS = Object.values(DIAGRAM_APPEAR);
