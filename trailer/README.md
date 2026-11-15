@@ -87,6 +87,17 @@ ffmpeg -hide_banner -loglevel error -i out/neurolens_trailer.mp4 \
 
 `contact_sheets.py` writes nothing when the frame directory is empty or missing. It defaults to six 640 px thumbnails per sheet, with frame and time labels.
 
+
+## Walkthrough v4
+
+`Walkthrough` is the 2:21 companion film: one real Swee Choon TikTok upload, the wait underneath, and the result. It uses the same 1920x1080 / 30 fps project and the installed Chrome through `tools/chrome-local.sh`:
+
+```sh
+npx remotion render Walkthrough out/walkthrough_v4.mp4
+```
+
+The voice timing is one build-time source, `public/walkthrough/audio/voice_lines_v4.json`; every scene lead and hold derives from its 23 line starts. To swap the final recording, replace the MP3 named in that JSON's `source` field (and its timings) — no code change is needed. The music bed is the local track in `public/walkthrough/audio/`, trimmed so its own ending lands on the final frame. Swee Choon's video, brain and `result.json` live in `public/walkthrough/swee/`; all footage under `public/` is git-ignored.
+
 ## Attribution
 
 Predicted brain response from TRIBE v2 (Meta, CC BY-NC).

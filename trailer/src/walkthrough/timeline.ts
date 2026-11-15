@@ -1,237 +1,149 @@
+import voiceFile from '../../public/walkthrough/audio/voice_lines_v4.json';
+
 export const FPS = 30;
 export const WIDTH = 1920;
 export const HEIGHT = 1080;
-export const SOURCE_W = 2940;
-export const SOURCE_H = 1912;
-export const DURATION_S = 116;
-export const DURATION = DURATION_S * FPS;
 export const FADE = 12;
-export const PANEL_MAX_W = 1760;
-export const PANEL_MAX_H = 940;
-export const TOP_CROP = 240;
 
 export const sec = (s: number) => Math.round(s * FPS);
 
-export type Rect = {x: number; y: number; w: number; h: number};
-export type CropState = {at: number; cx: number; cy: number; zoom: number};
-export type Segment = {sourceStart: number; rate: number; frames: number};
-export type Shot = {
-  id: string;
-  src: string;
-  start: number;
-  base: Rect;
-  states: CropState[];
-  segments: Segment[];
+export type VoiceLine = {line: number; start: number; end: number; text: string};
+export const LINES = voiceFile.lines as VoiceLine[];
+export const VOICE_SOURCE = voiceFile.source;
+
+const findLine = (n: number): VoiceLine => {
+  const line = LINES.find((l) => l.line === n);
+  if (!line) throw new Error(`Voice line ${n} is missing from voice_lines_v4.json`);
+  return line;
 };
 
-export type Cam = {at: number; cx: number; cy: number; zoom: number};
-export type Spot = {from: number; to: number; x: number; y: number; w: number; h: number};
-export type Still = {
-  id: string;
-  img: string;
-  w: number;
-  h: number;
-  start: number;
-  dur: number;
-  cams: Cam[];
-  spots?: Spot[];
+export const at = (n: number, offset = 0) => findLine(n).start + offset;
+
+export const LAST_END = Math.max(...LINES.map((l) => l.end));
+// The close keeps the wordmark and the brain on screen after the last word.
+export const CLOSE_HOLD = 8;
+export const DURATION_S = LAST_END + CLOSE_HOLD;
+export const DURATION = sec(DURATION_S);
+
+// The track is 144.72 s. Starting it late makes its own ending land on the last frame.
+export const MUSIC_TRACK_S = 144.72;
+export const MUSIC_OFFSET = Math.max(0, MUSIC_TRACK_S - DURATION_S);
+
+const LEAD = 0.3;
+export const SCENES = {
+  opening: {start: 0, end: at(2, -LEAD)},
+  upload: {start: at(2, -LEAD), end: at(4, -LEAD)},
+  journey: {start: at(4, -LEAD), end: at(14, -LEAD)},
+  result: {start: at(14, -LEAD), end: at(21, -LEAD)},
+  built: {start: at(21, -LEAD), end: at(23, -LEAD)},
+  close: {start: at(23, -LEAD), end: DURATION_S},
 };
 
-const seg = (sourceStart: number, rate: number, seconds: number): Segment => ({
-  sourceStart,
-  rate,
-  frames: sec(seconds),
-});
+export const JOURNEY = {
+  start: SCENES.journey.start,
+  browser: at(4),
+  s3: at(4, 0.9),
+  website: at(5),
+  queue: at(6, 0.5),
+  check: at(6, 3.2),
+  ticks: at(6, 4.0),
+  gpuIdle: at(7),
+  gpuWake: at(8, 3.1),
+  brain: at(9),
+  secondLine: at(10, 0.35),
+  saved: at(11),
+  report: at(12),
+  off: at(13),
+  end: SCENES.journey.end,
+};
 
-export const SHOTS: Shot[] = [
-  {
-    id: 'upload', src: 'walkthrough/s3_upload.mp4', start: 18.2,
-    base: {x: 1060, y: 800, w: 860, h: 520},
-    states: [{at: 0, cx: 1470, cy: 1060, zoom: 1}, {at: 1, cx: 1460, cy: 1080, zoom: 1.05}],
-    segments: [seg(6.6, 1, 4.8)],
-  },
-  {
-    id: 'brain', src: 'walkthrough/s8.mp4', start: 47,
-    base: {x: 140, y: 1220, w: 560, h: 520},
-    states: [{at: 0, cx: 420, cy: 1480, zoom: 1}, {at: 1, cx: 420, cy: 1480, zoom: 1.04}],
-    segments: [seg(5, 1, 3)],
-  },
+export const RESULT = {
+  start: SCENES.result.start,
+  cameBack: at(14),
+  chart: at(15),
+  report: at(16),
+  photos: at(17),
+  mute: at(18),
+  alley: at(19),
+  compare: at(20),
+  end: SCENES.result.end,
+};
+
+export const BUILT = {
+  start: SCENES.built.start,
+  terraform: at(21),
+  watchdog: at(22),
+  end: SCENES.built.end,
+};
+
+export const CLOSE = {start: SCENES.close.start, end: SCENES.close.end};
+
+export const SWEE = {
+  video: 'walkthrough/swee/tiktok_ZSg5soxrR.mp4',
+  brain: 'walkthrough/swee/brain',
+  result: 'walkthrough/swee/result.json',
+  duration: 44,
+};
+
+export const SFX = {
+  tap: 'walkthrough/sfx/tap.mp3',
+  whoosh: 'walkthrough/sfx/whoosh.mp3',
+  pop: 'walkthrough/sfx/pop.mp3',
+  resolve: 'walkthrough/sfx/resolve.mp3',
+  mute: 'sfx/mute_chime.wav',
+};
+
+export type SfxCue = {at: number; src: string; volume: number};
+
+const cue = (time: number, src: string, volume: number): SfxCue => ({at: Math.max(0, time), src, volume});
+export const SFX_CUES: SfxCue[] = [
+  cue(at(2, 0.5), SFX.tap, 0.22),
+  cue(at(3, 0.2), SFX.pop, 0.12),
+  cue(JOURNEY.start + 0.2, SFX.whoosh, 0.22),
+  cue(JOURNEY.queue - 0.1, SFX.pop, 0.12),
+  cue(JOURNEY.gpuWake, SFX.pop, 0.16),
+  cue(JOURNEY.saved, SFX.tap, 0.18),
+  cue(JOURNEY.report, SFX.tap, 0.14),
+  cue(RESULT.start + 0.2, SFX.whoosh, 0.2),
+  cue(RESULT.mute + 2.2, SFX.mute, 0.24),
+  cue(RESULT.compare, SFX.whoosh, 0.16),
+  cue(BUILT.start + 0.2, SFX.whoosh, 0.2),
+  cue(BUILT.watchdog, SFX.tap, 0.16),
+  cue(CLOSE.start + 1.0, SFX.resolve, 0.3),
 ];
 
-export const MUTE_DROP = 56.2;
-
-export const STILLS: Still[] = [
-  {
-    id: 'chart', img: 'walkthrough/captures/chart.png', w: 3006, h: 1335, start: 34.4, dur: 3.6,
-    cams: [{at: 0, cx: .5, cy: .5, zoom: 1}, {at: 1.0, cx: .3, cy: .42, zoom: 1.6}],
-    spots: [{from: 1.6, to: 3.4, x: .02, y: .47, w: .5, h: .08}],
-  },
-  {
-    id: 'seeing', img: 'walkthrough/captures/strip_seeing.png', w: 948, h: 777, start: 38, dur: 2.4,
-    cams: [{at: 0, cx: .5, cy: .5, zoom: 1}],
-    spots: [{from: .6, to: 2.2, x: .68, y: .02, w: .31, h: .12}],
-  },
-  {
-    id: 'parts', img: 'walkthrough/captures/strips_open.png', w: 3006, h: 861, start: 40.4, dur: 2.6,
-    cams: [{at: 0, cx: .38, cy: .5, zoom: 1.25}],
-    spots: [{from: .8, to: 2.5, x: .0, y: .18, w: .75, h: .55}],
-  },
-  {
-    id: 'moment', img: 'walkthrough/captures/chart_moment.png', w: 3006, h: 1335, start: 43, dur: 4,
-    cams: [{at: 0, cx: .5, cy: .5, zoom: 1}, {at: .8, cx: .22, cy: .45, zoom: 2.2}],
-    spots: [{from: 2.1, to: 3.9, x: .06, y: .32, w: .3, h: .28}],
-  },
-  {
-    id: 'report-moment', img: 'walkthrough/captures/report_moment_1.png', w: 2313, h: 480, start: 50, dur: 5,
-    cams: [{at: 0, cx: .5, cy: .5, zoom: 1}],
-    spots: [{from: 2.6, to: 4.9, x: .0, y: .68, w: 1, h: .26}],
-  },
-  {
-    id: 'compare', img: 'walkthrough/captures/compare_chart.png', w: 2451, h: 639, start: 58.5, dur: 3.6,
-    cams: [{at: 0, cx: .5, cy: .5, zoom: 1}, {at: 1.4, cx: .3, cy: .55, zoom: 1.35}],
-  },
-  {
-    id: 'verdict', img: 'walkthrough/captures/compare_verdict.png', w: 2451, h: 579, start: 62.1, dur: 3.9,
-    cams: [{at: 0, cx: .5, cy: .5, zoom: 1}],
-    spots: [{from: .9, to: 3.7, x: .0, y: .33, w: 1, h: .2}],
-  },
-];
-
-export type Voice = {line: number; at: number; from: number; to: number};
-export const VOICE: Voice[] = [
-  {line: 1, at: 1.5, from: 0, to: 4.21},
-  {line: 2, at: 6.02, from: 4.37, to: 8.45},
-  {line: 3, at: 10.46, from: 8.81, to: 12.51},
-  {line: 4, at: 15.8, from: 13.37, to: 14.79},
-  {line: 5, at: 18.2, from: 15.03, to: 18.23},
-  {line: 6, at: 23, from: 18.43, to: 22.03},
-  {line: 7, at: 29.2, from: 22.33, to: 30.79},
-  {line: 8, at: 38, from: 31.21, to: 35.81},
-  {line: 9, at: 43, from: 36.33, to: 39.63},
-  {line: 10, at: 47, from: 39.87, to: 42.23},
-  {line: 11, at: 50, from: 42.37, to: 46.75},
-  {line: 12, at: 55, from: 47.01, to: 50.13},
-  {line: 13, at: 58.5, from: 50.33, to: 54.11},
-  {line: 14, at: 67.5, from: 54.53, to: 59.8},
-  {line: 15, at: 72.8, from: 59.83, to: 63.63},
-  {line: 16, at: 76.78, from: 63.81, to: 69.45},
-  {line: 17, at: 82.9, from: 69.93, to: 74.71},
-  {line: 18, at: 88.16, from: 75.19, to: 78.33},
-  {line: 19, at: 91.46, from: 78.49, to: 82.43},
-  {line: 20, at: 95.44, from: 82.47, to: 87.57},
-  {line: 21, at: 103, from: 87.85, to: 90.83},
-  {line: 22, at: 110, from: 91.35, to: 94.09},
-];
-
-export type CardPart = {text: string; hot?: boolean};
-export type Card = {
-  id: string;
-  start: number;
-  end: number;
-  kind: 'chapter' | 'wordmark' | 'close';
-  parts?: CardPart[];
-  lead?: string;
-  title?: string;
-  sub?: string;
-};
-export const CARDS: Card[] = [
-  {id: 'hook-title', start: 14.2, end: 15.6, kind: 'chapter', parts: [{text: 'Watch a '}, {text: 'brain', hot: true}, {text: ' watch your video.'}]},
-  {id: 'wordmark', start: 15.6, end: 17.4, kind: 'wordmark', lead: 'Introducing', title: 'NeuroLens'},
-  {id: 'use', start: 17.4, end: 18.2, kind: 'chapter', parts: [{text: 'Use', hot: true}, {text: ' it'}]},
-  {id: 'read', start: 28, end: 29.2, kind: 'chapter', parts: [{text: 'Read', hot: true}, {text: ' it'}]},
-  {id: 'built', start: 66, end: 67.5, kind: 'chapter', parts: [{text: 'How it\u2019s '}, {text: 'built', hot: true}]},
-];
-
-export const HOOK = {start: 0, end: 14.2, reveal: 10.46};
-export const FLOW = {start: 29.2, end: 34.4};
-export const STEPS = {start: 23, end: 28};
-export const SPLIT = {start: 55, end: 58.5};
-export const REPRISE = {start: 103, end: 110};
-export const CLOSE = {start: 110, end: 116};
-export const SCENES = {HOOK, FLOW, STEPS, SPLIT, REPRISE, CLOSE};
-
-export const ROWS: {label: string; mid: number}[] = [
-  {label: 'hook', mid: 7.1},
-  {label: 'hook-title', mid: 14.9},
-  {label: 'wordmark', mid: 16.5},
-  {label: 'use-card', mid: 17.8},
-  {label: 'upload', mid: 20.6},
-  {label: 'steps', mid: 25.5},
-  {label: 'read-card', mid: 28.6},
-  {label: 'flow', mid: 31.8},
-  {label: 'chart', mid: 36.2},
-  {label: 'seeing', mid: 39.2},
-  {label: 'parts', mid: 41.7},
-  {label: 'moment', mid: 45},
-  {label: 'brain', mid: 48.5},
-  {label: 'report-moment', mid: 52.5},
-  {label: 'split', mid: 56.75},
-  {label: 'compare', mid: 60.3},
-  {label: 'verdict', mid: 64.05},
-  {label: 'built-card', mid: 66.75},
-  {label: 'diagram', mid: 85.25},
-  {label: 'reprise', mid: 106.5},
-  {label: 'close', mid: 113},
-];
-
-export const DIAGRAM = {
-  start: 67.5,
-  line15: 72.8,
-  line16: 76.78,
-  line17: 82.9,
-  line18: 88.16,
-  line19: 91.46,
-  line20: 95.44,
-  end: 103,
+export type MapCard = {
+  id: string; title: string; label: string;
+  x: number; y: number; w: number; h: number;
 };
 
-// Music edit: the track is advanced 1 s so its return lands on the wordmark (15 s),
-// then a repetitive middle stretch is cut so the video ends on the track's own ending.
-export const MUSIC = {
-  offset: 1,        // track second played at video 0
-  cutFrom: 50.3,    // track second where the cut starts (start of a quiet dip)
-  cutTo: 78.0,      // track second the music resumes from (end of the next dip)
-  xfade: 1,         // crossfade across the join, seconds
+export const MAP: Record<string, MapCard> = {
+  browser: {id: 'browser', title: 'Browser', label: 'your file', x: 100, y: 300, w: 300, h: 170},
+  s3: {id: 's3', title: 'Storage', label: 'S3', x: 560, y: 300, w: 300, h: 170},
+  website: {id: 'website', title: 'Website', label: 'CloudFront + Lambda', x: 560, y: 560, w: 320, h: 170},
+  queue: {id: 'queue', title: 'Queue', label: 'SQS', x: 1080, y: 300, w: 300, h: 170},
+  check: {id: 'check', title: 'Check', label: 'Lambda · length + price', x: 1560, y: 300, w: 300, h: 170},
+  gpu: {id: 'gpu', title: 'GPU', label: 'idle: $0 / hour', x: 2060, y: 280, w: 340, h: 210},
+  brain: {id: 'brain', title: 'Brain', label: 'TRIBE v2', x: 2060, y: 560, w: 620, h: 460},
+  response: {id: 'response', title: 'Response', label: 'second by second', x: 2760, y: 560, w: 620, h: 460},
+  credits: {id: 'credits', title: 'Credit', label: 'held → charged', x: 1560, y: 560, w: 300, h: 170},
+  report: {id: 'report', title: 'Report', label: 'Bedrock · Claude', x: 2900, y: 300, w: 360, h: 190},
+  watchdog: {id: 'watchdog', title: 'Watchdog', label: 'every 10 min', x: 1080, y: 560, w: 300, h: 170},
 };
-// Video second where the join happens.
-export const MUSIC_JOIN = MUSIC.cutFrom - MUSIC.offset;
 
-export type Sfx = {at: number; src: string; volume: number};
+export const MAP_W = 3500;
+export const MAP_H = 1080;
 
-// When each diagram box appears (video seconds); each gets a soft pop.
-export const DIAGRAM_APPEAR = {
-  viewerA: DIAGRAM.start + 0.25,
-  websiteA: DIAGRAM.start + 1.8,
-  queueA: DIAGRAM.line16 + 0.2,
-  gpuA: DIAGRAM.line16 + 1.15,
-  creditsA: DIAGRAM.line17 + 0.1,
-  reportA: DIAGRAM.line18 + 0.15,
-  watchdogA: DIAGRAM.line19 + 0.1,
-};
-export const DIAGRAM_POPS = Object.values(DIAGRAM_APPEAR);
 
-// Visual layers must not overlap (cards are excluded: their fades cross over neighbours).
+// Visual layers are contiguous; the fade at each join is the only overlap.
 export function checkCoverage() {
-  const layers = [
-    ...SHOTS.map((s) => ({
-      id: s.id,
-      start: s.start,
-      end: s.start + s.segments.reduce((a, seg) => a + seg.frames, 0) / FPS,
-    })),
-    ...STILLS.map((s) => ({id: s.id, start: s.start, end: s.start + s.dur})),
-    {id: 'diagram', start: DIAGRAM.start, end: DIAGRAM.end},
-    ...Object.entries(SCENES).map(([id, s]) => ({id: id.toLowerCase(), start: s.start, end: s.end})),
-  ];
+  const layers = Object.entries(SCENES).map(([id, s]) => ({id, ...s}));
   for (let i = 0; i < layers.length; i++) {
     for (let j = i + 1; j < layers.length; j++) {
       const a = layers[i];
       const b = layers[j];
       const overlap = Math.min(a.end, b.end) - Math.max(a.start, b.start);
-      if (overlap > 0.05) {
-        throw new Error(
-          `Visual layers overlap by ${overlap.toFixed(2)}s: ${a.id} (${a.start}-${a.end}) and ${b.id} (${b.start}-${b.end})`,
-        );
-      }
+      if (overlap > 0.05) throw new Error(`Scenes overlap: ${a.id} and ${b.id}`);
     }
   }
 }
