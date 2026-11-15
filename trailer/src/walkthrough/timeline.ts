@@ -118,20 +118,20 @@ export type MapCard = {
 };
 
 export const MAP: Record<string, MapCard> = {
-  browser: {id: 'browser', title: 'Browser', label: 'your file', x: 100, y: 300, w: 300, h: 170},
-  s3: {id: 's3', title: 'Storage', label: 'S3', x: 560, y: 300, w: 300, h: 170},
-  website: {id: 'website', title: 'Website', label: 'CloudFront + Lambda', x: 560, y: 560, w: 320, h: 170},
-  queue: {id: 'queue', title: 'Queue', label: 'SQS', x: 1080, y: 300, w: 300, h: 170},
-  check: {id: 'check', title: 'Check', label: 'Lambda · length + price', x: 1560, y: 300, w: 300, h: 170},
-  gpu: {id: 'gpu', title: 'GPU', label: 'idle: $0 / hour', x: 2060, y: 280, w: 340, h: 210},
-  brain: {id: 'brain', title: 'Brain', label: 'TRIBE v2', x: 2060, y: 560, w: 620, h: 460},
-  response: {id: 'response', title: 'Response', label: 'second by second', x: 2760, y: 560, w: 620, h: 460},
-  credits: {id: 'credits', title: 'Credit', label: 'held → charged', x: 1560, y: 560, w: 300, h: 170},
-  report: {id: 'report', title: 'Report', label: 'Bedrock · Claude', x: 2900, y: 300, w: 360, h: 190},
-  watchdog: {id: 'watchdog', title: 'Watchdog', label: 'every 10 min', x: 1080, y: 560, w: 300, h: 170},
+  browser: {id: 'browser', title: 'Browser', label: 'your file', x: 100, y: 270, w: 540, h: 250},
+  s3: {id: 's3', title: 'Storage', label: 'S3', x: 760, y: 270, w: 540, h: 250},
+  website: {id: 'website', title: 'Website', label: 'CloudFront + Lambda', x: 760, y: 630, w: 540, h: 250},
+  queue: {id: 'queue', title: 'Queue', label: 'SQS', x: 2050, y: 270, w: 540, h: 250},
+  check: {id: 'check', title: 'Check', label: 'Lambda · length + price', x: 2710, y: 270, w: 560, h: 250},
+  credits: {id: 'credits', title: 'Credit', label: 'held → charged', x: 2710, y: 630, w: 560, h: 250},
+  gpu: {id: 'gpu', title: 'GPU', label: 'idle: $0 / hour', x: 3390, y: 250, w: 580, h: 270},
+  brain: {id: 'brain', title: 'Brain', label: 'TRIBE v2', x: 3390, y: 580, w: 600, h: 430},
+  response: {id: 'response', title: 'Response', label: 'second by second', x: 4090, y: 580, w: 620, h: 430},
+  report: {id: 'report', title: 'Report', label: 'Bedrock · Claude', x: 4090, y: 250, w: 620, h: 270},
+  watchdog: {id: 'watchdog', title: 'Watchdog', label: 'every 10 min', x: 2050, y: 630, w: 540, h: 250},
 };
 
-export const MAP_W = 3500;
+export const MAP_W = 4900;
 export const MAP_H = 1080;
 
 

@@ -17,32 +17,32 @@ export const Upload: React.FC = () => {
 
   return <ScreenWindow
     title="NeuroLens — Upload"
-    x={260} y={140} w={1400} h={880}
+    x={300} y={130} w={1320} h={870}
     src="walkthrough/captures/upload_dialog.png"
     kind="image"
     sourceW={2940} sourceH={1912}
-    base={{x: 980, y: 800, w: 1020, h: 560}}
+    base={{x: 1034, y: 832, w: 872, h: 556}}
     cams={[
-      {at: 0, cx: 1490, cy: 1080, zoom: 1},
+      {at: 0, cx: 1470, cy: 1110, zoom: 1},
     ]}
   >
     <SourceMark
-      x={1058} y={1194} w={790} h={50}
+      x={1068} y={1204} w={766} h={44}
       opacity={t > 0.4 && t < 8.4 ? 1 : 0}
       radius={12}
     />
     <div style={{
-      position: 'absolute', left: 1600, top: 1240,
-      height: 44, padding: '0 18px', boxSizing: 'border-box',
-      display: 'flex', alignItems: 'center', gap: 10,
-      borderRadius: 999, background: 'rgba(255,138,42,.13)',
-      border: `1px solid ${C.hot}`, color: C.hot,
-      fontFamily, fontSize: 25, fontWeight: 600, letterSpacing: '-0.01em',
+      position: 'absolute', left: 1620, top: 1280,
+      height: 52, padding: '0 22px', boxSizing: 'border-box',
+      display: 'flex', alignItems: 'center', gap: 11,
+      borderRadius: 999, background: 'rgba(255,138,42,.15)',
+      border: `1.5px solid ${C.hot}`, color: C.hot,
+      fontFamily, fontSize: 26, fontWeight: 600, letterSpacing: '-0.01em',
       opacity: chip, transform: `translateY(${(1 - chip) * 6}px)`,
-      boxShadow: '0 8px 26px rgba(255,138,42,.18)',
+      boxShadow: '0 8px 26px rgba(255,138,42,.22)',
       whiteSpace: 'nowrap',
     }}>
-      <span style={{width: 8, height: 8, borderRadius: 999, background: C.hot, display: 'block'}} />
+      <span style={{width: 9, height: 9, borderRadius: 999, background: C.hot, display: 'block'}} />
       held
     </div>
   </ScreenWindow>;

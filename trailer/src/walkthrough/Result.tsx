@@ -53,14 +53,14 @@ const CameBack: React.FC = () => {
     <Label text="The result" />
     <ScreenWindow
       title="NeuroLens — Analysis"
-      x={200} y={104} w={1520} h={870}
+      x={110} y={100} w={1700} h={896}
       src="walkthrough/s5_result.mp4"
       kind="video"
       sourceW={2940} sourceH={1912}
       sourceStart={0.2}
       rate={0.85}
-      base={{x: 0, y: 400, w: 2940, h: 1512}}
-      cams={[{at: 0, cx: 1470, cy: 1156, zoom: 1}, {at: 0.4, cx: 1470, cy: 1156, zoom: 1.03}]}
+      base={{x: 0, y: 400, w: 2940, h: 1490}}
+      cams={[{at: 0, cx: 1470, cy: 1145, zoom: 1}]}
     />
   </AbsoluteFill>;
 };
@@ -72,18 +72,17 @@ const ChartMoment: React.FC = () => {
     <Label text="Every second" />
     <ScreenWindow
       title="NeuroLens — Analysis"
-      x={180} y={104} w={1560} h={900}
+      x={140} y={130} w={1640} h={790}
       src="walkthrough/s6.mp4"
       kind="video"
       sourceW={2940} sourceH={1912}
       sourceStart={1.0}
-      base={{x: 0, y: 380, w: 2940, h: 1500}}
+      base={{x: 880, y: 390, w: 2040, h: 940}}
       cams={[
-        {at: 0, cx: 1470, cy: 1130, zoom: 1},
-        {at: 1.0, cx: 1380, cy: 1000, zoom: 1.42},
+        {at: 0, cx: 1900, cy: 860, zoom: 1},
       ]}
     >
-      <SourceMark x={908} y={870} w={950} h={46} opacity={t > 2.4 && t < 6.5 ? 1 : 0} radius={12} />
+      <SourceMark x={918} y={870} w={1880} h={46} opacity={t > 2.2 && t < 6.4 ? 1 : 0} radius={12} />
     </ScreenWindow>
   </AbsoluteFill>;
 };
@@ -91,17 +90,17 @@ const ChartMoment: React.FC = () => {
 const Report: React.FC = () => {
   const frame = useCurrentFrame();
   const t = frame / FPS;
-  const inX = 220 + (1 - easeOut(t, 0, 0.65)) * 90;
+  const inX = 140 + (1 - easeOut(t, 0, 0.65)) * 70;
   return <AbsoluteFill>
     <Label text="The report" />
     <ScreenWindow
       title="NeuroLens — Report"
-      x={inX} y={120} w={1480} h={850}
+      x={inX} y={120} w={1640} h={802}
       src="walkthrough/s9.mp4"
       kind="video"
       sourceW={2940} sourceH={1912}
       sourceStart={1.0}
-      base={{x: 780, y: 500, w: 2100, h: 1158}}
+      base={{x: 880, y: 390, w: 2040, h: 956}}
     />
   </AbsoluteFill>;
 };
@@ -114,14 +113,16 @@ const Photos: React.FC = () => {
     <Label text="The old photos · 0:08–0:13" />
     <ScreenWindow
       title="NeuroLens — Report"
-      x={180} y={220 + rise * 16} w={1080} h={255}
+      x={70} y={365 + rise * 14} w={1320} h={350}
       src="walkthrough/captures/report_moment_1.png"
       kind="image"
       sourceW={2313} sourceH={480}
       base={{x: 0, y: 0, w: 2313, h: 480}}
+      fit="contain"
+      contentBg="#0C0D10"
     />
     <div style={{
-      position: 'absolute', left: 1370, top: 140, width: 330, height: 586,
+      position: 'absolute', left: 1430, top: 166, width: 420, height: 748,
       borderRadius: 18, overflow: 'hidden', background: '#000',
       border: `1px solid rgba(255,255,255,.10)`,
       boxShadow: '0 38px 100px rgba(0,0,0,.8), 0 0 0 1px rgba(255,255,255,.04)',
@@ -129,8 +130,8 @@ const Photos: React.FC = () => {
       <OffthreadVideo src={staticFile(SWEE.video)} trimBefore={sec(8)} muted
         style={{width: '100%', height: '100%', objectFit: 'cover'}} />
       <div style={{
-        position: 'absolute', left: 14, bottom: 14, padding: '5px 10px', borderRadius: 7,
-        background: 'rgba(0,0,0,.62)', fontFamily, fontSize: 17, fontWeight: 600,
+        position: 'absolute', left: 16, bottom: 16, padding: '6px 12px', borderRadius: 8,
+        background: 'rgba(0,0,0,.68)', fontFamily, fontSize: 20, fontWeight: 600,
         color: C.text, fontVariantNumeric: 'tabular-nums',
       }}>0:08 – 0:13</div>
     </div>
@@ -226,12 +227,12 @@ const Mute: React.FC = () => {
     {a && <AbsoluteFill style={{opacity: aOut}}>
       <ScreenWindow
         title="NeuroLens — Analysis"
-        x={300} y={150} w={1320} h={780}
+        x={140} y={130} w={1640} h={790}
         src="walkthrough/s10.mp4"
         kind="video"
         sourceW={2940} sourceH={1912}
         sourceStart={2.0}
-        base={{x: 900, y: 520, w: 1900, h: 1000}}
+        base={{x: 880, y: 390, w: 2040, h: 940}}
       >
         <SourceMark x={1328} y={588} w={245} h={42} opacity={t > 0.4 ? 1 : 0} radius={9} />
       </ScreenWindow>
@@ -240,11 +241,13 @@ const Mute: React.FC = () => {
     {c && <AbsoluteFill style={{opacity: cIn}}>
       <ScreenWindow
         title="NeuroLens — Report"
-        x={260} y={250} w={1400} h={325}
+        x={180} y={350} w={1560} h={390}
         src="walkthrough/captures/report_moment_1.png"
         kind="image"
         sourceW={2313} sourceH={480}
         base={{x: 0, y: 0, w: 2313, h: 480}}
+        fit="contain"
+        contentBg="#0C0D10"
       >
         <SourceMark x={0} y={320} w={2310} h={120} opacity={t > 6.2 ? 1 : 0} radius={8} />
       </ScreenWindow>
@@ -318,18 +321,17 @@ const Compare: React.FC = () => {
     <Label text="CeraVe ad · two cuts" />
     <ScreenWindow
       title="NeuroLens — Compare"
-      x={180} y={100} w={1560} h={870}
+      x={130} y={102} w={1660} h={900}
       src="walkthrough/s11.mp4"
       kind="video"
       sourceW={2940} sourceH={1912}
       sourceStart={0.5}
-      base={{x: 0, y: 380, w: 2940, h: 1520}}
+      base={{x: 20, y: 390, w: 2900, h: 1515}}
       cams={[
-        {at: 0, cx: 1470, cy: 1140, zoom: 1},
-        {at: 0.9, cx: 1470, cy: 1040, zoom: 1.16},
+        {at: 0, cx: 1470, cy: 1148, zoom: 1},
       ]}
     >
-      <SourceMark x={2548} y={516} w={178} h={44} opacity={t > 1.1 && t < 2.5 ? 1 : 0} radius={9} />
+      <SourceMark x={2548} y={516} w={178} h={44} opacity={t > 0.8 && t < 2.3 ? 1 : 0} radius={9} />
     </ScreenWindow>
   </AbsoluteFill>;
 };

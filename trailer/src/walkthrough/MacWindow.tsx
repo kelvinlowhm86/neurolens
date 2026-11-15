@@ -95,18 +95,23 @@ export const ScreenWindow: React.FC<{
   rate?: number;
   base: Rect;
   cams?: ScreenCam[];
+  fit?: 'cover' | 'contain';
+  contentBg?: string;
   children?: React.ReactNode;
-}> = ({title, x, y, w, h, src, kind, sourceW, sourceH, sourceStart = 0, rate = 1, base, cams, children}) => {
+}> = ({title, x, y, w, h, src, kind, sourceW, sourceH, sourceStart = 0, rate = 1, base, cams, fit = 'cover', contentBg = '#000', children}) => {
   const frame = useCurrentFrame();
   const t = frame / FPS;
   const crop = cropAt(base, cams, t, sourceW, sourceH);
   const contentH = h - BAR;
-  const scale = Math.max(w / crop.w, contentH / crop.h);
+  const scale = fit === 'contain'
+    ? Math.min(w / crop.w, contentH / crop.h)
+    : Math.max(w / crop.w, contentH / crop.h);
   const offX = (w - crop.w * scale) / 2;
   const offY = (contentH - crop.h * scale) / 2;
 
   return <div style={{position: 'absolute', left: x, top: y, width: w, height: h}}>
     <MacChrome title={title}>
+      <div style={{position: 'absolute', inset: 0, background: contentBg}} />
       <div style={{
         position: 'absolute',
         left: offX - crop.x * scale,

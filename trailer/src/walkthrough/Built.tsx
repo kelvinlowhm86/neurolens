@@ -20,16 +20,16 @@ type Box = {
 };
 
 const boxes: Box[] = [
-  {id: 'browser', title: 'Browser', label: 'your file', x: 60, y: 270, w: 220, h: 130, delay: 0.15, dx: -120, dy: 80, rot: -2},
-  {id: 's3', title: 'Storage', label: 'S3', x: 330, y: 270, w: 220, h: 130, delay: 0.28, dx: 50, dy: -110, rot: 1.4},
-  {id: 'website', title: 'Website', label: 'CloudFront + Lambda', x: 60, y: 456, w: 220, h: 130, delay: 0.42, dx: -90, dy: 130, rot: -1.2},
-  {id: 'queue', title: 'Queue', label: 'SQS', x: 600, y: 270, w: 220, h: 130, delay: 0.56, dx: 30, dy: -140, rot: 2},
-  {id: 'check', title: 'Check', label: 'Lambda · length + price', x: 880, y: 270, w: 250, h: 130, delay: 0.7, dx: 110, dy: -80, rot: 1},
-  {id: 'gpu', title: 'GPU', label: 'idle: $0 / hour', x: 1170, y: 260, w: 250, h: 150, delay: 0.84, dx: 160, dy: 40, rot: 2.4},
-  {id: 'credits', title: 'Credit', label: 'held / charged', x: 600, y: 456, w: 220, h: 130, delay: 0.98, dx: 100, dy: 130, rot: -1.8},
-  {id: 'brain', title: 'Brain', label: 'TRIBE v2', x: 330, y: 456, w: 220, h: 130, delay: 1.12, dx: -40, dy: 140, rot: 1.5},
-  {id: 'report', title: 'Report', label: 'Bedrock · Claude', x: 1170, y: 456, w: 250, h: 130, delay: 1.26, dx: 150, dy: 120, rot: -2},
-  {id: 'response', title: 'Response', label: 'second by second', x: 880, y: 456, w: 250, h: 130, delay: 1.4, dx: 80, dy: 100, rot: 1.2},
+  {id: 'browser', title: 'Browser', label: 'your file', x: 50, y: 210, w: 300, h: 170, delay: 0.12, dx: -120, dy: 80, rot: -2},
+  {id: 's3', title: 'Storage', label: 'S3', x: 390, y: 210, w: 300, h: 170, delay: 0.24, dx: 50, dy: -110, rot: 1.4},
+  {id: 'queue', title: 'Queue', label: 'SQS', x: 730, y: 210, w: 300, h: 170, delay: 0.36, dx: 30, dy: -140, rot: 2},
+  {id: 'check', title: 'Check', label: 'Lambda · length + price', x: 1070, y: 210, w: 300, h: 170, delay: 0.48, dx: 110, dy: -80, rot: 1},
+  {id: 'gpu', title: 'GPU', label: 'idle: $0 / hour', x: 1410, y: 200, w: 300, h: 190, delay: 0.60, dx: 160, dy: 40, rot: 2.4},
+  {id: 'website', title: 'Website', label: 'CloudFront + Lambda', x: 50, y: 440, w: 300, h: 170, delay: 0.72, dx: -90, dy: 130, rot: -1.2},
+  {id: 'brain', title: 'Brain', label: 'TRIBE v2', x: 390, y: 440, w: 300, h: 170, delay: 0.84, dx: -40, dy: 140, rot: 1.5},
+  {id: 'credits', title: 'Credit', label: 'held / charged', x: 730, y: 440, w: 300, h: 170, delay: 0.96, dx: 100, dy: 130, rot: -1.8},
+  {id: 'response', title: 'Response', label: 'second by second', x: 1070, y: 440, w: 300, h: 170, delay: 1.08, dx: 80, dy: 100, rot: 1.2},
+  {id: 'report', title: 'Report', label: 'Bedrock · Claude', x: 1410, y: 440, w: 300, h: 170, delay: 1.20, dx: 150, dy: 120, rot: -2},
 ];
 
 const Card: React.FC<{box: Box; t: number}> = ({box, t}) => {
@@ -43,14 +43,14 @@ const Card: React.FC<{box: Box; t: number}> = ({box, t}) => {
     opacity: p,
     transform: `rotate(${(box.rot ?? 0) * (1 - p)}deg) scale(${0.92 + p * 0.08})`,
     transformOrigin: '50% 50%',
-    background: C.surface, borderRadius: 13, boxSizing: 'border-box',
-    border: `1px solid ${hot ? C.hot : C.rule}`,
-    boxShadow: hot ? `0 0 0 1px ${C.hot}, 0 0 34px rgba(255,138,42,.28)` : '0 12px 30px rgba(0,0,0,.35)',
-    display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '0 18px',
+    background: C.surface, borderRadius: 15, boxSizing: 'border-box',
+    border: `1.5px solid ${hot ? C.hot : C.rule}`,
+    boxShadow: hot ? `0 0 0 1px ${C.hot}, 0 0 34px rgba(255,138,42,.28)` : '0 14px 34px rgba(0,0,0,.38)',
+    display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '0 22px',
     fontFamily, color: C.text,
   }}>
-    <div style={{fontSize: 28, lineHeight: 1.1, fontWeight: 600, letterSpacing: '-0.025em'}}>{box.title}</div>
-    <div style={{marginTop: 7, fontSize: 16, lineHeight: 1.3, color: C.muted, letterSpacing: '-0.005em'}}>{box.label}</div>
+    <div style={{fontSize: 38, lineHeight: 1.1, fontWeight: 600, letterSpacing: '-0.028em'}}>{box.title}</div>
+    <div style={{marginTop: 9, fontSize: 22, lineHeight: 1.25, color: C.muted, letterSpacing: '-0.005em'}}>{box.label}</div>
   </div>;
 };
 
@@ -66,68 +66,68 @@ export const Built: React.FC = () => {
 
   return <AbsoluteFill style={{background: 'radial-gradient(ellipse at 50% 45%, #0B0C0F 0%, #000 74%)', fontFamily, color: C.text}}>
     <div style={{
-      position: 'absolute', left: 160, top: 110, width: 1600, height: 860,
-      borderRadius: 20, boxSizing: 'border-box', border: `1px solid ${C.rule}`,
+      position: 'absolute', left: 80, top: 80, width: 1760, height: 920,
+      borderRadius: 22, boxSizing: 'border-box', border: `1.5px solid ${C.rule}`,
       opacity: frameIn, boxShadow: '0 30px 90px rgba(0,0,0,.6)',
     }} />
     <div style={{
-      position: 'absolute', left: 198, top: 146, opacity: frameIn,
-      fontSize: 30, fontWeight: 600, letterSpacing: '-0.03em',
+      position: 'absolute', left: 130, top: 118, opacity: frameIn,
+      fontSize: 42, fontWeight: 600, letterSpacing: '-0.032em',
     }}>Terraform</div>
     <div style={{
-      position: 'absolute', left: 198, top: 184, opacity: frameIn,
-      fontSize: 18, color: C.muted, letterSpacing: '-0.005em',
+      position: 'absolute', left: 130, top: 170, opacity: frameIn,
+      fontSize: 24, color: C.muted, letterSpacing: '-0.005em',
     }}>one command up, one command down</div>
 
-    <div style={{position: 'absolute', left: 160, top: 110, width: 1600, height: 860}}>
-      <svg width={1600} height={860} style={{position: 'absolute', left: 0, top: 0, overflow: 'visible'}}>
+    <div style={{position: 'absolute', left: 80, top: 80, width: 1760, height: 920}}>
+      <svg width={1760} height={920} style={{position: 'absolute', left: 0, top: 0, overflow: 'visible'}}>
         <defs>
           <marker id="built-arrow" viewBox="0 0 10 10" refX="8" refY="5"
             markerWidth="7" markerHeight="7" orient="auto-start-reverse">
             <path d="M 0 0 L 10 5 L 0 10 z" fill="#4B515A" />
           </marker>
         </defs>
-        <path d="M 280 335 L 320 335" fill="none" stroke="#4B515A" strokeWidth={2} markerEnd="url(#built-arrow)" opacity={frameIn} />
-        <path d="M 550 335 L 590 335" fill="none" stroke="#4B515A" strokeWidth={2} markerEnd="url(#built-arrow)" opacity={frameIn} />
-        <path d="M 820 335 L 870 335" fill="none" stroke="#4B515A" strokeWidth={2} markerEnd="url(#built-arrow)" opacity={frameIn} />
-        <path d="M 1130 335 L 1160 335" fill="none" stroke="#4B515A" strokeWidth={2} markerEnd="url(#built-arrow)" opacity={frameIn} />
-        <path d="M 170 400 L 170 450" fill="none" stroke="#4B515A" strokeWidth={2} strokeDasharray="8 9" opacity={frameIn * 0.7} />
-        <path d="M 1005 400 L 710 450" fill="none" stroke="#4B515A" strokeWidth={2} strokeDasharray="8 9" opacity={frameIn * 0.7} />
-        <path d="M 550 521 L 870 521" fill="none" stroke="#4B515A" strokeWidth={2} opacity={frameIn * 0.7} />
-        <path d="M 1295 410 L 1295 450" fill="none" stroke="#4B515A" strokeWidth={2} markerEnd="url(#built-arrow)" opacity={frameIn} />
-        <path d="M 710 780 L 1295 780 L 1295 410" fill="none" stroke="#FF8A2A"
-          strokeWidth={2} strokeDasharray="8 9" opacity={watch * 0.75} />
+        <path d="M 350 295 L 380 295" fill="none" stroke="#4B515A" strokeWidth={2} markerEnd="url(#built-arrow)" opacity={frameIn} />
+        <path d="M 690 295 L 720 295" fill="none" stroke="#4B515A" strokeWidth={2} markerEnd="url(#built-arrow)" opacity={frameIn} />
+        <path d="M 1030 295 L 1060 295" fill="none" stroke="#4B515A" strokeWidth={2} markerEnd="url(#built-arrow)" opacity={frameIn} />
+        <path d="M 1370 295 L 1400 295" fill="none" stroke="#4B515A" strokeWidth={2} markerEnd="url(#built-arrow)" opacity={frameIn} />
+        <path d="M 200 380 L 200 432" fill="none" stroke="#4B515A" strokeWidth={2} strokeDasharray="8 9" opacity={frameIn * 0.7} />
+        <path d="M 1220 380 L 880 432" fill="none" stroke="#4B515A" strokeWidth={2} strokeDasharray="8 9" opacity={frameIn * 0.7} />
+        <path d="M 690 525 L 1060 525" fill="none" stroke="#4B515A" strokeWidth={2} opacity={frameIn * 0.7} />
+        <path d="M 1560 390 L 1560 432" fill="none" stroke="#4B515A" strokeWidth={2} markerEnd="url(#built-arrow)" opacity={frameIn} />
+        <path d="M 1030 755 L 1560 755 L 1560 390" fill="none" stroke="#FF8A2A"
+          strokeWidth={2.5} strokeDasharray="8 9" opacity={watch * 0.8} />
       </svg>
 
       {boxes.map((box) => <Card key={box.id} box={box} t={t} />)}
 
       <div style={{
-        position: 'absolute', left: 600, top: 650, width: 220, height: 130,
+        position: 'absolute', left: 730, top: 670, width: 300, height: 170,
         opacity: watch, transform: `translateY(${(1 - watch) * 14}px)`,
-        background: C.surface, borderRadius: 13, border: `1px solid ${C.rule}`,
-        boxShadow: '0 12px 30px rgba(0,0,0,.35)',
-        display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '0 18px',
-        fontFamily, color: C.text,
+        background: C.surface, borderRadius: 15, border: `1.5px solid ${C.hot}`,
+        boxShadow: '0 14px 34px rgba(0,0,0,.38), 0 0 32px rgba(255,138,42,.2)',
+        display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '0 22px',
+        fontFamily, color: C.text, boxSizing: 'border-box',
       }}>
-        <div style={{fontSize: 28, fontWeight: 600, letterSpacing: '-0.025em'}}>Watchdog</div>
-        <div style={{marginTop: 7, fontSize: 16, color: C.muted}}>every 10 min</div>
-        <svg width={34} height={28} viewBox="0 0 34 28" style={{
-          position: 'absolute', right: 16, bottom: 14, overflow: 'visible',
+        <div style={{fontSize: 38, lineHeight: 1.1, fontWeight: 600, letterSpacing: '-0.028em'}}>Watchdog</div>
+        <div style={{marginTop: 9, fontSize: 22, color: C.muted}}>every 10 min</div>
+        <svg width={38} height={32} viewBox="0 0 34 28" style={{
+          position: 'absolute', right: 20, bottom: 18, overflow: 'visible',
         }}>
-          <polyline points="3,15 12,24 31,4" fill="none" stroke={C.hot} strokeWidth={3}
+          <polyline points="3,15 12,24 31,4" fill="none" stroke={C.hot} strokeWidth={3.2}
             strokeLinecap="round" strokeLinejoin="round"
             strokeDasharray={checkLen} strokeDashoffset={checkLen * (1 - tick)} opacity={tick > 0 ? 1 : 0} />
         </svg>
       </div>
 
       <div style={{
-        position: 'absolute', left: 1170, top: 260, width: 250, height: 150,
-        borderRadius: 13, pointerEvents: 'none',
+        position: 'absolute', left: 1410, top: 200, width: 300, height: 190,
+        borderRadius: 15, pointerEvents: 'none',
         background: `rgba(0,0,0,${gpuDim * 0.24})`,
       }} />
       <div style={{
-        position: 'absolute', left: 1188, top: 376, fontFamily, fontSize: 15,
-        color: C.muted, opacity: gpuDim,
+        position: 'absolute', left: 1432, top: 344, fontFamily, fontSize: 22,
+        color: C.hot, fontWeight: 500, opacity: gpuDim,
       }}>off · $0 / hour</div>
     </div>
   </AbsoluteFill>;

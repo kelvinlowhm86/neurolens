@@ -24,14 +24,14 @@ export const Close: React.FC = () => {
 
   const inFade = easeOut(t, 0, 0.7);
   const outFade = 1 - easeIO(t, length - 0.8, length);
-  const word = easeOut(t, 2.3, 3.1);
-  const sub = easeOut(t, 3.0, 3.8);
+  const word = easeOut(t, 1.4, 2.2);
+  const sub = easeOut(t, 2.0, 2.8);
   const turn = clamp(t / length);
 
   return <AbsoluteFill style={{background: 'radial-gradient(ellipse at 50% 46%, #101114 0%, #000 68%)', fontFamily, color: C.text, overflow: 'hidden'}}>
     {data && <ThreeCanvas
       width={1500} height={1080}
-      style={{position: 'absolute', left: 210, top: 0, opacity: 0.42 * inFade, pointerEvents: 'none'}}
+      style={{position: 'absolute', left: 210, top: -120, opacity: 0.25 * inFade, pointerEvents: 'none'}}
       camera={{fov: 28, near: 0.1, far: 3000, position: [-300, 300, 165], up: [0, 0, 1]}}
       gl={{alpha: true, antialias: true, preserveDrawingBuffer: true}}
       dpr={1}
@@ -46,10 +46,13 @@ export const Close: React.FC = () => {
       <div style={{
         fontSize: 176, lineHeight: 1, fontWeight: 600, letterSpacing: '-0.055em',
         opacity: word, transform: `translateY(${(1 - word) * 14}px)`,
-        textShadow: '0 10px 60px rgba(0,0,0,.55)',
+        textShadow: '0 12px 64px rgba(0,0,0,.85)',
       }}>NeuroLens</div>
       <div style={{
-        marginTop: 30, fontSize: 28, color: C.muted, letterSpacing: '-0.01em',
+        marginTop: 260, fontSize: 32, fontWeight: 500, color: C.text, letterSpacing: '-0.01em',
+        padding: '12px 30px', borderRadius: 999,
+        background: 'rgba(13,14,17,.88)', border: `1px solid ${C.rule}`,
+        boxShadow: '0 14px 40px rgba(0,0,0,.75)',
         opacity: sub, transform: `translateY(${(1 - sub) * 8}px)`,
       }}>
         Try the samples at the link below
