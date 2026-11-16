@@ -19,23 +19,32 @@ const TakeVideo: React.FC<{segment: Segment}> = ({segment}) => {
     clamp((segment.to - absolute) / segment.fade),
   );
 
-  return <div style={{position: 'absolute', inset: 0, opacity, background: '#000'}}>
+  return <div style={{position: 'absolute', inset: 0, opacity, background: '#0A0C0D'}}>
     <div style={{
       position: 'absolute',
-      left: offX - crop.x * scale,
-      top: offY - crop.y * scale,
-      width: SOURCE_W,
-      height: SOURCE_H,
-      transform: `scale(${scale})`,
-      transformOrigin: '0 0',
+      left: offX,
+      top: offY,
+      width: crop.w * scale,
+      height: crop.h * scale,
+      overflow: 'hidden',
     }}>
-      <OffthreadVideo
-        src={staticFile(TAKE_SRC[segment.take])}
-        trimBefore={sec(segment.sourceStart)}
-        playbackRate={segment.rate}
-        muted
-        style={{position: 'absolute', left: 0, top: 0, width: SOURCE_W, height: SOURCE_H}}
-      />
+      <div style={{
+        position: 'absolute',
+        left: -crop.x * scale,
+        top: -crop.y * scale,
+        width: SOURCE_W,
+        height: SOURCE_H,
+        transform: `scale(${scale})`,
+        transformOrigin: '0 0',
+      }}>
+        <OffthreadVideo
+          src={staticFile(TAKE_SRC[segment.take])}
+          trimBefore={sec(segment.sourceStart)}
+          playbackRate={segment.rate}
+          muted
+          style={{position: 'absolute', left: 0, top: 0, width: SOURCE_W, height: SOURCE_H}}
+        />
+      </div>
     </div>
   </div>;
 };

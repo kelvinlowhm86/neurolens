@@ -37,6 +37,10 @@ const cursorSource = (t: number): Point => {
 
 const Arrow: React.FC<{crop: Crop; t: number}> = ({crop, t}) => {
   const source = cursorSource(t);
+  // A framing can be narrower than the page (the group section). Do not let the
+  // cursor float over the page-coloured space outside the recorded region.
+  if (source.x < crop.x || source.x > crop.x + crop.w
+    || source.y < crop.y || source.y > crop.y + crop.h) return null;
   const {x, y} = project(source, crop, STAGE);
 
   let press = 1;

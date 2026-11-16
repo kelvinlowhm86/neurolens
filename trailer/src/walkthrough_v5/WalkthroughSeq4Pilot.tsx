@@ -119,8 +119,10 @@ export const WalkthroughSeq4Pilot: React.FC = () => {
     </Sequence>)}
 
     <Stage />
+    <Spotlight from={at(8)} to={at(9) - 0.15} sourceTop={465} sourceBottom={1320} strength={0.82} />
+    <Spotlight from={at(10) - 0.35} to={at(12) - 0.2} sourceTop={465} sourceBottom={1320} strength={0.82} />
     <Spotlight from={at(13) + 0.25} to={at(14) - 0.25} sourceTop={360} sourceBottom={1140} strength={0.4} />
-    <Spotlight from={at(14) + 0.4} to={DURATION_S - 0.5} sourceTop={1120} sourceBottom={1890} strength={0.45} />
+    <Spotlight from={at(14) + 0.1} to={DURATION_S - 0.5} sourceTop={1120} sourceBottom={1890} strength={0.45} />
     <Cursor />
 
     <Chapter />

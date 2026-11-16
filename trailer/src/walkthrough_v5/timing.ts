@@ -106,7 +106,13 @@ export const TAKE10_START = MUTED_TOGGLE.t - P.muted * length(11);
 // 0:08-0:13 advice is settled on screen inside line 12.
 export const RATE9 = 1.4;
 export const TAKE9_START = REPORT_TAB.t - RATE9 * P.report * length(12);
-export const TAKE11_START = PLAY_BOTH.t - P.playBoth * length(13);
+// Measured from s11.mp4: the two compare videos stay black for about a second
+// after the logged click while the page preloads them (the button flips from
+// "Play both" to "Pause both" at 2.60 s, the click is at 1.53 s, video frames
+// appear at 2.9 s). Start the take that much later so the drawn click lands a
+// couple of frames before the flip; the dead wait is trimmed, not shown.
+export const PRELOAD11 = 1.0;
+export const TAKE11_START = PLAY_BOTH.t + PRELOAD11 - P.playBoth * length(13);
 
 export const PRE = 4 / FPS;
 
@@ -149,33 +155,64 @@ export const PAGE_TOP = 240;
 export const PAGE_H = SOURCE_H - PAGE_TOP;
 export const STAGE = {x: 140, y: 56, w: 1640, h: 967};
 
-export type Cam = {at: number; cx: number; cy: number; zoom: number; glide?: number};
-export type Target = {cx: number; cy: number; zoom: number};
+// A framing is either a zoom about the page (keeps the 1470:836 page aspect) or
+// an explicit source rectangle, used when the subject is much wider or shorter
+// than the window. Explicit rectangles flagged `contain` are shown whole, with
+// the page's own background above and below, rather than cropped.
+export type Target = {
+  cx: number; cy: number;
+  zoom?: number;
+  w?: number; h?: number;
+  contain?: boolean;
+};
+export type Cam = Target & {at: number; glide?: number};
 
 const target = (cx: number, cy: number, zoom: number): Target => ({cx, cy, zoom});
+const frame = (cx: number, cy: number, w: number, h: number, contain = false): Target =>
+  ({cx, cy, w, h, contain});
 const cam = (time: number, t: Target, glide = 1.2): Cam => ({at: time, ...t, glide});
 
 // Framings are page regions, in source pixels, chosen so every edge lands on a
 // panel boundary or in the gap between panels:
 // - PAGE: the whole page viewport (window edges).
-// - CARD: the main chart card, from its chart content to its readout, bottom in
-//   the gap between the card and the strips header. 978 CSS px wide; that is
-//   the tightest crop that keeps the whole plot and readout.
+// - CARD: the chart card edge to edge, with 8 px on each side, from the page top
+//   to the gap before the group section (no piece of the next heading in frame).
+//   The app header and tabs stay in frame but are dimmed (they sit above the
+//   spotlight hole), so no word or button is sliced and the card itself is whole.
+//   It is 18 px taller than 16:9, so contain adds a hairline of page background.
+// - GROUPS: the whole "What the brain is doing" section, headings and all three
+//   charts. It is 2040 x 592 source px, far wider than 16:9, so it is shown
+//   width-filled with the page background above and below (contain).
 // - REPORT: the report card between two gaps in its moment list, wide enough
 //   for every advice line at once.
+// - COMPARE_HEAD / COMPARE: line 12 opens on the Compare controls and both
+//   videos, so the drawn click lands on "Play both" (COMPARE_HEAD); after the
+//   click the camera glides to the videos alone (COMPARE), width-filled with 34
+//   px margins. Both regions are 4:1 or wider, so contain adds page-coloured
+//   space above and below: nothing is cut and the verdict stays out of frame.
+// - VERDICT: the verdict card plus the overall-response chart, at a scale that
+//   puts the body text at 20 px (1.3x page zoom). LEFT and RIGHT are the ends of
+//   one slow pan: at LEFT the text start is in frame, at RIGHT its end is.
 const PAGE = target(1470, 1076, 1.0);
-const CARD = target(1908, 796, 1470 / 978);
+const CARD = frame(1890, 792.5, 2020, 1105, true);
+const GROUPS = frame(1890, 1616, 2040, 592, true);
 const REPORT = target(1894, 955, 1470 / 968);
+const COMPARE_HEAD = frame(1387.5, 795, 2715, 660, true);
+const COMPARE = frame(1462, 892.5, 2166, 425, true);
+const VERDICT_L = frame(1060, 1285, 2120, 1206);
+const VERDICT_R = frame(1840, 1285, 2120, 1206);
 
 export const CAMS: Cam[] = [
   cam(at(8), CARD),
-  cam(at(9) + 0.15, PAGE, 1.0),
+  cam(at(9) + 0.15, GROUPS, 1.0),
   cam(at(10) - 0.55, CARD, 1.0),
   cam(at(11) + 0.1, CARD, 0.9),
   cam(at(12) - 0.35, PAGE, 0.9),
   cam(at(12) + 6.8, REPORT, 0.8),
-  cam(at(13) + 0.3, PAGE, 0.9),
-  cam(at(14) + 0.2, PAGE, 0.8),
+  cam(at(13) - 0.4, COMPARE_HEAD, 1.0),
+  cam(at(13) + 1.35, COMPARE, 0.9),
+  cam(at(14) - 0.5, VERDICT_L, 0.6),
+  cam(at(14) + 0.8, VERDICT_R, 2.9),
 ];
 
 export type Click = {at: number; x: number; y: number; label: string};
@@ -217,7 +254,7 @@ export const playheadCursor = (t: number): Point => {
 
 export const CURSOR_KEYS: Key[] = [
   key(at(9) + 0.2, playheadCursor(at(9) + 0.2)),
-  key(SEE_AT - 0.4, {x: 1140, y: 1260, bow: 20}),
+  key(SEE_AT - 0.4, {x: 1140, y: 1350, bow: 20}),
   key(SEE_AT, {x: 1000, y: 1452}),
   key(HEAR_AT, {x: 1680, y: 1452}),
   key(UNDERSTAND_AT, {x: 2490, y: 1452}),
