@@ -6,7 +6,7 @@ import {Spotlight} from './Spotlight';
 import {Stage} from './Stage';
 import {
   CLICKS, DURATION, DURATION_S, FPS, LABELS, LINES, MUSIC_OFFSET, MUSIC_SOURCE, SFX,
-  START, VOICE_SOURCE, at, sec,
+  STAGE, START, VOICE_SOURCE, at, sec,
 } from './timing';
 
 const clamp = (x: number, a = 0, b = 1) => Math.max(a, Math.min(b, x));
@@ -32,23 +32,54 @@ const musicLevel = (t: number) => {
   return level * clamp(t / 0.8) * clamp((DURATION_S - t) / 1.0);
 };
 
-const Chip: React.FC<{
-  from: number; to: number; text: string; x: number; y: number; align?: 'left' | 'right';
-}> = ({from, to, text, x, y, align = 'left'}) => {
+const Label: React.FC<{from: number; to: number; text: string}> = ({from, to, text}) => {
+  const frame = useCurrentFrame();
+  const t = frame / FPS;
+  const opacity = Math.min(clamp((t - from) / 0.5), clamp((to - t) / 0.5));
+  if (opacity <= 0) return null;
+  return <>
+    <div style={{
+      position: 'absolute',
+      left: STAGE.x,
+      top: STAGE.y + STAGE.h - 150,
+      width: STAGE.w,
+      height: 150,
+      background: 'linear-gradient(to top, rgba(0,0,0,.86) 0%, rgba(0,0,0,.55) 45%, rgba(0,0,0,0) 100%)',
+      opacity,
+    }} />
+    <div style={{
+      position: 'absolute',
+      left: STAGE.x + 30,
+      top: STAGE.y + STAGE.h - 54,
+      opacity,
+      fontFamily,
+      fontSize: 24,
+      fontWeight: 500,
+      letterSpacing: '.01em',
+      color: 'rgba(236,237,239,.95)',
+      textShadow: '0 2px 10px rgba(0,0,0,.65)',
+      whiteSpace: 'nowrap',
+      pointerEvents: 'none',
+    }}>{text}</div>
+  </>;
+};
+
+const RunChip: React.FC<{from: number; to: number; text: string}> = ({from, to, text}) => {
   const frame = useCurrentFrame();
   const t = frame / FPS;
   const opacity = Math.min(clamp((t - from) / 0.45), clamp((to - t) / 0.45));
+  if (opacity <= 0) return null;
   return <div style={{
     position: 'absolute',
-    left: x,
-    top: y,
-    transform: align === 'right' ? 'translateX(-100%)' : undefined,
+    left: STAGE.x + STAGE.w - 24,
+    top: STAGE.y + 7,
+    transform: 'translateX(-100%)',
     opacity,
     fontFamily,
-    fontSize: 18,
+    fontSize: 22,
     fontWeight: 500,
-    letterSpacing: '.02em',
-    color: 'rgba(236,237,239,.66)',
+    letterSpacing: '.01em',
+    color: 'rgba(236,237,239,.7)',
     whiteSpace: 'nowrap',
     pointerEvents: 'none',
   }}>{text}</div>;
@@ -88,13 +119,13 @@ export const WalkthroughSeq4Pilot: React.FC = () => {
     </Sequence>)}
 
     <Stage />
-    <Spotlight from={at(12) + 2.6} to={at(12) + 8.1} sourceTop={1338} sourceBottom={1612} />
-    <Spotlight from={at(14) + 1.45} to={DURATION_S - 0.6} sourceTop={1348} sourceBottom={1412} strength={0.5} />
+    <Spotlight from={at(13) + 0.25} to={at(14) - 0.25} sourceTop={360} sourceBottom={1140} strength={0.4} />
+    <Spotlight from={at(14) + 0.4} to={DURATION_S - 0.5} sourceTop={1120} sourceBottom={1890} strength={0.45} />
     <Cursor />
 
     <Chapter />
-    <Chip from={LABELS.run.from} to={LABELS.run.to} text={LABELS.run.text} x={1770} y={20} align="right" />
-    <Chip from={LABELS.bedrock.from} to={LABELS.bedrock.to} text={LABELS.bedrock.text} x={150} y={1024} />
-    <Chip from={LABELS.compare.from} to={LABELS.compare.to} text={LABELS.compare.text} x={150} y={1024} />
+    <RunChip from={LABELS.run.from} to={LABELS.run.to} text={LABELS.run.text} />
+    <Label from={LABELS.bedrock.from} to={LABELS.bedrock.to} text={LABELS.bedrock.text} />
+    <Label from={LABELS.compare.from} to={LABELS.compare.to} text={LABELS.compare.text} />
   </AbsoluteFill>;
 };

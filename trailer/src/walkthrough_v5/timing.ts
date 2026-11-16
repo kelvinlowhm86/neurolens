@@ -65,17 +65,32 @@ export const MUTED_TOGGLE = action('s10', 'muted_toggle');
 export const REPORT_TAB = action('s9', 'report_tab');
 export const PLAY_BOTH = action('s11', 'play_both');
 
+// The three group words are spoken late in line 9 ("what you see, what you hear,
+// what you understand"). Split the line by character position, so a re-recorded
+// voice moves the sweep with it.
+const GROUPS_LINE = findLine(9);
+const wordAt = (word: string) => {
+  const match = new RegExp(`\\b${word}\\b`, 'i').exec(GROUPS_LINE.text);
+  if (!match) throw new Error(`\"${word}\" is missing from voice line 9`);
+  return GROUPS_LINE.start + (match.index / GROUPS_LINE.text.length) * (GROUPS_LINE.end - GROUPS_LINE.start);
+};
+
+export const SEE_AT = wordAt('see') - START;
+export const HEAR_AT = wordAt('hear') - START;
+export const UNDERSTAND_AT = wordAt('understand') - START;
+
+// "Show 4 parts" stays after the sweep, still inside line 9.
+export const SHOW_AT = Math.min(UNDERSTAND_AT + 0.5, at(9) + length(9) - 0.18);
+
 // How far into each spoken line the logged action should land. One number per
 // take; every take start and every later cue falls out of these.
 export const P = {
-  showParts: 0.58,
   moment: 0.5,
   muted: 0.2,
   report: 0.08,
   playBoth: 0.24,
 };
 
-export const SHOW_AT = within(9, P.showParts);
 export const MOMENT_AT = within(10, P.moment);
 export const MUTED_AT = within(11, P.muted);
 export const REPORT_AT = within(12, P.report);
@@ -87,7 +102,9 @@ export const MOMENT_HOVER_AT = at(10) + (MOMENT_HOVER.t - (MOMENT_CLICK.t - P.mo
 export const TAKE6_START = SHOW_PARTS.t - SHOW_AT;
 export const TAKE7_START = MOMENT_CLICK.t - P.moment * length(10);
 export const TAKE10_START = MUTED_TOGGLE.t - P.muted * length(11);
-export const RATE9 = 0.8;
+// The report take scrolls its own content for ten seconds. Run it faster so the
+// 0:08-0:13 advice is settled on screen inside line 12.
+export const RATE9 = 1.4;
 export const TAKE9_START = REPORT_TAB.t - RATE9 * P.report * length(12);
 export const TAKE11_START = PLAY_BOTH.t - P.playBoth * length(13);
 
@@ -138,34 +155,27 @@ export type Target = {cx: number; cy: number; zoom: number};
 const target = (cx: number, cy: number, zoom: number): Target => ({cx, cy, zoom});
 const cam = (time: number, t: Target, glide = 1.2): Cam => ({at: time, ...t, glide});
 
-const CHART = target(1880, 850, 1.5);
-const GROUPS = target(900, 1400, 1.5);
-const DOT = target(1440, 880, 1.8);
-const DOT2 = target(1440, 820, 1.72);
-const CHART_WIDE = target(1440, 860, 1.6);
-const REPORT_TAB_CAM = target(1470, 940, 1.5);
-const ADVICE = target(1815, 1420, 1.6);
-const COMPARE_TAB = target(470, 440, 1.55);
-const PLAY_CAM = target(2640, 760, 1.55);
-const RIGHT_VIDEO = target(2400, 1040, 1.55);
-const LEFT_VIDEO = target(760, 1040, 1.55);
-const VERDICT = target(1000, 1330, 1.6);
-const VERDICT2 = target(1000, 1360, 1.65);
+// Framings are page regions, in source pixels, chosen so every edge lands on a
+// panel boundary or in the gap between panels:
+// - PAGE: the whole page viewport (window edges).
+// - CARD: the main chart card, from its chart content to its readout, bottom in
+//   the gap between the card and the strips header. 978 CSS px wide; that is
+//   the tightest crop that keeps the whole plot and readout.
+// - REPORT: the report card between two gaps in its moment list, wide enough
+//   for every advice line at once.
+const PAGE = target(1470, 1076, 1.0);
+const CARD = target(1908, 796, 1470 / 978);
+const REPORT = target(1894, 955, 1470 / 968);
 
 export const CAMS: Cam[] = [
-  cam(at(8), CHART),
-  cam(at(9) + 0.15, GROUPS, 1.6),
-  cam(at(10) - 0.55, DOT, 1.1),
-  cam(at(10) + 0.65, DOT2, 1.2),
-  cam(at(11) + 0.2, CHART_WIDE, 1.2),
-  cam(at(12) - 0.5, REPORT_TAB_CAM, 0.9),
-  cam(at(12) + 1.1, ADVICE, 1.4),
-  cam(at(13) - 0.6, COMPARE_TAB, 1.0),
-  cam(at(13) + 0.45, PLAY_CAM, 0.75),
-  cam(at(13) + 2.0, RIGHT_VIDEO, 1.1),
-  cam(at(13) + 3.2, LEFT_VIDEO, 1.1),
-  cam(at(14) + 0.1, VERDICT, 1.3),
-  cam(at(14) + 2.0, VERDICT2, 1.6),
+  cam(at(8), CARD),
+  cam(at(9) + 0.15, PAGE, 1.0),
+  cam(at(10) - 0.55, CARD, 1.0),
+  cam(at(11) + 0.1, CARD, 0.9),
+  cam(at(12) - 0.35, PAGE, 0.9),
+  cam(at(12) + 6.8, REPORT, 0.8),
+  cam(at(13) + 0.3, PAGE, 0.9),
+  cam(at(14) + 0.2, PAGE, 0.8),
 ];
 
 export type Click = {at: number; x: number; y: number; label: string};
@@ -206,15 +216,14 @@ export const playheadCursor = (t: number): Point => {
 };
 
 export const CURSOR_KEYS: Key[] = [
-  key(at(9), playheadCursor(at(9))),
-  key(SHOW_AT - 0.5, {x: 1442, y: 1449, bow: -30}),
-  key(SHOW_AT + 0.2, {x: 1442, y: 1449}),
-  key(SHOW_AT + 0.5, {x: 140, y: 1790, bow: 40}),
-  key(SHOW_AT + 1.3, {x: 390, y: 1790, bow: -20}),
-  key(SHOW_AT + 2.1, {x: 650, y: 1790, bow: 20}),
-  key(at(10) - 0.55, {x: 900, y: 1650}),
-  key(at(10) - 0.1, {x: 1550, y: 900}),
-  key(at(10) + 0.4, {x: 1480, y: 860}),
+  key(at(9) + 0.2, playheadCursor(at(9) + 0.2)),
+  key(SEE_AT - 0.4, {x: 1140, y: 1260, bow: 20}),
+  key(SEE_AT, {x: 1000, y: 1452}),
+  key(HEAR_AT, {x: 1680, y: 1452}),
+  key(UNDERSTAND_AT, {x: 2490, y: 1452}),
+  key(SHOW_AT, {x: 1442, y: 1449, bow: -70}),
+  key(SHOW_AT + 0.5, {x: 1442, y: 1449}),
+  key(at(10) + 0.05, {x: 1450, y: 1260, bow: 40}),
   key(MOMENT_HOVER_AT, {x: 1287, y: 753, bow: -30}),
   key(MOMENT_AT, {x: 1287, y: 753}),
   key(MOMENT_AT + 0.7, {x: 1300, y: 762}),
@@ -232,16 +241,18 @@ export const CURSOR_KEYS: Key[] = [
   key(at(13) - 0.8, {x: 900, y: 900}),
   key(at(13) - 0.1, {x: 427, y: 418}),
   key(at(13) + 0.3, {x: 520, y: 480}),
-  key(PLAY_AT, {x: 2652, y: 543, bow: -40}),
+  key(PLAY_AT - 0.3, {x: 2500, y: 560, bow: 20}),
+  key(PLAY_AT, {x: 2652, y: 543}),
   key(PLAY_AT + 0.5, {x: 2652, y: 543}),
-  key(PLAY_AT + 1.5, {x: 2450, y: 720}),
-  key(at(14) + 0.3, {x: 2200, y: 900}),
-  key(DURATION_S, {x: 2300, y: 1000}),
+  key(PLAY_AT + 1.5, {x: 2300, y: 900, bow: -30}),
+  key(at(14) + 0.6, {x: 1900, y: 1240, bow: 40}),
+  key(at(14) + 2.2, {x: 1800, y: 1320}),
+  key(DURATION_S, {x: 1980, y: 1380}),
 ];
 
 export const LABELS = {
-  bedrock: {from: at(12) + 1.2, to: at(12) + 6.8, text: 'Claude on Amazon Bedrock'},
-  compare: {from: at(13) + 0.9, to: at(13) + 5.0, text: 'CeraVe ad, two cuts'},
+  bedrock: {from: at(12) + 1.0, to: at(13) - 0.4, text: 'Claude on Amazon Bedrock'},
+  compare: {from: at(13) + 0.5, to: at(13) + 5.1, text: 'CeraVe ad, two cuts'},
   run: {from: at(8) + 0.2, to: at(9) - 0.2, text: 'Recorded run · 10:30'},
 };
 
