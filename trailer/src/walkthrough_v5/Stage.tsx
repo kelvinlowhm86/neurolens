@@ -1,5 +1,5 @@
 import React from 'react';
-import {OffthreadVideo, Sequence, staticFile, useCurrentFrame} from 'remotion';
+import {Freeze, OffthreadVideo, Sequence, staticFile, useCurrentFrame} from 'remotion';
 import {MacChrome} from '../walkthrough/MacWindow';
 import {cropAt, fit} from './camera';
 import {
@@ -18,6 +18,13 @@ const TakeVideo: React.FC<{segment: Segment}> = ({segment}) => {
     clamp((absolute - segment.from) / 8),
     clamp((segment.to - absolute) / segment.fade),
   );
+  const video = <OffthreadVideo
+    src={staticFile(TAKE_SRC[segment.take])}
+    trimBefore={sec(segment.sourceStart)}
+    playbackRate={segment.rate}
+    muted
+    style={{position: 'absolute', left: 0, top: 0, width: SOURCE_W, height: SOURCE_H}}
+  />;
 
   return <div style={{position: 'absolute', inset: 0, opacity, background: '#0A0C0D'}}>
     <div style={{
@@ -37,13 +44,7 @@ const TakeVideo: React.FC<{segment: Segment}> = ({segment}) => {
         transform: `scale(${scale})`,
         transformOrigin: '0 0',
       }}>
-        <OffthreadVideo
-          src={staticFile(TAKE_SRC[segment.take])}
-          trimBefore={sec(segment.sourceStart)}
-          playbackRate={segment.rate}
-          muted
-          style={{position: 'absolute', left: 0, top: 0, width: SOURCE_W, height: SOURCE_H}}
-        />
+        {segment.still ? <Freeze frame={0}>{video}</Freeze> : video}
       </div>
     </div>
   </div>;

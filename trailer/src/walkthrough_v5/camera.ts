@@ -18,6 +18,16 @@ const cropFor = (cam: Cam): Crop => {
   };
 };
 
+// Critically damped spring step, normalised so it reaches exactly 1: no
+// overshoot and no snap when the glide ends.
+const SPRING = 6;
+const springEase = (p: number) =>
+  (1 - Math.exp(-SPRING * p) * (1 + SPRING * p)) /
+  (1 - Math.exp(-SPRING) * (1 + SPRING));
+
+const ease = (p: number, kind: Cam['ease']) =>
+  kind === 'spring' ? springEase(p) : Easing.inOut(Easing.cubic)(p);
+
 // Interpolate the visible source rectangle rather than a zoom factor, so a
 // framing can change shape (e.g. the flat group section) as well as scale.
 export const cameraAt = (cams: Cam[], t: number): Crop => {
@@ -27,7 +37,7 @@ export const cameraAt = (cams: Cam[], t: number): Crop => {
     if (t < next.at) break;
     const glide = next.glide ?? 1.2;
     if (t <= next.at + glide) {
-      const p = Easing.inOut(Easing.cubic)(clamp((t - next.at) / glide, 0, 1));
+      const p = ease(clamp((t - next.at) / glide, 0, 1), next.ease);
       const a = cropFor(previous);
       const b = cropFor(next);
       return {

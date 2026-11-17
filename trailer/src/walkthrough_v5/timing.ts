@@ -93,10 +93,11 @@ export const UNDERSTAND_AT = wordAt('understand') - START;
 export const SHOW_AT = Math.min(UNDERSTAND_AT + 0.5, at(9) + length(9) - 0.18);
 
 // Word cues for the lines whose focus changes inside the line.
+export const TYPICAL_AT = phraseAt(8, 'Above the typical line');
+export const TYPICAL_TO = phraseAt(8, 'ordinary viewing') + 0.55;
 export const SOUND_OFF_AT = phraseAt(11, 'Turn the sound off');
 export const DROP_AT = phraseAt(11, 'whole line drops');
 export const SOUND_LABEL_AT = phraseAt(11, 'Most of this response');
-export const ADVICE_AT = phraseAt(12, 'plain advice');
 export const ADD_AT = phraseAt(12, 'add one second');
 export const OPENING_AT = phraseAt(14, 'The short cut');
 export const MIDDLE_AT = phraseAt(14, 'The long cut');
@@ -104,7 +105,9 @@ export const MIDDLE_AT = phraseAt(14, 'The long cut');
 // The inset clip is source 0:07-0:14, so its own t=1.0 is video 0:08.
 export const INSET = {
   src: 'walkthrough/v5/swee_0807_0814.mp4',
-  from: at(10) + 0.5,
+  // Start early enough that the old group photo (clip 3.87 s, video 0:10.9)
+  // is on screen before line 10 ends.
+  from: at(10) + 0.2,
   to: at(11) + 1.2,
   trim: 1.0,
   rate: 1.0,
@@ -114,13 +117,15 @@ export const INSET = {
 // take; every take start and every later cue falls out of these.
 export const P = {
   moment: 0.5,
-  muted: 0.2,
   report: 0.08,
   playBoth: 0.24,
 };
 
 export const MOMENT_AT = within(10, P.moment);
-export const MUTED_AT = within(11, P.muted);
+// The toggle click is timed to the words "turn the sound off", so the take is
+// slowed until the click instead of landing the click early to keep the take's
+// own clock.
+export const MUTED_AT = SOUND_OFF_AT;
 export const REPORT_AT = within(12, P.report);
 export const PLAY_AT = within(13, P.playBoth);
 
@@ -129,16 +134,20 @@ export const MOMENT_HOVER_AT = at(10) + (MOMENT_HOVER.t - (MOMENT_CLICK.t - P.mo
 // Take source seconds at the first frame of each take's layer.
 export const TAKE6_START = SHOW_PARTS.t - SHOW_AT;
 export const TAKE7_START = MOMENT_CLICK.t - P.moment * length(10);
-export const TAKE10_START = MUTED_TOGGLE.t - P.muted * length(11);
-// The report take stays still from just after the tab click until the scroll
-// starts at about 7 s. The first layer shows the click and the page change; an
-// eight-frame crossfade then joins the loaded report page, so the scroll has
-// time to settle the 0:08-0:13 row before "add one second" is spoken.
-export const RATE9 = 1.4;
-export const SPLIT9 = 1.0;
-export const SKIP9 = 7.1;
+
+const MUTED_FRAME = sec(MUTED_AT);
+const MUTED_JOIN = sec(at(11));
+export const TAKE10_RATE = MUTED_TOGGLE.t / ((MUTED_FRAME - (MUTED_JOIN - 4)) / FPS);
+export const TAKE10_SPLIT_START = MUTED_TOGGLE.t - TAKE10_RATE * PRE;
+
+// The report take has finished its scroll by 11.2 s (measured from the take),
+// so 12.5 s is a static, sharp frame with the 0:08-0:13 advice row in view.
+// The tab click is shown from the moving take, then one 8-frame crossfade joins
+// that still. No part of the recorded scroll is replayed.
+export const FREEZE9 = 12.5;
+export const REPORT_CROSS = REPORT_AT + 0.45;
+export const REPORT_CAM_AT = REPORT_CROSS + 0.1;
 export const TAKE9A_START = REPORT_TAB.t - (REPORT_AT - (at(12) - 0.35));
-export const TAKE9B_START = SKIP9 - RATE9 * PRE;
 // Measured from s11.mp4: the two compare videos stay black for about a second
 // after the logged click while the page preloads them (the button flips from
 // "Play both" to "Pause both" at 2.60 s, the click is at 1.53 s, video frames
@@ -158,20 +167,23 @@ export type Segment = {
   sourceStart: number;
   fade: number;
   rate: number;
+  still?: boolean;
 };
 
 const segment = (
-  takeName: Segment['take'], from: number, to: number, sourceStart: number, fade = 8, rate = 1,
-): Segment => ({take: takeName, from, to, sourceStart, fade, rate});
+  takeName: Segment['take'], from: number, to: number, sourceStart: number,
+  fade = 8, rate = 1, still = false,
+): Segment => ({take: takeName, from, to, sourceStart, fade, rate, still});
 
-const SPLIT9_FRAME = sec(at(12) + SPLIT9);
+const REPORT_CROSS_FRAME = sec(REPORT_CROSS);
 
 export const SEGMENTS: Segment[] = [
   segment('s6', 0, JOIN[0] + 4, TAKE6_START),
   segment('s7', JOIN[0] - 4, JOIN[1] + 4, TAKE7_START - PRE),
-  segment('s10', JOIN[1] - 4, JOIN[2] + 4, TAKE10_START - PRE),
-  segment('s9', JOIN[2] - 4, SPLIT9_FRAME + 4, TAKE9A_START),
-  segment('s9', SPLIT9_FRAME - 4, JOIN[3] + 4, TAKE9B_START, 8, RATE9),
+  segment('s10', JOIN[1] - 4, MUTED_FRAME + 4, 0, 8, TAKE10_RATE),
+  segment('s10', MUTED_FRAME - 4, JOIN[2] + 4, TAKE10_SPLIT_START),
+  segment('s9', JOIN[2] - 4, REPORT_CROSS_FRAME + 4, TAKE9A_START),
+  segment('s9', REPORT_CROSS_FRAME - 4, JOIN[3] + 4, FREEZE9, 8, 1, true),
   segment('s11', JOIN[3] - 4, DURATION, TAKE11_START - PRE, 10),
 ];
 
@@ -199,12 +211,14 @@ export type Target = {
   w?: number; h?: number;
   contain?: boolean;
 };
-export type Cam = Target & {at: number; glide?: number};
+export type Cam = Target & {at: number; glide?: number; ease?: 'io' | 'spring'};
 
 const target = (cx: number, cy: number, zoom: number): Target => ({cx, cy, zoom});
 const frame = (cx: number, cy: number, w: number, h: number, contain = false): Target =>
   ({cx, cy, w, h, contain});
-const cam = (time: number, t: Target, glide = 1.2): Cam => ({at: time, ...t, glide});
+const cam = (
+  time: number, t: Target, glide = 1.2, ease: Cam['ease'] = 'io',
+): Cam => ({at: time, ...t, glide, ease});
 
 // Framings are still page regions in source pixels, but every one now has the
 // window's own aspect (1640 x 933): the focus section is width-filled exactly as
@@ -249,9 +263,10 @@ const GROUPS = fullToBottom(1890, 1856, 2040);
 const REPORT_ROW = frame(1890, 950.5, 1950, 1109);
 const COMPARE_HEAD = fullFromTop(1398, 392, 2700);
 const COMPARE = fullFromTop(1462, 676, 2166);
-// The compare "Overall response" chart, filled to the frame edges; the crop
-// reaches the page bottom so the chart sits on the window's bottom edge.
-const COMPARE_CHART = frame(745, 1500, 1450, 825);
+// The compare page at full width: the crop holds the whole verdict sentence
+// (source x 81-2807) and the whole "Overall response" chart, so no word is cut
+// at the frame edge. The chart stays width-filled at the window's bottom edge.
+const COMPARE_CHART = frame(1475, 1084, 2910, 1655);
 
 export const CAMS: Cam[] = [
   cam(at(8), CARD),
@@ -259,10 +274,12 @@ export const CAMS: Cam[] = [
   cam(at(10) - 0.55, CARD, 1.0),
   cam(at(11) + 0.1, CARD, 0.9),
   cam(at(12) - 0.35, PAGE, 0.9),
-  cam(at(12) + 0.75, REPORT_ROW, 1.1),
+  // One spring glide on the frozen report frame, settled well before "add one
+  // second" (2.8 s into line 12).
+  cam(REPORT_CAM_AT, REPORT_ROW, 1.3, 'spring'),
   cam(at(13) - 0.4, COMPARE_HEAD, 1.0),
   cam(at(13) + 1.35, COMPARE, 0.9),
-  cam(at(14) - 0.45, COMPARE_CHART, 0.55),
+  cam(at(14) - 0.8, COMPARE_CHART, 0.7, 'spring'),
 ];
 
 export type Click = {at: number; x: number; y: number; label: string};
@@ -347,6 +364,11 @@ export type FocusRect = {x: number; y: number; w: number; h: number};
 
 // The bright hole for each named thing, in source pixels. The surrounding page
 // is dimmed by the same soft black scrims the earlier shots use.
+export const FOCUS_TYPICAL = {
+  from: TYPICAL_AT - 0.5, to: TYPICAL_TO, strength: 0.42,
+  // The dashed typical line (source y ~916-925) and its label (y 901-927).
+  rect: {x: 900, y: 878, w: 1830, h: 80},
+};
 export const FOCUS_PEAK = {
   from: at(10) - 0.25, to: at(11) + 0.3, strength: 0.76,
   // The plot around the peak only: the legend above and the tooltip block
@@ -354,21 +376,27 @@ export const FOCUS_PEAK = {
   rect: {x: 880, y: 665, w: 900, h: 135},
 };
 export const FOCUS_CHART = {
-  from: at(11) + 0.15, to: SOUND_LABEL_AT + 0.15, strength: 0.55,
-  rect: {x: 900, y: 560, w: 1820, h: 640},
+  from: at(11) + 0.15, to: SOUND_LABEL_AT + 0.15, strength: 0.5,
+  // The whole plot, including the response line near the bottom (y 1214-1258).
+  rect: {x: 900, y: 550, w: 1830, h: 780},
+};
+export const FOCUS_DROP = {
+  from: DROP_AT - 0.5, to: SOUND_LABEL_AT + 0.1, strength: 0.5,
+  // The dropped "without sound" line across the whole chart width.
+  rect: {x: 900, y: 1155, w: 1830, h: 130},
 };
 export const FOCUS_SOUND_LABEL = {
   from: SOUND_LABEL_AT - 0.5, to: at(12) - 0.25, strength: 0.82,
   rect: {x: 1560, y: 582, w: 560, h: 68},
 };
 export const FOCUS_REPORT = {
-  from: ADD_AT - 0.6, to: at(13) - 0.45, strength: 0.8,
-  // Tall enough to hold the Do sentence while the page finishes scrolling,
-  // starting below the commentary line above it.
-  rect: {x: 1080, y: 865, w: 1640, h: 125},
+  from: REPORT_CROSS - 0.15, to: at(13) - 0.45, strength: 0.82,
+  // Only the Do advice line on the frozen frame: its label at x 932 and the
+  // sentence x 1098-2709.
+  rect: {x: 910, y: 862, w: 1815, h: 58},
 };
 export const FOCUS_COMPARE = {
-  from: at(14) - 0.35, to: DURATION_S - 0.3, strength: 0.62,
+  from: at(14) - 0.7, to: DURATION_S - 0.3, strength: 0.62,
   opening: {x: 55, y: 1525, w: 505, h: 365},
   middle: {x: 600, y: 1525, w: 600, h: 365},
 };

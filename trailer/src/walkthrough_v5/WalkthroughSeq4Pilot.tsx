@@ -6,9 +6,10 @@ import {Cursor} from './Cursor';
 import {FocusSpotlight, Spotlight, glideRect} from './Spotlight';
 import {Stage} from './Stage';
 import {
-  CAMS, CLICKS, DURATION, DURATION_S, FOCUS_CHART, FOCUS_COMPARE, FOCUS_PEAK,
-  FOCUS_REPORT, FOCUS_SOUND_LABEL, FPS, INSET, LABELS, LINES, MIDDLE_AT,
-  MUSIC_OFFSET, MUSIC_SOURCE, SFX, STAGE, START, VOICE_SOURCE, at, sec,
+  CAMS, CLICKS, DURATION, DURATION_S, FOCUS_CHART, FOCUS_COMPARE, FOCUS_DROP,
+  FOCUS_PEAK, FOCUS_REPORT, FOCUS_SOUND_LABEL, FOCUS_TYPICAL, FPS, INSET,
+  LABELS, LINES, MIDDLE_AT, MUSIC_OFFSET, MUSIC_SOURCE, SFX, STAGE, START,
+  VOICE_SOURCE, at, sec,
 } from './timing';
 
 const clamp = (x: number, a = 0, b = 1) => Math.max(a, Math.min(b, x));
@@ -96,7 +97,8 @@ const InsetVideo: React.FC = () => {
   return <div style={{
     position: 'absolute',
     left: STAGE.x + STAGE.w - 24 - 300,
-    top: STAGE.y + 154,
+    // Below the "Well above typical" headline and its time note.
+    top: STAGE.y + 210,
     width: 300,
     height: 533,
     borderRadius: 16,
@@ -184,9 +186,11 @@ export const WalkthroughSeq4Pilot: React.FC = () => {
     <Stage />
     <ChartLabels />
     <Spotlight from={at(8)} to={at(9) - 0.15} sourceTop={504} sourceBottom={1295} strength={0.82} />
+    <FocusSpotlight {...FOCUS_TYPICAL} />
     <Spotlight from={at(9) + 0.1} to={at(10) - 0.35} sourceTop={1327} sourceBottom={1856} strength={0.6} />
     <FocusSpotlight {...FOCUS_PEAK} />
     <FocusSpotlight {...FOCUS_CHART} />
+    <FocusSpotlight {...FOCUS_DROP} />
     <FocusSpotlight {...FOCUS_SOUND_LABEL} />
     <FocusSpotlight {...FOCUS_REPORT} />
     <FocusSpotlight
