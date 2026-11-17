@@ -23,11 +23,11 @@ type Look = {border: string; icon: string; label: string; glow: number; opacity:
 
 const LOOK: Record<Exclude<NodeState, 'hidden'>, Look> = {
   idle: {
-    border: 'rgba(120,138,160,.46)',
-    icon: '#8FA0B4',
-    label: '#C6CCD4',
+    border: 'rgba(150,168,190,.62)',
+    icon: '#ACBCCE',
+    label: '#D6DCE4',
     glow: 0.16,
-    opacity: 0.84,
+    opacity: 0.96,
   },
   lit: {
     border: 'rgba(255,138,42,.78)',
@@ -235,6 +235,9 @@ type NodeProps = {
   dx?: number;
   keyAt?: number;
   keySide?: 'left' | 'right';
+  wide?: boolean;
+  showService?: boolean;
+  serviceOpacity?: number;
 };
 
 export const Node: React.FC<NodeProps> = ({
@@ -250,6 +253,9 @@ export const Node: React.FC<NodeProps> = ({
   dx = 0,
   keyAt,
   keySide = 'right',
+  wide = false,
+  showService = true,
+  serviceOpacity = 1,
 }) => {
   const f = useCurrentFrame();
   const rise = ease(f, appear, appear + 18);
@@ -262,16 +268,17 @@ export const Node: React.FC<NodeProps> = ({
   const border = mix(from.border, target.border, t);
   const iconColour = mix(from.icon, target.icon, t);
   const labelColour = mix(from.label, target.label, t);
+  const wideLabel = wide && state !== 'dim' && state !== 'off' ? mix(labelColour, '#F2F5F8', 0.5) : labelColour;
   const keyP = keyAt === undefined ? 0 : smooth(f, keyAt, keyAt + 10);
-  const keyX = keySide === 'right' ? 44 : -44;
+  const keyX = keySide === 'right' ? 48 : -48;
   if (opacity <= 0.001) return null;
   return (
     <div
       style={{
         position: 'absolute',
-        left: x + dx - 160,
+        left: x + dx - 190,
         top: y - 64,
-        width: 320,
+        width: 380,
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
@@ -325,17 +332,17 @@ export const Node: React.FC<NodeProps> = ({
                 : '0 0 30px rgba(120,138,160,.07), inset 0 0 22px rgba(120,138,160,.04)',
           }}
         >
-          <Icon name={icon} size={64} />
+          <Icon name={icon} size={78} />
         </div>
         {keyP > 0.01 ? (
           <div
             style={{
               position: 'absolute',
-              left: 64 + keyX - 19,
-              top: 64 - 44 - 19,
-              width: 38,
-              height: 38,
-              borderRadius: 19,
+              left: 64 + keyX - 24,
+              top: -4,
+              width: 48,
+              height: 48,
+              borderRadius: 24,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -347,35 +354,38 @@ export const Node: React.FC<NodeProps> = ({
               transform: `scale(${0.8 + 0.2 * keyP})`,
             }}
           >
-            <Icon name="key" size={24} />
+            <Icon name="key" size={30} />
           </div>
         ) : null}
       </div>
       <div
         style={{
           marginTop: 16,
-          fontSize: 58,
-          fontWeight: 600,
+          fontSize: wide ? 64 : 58,
+          fontWeight: wide ? 700 : 600,
           letterSpacing: '-.025em',
           lineHeight: 1,
-          color: labelColour,
+          color: wideLabel,
           whiteSpace: 'nowrap',
         }}
       >
         {label}
       </div>
-      <div
-        style={{
-          marginTop: 12,
-          fontSize: 27,
-          letterSpacing: '.08em',
-          lineHeight: 1,
-          color: mix('#7F8791', '#C39C7F', glow),
-          whiteSpace: 'nowrap',
-        }}
-      >
-        {service}
-      </div>
+      {showService && serviceOpacity > 0.01 ? (
+        <div
+          style={{
+            marginTop: 12,
+            fontSize: 42,
+            letterSpacing: '.04em',
+            lineHeight: 1,
+            color: mix('#9AA3AE', '#C9A17F', glow),
+            whiteSpace: 'nowrap',
+            opacity: serviceOpacity,
+          }}
+        >
+          {service}
+        </div>
+      ) : null}
     </div>
   );
 };
@@ -615,12 +625,12 @@ export const Link: React.FC<LinkProps> = ({
       ) : null}
       {blocked > 0.01 ? (
         <g opacity={blocked}>
-          <rect x={mid.x - 9} y={mid.y - 34} width={18} height={68} rx={9} fill="#0B0C0F" stroke={DANGER} strokeWidth={2.4} />
-          <rect x={mid.x - 4} y={mid.y - 28} width={8} height={56} rx={4} fill={DANGER} opacity={0.7} />
-          <circle cx={mid.x} cy={mid.y} r={25} fill="#0B0C0F" opacity={0.88} />
-          <g stroke={DANGER} strokeWidth={5} strokeLinecap="round">
-            <path d={`M ${mid.x - 10} ${mid.y - 10} L ${mid.x + 10} ${mid.y + 10}`} />
-            <path d={`M ${mid.x - 10} ${mid.y + 10} L ${mid.x + 10} ${mid.y - 10}`} />
+          <rect x={mid.x - 12} y={mid.y - 42} width={24} height={84} rx={12} fill="#0B0C0F" stroke={DANGER} strokeWidth={3} />
+          <rect x={mid.x - 5} y={mid.y - 34} width={10} height={68} rx={5} fill={DANGER} opacity={0.7} />
+          <circle cx={mid.x} cy={mid.y} r={34} fill="#0B0C0F" opacity={0.9} />
+          <g stroke={DANGER} strokeWidth={6.5} strokeLinecap="round">
+            <path d={`M ${mid.x - 14} ${mid.y - 14} L ${mid.x + 14} ${mid.y + 14}`} />
+            <path d={`M ${mid.x - 14} ${mid.y + 14} L ${mid.x + 14} ${mid.y - 14}`} />
           </g>
         </g>
       ) : null}
@@ -732,7 +742,7 @@ export const Traveller: React.FC<TravellerProps> = ({
                 style={{
                   marginTop: 5,
                   fontFamily,
-                  fontSize: 22,
+                  fontSize: 36,
                   fontWeight: 600,
                   letterSpacing: '.04em',
                   textAlign: 'center',
@@ -747,27 +757,27 @@ export const Traveller: React.FC<TravellerProps> = ({
           </div>
         </foreignObject>
       ) : kind === 'job' ? (
-        <foreignObject x={at.x - 78} y={at.y - 42} width={156} height={84} style={{overflow: 'visible'}}>
+        <foreignObject x={at.x - 100} y={at.y - 54} width={200} height={108} style={{overflow: 'visible'}}>
           <div
             style={{
-              width: 156,
-              height: 78,
-              borderRadius: 20,
+              width: 200,
+              height: 100,
+              borderRadius: 24,
               background: '#1C1E22',
               border: '1.5px solid rgba(255,158,84,.6)',
               boxShadow: '0 16px 34px rgba(0,0,0,.6), 0 0 30px rgba(255,138,42,.22)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              gap: 12,
+              gap: 14,
               fontFamily,
-              fontSize: 30,
+              fontSize: 40,
               fontWeight: 500,
               letterSpacing: '.02em',
               color: C.text,
             }}
           >
-            <div style={{width: 11, height: 11, borderRadius: 6, background: C.hot}} />
+            <div style={{width: 13, height: 13, borderRadius: 7, background: C.hot}} />
             job
           </div>
         </foreignObject>
@@ -810,7 +820,7 @@ export const Caption: React.FC<{text: string; from: number; to: number; hot?: st
       <div
         style={{
           fontFamily,
-          fontSize: 42,
+          fontSize: 44,
           fontWeight: 600,
           letterSpacing: '.005em',
           color: C.text,

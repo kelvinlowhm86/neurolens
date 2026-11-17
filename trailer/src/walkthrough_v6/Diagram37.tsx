@@ -77,27 +77,95 @@ const P = {
 };
 
 type Camera = {cx: number; cy: number; scale: number};
+type Box = {x1: number; y1: number; x2: number; y2: number};
+type FocusOptions = {primary?: Pt; width?: number; height?: number; maxScale?: number; bias?: number; lift?: number};
 
 const camera = (cx: number, cy: number, scale: number): Camera => ({cx, cy, scale});
 
+const nodeBox = (p: Pt): Box => ({x1: p.x - 190, y1: p.y - 84, x2: p.x + 190, y2: p.y + 200});
+const propBox = (left: number, top: number, width: number, height: number): Box => ({
+  x1: left,
+  y1: top,
+  x2: left + width,
+  y2: top + height,
+});
+const unionBox = (...boxes: Box[]): Box => ({
+  x1: Math.min(...boxes.map((b) => b.x1)),
+  y1: Math.min(...boxes.map((b) => b.y1)),
+  x2: Math.max(...boxes.map((b) => b.x2)),
+  y2: Math.max(...boxes.map((b) => b.y2)),
+});
+
+const focus = (boxes: Box[], options: FocusOptions = {}): Camera => {
+  const area = unionBox(...boxes);
+  const w = Math.max(1, area.x2 - area.x1);
+  const h = Math.max(1, area.y2 - area.y1);
+  const scale = Math.min(
+    (1920 * (options.width ?? 0.6)) / w,
+    (1080 * (options.height ?? 0.76)) / h,
+    options.maxScale ?? 1.48,
+  );
+  const bx = (area.x1 + area.x2) / 2;
+  const by = (area.y1 + area.y2) / 2;
+  const px = options.primary?.x ?? bx;
+  const py = options.primary?.y ?? by;
+  const bias = options.bias ?? 0.6;
+  const lift = options.lift ?? 20;
+  return camera(bx + (px - bx) * bias, by + (py - by) * 0.35 + lift / scale, scale);
+};
+
+const COUNTER = {x: P.gpu.x + 150, y: P.gpu.y - 118};
+const READOUT = {left: 1180, top: 920, width: 760, height: 108};
+const CLOCK = {left: 1560, top: 460, width: 660, height: 220};
+const JOBS = {left: 1930, top: 880, width: 560, height: 120};
+
+const CAM_3A = focus([nodeBox(P.browser), nodeBox(P.website)], {primary: P.website, bias: 0.55});
+const CAM_3B = focus([nodeBox(P.browser), nodeBox(P.storage), nodeBox(P.website)], {primary: P.storage, bias: 0.55});
+const CAM_3C = focus([nodeBox(P.website), nodeBox(P.queue)], {primary: P.queue});
+const CAM_4A = focus([nodeBox(P.queue), nodeBox(P.check)], {primary: P.check});
+const CAM_4B = focus(
+  [nodeBox(P.queue), nodeBox(P.check), propBox(READOUT.left, READOUT.top, READOUT.width, READOUT.height)],
+  {primary: P.check},
+);
+const CAM_4C = focus([nodeBox(P.queue), nodeBox(P.check), nodeBox(P.gpu)], {primary: P.check});
+const CAM_5A = focus([nodeBox(P.check), nodeBox(P.gpu), propBox(COUNTER.x - 170, COUNTER.y - 60, 340, 120)], {
+  primary: P.gpu,
+});
+const CAM_5C = focus([nodeBox(P.website), nodeBox(P.database)], {primary: {x: P.website.x, y: 905}});
+const CAM_5D = focus(
+  [
+    nodeBox(P.check),
+    nodeBox(P.gpu),
+    propBox(CLOCK.left, CLOCK.top, CLOCK.width, CLOCK.height),
+  ],
+  {primary: {x: 1900, y: 600}},
+);
+const CAM_7A = focus([nodeBox(P.queue), nodeBox(P.check), nodeBox(P.gpu)], {primary: P.gpu});
+const CAM_7B = focus([nodeBox(P.gpu), propBox(JOBS.left, JOBS.top, JOBS.width, JOBS.height)], {
+  primary: {x: 2180, y: 900},
+});
+const CAM_7C = focus(
+  [nodeBox(P.check), nodeBox(P.gpu), nodeBox(P.watchdog), nodeBox(P.dead)],
+  {primary: P.gpu, bias: 0.4},
+);
+
 const FULL = camera(1330, 710, 0.74);
-const CAM_5A = camera(1600, 700, 0.84);
 const CAM_6 = camera(1970, 720, 1.95);
 
 const CAMS: {at: number; cam: Camera; move?: number}[] = [
-  {at: 0, cam: camera(500, 690, 1.0)},
-  {at: CUE('3b').start, cam: camera(600, 540, 0.94)},
-  {at: CUE('3c').start, cam: camera(900, 680, 0.88)},
-  {at: CUE('3d').start, cam: camera(900, 680, 0.88)},
-  {at: CUE('4').start, cam: camera(1180, 700, 0.86)},
+  {at: 0, cam: CAM_3A},
+  {at: CUE('3b').start, cam: CAM_3B},
+  {at: CUE('3c').start, cam: CAM_3C},
+  {at: CUE('4').start, cam: CAM_4A},
+  {at: CUE('4', 1).start, cam: CAM_4B},
+  {at: CUE('4', 2).start, cam: CAM_4C},
   {at: CUE('5a').start, cam: CAM_5A},
-  {at: CUE('5b').start, cam: CAM_5A},
-  {at: CUE('5c').start, cam: camera(820, 820, 0.9)},
-  {at: CUE('5d').start, cam: camera(1900, 700, 1.05)},
+  {at: CUE('5c').start, cam: CAM_5C},
+  {at: CUE('5d').start, cam: CAM_5D},
   {at: CUE('6').start + 56, cam: CAM_6, move: 56},
-  {at: CUE('7a').start, cam: camera(2040, 760, 0.94), move: 80},
-  {at: CUE('7b').start, cam: camera(2250, 810, 0.94)},
-  {at: CUE('7c').start, cam: camera(2280, 680, 0.92)},
+  {at: CUE('7a').start, cam: CAM_7A, move: 80},
+  {at: CUE('7b').start, cam: CAM_7B, move: 36},
+  {at: CUE('7c').start, cam: CAM_7C, move: 36},
   {at: CUE('7d').start, cam: FULL, move: 40},
   {at: CUE('7e').start, cam: FULL},
   {at: CUE('7f').start, cam: FULL},
@@ -111,7 +179,7 @@ const cameraAt = (f: number): Camera => {
       current = next.cam;
       continue;
     }
-    const move = next.move ?? 16;
+    const move = next.move ?? 26;
     if (f > next.at - move) {
       const t = interpolate(f, [next.at - move, next.at], [0, 1], {
         extrapolateLeft: 'clamp',

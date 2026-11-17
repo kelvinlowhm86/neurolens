@@ -459,6 +459,15 @@ export const Result: React.FC = () => {
             </g>
           </g>;
         })() : null}
+
+        {/* Playhead: follows the clip once the line has finished drawing. */}
+        {lineProgress > 0.95 ? (() => {
+          const hx = xAt(clamp(clipSecond, 0, TO));
+          return <g opacity={clamp((lineProgress - 0.95) / 0.05)}>
+            <line x1={hx} x2={hx} y1={PAD.t - 8} y2={chart.h - PAD.b} stroke={C.text} strokeOpacity={0.55} strokeWidth={3} />
+            <circle cx={hx} cy={PAD.t - 8} r={7} fill={C.text} />
+          </g>;
+        })() : null}
       </svg>
     </div>
 
