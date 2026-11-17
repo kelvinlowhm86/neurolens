@@ -172,33 +172,47 @@ const frame = (cx: number, cy: number, w: number, h: number, contain = false): T
   ({cx, cy, w, h, contain});
 const cam = (time: number, t: Target, glide = 1.2): Cam => ({at: time, ...t, glide});
 
-// Framings are page regions, in source pixels, chosen so every edge lands on a
-// panel boundary or in the gap between panels:
+// Framings are still page regions in source pixels, but every one now has the
+// window's own aspect (1640 x 933): the focus section is width-filled exactly as
+// before and the extra height shows the real page above and below it, so no
+// shot ever has a flat letterbox band. The spotlight dims that surrounding page.
 // - PAGE: the whole page viewport (window edges).
-// - CARD: the chart card edge to edge, with 8 px on each side, from the page top
-//   to the gap before the group section (no piece of the next heading in frame).
-//   The app header and tabs stay in frame but are dimmed (they sit above the
-//   spotlight hole), so no word or button is sliced and the card itself is whole.
-//   It is 18 px taller than 16:9, so contain adds a hairline of page background.
+// - CARD: the chart card edge to edge, with 8 px on each side. The crop starts
+//   just above the Analysis/Report/Compare labels, so "Analysis" is whole and
+//   the app header ("Sign in") is out of frame; below the card it reaches the
+//   start of the group section.
 // - GROUPS: the whole "What the brain is doing" section, headings and all three
-//   charts. It is 2040 x 592 source px, far wider than 16:9, so it is shown
-//   width-filled with the page background above and below (contain).
+//   charts, width-filled; the crop ends at the bottom of the chart ink and shows
+//   the bottom of the chart card above it.
 // - REPORT: the report card between two gaps in its moment list, wide enough
 //   for every advice line at once.
 // - COMPARE_HEAD / COMPARE: line 12 opens on the Compare controls and both
-//   videos, so the drawn click lands on "Play both" (COMPARE_HEAD); after the
-//   click the camera glides to the videos alone (COMPARE), width-filled with 34
-//   px margins. Both regions are 4:1 or wider, so contain adds page-coloured
-//   space above and below: nothing is cut and the verdict stays out of frame.
+//   videos so the drawn click lands on "Play both" (COMPARE_HEAD); after the
+//   click the camera glides to the videos alone (COMPARE), width-filled with a
+//   small margin. The head crop keeps the controls row above and the verdict
+//   below; the tight crop starts just below the card heads and keeps the whole
+//   verdict and overall-response chart below, so no word is sliced and there is
+//   no header or page-coloured band.
 // - VERDICT: the verdict card plus the overall-response chart, at a scale that
 //   puts the body text at 20 px (1.3x page zoom). LEFT and RIGHT are the ends of
 //   one slow pan: at LEFT the text start is in frame, at RIGHT its end is.
+const PAGE_ASPECT = (STAGE.h - BAR) / STAGE.w;
+const fullH = (w: number) => w * PAGE_ASPECT;
+const fullFromTop = (cx: number, top: number, w: number): Target => {
+  const h = fullH(w);
+  return frame(cx, top + h / 2, w, h);
+};
+const fullToBottom = (cx: number, bottom: number, w: number): Target => {
+  const h = fullH(w);
+  return frame(cx, bottom - h / 2, w, h);
+};
+
 const PAGE = target(1470, 1076, 1.0);
-const CARD = frame(1890, 792.5, 2020, 1105, true);
-const GROUPS = frame(1890, 1616, 2040, 592, true);
+const CARD = fullFromTop(1890, 412, 2020);
+const GROUPS = fullToBottom(1890, 1856, 2040);
 const REPORT = target(1894, 955, 1470 / 968);
-const COMPARE_HEAD = frame(1387.5, 795, 2715, 660, true);
-const COMPARE = frame(1462, 892.5, 2166, 425, true);
+const COMPARE_HEAD = fullFromTop(1398, 392, 2700);
+const COMPARE = fullFromTop(1462, 676, 2166);
 const VERDICT_L = frame(1060, 1285, 2120, 1206);
 const VERDICT_R = frame(1840, 1285, 2120, 1206);
 
