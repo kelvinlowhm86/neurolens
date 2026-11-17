@@ -1,12 +1,14 @@
 import React from 'react';
-import {AbsoluteFill, Audio, Sequence, staticFile, useCurrentFrame} from 'remotion';
+import {AbsoluteFill, Audio, OffthreadVideo, Sequence, staticFile, useCurrentFrame} from 'remotion';
 import {C, fontFamily} from '../edit/ui';
+import {cropAt, project} from './camera';
 import {Cursor} from './Cursor';
-import {Spotlight} from './Spotlight';
+import {FocusSpotlight, Spotlight, glideRect} from './Spotlight';
 import {Stage} from './Stage';
 import {
-  CLICKS, DURATION, DURATION_S, FPS, LABELS, LINES, MUSIC_OFFSET, MUSIC_SOURCE, SFX,
-  STAGE, START, VOICE_SOURCE, at, sec,
+  CAMS, CLICKS, DURATION, DURATION_S, FOCUS_CHART, FOCUS_COMPARE, FOCUS_PEAK,
+  FOCUS_REPORT, FOCUS_SOUND_LABEL, FPS, INSET, LABELS, LINES, MIDDLE_AT,
+  MUSIC_OFFSET, MUSIC_SOURCE, SFX, STAGE, START, VOICE_SOURCE, at, sec,
 } from './timing';
 
 const clamp = (x: number, a = 0, b = 1) => Math.max(a, Math.min(b, x));
@@ -85,6 +87,67 @@ const RunChip: React.FC<{from: number; to: number; text: string}> = ({from, to, 
   }}>{text}</div>;
 };
 
+const InsetVideo: React.FC = () => {
+  const frame = useCurrentFrame();
+  const t = frame / FPS;
+  const duration = INSET.to - INSET.from;
+  const opacity = Math.min(clamp(t / 0.4), clamp((duration - t) / 0.6));
+  if (opacity <= 0) return null;
+  return <div style={{
+    position: 'absolute',
+    left: STAGE.x + STAGE.w - 24 - 300,
+    top: STAGE.y + 154,
+    width: 300,
+    height: 533,
+    borderRadius: 16,
+    overflow: 'hidden',
+    background: '#000',
+    border: '1px solid rgba(255,255,255,.14)',
+    boxShadow: '0 30px 80px rgba(0,0,0,.78), 0 0 0 1px rgba(0,0,0,.6)',
+    opacity,
+  }}>
+    <OffthreadVideo
+      src={staticFile(INSET.src)}
+      trimBefore={sec(INSET.trim)}
+      playbackRate={INSET.rate}
+      muted
+      style={{position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover'}}
+    />
+  </div>;
+};
+
+// The compare chart has no readable legend in the recording, so the two lines
+// carry tiny A/B labels. They sit inside the bright stretch at the opening and
+// dim with the rest of the chart when the focus moves to the middle.
+const ChartLabels: React.FC = () => {
+  const frame = useCurrentFrame();
+  const t = frame / FPS;
+  const from = at(14) + 0.15;
+  const to = DURATION_S - 0.45;
+  const opacity = Math.min(clamp((t - from) / 0.4), clamp((to - t) / 0.5));
+  if (opacity <= 0) return null;
+  const crop = cropAt(CAMS, t);
+  const a = project({x: 74, y: 1608}, crop, STAGE);
+  const b = project({x: 74, y: 1800}, crop, STAGE);
+  const badge: React.CSSProperties = {
+    position: 'absolute',
+    transform: 'translateY(-50%)',
+    fontFamily,
+    fontSize: 19,
+    fontWeight: 600,
+    lineHeight: 1.1,
+    whiteSpace: 'nowrap',
+    padding: '4px 8px',
+    borderRadius: 6,
+    background: 'rgba(0,0,0,.55)',
+    pointerEvents: 'none',
+  };
+  return <>
+    <div style={{...badge, left: a.x, top: a.y, color: '#F0A16A'}}>A: short cut</div>
+    <div style={{...badge, left: b.x, top: b.y, color: '#90B4EE'}}>B: long cut</div>
+  </>;
+};
+
 const Chapter: React.FC = () => {
   const frame = useCurrentFrame();
   const opacity = Math.min(clamp(frame / 12), clamp((DURATION - 1 - frame) / 12)) * 0.8;
@@ -119,12 +182,25 @@ export const WalkthroughSeq4Pilot: React.FC = () => {
     </Sequence>)}
 
     <Stage />
+    <ChartLabels />
     <Spotlight from={at(8)} to={at(9) - 0.15} sourceTop={504} sourceBottom={1295} strength={0.82} />
     <Spotlight from={at(9) + 0.1} to={at(10) - 0.35} sourceTop={1327} sourceBottom={1856} strength={0.6} />
-    <Spotlight from={at(10) - 0.35} to={at(12) - 0.2} sourceTop={504} sourceBottom={1295} strength={0.82} />
+    <FocusSpotlight {...FOCUS_PEAK} />
+    <FocusSpotlight {...FOCUS_CHART} />
+    <FocusSpotlight {...FOCUS_SOUND_LABEL} />
+    <FocusSpotlight {...FOCUS_REPORT} />
+    <FocusSpotlight
+      from={FOCUS_COMPARE.from}
+      to={FOCUS_COMPARE.to}
+      strength={FOCUS_COMPARE.strength}
+      rectAt={(t) => glideRect(t, MIDDLE_AT - 0.3, MIDDLE_AT + 0.4,
+        FOCUS_COMPARE.opening, FOCUS_COMPARE.middle)}
+    />
     <Spotlight from={at(13) - 0.3} to={at(14) - 0.25} sourceTop={482} sourceBottom={1105} strength={0.5} />
-    <Spotlight from={at(14) + 0.1} to={DURATION_S - 0.5} sourceTop={1120} sourceBottom={1890} strength={0.45} />
     <Cursor />
+    <Sequence from={sec(INSET.from)} durationInFrames={sec(INSET.to - INSET.from)}>
+      <InsetVideo />
+    </Sequence>
 
     <Chapter />
     <RunChip from={LABELS.run.from} to={LABELS.run.to} text={LABELS.run.text} />

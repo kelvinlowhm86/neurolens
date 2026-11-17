@@ -11,6 +11,7 @@ export const HEIGHT = 1080;
 export const BAR = 34;
 
 export const sec = (s: number) => Math.round(s * FPS);
+export const PRE = 4 / FPS;
 
 export type VoiceLine = {line: number; text: string; start: number; end: number};
 export const LINES = voiceFile as VoiceLine[];
@@ -32,6 +33,15 @@ export const DURATION = sec(DURATION_S);
 export const at = (n: number, offset = 0) => findLine(n).start + offset - START;
 export const length = (n: number) => findLine(n).end - findLine(n).start;
 export const within = (n: number, p: number) => at(n, p * length(n));
+
+// Start of a phrase inside a line, split by character position so a
+// re-recorded voice moves the cue with the words.
+const phraseAt = (n: number, phrase: string) => {
+  const line = findLine(n);
+  const index = line.text.toLowerCase().indexOf(phrase.toLowerCase());
+  if (index < 0) throw new Error(`"${phrase}" is missing from voice line ${n}`);
+  return line.start + (index / line.text.length) * (line.end - line.start) - START;
+};
 
 export type Box = {x: number; y: number; width: number; height: number};
 export type ActionLog = {t: number; kind: 'hover' | 'click'; label: string; box: Box};
@@ -82,6 +92,24 @@ export const UNDERSTAND_AT = wordAt('understand') - START;
 // "Show 4 parts" stays after the sweep, still inside line 9.
 export const SHOW_AT = Math.min(UNDERSTAND_AT + 0.5, at(9) + length(9) - 0.18);
 
+// Word cues for the lines whose focus changes inside the line.
+export const SOUND_OFF_AT = phraseAt(11, 'Turn the sound off');
+export const DROP_AT = phraseAt(11, 'whole line drops');
+export const SOUND_LABEL_AT = phraseAt(11, 'Most of this response');
+export const ADVICE_AT = phraseAt(12, 'plain advice');
+export const ADD_AT = phraseAt(12, 'add one second');
+export const OPENING_AT = phraseAt(14, 'The short cut');
+export const MIDDLE_AT = phraseAt(14, 'The long cut');
+
+// The inset clip is source 0:07-0:14, so its own t=1.0 is video 0:08.
+export const INSET = {
+  src: 'walkthrough/v5/swee_0807_0814.mp4',
+  from: at(10) + 0.5,
+  to: at(11) + 1.2,
+  trim: 1.0,
+  rate: 1.0,
+};
+
 // How far into each spoken line the logged action should land. One number per
 // take; every take start and every later cue falls out of these.
 export const P = {
@@ -102,10 +130,15 @@ export const MOMENT_HOVER_AT = at(10) + (MOMENT_HOVER.t - (MOMENT_CLICK.t - P.mo
 export const TAKE6_START = SHOW_PARTS.t - SHOW_AT;
 export const TAKE7_START = MOMENT_CLICK.t - P.moment * length(10);
 export const TAKE10_START = MUTED_TOGGLE.t - P.muted * length(11);
-// The report take scrolls its own content for ten seconds. Run it faster so the
-// 0:08-0:13 advice is settled on screen inside line 12.
+// The report take stays still from just after the tab click until the scroll
+// starts at about 7 s. The first layer shows the click and the page change; an
+// eight-frame crossfade then joins the loaded report page, so the scroll has
+// time to settle the 0:08-0:13 row before "add one second" is spoken.
 export const RATE9 = 1.4;
-export const TAKE9_START = REPORT_TAB.t - RATE9 * P.report * length(12);
+export const SPLIT9 = 1.0;
+export const SKIP9 = 7.1;
+export const TAKE9A_START = REPORT_TAB.t - (REPORT_AT - (at(12) - 0.35));
+export const TAKE9B_START = SKIP9 - RATE9 * PRE;
 // Measured from s11.mp4: the two compare videos stay black for about a second
 // after the logged click while the page preloads them (the button flips from
 // "Play both" to "Pause both" at 2.60 s, the click is at 1.53 s, video frames
@@ -113,8 +146,6 @@ export const TAKE9_START = REPORT_TAB.t - RATE9 * P.report * length(12);
 // couple of frames before the flip; the dead wait is trimmed, not shown.
 export const PRELOAD11 = 1.0;
 export const TAKE11_START = PLAY_BOTH.t + PRELOAD11 - P.playBoth * length(13);
-
-export const PRE = 4 / FPS;
 
 // Crossfade centres. Each take runs four frames past the join and the next
 // starts four frames before it, so the overlap is eight frames.
@@ -133,11 +164,14 @@ const segment = (
   takeName: Segment['take'], from: number, to: number, sourceStart: number, fade = 8, rate = 1,
 ): Segment => ({take: takeName, from, to, sourceStart, fade, rate});
 
+const SPLIT9_FRAME = sec(at(12) + SPLIT9);
+
 export const SEGMENTS: Segment[] = [
   segment('s6', 0, JOIN[0] + 4, TAKE6_START),
   segment('s7', JOIN[0] - 4, JOIN[1] + 4, TAKE7_START - PRE),
   segment('s10', JOIN[1] - 4, JOIN[2] + 4, TAKE10_START - PRE),
-  segment('s9', JOIN[2] - 4, JOIN[3] + 4, TAKE9_START - RATE9 * PRE, 8, RATE9),
+  segment('s9', JOIN[2] - 4, SPLIT9_FRAME + 4, TAKE9A_START),
+  segment('s9', SPLIT9_FRAME - 4, JOIN[3] + 4, TAKE9B_START, 8, RATE9),
   segment('s11', JOIN[3] - 4, DURATION, TAKE11_START - PRE, 10),
 ];
 
@@ -210,11 +244,14 @@ const fullToBottom = (cx: number, bottom: number, w: number): Target => {
 const PAGE = target(1470, 1076, 1.0);
 const CARD = fullFromTop(1890, 412, 2020);
 const GROUPS = fullToBottom(1890, 1856, 2040);
-const REPORT = target(1894, 955, 1470 / 968);
+// The 0:08-0:13 report row, edge to edge, with the rows above and below as
+// context. The Do sentence (source x 1093-2708) sits whole inside it.
+const REPORT_ROW = frame(1890, 950.5, 1950, 1109);
 const COMPARE_HEAD = fullFromTop(1398, 392, 2700);
 const COMPARE = fullFromTop(1462, 676, 2166);
-const VERDICT_L = frame(1060, 1285, 2120, 1206);
-const VERDICT_R = frame(1840, 1285, 2120, 1206);
+// The compare "Overall response" chart, filled to the frame edges; the crop
+// reaches the page bottom so the chart sits on the window's bottom edge.
+const COMPARE_CHART = frame(745, 1500, 1450, 825);
 
 export const CAMS: Cam[] = [
   cam(at(8), CARD),
@@ -222,11 +259,10 @@ export const CAMS: Cam[] = [
   cam(at(10) - 0.55, CARD, 1.0),
   cam(at(11) + 0.1, CARD, 0.9),
   cam(at(12) - 0.35, PAGE, 0.9),
-  cam(at(12) + 6.8, REPORT, 0.8),
+  cam(at(12) + 0.75, REPORT_ROW, 1.1),
   cam(at(13) - 0.4, COMPARE_HEAD, 1.0),
   cam(at(13) + 1.35, COMPARE, 0.9),
-  cam(at(14) - 0.5, VERDICT_L, 0.6),
-  cam(at(14) + 0.8, VERDICT_R, 2.9),
+  cam(at(14) - 0.45, COMPARE_CHART, 0.55),
 ];
 
 export type Click = {at: number; x: number; y: number; label: string};
@@ -296,15 +332,45 @@ export const CURSOR_KEYS: Key[] = [
   key(PLAY_AT, {x: 2652, y: 543}),
   key(PLAY_AT + 0.5, {x: 2652, y: 543}),
   key(PLAY_AT + 1.5, {x: 2300, y: 900, bow: -30}),
-  key(at(14) + 0.6, {x: 1900, y: 1240, bow: 40}),
-  key(at(14) + 2.2, {x: 1800, y: 1320}),
-  key(DURATION_S, {x: 1980, y: 1380}),
+  key(at(14) + 0.6, {x: 300, y: 1660, bow: 20}),
+  key(at(14) + 2.2, {x: 850, y: 1670}),
+  key(DURATION_S, {x: 950, y: 1660}),
 ];
 
 export const LABELS = {
   bedrock: {from: at(12) + 1.0, to: at(13) - 0.4, text: 'Claude on Amazon Bedrock'},
   compare: {from: at(13) + 0.5, to: at(13) + 5.1, text: 'CeraVe ad, two cuts'},
   run: {from: at(8) + 0.2, to: at(9) - 0.2, text: 'Recorded run · 10:30'},
+};
+
+export type FocusRect = {x: number; y: number; w: number; h: number};
+
+// The bright hole for each named thing, in source pixels. The surrounding page
+// is dimmed by the same soft black scrims the earlier shots use.
+export const FOCUS_PEAK = {
+  from: at(10) - 0.25, to: at(11) + 0.3, strength: 0.76,
+  // The plot around the peak only: the legend above and the tooltip block
+  // below stay dimmed.
+  rect: {x: 880, y: 665, w: 900, h: 135},
+};
+export const FOCUS_CHART = {
+  from: at(11) + 0.15, to: SOUND_LABEL_AT + 0.15, strength: 0.55,
+  rect: {x: 900, y: 560, w: 1820, h: 640},
+};
+export const FOCUS_SOUND_LABEL = {
+  from: SOUND_LABEL_AT - 0.5, to: at(12) - 0.25, strength: 0.82,
+  rect: {x: 1560, y: 582, w: 560, h: 68},
+};
+export const FOCUS_REPORT = {
+  from: ADD_AT - 0.6, to: at(13) - 0.45, strength: 0.8,
+  // Tall enough to hold the Do sentence while the page finishes scrolling,
+  // starting below the commentary line above it.
+  rect: {x: 1080, y: 865, w: 1640, h: 125},
+};
+export const FOCUS_COMPARE = {
+  from: at(14) - 0.35, to: DURATION_S - 0.3, strength: 0.62,
+  opening: {x: 55, y: 1525, w: 505, h: 365},
+  middle: {x: 600, y: 1525, w: 600, h: 365},
 };
 
 export const MUSIC_SOURCE = 'walkthrough/audio/solvikmusic-chill-technology-604083.mp3';
