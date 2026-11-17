@@ -14,6 +14,7 @@ import {StyleA_Glass} from './walkthrough_v6/styles/StyleA_Glass';
 import {StyleB_Icons} from './walkthrough_v6/styles/StyleB_Icons';
 import {StyleC_Blueprint} from './walkthrough_v6/styles/StyleC_Blueprint';
 import {StyleD_Spatial} from './walkthrough_v6/styles/StyleD_Spatial';
+import {StyleE_Mix} from './walkthrough_v6/styles/StyleE_Mix';
 import {DURATION as STYLE_DURATION} from './walkthrough_v6/styles/StyleA_Glass';
 export const Root: React.FC = () => <>
   <Composition id="NeuroLensTrailer" component={Trailer} durationInFrames={DURATION} fps={FPS} width={1920} height={1080} />
@@ -26,4 +27,5 @@ export const Root: React.FC = () => <>
   <Composition id="StyleB-Icons" component={StyleB_Icons} durationInFrames={STYLE_DURATION} fps={30} width={1920} height={1080} />
   <Composition id="StyleC-Blueprint" component={StyleC_Blueprint} durationInFrames={STYLE_DURATION} fps={30} width={1920} height={1080} />
   <Composition id="StyleD-Spatial" component={StyleD_Spatial} durationInFrames={STYLE_DURATION} fps={30} width={1920} height={1080} />
+  <Composition id="StyleE-Mix" component={StyleE_Mix} durationInFrames={STYLE_DURATION} fps={30} width={1920} height={1080} />
 </>;
