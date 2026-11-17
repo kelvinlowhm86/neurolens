@@ -1,12 +1,11 @@
 import React from 'react';
 import {AbsoluteFill, Audio, OffthreadVideo, Sequence, staticFile, useCurrentFrame} from 'remotion';
 import {C, fontFamily} from '../edit/ui';
-import {cropAt, project} from './camera';
 import {Cursor} from './Cursor';
 import {FocusSpotlight, Spotlight, glideRect} from './Spotlight';
 import {Stage} from './Stage';
 import {
-  CAMS, CLICKS, DURATION, DURATION_S, FOCUS_CHART, FOCUS_COMPARE, FOCUS_DROP,
+  CLICKS, DURATION, DURATION_S, FOCUS_CHART, FOCUS_COMPARE, FOCUS_DROP,
   FOCUS_PEAK, FOCUS_REPORT, FOCUS_SOUND_LABEL, FOCUS_TYPICAL, FPS, INSET,
   LABELS, LINES, MIDDLE_AT, MUSIC_OFFSET, MUSIC_SOURCE, SFX, STAGE, START,
   VOICE_SOURCE, at, sec,
@@ -119,8 +118,8 @@ const InsetVideo: React.FC = () => {
 };
 
 // The compare chart has no readable legend in the recording, so the two lines
-// carry tiny A/B labels. They sit inside the bright stretch at the opening and
-// dim with the rest of the chart when the focus moves to the middle.
+// carry tiny A/B labels. They sit in the card's empty top band, pinned to the
+// window (not the page) so they stay put while the camera pans along the chart.
 const ChartLabels: React.FC = () => {
   const frame = useCurrentFrame();
   const t = frame / FPS;
@@ -128,12 +127,9 @@ const ChartLabels: React.FC = () => {
   const to = DURATION_S - 0.45;
   const opacity = Math.min(clamp((t - from) / 0.4), clamp((to - t) / 0.5));
   if (opacity <= 0) return null;
-  const crop = cropAt(CAMS, t);
-  const a = project({x: 74, y: 1608}, crop, STAGE);
-  const b = project({x: 74, y: 1800}, crop, STAGE);
   const badge: React.CSSProperties = {
     position: 'absolute',
-    transform: 'translateY(-50%)',
+    left: STAGE.x + 640,
     fontFamily,
     fontSize: 19,
     fontWeight: 600,
@@ -143,10 +139,11 @@ const ChartLabels: React.FC = () => {
     borderRadius: 6,
     background: 'rgba(0,0,0,.55)',
     pointerEvents: 'none',
+    opacity,
   };
   return <>
-    <div style={{...badge, left: a.x, top: a.y, color: '#F0A16A'}}>A: short cut</div>
-    <div style={{...badge, left: b.x, top: b.y, color: '#90B4EE'}}>B: long cut</div>
+    <div style={{...badge, top: STAGE.y + 140, color: '#F0A16A'}}>A: short cut</div>
+    <div style={{...badge, top: STAGE.y + 182, color: '#90B4EE'}}>B: long cut</div>
   </>;
 };
 

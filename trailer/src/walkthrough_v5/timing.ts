@@ -234,16 +234,16 @@ const cam = (
 //   the bottom of the chart card above it.
 // - REPORT: the report card between two gaps in its moment list, wide enough
 //   for every advice line at once.
-// - COMPARE_HEAD / COMPARE: line 12 opens on the Compare controls and both
-//   videos so the drawn click lands on "Play both" (COMPARE_HEAD); after the
-//   click the camera glides to the videos alone (COMPARE), width-filled with a
-//   small margin. The head crop keeps the controls row above and the verdict
-//   below; the tight crop starts just below the card heads and keeps the whole
-//   verdict and overall-response chart below, so no word is sliced and there is
-//   no header or page-coloured band.
-// - VERDICT: the verdict card plus the overall-response chart, at a scale that
-//   puts the body text at 20 px (1.3x page zoom). LEFT and RIGHT are the ends of
-//   one slow pan: at LEFT the text start is in frame, at RIGHT its end is.
+// - COMPARE: lines 12-13 use the whole page viewport. Both videos are
+//   width-filled (the pair spans the page) and every label, verdict line and
+//   axis word sits inside the frame edges, so nothing is sliced mid-word. The
+//   controls row with "Play both" is inside the page, so the drawn click lands.
+// - CHART_OPEN / CHART_MIDDLE: line 14 frames the "Overall response" chart
+//   alone. The crop starts at the chart card's top edge and at the page bottom,
+//   so the verdict above is out of frame; the windows are 0:00-0:21 and 0:08-0:30,
+//   which hold the opening (orange above blue) and the whole middle stretch
+//   (blue above orange). Axis labels render at ~50 px. The camera pans between
+//   the two, and the spotlight hole glides with it.
 const PAGE_ASPECT = (STAGE.h - BAR) / STAGE.w;
 const fullH = (w: number) => w * PAGE_ASPECT;
 const fullFromTop = (cx: number, top: number, w: number): Target => {
@@ -261,12 +261,15 @@ const GROUPS = fullToBottom(1890, 1856, 2040);
 // The 0:08-0:13 report row, edge to edge, with the rows above and below as
 // context. The Do sentence (source x 1093-2708) sits whole inside it.
 const REPORT_ROW = frame(1890, 950.5, 1950, 1109);
-const COMPARE_HEAD = fullFromTop(1398, 392, 2700);
-const COMPARE = fullFromTop(1462, 676, 2166);
-// The compare page at full width: the crop holds the whole verdict sentence
-// (source x 81-2807) and the whole "Overall response" chart, so no word is cut
-// at the frame edge. The chart stays width-filled at the window's bottom edge.
-const COMPARE_CHART = frame(1475, 1084, 2910, 1655);
+// Line 14: the chart card only, from its top edge to the page bottom. Crop edges
+// fall beside words, not through them: opening window x 60-846 keeps "0:00"
+// (x 81-145) and "0:20" (x 782-846) whole and puts the verdict above out of
+// frame; middle window x 380-1166 starts in the gap after the title and ends
+// past the orange line at 0:30. The card is 2846 source px wide, so a readable
+// window cannot hold all of it at 16:9; the camera pans to the middle rather
+// than shrinking the chart.
+const CHART_OPEN = frame(453, 1688.5, 786, 447);
+const CHART_MIDDLE = frame(773, 1688.5, 786, 447);
 
 export const CAMS: Cam[] = [
   cam(at(8), CARD),
@@ -277,9 +280,13 @@ export const CAMS: Cam[] = [
   // One spring glide on the frozen report frame, settled well before "add one
   // second" (2.8 s into line 12).
   cam(REPORT_CAM_AT, REPORT_ROW, 1.3, 'spring'),
-  cam(at(13) - 0.4, COMPARE_HEAD, 1.0),
-  cam(at(13) + 1.35, COMPARE, 0.9),
-  cam(at(14) - 0.8, COMPARE_CHART, 0.7, 'spring'),
+  // Whole page for line 13: both videos, their labels, the verdict and the
+  // header are inside the frame, so no word is cut at any edge.
+  cam(at(13) - 0.4, PAGE, 0.9),
+  // Line 14: settle on the opening before the line starts, then pan to the
+  // middle across "The long cut holds the middle".
+  cam(at(14) - 2.5, CHART_OPEN, 2.2),
+  cam(MIDDLE_AT - 1.2, CHART_MIDDLE, 2.4),
 ];
 
 export type Click = {at: number; x: number; y: number; label: string};
