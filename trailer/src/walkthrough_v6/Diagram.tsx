@@ -270,7 +270,7 @@ export const Node: React.FC<NodeProps> = ({
   const labelColour = mix(from.label, target.label, t);
   const wideLabel = wide && state !== 'dim' && state !== 'off' ? mix(labelColour, '#F2F5F8', 0.5) : labelColour;
   const keyP = keyAt === undefined ? 0 : smooth(f, keyAt, keyAt + 10);
-  const keyX = keySide === 'right' ? 48 : -48;
+  const keyX = keySide === 'right' ? 54 : -54;
   if (opacity <= 0.001) return null;
   return (
     <div
@@ -338,11 +338,11 @@ export const Node: React.FC<NodeProps> = ({
           <div
             style={{
               position: 'absolute',
-              left: 64 + keyX - 24,
-              top: -4,
-              width: 48,
-              height: 48,
-              borderRadius: 24,
+              left: 64 + keyX - 29,
+              top: -8,
+              width: 58,
+              height: 58,
+              borderRadius: 29,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -354,7 +354,7 @@ export const Node: React.FC<NodeProps> = ({
               transform: `scale(${0.8 + 0.2 * keyP})`,
             }}
           >
-            <Icon name="key" size={30} />
+            <Icon name="key" size={36} />
           </div>
         ) : null}
       </div>
@@ -625,12 +625,12 @@ export const Link: React.FC<LinkProps> = ({
       ) : null}
       {blocked > 0.01 ? (
         <g opacity={blocked}>
-          <rect x={mid.x - 12} y={mid.y - 42} width={24} height={84} rx={12} fill="#0B0C0F" stroke={DANGER} strokeWidth={3} />
-          <rect x={mid.x - 5} y={mid.y - 34} width={10} height={68} rx={5} fill={DANGER} opacity={0.7} />
-          <circle cx={mid.x} cy={mid.y} r={34} fill="#0B0C0F" opacity={0.9} />
-          <g stroke={DANGER} strokeWidth={6.5} strokeLinecap="round">
-            <path d={`M ${mid.x - 14} ${mid.y - 14} L ${mid.x + 14} ${mid.y + 14}`} />
-            <path d={`M ${mid.x - 14} ${mid.y + 14} L ${mid.x + 14} ${mid.y - 14}`} />
+          <rect x={mid.x - 13} y={mid.y - 46} width={26} height={92} rx={13} fill="#0B0C0F" stroke={DANGER} strokeWidth={3} />
+          <rect x={mid.x - 5} y={mid.y - 38} width={10} height={76} rx={5} fill={DANGER} opacity={0.7} />
+          <circle cx={mid.x} cy={mid.y} r={38} fill="#0B0C0F" opacity={0.9} />
+          <g stroke={DANGER} strokeWidth={7} strokeLinecap="round">
+            <path d={`M ${mid.x - 16} ${mid.y - 16} L ${mid.x + 16} ${mid.y + 16}`} />
+            <path d={`M ${mid.x - 16} ${mid.y + 16} L ${mid.x + 16} ${mid.y - 16}`} />
           </g>
         </g>
       ) : null}

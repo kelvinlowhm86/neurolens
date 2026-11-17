@@ -1,7 +1,7 @@
 import React from 'react';
 import {AbsoluteFill, interpolate, useCurrentFrame} from 'remotion';
 import {C, fontFamily} from '../edit/ui';
-import {ease} from '../edit/anim';
+import {clamp, ease} from '../edit/anim';
 import {
   Caption,
   Counter,
@@ -117,7 +117,7 @@ const focus = (boxes: Box[], options: FocusOptions = {}): Camera => {
 const COUNTER = {x: P.gpu.x + 150, y: P.gpu.y - 118};
 const READOUT = {left: 1180, top: 920, width: 760, height: 108};
 const CLOCK = {left: 1560, top: 460, width: 660, height: 220};
-const JOBS = {left: 1930, top: 880, width: 560, height: 120};
+const JOBS = {left: 1910, top: 870, width: 640, height: 140};
 
 const CAM_3A = focus([nodeBox(P.browser), nodeBox(P.website)], {primary: P.website, bias: 0.55});
 const CAM_3B = focus([nodeBox(P.browser), nodeBox(P.storage), nodeBox(P.website)], {primary: P.storage, bias: 0.55});
@@ -128,12 +128,19 @@ const CAM_4B = focus(
   {primary: P.check},
 );
 const CAM_4C = focus([nodeBox(P.queue), nodeBox(P.check), nodeBox(P.gpu)], {primary: P.check});
-const CAM_5A = focus([nodeBox(P.check), nodeBox(P.gpu), propBox(COUNTER.x - 170, COUNTER.y - 60, 340, 120)], {
-  primary: P.gpu,
-});
+const CAM_5A = focus(
+  [
+    nodeBox(P.queue),
+    nodeBox(P.check),
+    nodeBox(P.gpu),
+    propBox(COUNTER.x - 170, COUNTER.y - 60, 340, 120),
+  ],
+  {primary: P.gpu},
+);
 const CAM_5C = focus([nodeBox(P.website), nodeBox(P.database)], {primary: {x: P.website.x, y: 905}});
 const CAM_5D = focus(
   [
+    nodeBox(P.queue),
     nodeBox(P.check),
     nodeBox(P.gpu),
     propBox(CLOCK.left, CLOCK.top, CLOCK.width, CLOCK.height),
@@ -295,38 +302,38 @@ const Readout: React.FC<{f: number}> = ({f}) => {
     <div
       style={{
         position: 'absolute',
-        left: 1220,
-        top: 928,
-        width: 690,
-        height: 96,
+        left: READOUT.left,
+        top: READOUT.top,
+        width: READOUT.width,
+        height: READOUT.height,
         display: 'flex',
         alignItems: 'center',
-        gap: 38,
-        padding: '0 30px',
+        gap: 34,
+        padding: '0 34px',
         boxSizing: 'border-box',
-        borderRadius: 24,
+        borderRadius: 26,
         background: 'rgba(13,14,17,.94)',
         border: `1.5px solid ${C.rule}`,
         boxShadow: '0 22px 54px rgba(0,0,0,.52)',
         fontFamily,
-        fontSize: 50,
+        fontSize: 56,
         fontVariantNumeric: 'tabular-nums',
         whiteSpace: 'nowrap',
         opacity,
       }}
     >
-      <span style={{color: C.text, opacity: length, display: 'flex', alignItems: 'center', gap: 12}}>
-        length 0:44 <span style={{color: C.hot, display: 'inline-flex'}}><Icon name="tick" size={32} /></span>
+      <span style={{color: C.text, opacity: length, display: 'flex', alignItems: 'center', gap: 14}}>
+        length 0:44 <span style={{color: C.hot, display: 'inline-flex'}}><Icon name="tick" size={38} /></span>
       </span>
-      <span style={{color: C.text, opacity: price, display: 'flex', alignItems: 'center', gap: 12}}>
-        price <span style={{color: C.hot, display: 'inline-flex'}}><Icon name="tick" size={32} /></span>
+      <span style={{color: C.text, opacity: price, display: 'flex', alignItems: 'center', gap: 14}}>
+        price <span style={{color: C.hot, display: 'inline-flex'}}><Icon name="tick" size={38} /></span>
       </span>
     </div>
   );
 };
 
 const ClockDial: React.FC<{turn: number}> = ({turn}) => (
-  <svg width={44} height={44} viewBox="0 0 64 64" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" style={{display: 'block'}}>
+  <svg width={52} height={52} viewBox="0 0 64 64" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" style={{display: 'block'}}>
     <circle cx="32" cy="32" r="20" />
     <path d="M32 32l9 6" opacity=".55" />
     <path d="M32 32V18" transform={`rotate(${turn * 270} 32 32)`} />
@@ -344,23 +351,23 @@ const ClockNote: React.FC<{f: number}> = ({f}) => {
     <div
       style={{
         position: 'absolute',
-        left: 1580,
-        top: 470,
-        width: 540,
-        padding: '24px 28px',
+        left: CLOCK.left,
+        top: CLOCK.top,
+        width: CLOCK.width,
+        padding: '26px 30px',
         boxSizing: 'border-box',
-        borderRadius: 26,
+        borderRadius: 28,
         background: 'rgba(12,14,18,.95)',
         border: `1.5px solid ${C.rule}`,
         boxShadow: '0 22px 54px rgba(0,0,0,.5)',
         fontFamily,
-        fontSize: 40,
+        fontSize: 46,
         lineHeight: 1.1,
         whiteSpace: 'nowrap',
         color: C.text,
         display: 'flex',
         flexDirection: 'column',
-        gap: 16,
+        gap: 18,
         opacity,
       }}
     >
@@ -369,19 +376,21 @@ const ClockNote: React.FC<{f: number}> = ({f}) => {
         ~few min to start
       </div>
       <div style={{display: 'flex', alignItems: 'center', gap: 16, opacity: tick, color: '#C6CCD4'}}>
-        <span style={{color: C.hot, display: 'inline-flex'}}><Icon name="tick" size={40} /></span>
+        <span style={{color: C.hot, display: 'inline-flex'}}><Icon name="tick" size={44} /></span>
         not needed in a second
       </div>
     </div>
   );
 };
 
+const panelOpacity = (f: number) =>
+  interpolate(f, [CUE('6').start, CUE('6').start + 24, CUE('6', 1).start + 36, CUE('6', 1).start + 70], [0, 1, 1, 0], {
+    extrapolateLeft: 'clamp',
+    extrapolateRight: 'clamp',
+  });
+
 const GpuPanel: React.FC<{f: number}> = ({f}) => {
-  const opacity =
-    interpolate(f, [CUE('6').start, CUE('6').start + 24, CUE('6', 1).start + 36, CUE('6', 1).start + 70], [0, 1, 1, 0], {
-      extrapolateLeft: 'clamp',
-      extrapolateRight: 'clamp',
-    });
+  const opacity = panelOpacity(f);
   if (opacity <= 0.001) return null;
   return (
     <div
@@ -430,18 +439,18 @@ const CreditBar: React.FC<{f: number}> = ({f}) => {
     (1 - ease(f, CUE('7b').start - 18, CUE('7b').start + 4));
   if (opacity <= 0.001) return null;
   const returned = ease(f, CUE('7a', 1).start + 20, CUE('7a', 1).start + 84);
-  const barW = 470;
+  const barW = 600;
   return (
     <div
       style={{
         position: 'absolute',
-        left: 110,
-        top: 780,
-        width: 530,
-        height: 204,
+        left: 70,
+        top: 760,
+        width: 690,
+        height: 248,
         boxSizing: 'border-box',
-        padding: '24px 30px',
-        borderRadius: 28,
+        padding: '26px 34px',
+        borderRadius: 30,
         background: 'rgba(10,12,16,.96)',
         border: `1.5px solid ${C.rule}`,
         boxShadow: '0 26px 64px rgba(0,0,0,.58)',
@@ -450,10 +459,10 @@ const CreditBar: React.FC<{f: number}> = ({f}) => {
       }}
     >
       <div style={{display: 'flex', alignItems: 'center', justifyContent: 'space-between'}}>
-        <div style={{fontSize: 40, fontWeight: 600, letterSpacing: '-.02em', color: C.text}}>credit balance</div>
+        <div style={{fontSize: 48, fontWeight: 600, letterSpacing: '-.02em', color: C.text}}>credit balance</div>
         <div
           style={{
-            fontSize: 40,
+            fontSize: 48,
             fontWeight: 600,
             color: C.hot,
             opacity: 1 - returned,
@@ -463,12 +472,12 @@ const CreditBar: React.FC<{f: number}> = ({f}) => {
           held
         </div>
       </div>
-      <div style={{position: 'relative', marginTop: 26, width: barW, height: 24, borderRadius: 12, background: '#232830', overflow: 'hidden'}}>
+      <div style={{position: 'relative', marginTop: 30, width: barW, height: 28, borderRadius: 14, background: '#232830', overflow: 'hidden'}}>
         <div
           style={{
             position: 'absolute',
             inset: 0,
-            borderRadius: 12,
+            borderRadius: 14,
             background: 'linear-gradient(90deg, rgba(255,138,42,.45), rgba(255,176,110,.9))',
             opacity: 0.72 + 0.28 * returned,
           }}
@@ -478,16 +487,16 @@ const CreditBar: React.FC<{f: number}> = ({f}) => {
             position: 'absolute',
             right: 0,
             top: 0,
-            width: 108,
-            height: 24,
+            width: 150,
+            height: 28,
             background:
-              'repeating-linear-gradient(135deg, rgba(9,11,14,.72) 0 7px, rgba(255,138,42,.9) 7px 13px)',
-            opacity: (1 - returned) * 0.96,
+              'repeating-linear-gradient(135deg, rgba(9,11,14,.72) 0 8px, rgba(255,138,42,.9) 8px 15px)',
+            transform: `translateX(${returned * (barW + 20)}px)`,
           }}
         />
       </div>
-      <div style={{marginTop: 14, height: 34, fontSize: 36, color: '#FFC08A', opacity: returned, display: 'flex', alignItems: 'center', gap: 10}}>
-        <Icon name="tick" size={28} /> hold returned
+      <div style={{marginTop: 16, height: 42, fontSize: 44, color: '#FFC08A', opacity: returned, display: 'flex', alignItems: 'center', gap: 12}}>
+        <Icon name="tick" size={36} /> hold returned
       </div>
     </div>
   );
@@ -510,26 +519,26 @@ const DuplicateJob: React.FC<{f: number}> = ({f}) => {
     <div
       style={{
         position: 'absolute',
-        left: left - 75,
-        top: 901,
-        width: 150,
-        height: 78,
-        borderRadius: 20,
+        left: left - 100,
+        top: 890,
+        width: 200,
+        height: 100,
+        borderRadius: 24,
         background: '#1C1E22',
         border: '1.5px solid rgba(255,158,84,.55)',
         boxShadow: '0 16px 34px rgba(0,0,0,.62), 0 0 26px rgba(255,138,42,.18)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        gap: 12,
+        gap: 14,
         fontFamily,
-        fontSize: 30,
+        fontSize: 44,
         fontWeight: 500,
         color: C.text,
         opacity: alpha,
       }}
     >
-      <div style={{width: 11, height: 11, borderRadius: 6, background: C.hot}} />
+      <div style={{width: 13, height: 13, borderRadius: 7, background: C.hot}} />
       job
     </div>
   );
@@ -540,19 +549,19 @@ const DuplicateJob: React.FC<{f: number}> = ({f}) => {
       <div
         style={{
           position: 'absolute',
-          left: 2205,
-          top: 888,
-          width: 250,
-          height: 104,
+          left: 2240,
+          top: 882,
+          width: 280,
+          height: 120,
           boxSizing: 'border-box',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          border: '3px solid rgba(255,138,42,.85)',
-          borderRadius: 18,
+          border: '3.5px solid rgba(255,138,42,.85)',
+          borderRadius: 20,
           color: '#FFC08A',
           fontFamily,
-          fontSize: 44,
+          fontSize: 54,
           fontWeight: 700,
           letterSpacing: '-.01em',
           transform: `rotate(-7deg) scale(${stampPulse})`,
@@ -636,6 +645,9 @@ const TerraformOutline: React.FC<{f: number}> = ({f}) => {
 export const WalkthroughV6Diagram: React.FC = () => {
   const f = useCurrentFrame();
   const cam = cameraAt(f);
+  const wide = f >= CUE('7d').start;
+  const serviceOpacity = wide ? 0 : clamp((cam.scale - 1) / 0.12);
+  const panelDim = panelOpacity(f);
   const sep = ease(f, CUE('3d').start + 10, CUE('3d').start + 40);
   const dxW = -10 * sep;
   const dxQ = 10 * sep;
@@ -717,6 +729,14 @@ export const WalkthroughV6Diagram: React.FC = () => {
     <AbsoluteFill style={{background: 'radial-gradient(1300px 900px at 50% 42%, #0B0E13 0%, #07090C 58%, #040507 100%)'}}>
       <AbsoluteFill style={worldStyle(cam)}>
         <div style={{position: 'absolute', inset: 0, opacity: sceneOpacity}}>
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              opacity: 1 - 0.8 * panelDim,
+              filter: panelDim > 0.001 ? `blur(${panelDim * 14}px) brightness(${1 - 0.66 * panelDim})` : undefined,
+            }}
+          >
           <Floor
             pools={[
               pool(P.browser, BROWSER),
@@ -836,6 +856,8 @@ export const WalkthroughV6Diagram: React.FC = () => {
             {...nodeState(f, BROWSER)}
             appear={6}
             keyAt={keyBase}
+            wide={wide}
+            serviceOpacity={serviceOpacity}
           />
           <Node
             x={P.website.x + dxW}
@@ -846,6 +868,8 @@ export const WalkthroughV6Diagram: React.FC = () => {
             {...nodeState(f, WEBSITE)}
             appear={2}
             keyAt={keyBase + 7}
+            wide={wide}
+            serviceOpacity={serviceOpacity}
           />
           <Node
             x={P.storage.x}
@@ -856,6 +880,8 @@ export const WalkthroughV6Diagram: React.FC = () => {
             {...nodeState(f, STORAGE)}
             appear={CUE('3b').start}
             keyAt={keyBase + 14}
+            wide={wide}
+            serviceOpacity={serviceOpacity}
           />
           <Node
             x={P.queue.x + dxQ}
@@ -866,6 +892,8 @@ export const WalkthroughV6Diagram: React.FC = () => {
             {...nodeState(f, QUEUE)}
             appear={CUE('3c').start}
             keyAt={keyBase + 21}
+            wide={wide}
+            serviceOpacity={serviceOpacity}
           />
           <Node
             x={P.check.x}
@@ -876,6 +904,8 @@ export const WalkthroughV6Diagram: React.FC = () => {
             {...nodeState(f, CHECK)}
             appear={CUE('4').start}
             keyAt={keyBase + 28}
+            wide={wide}
+            serviceOpacity={serviceOpacity}
           />
           <Node
             x={P.gpu.x}
@@ -886,6 +916,8 @@ export const WalkthroughV6Diagram: React.FC = () => {
             {...nodeState(f, GPU)}
             appear={CUE('5a').start}
             keyAt={keyBase + 35}
+            wide={wide}
+            serviceOpacity={serviceOpacity}
             keySide="left"
           />
           <Node
@@ -897,6 +929,8 @@ export const WalkthroughV6Diagram: React.FC = () => {
             {...nodeState(f, DATABASE)}
             appear={CUE('5c').start}
             keyAt={keyBase + 42}
+            wide={wide}
+            serviceOpacity={serviceOpacity}
           />
           <Node
             x={P.watchdog.x}
@@ -907,6 +941,8 @@ export const WalkthroughV6Diagram: React.FC = () => {
             {...nodeState(f, WATCHDOG)}
             appear={CUE('7c').start}
             keyAt={keyBase + 49}
+            wide={wide}
+            serviceOpacity={serviceOpacity}
           />
           <Node
             x={P.dead.x}
@@ -917,13 +953,16 @@ export const WalkthroughV6Diagram: React.FC = () => {
             {...nodeState(f, DEAD)}
             appear={CUE('7c').start}
             keyAt={keyBase + 56}
+            wide={wide}
+            serviceOpacity={serviceOpacity}
           />
 
           <Readout f={f} />
           <ClockNote f={f} />
           <Counter x={P.gpu.x + 150} y={P.gpu.y - 118} value={running} opacity={counterOpacity} />
-          <GpuPanel f={f} />
           <DuplicateJob f={f} />
+          </div>
+          <GpuPanel f={f} />
         </div>
 
         <TerraformOutline f={f} />
