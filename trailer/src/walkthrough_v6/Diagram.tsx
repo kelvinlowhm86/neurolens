@@ -238,6 +238,7 @@ type NodeProps = {
   wide?: boolean;
   showService?: boolean;
   serviceOpacity?: number;
+  safe?: number;
 };
 
 export const Node: React.FC<NodeProps> = ({
@@ -256,6 +257,7 @@ export const Node: React.FC<NodeProps> = ({
   wide = false,
   showService = true,
   serviceOpacity = 1,
+  safe = 1,
 }) => {
   const f = useCurrentFrame();
   const rise = ease(f, appear, appear + 18);
@@ -264,7 +266,8 @@ export const Node: React.FC<NodeProps> = ({
   const from = prev && prev !== 'hidden' ? LOOK[prev] : target;
   const t = prev === undefined && state !== 'hidden' ? 1 : smooth(f, stateFrame, stateFrame + 10);
   const glow = from.glow + (target.glow - from.glow) * t;
-  const opacity = (from.opacity + (target.opacity - from.opacity) * t) * (state === 'hidden' ? 1 - t : 1) * rise;
+  const opacity =
+    (from.opacity + (target.opacity - from.opacity) * t) * (state === 'hidden' ? 1 - t : 1) * rise * clamp(safe);
   const border = mix(from.border, target.border, t);
   const iconColour = mix(from.icon, target.icon, t);
   const labelColour = mix(from.label, target.label, t);
@@ -702,15 +705,19 @@ export const Traveller: React.FC<TravellerProps> = ({
   });
   return (
     <g opacity={opacity}>
-      <ellipse
-        cx={at.x}
-        cy={at.y + 74}
-        rx={150}
-        ry={66}
-        fill={kind === 'dot' ? 'rgba(255,138,42,.24)' : 'rgba(255,138,42,.2)'}
-        filter="url(#v6-floor-blur)"
-        transform={`rotate(${ISO_ANGLE} ${at.x} ${at.y + 74})`}
-      />
+      {kind === 'dot' ? (
+        <circle cx={at.x} cy={at.y + 58} r={46} fill="rgba(255,138,42,.14)" filter="url(#v6-floor-blur)" />
+      ) : (
+        <ellipse
+          cx={at.x}
+          cy={at.y + 74}
+          rx={150}
+          ry={66}
+          fill="rgba(255,138,42,.2)"
+          filter="url(#v6-floor-blur)"
+          transform={`rotate(${ISO_ANGLE} ${at.x} ${at.y + 74})`}
+        />
+      )}
       {ghosts.map((g, i) =>
         kind === 'clip' ? (
           <foreignObject

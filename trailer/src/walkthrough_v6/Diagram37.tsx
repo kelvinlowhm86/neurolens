@@ -10,6 +10,7 @@ import {
   Gate,
   Icon,
   Link,
+  IconName,
   Node,
   NodeState,
   Pt,
@@ -79,6 +80,11 @@ const P = {
 type Camera = {cx: number; cy: number; scale: number};
 type Box = {x1: number; y1: number; x2: number; y2: number};
 type FocusOptions = {primary?: Pt; width?: number; height?: number; maxScale?: number; bias?: number; lift?: number};
+type Shot = {at: number; cam: Camera; box: Box; move?: number};
+type CameraState = {cam: Camera; fromBox: Box; toBox: Box; t: number};
+
+const SAFE = 80;
+const SAFE_FADE = 40;
 
 const camera = (cx: number, cy: number, scale: number): Camera => ({cx, cy, scale});
 
@@ -108,82 +114,91 @@ const focus = (boxes: Box[], options: FocusOptions = {}): Camera => {
   const bx = (area.x1 + area.x2) / 2;
   const by = (area.y1 + area.y2) / 2;
   const px = options.primary?.x ?? bx;
-  const py = options.primary?.y ?? by;
   const bias = options.bias ?? 0.6;
-  const lift = options.lift ?? 20;
-  return camera(bx + (px - bx) * bias, by + (py - by) * 0.35 + lift / scale, scale);
+  const lift = options.lift ?? 0;
+  return camera(bx + (px - bx) * bias, by + lift / scale, scale);
 };
 
 const COUNTER = {x: P.gpu.x + 150, y: P.gpu.y - 118};
 const READOUT = {left: 1180, top: 920, width: 760, height: 108};
 const CLOCK = {left: 1560, top: 460, width: 660, height: 220};
-const JOBS = {left: 1910, top: 870, width: 640, height: 140};
+const JOBS = {left: 1740, top: 995, width: 1020, height: 140};
 
-const CAM_3A = focus([nodeBox(P.browser), nodeBox(P.website)], {primary: P.website, bias: 0.55});
-const CAM_3B = focus([nodeBox(P.browser), nodeBox(P.storage), nodeBox(P.website)], {primary: P.storage, bias: 0.55});
-const CAM_3C = focus([nodeBox(P.website), nodeBox(P.queue)], {primary: P.queue});
-const CAM_4A = focus([nodeBox(P.queue), nodeBox(P.check)], {primary: P.check});
-const CAM_4B = focus(
-  [nodeBox(P.queue), nodeBox(P.check), propBox(READOUT.left, READOUT.top, READOUT.width, READOUT.height)],
-  {primary: P.check},
-);
-const CAM_4C = focus([nodeBox(P.queue), nodeBox(P.check), nodeBox(P.gpu)], {primary: P.check});
-const CAM_5A = focus(
-  [
-    nodeBox(P.queue),
-    nodeBox(P.check),
-    nodeBox(P.gpu),
-    propBox(COUNTER.x - 170, COUNTER.y - 60, 340, 120),
-  ],
-  {primary: P.gpu},
-);
-const CAM_5C = focus([nodeBox(P.website), nodeBox(P.database)], {primary: {x: P.website.x, y: 905}});
-const CAM_5D = focus(
-  [
-    nodeBox(P.queue),
-    nodeBox(P.check),
-    nodeBox(P.gpu),
-    propBox(CLOCK.left, CLOCK.top, CLOCK.width, CLOCK.height),
-  ],
-  {primary: {x: 1900, y: 600}},
-);
-const CAM_7A = focus([nodeBox(P.queue), nodeBox(P.check), nodeBox(P.gpu)], {primary: P.gpu});
-const CAM_7B = focus([nodeBox(P.gpu), propBox(JOBS.left, JOBS.top, JOBS.width, JOBS.height)], {
-  primary: {x: 2180, y: 900},
+const JOB_LANE_Y = 1055;
+const FIRST_JOB_X = 1840;
+const SECOND_JOB_START = 3200;
+const SECOND_JOB_HIT = 2560;
+const SECOND_JOB_BOUNCE = 2720;
+const STAMP = {x: 2320, y: 1055, width: 280, height: 120};
+
+const makeShot = (at: number, boxes: Box[], options: FocusOptions = {}, move?: number): Shot => ({
+  at,
+  cam: focus(boxes, options),
+  box: unionBox(...boxes),
+  ...(move === undefined ? {} : {move}),
 });
-const CAM_7C = focus(
-  [nodeBox(P.check), nodeBox(P.gpu), nodeBox(P.watchdog), nodeBox(P.dead)],
-  {primary: P.gpu, bias: 0.4},
-);
 
-const FULL = camera(1330, 710, 0.74);
-const CAM_6 = camera(1970, 720, 1.95);
+// The whole system, as large as the Terraform outline and caption allow.
+const WIDE: FocusOptions = {width: 0.78, height: 0.7, lift: -30};
 
-const CAMS: {at: number; cam: Camera; move?: number}[] = [
-  {at: 0, cam: CAM_3A},
-  {at: CUE('3b').start, cam: CAM_3B},
-  {at: CUE('3c').start, cam: CAM_3C},
-  {at: CUE('4').start, cam: CAM_4A},
-  {at: CUE('4', 1).start, cam: CAM_4B},
-  {at: CUE('4', 2).start, cam: CAM_4C},
-  {at: CUE('5a').start, cam: CAM_5A},
-  {at: CUE('5c').start, cam: CAM_5C},
-  {at: CUE('5d').start, cam: CAM_5D},
-  {at: CUE('6').start + 56, cam: CAM_6, move: 56},
-  {at: CUE('7a').start, cam: CAM_7A, move: 80},
-  {at: CUE('7b').start, cam: CAM_7B, move: 36},
-  {at: CUE('7c').start, cam: CAM_7C, move: 36},
-  {at: CUE('7d').start, cam: FULL, move: 40},
-  {at: CUE('7e').start, cam: FULL},
-  {at: CUE('7f').start, cam: FULL},
+const CAMS: Shot[] = [
+  makeShot(0, [nodeBox(P.browser), nodeBox(P.website)], {primary: P.website, bias: 0.55}),
+  makeShot(CUE('3b').start, [nodeBox(P.browser), nodeBox(P.storage), nodeBox(P.website)], {
+    primary: P.storage,
+    bias: 0.55,
+  }),
+  makeShot(CUE('3c').start, [nodeBox(P.website), nodeBox(P.queue)], {primary: P.queue}),
+  makeShot(CUE('4').start, [nodeBox(P.queue), nodeBox(P.check)], {primary: P.check}),
+  makeShot(
+    CUE('4', 1).start,
+    [nodeBox(P.queue), nodeBox(P.check), propBox(READOUT.left, READOUT.top, READOUT.width, READOUT.height)],
+    {primary: P.check},
+  ),
+  makeShot(
+    CUE('4', 2).start,
+    [nodeBox(P.queue), nodeBox(P.check), nodeBox(P.gpu), propBox(READOUT.left, READOUT.top, READOUT.width, READOUT.height)],
+    {primary: P.check},
+  ),
+  makeShot(
+    CUE('5a').start,
+    [nodeBox(P.queue), nodeBox(P.check), nodeBox(P.gpu), propBox(COUNTER.x - 170, COUNTER.y - 60, 340, 120)],
+    {primary: P.gpu},
+  ),
+  makeShot(CUE('5c').start, [nodeBox(P.website), nodeBox(P.database)], {primary: {x: P.website.x, y: 905}}),
+  makeShot(
+    CUE('5d').start,
+    [nodeBox(P.queue), nodeBox(P.check), nodeBox(P.gpu), propBox(CLOCK.left, CLOCK.top, CLOCK.width, CLOCK.height)],
+    {primary: {x: 1900, y: 600}},
+  ),
+  {at: CUE('6').start + 56, cam: camera(1970, 720, 1.95), box: nodeBox(P.gpu), move: 56},
+  makeShot(CUE('7a').start, [nodeBox(P.queue), nodeBox(P.check), nodeBox(P.gpu)], {primary: P.gpu}, 80),
+  makeShot(
+    CUE('7b').start,
+    [
+      nodeBox(P.gpu),
+      propBox(JOBS.left, JOBS.top, JOBS.width, JOBS.height),
+      propBox(STAMP.x - STAMP.width / 2, STAMP.y - STAMP.height / 2, STAMP.width, STAMP.height),
+    ],
+    {primary: {x: 2050, y: 900}},
+    36,
+  ),
+  makeShot(
+    CUE('7c').start,
+    [nodeBox(P.check), nodeBox(P.gpu), nodeBox(P.watchdog), nodeBox(P.dead)],
+    {primary: P.gpu, bias: 0.4},
+    36,
+  ),
+  makeShot(CUE('7d').start, Object.values(P).map(nodeBox), WIDE, 40),
+  makeShot(CUE('7e').start, Object.values(P).map(nodeBox), WIDE),
+  makeShot(CUE('7f').start, Object.values(P).map(nodeBox), WIDE),
 ];
 
-const cameraAt = (f: number): Camera => {
-  let current = CAMS[0].cam;
+const cameraAt = (f: number): CameraState => {
+  let current = CAMS[0];
   for (let i = 1; i < CAMS.length; i += 1) {
     const next = CAMS[i];
     if (f >= next.at) {
-      current = next.cam;
+      current = next;
       continue;
     }
     const move = next.move ?? 26;
@@ -194,14 +209,19 @@ const cameraAt = (f: number): Camera => {
         easing: (x) => (x < 0.5 ? 4 * x * x * x : 1 - (-2 * x + 2) ** 3 / 2),
       });
       return {
-        cx: current.cx + (next.cam.cx - current.cx) * t,
-        cy: current.cy + (next.cam.cy - current.cy) * t,
-        scale: current.scale + (next.cam.scale - current.scale) * t,
+        cam: {
+          cx: current.cam.cx + (next.cam.cx - current.cam.cx) * t,
+          cy: current.cam.cy + (next.cam.cy - current.cam.cy) * t,
+          scale: current.cam.scale + (next.cam.scale - current.cam.scale) * t,
+        },
+        fromBox: current.box,
+        toBox: next.box,
+        t,
       };
     }
-    return current;
+    return {cam: current.cam, fromBox: current.box, toBox: current.box, t: 1};
   }
-  return current;
+  return {cam: current.cam, fromBox: current.box, toBox: current.box, t: 1};
 };
 
 const worldStyle = (cam: Camera): React.CSSProperties => ({
@@ -291,6 +311,156 @@ const DEAD: StateKey[] = [
   {at: CUE('7c').start + 112, state: 'idle'},
 ];
 
+const KEY_BASE = CUE('7f').start;
+const WIDE_LEAD = 40;
+
+type NodeDef = {
+  id: string;
+  x: number;
+  y: number;
+  label: string;
+  service: string;
+  icon: IconName;
+  keys: StateKey[];
+  appear: number;
+  keyAt: number;
+  keySide?: 'left' | 'right';
+  dxKey?: 'website' | 'queue';
+};
+
+const NODES: NodeDef[] = [
+  {id: 'browser', x: P.browser.x, y: P.browser.y, label: 'Browser', service: 'the file', icon: 'browser', keys: BROWSER, appear: 6, keyAt: KEY_BASE},
+  {id: 'website', x: P.website.x, y: P.website.y, label: 'Website', service: 'Lambda', icon: 'website', keys: WEBSITE, appear: 2, keyAt: KEY_BASE + 7, dxKey: 'website'},
+  {id: 'storage', x: P.storage.x, y: P.storage.y, label: 'Storage', service: 'S3', icon: 'storage', keys: STORAGE, appear: CUE('3b').start, keyAt: KEY_BASE + 14},
+  {id: 'queue', x: P.queue.x, y: P.queue.y, label: 'Queue', service: 'SQS', icon: 'queue', keys: QUEUE, appear: CUE('3c').start, keyAt: KEY_BASE + 21, dxKey: 'queue'},
+  {id: 'check', x: P.check.x, y: P.check.y, label: 'Check', service: 'Lambda', icon: 'check', keys: CHECK, appear: CUE('4').start, keyAt: KEY_BASE + 28},
+  {id: 'gpu', x: P.gpu.x, y: P.gpu.y, label: 'GPU', service: 'SageMaker', icon: 'gpu', keys: GPU, appear: CUE('5a').start, keyAt: KEY_BASE + 35, keySide: 'left'},
+  {id: 'database', x: P.database.x, y: P.database.y, label: 'Database', service: 'Aurora Serverless', icon: 'database', keys: DATABASE, appear: CUE('5c').start, keyAt: KEY_BASE + 42},
+  {id: 'watchdog', x: P.watchdog.x, y: P.watchdog.y, label: 'Watchdog', service: 'Lambda', icon: 'watchdog', keys: WATCHDOG, appear: CUE('7c').start, keyAt: KEY_BASE + 49},
+  {id: 'dead', x: P.dead.x, y: P.dead.y, label: 'Dead-letter', service: 'SQS', icon: 'deadLetter', keys: DEAD, appear: CUE('7c').start, keyAt: KEY_BASE + 56},
+];
+
+let textCtx: CanvasRenderingContext2D | null = null;
+
+const textWidth = (text: string, size: number, weight: number, spacing = 0) => {
+  if (typeof document === 'undefined') return text.length * size * 0.62;
+  if (!textCtx) textCtx = document.createElement('canvas').getContext('2d');
+  if (!textCtx) return text.length * size * 0.62;
+  textCtx.font = `${weight} ${size}px ${fontFamily}`;
+  return textCtx.measureText(text).width + spacing * size * text.length + 4;
+};
+
+const nodeWorldBox = (
+  def: NodeDef,
+  x: number,
+  wide: boolean,
+  serviceShown: boolean,
+  keyShown: boolean,
+): Box => {
+  const labelSize = wide ? 64 : 58;
+  const labelW = textWidth(def.label, labelSize, wide ? 700 : 600);
+  const serviceW = serviceShown ? textWidth(def.service, 42, 400, 0.04) : 0;
+  const half = Math.max(64, labelW / 2, serviceW / 2, keyShown ? 83 : 0);
+  return {
+    x1: x - half,
+    y1: def.y - 64 - (keyShown ? 8 : 0),
+    x2: x + half,
+    y2: def.y - 64 + 128 + 16 + labelSize + (serviceShown ? 12 + 42 : 0),
+  };
+};
+
+const screenBox = (box: Box, cam: Camera): Box => ({
+  x1: 960 + (box.x1 - cam.cx) * cam.scale,
+  y1: 540 + (box.y1 - cam.cy) * cam.scale,
+  x2: 960 + (box.x2 - cam.cx) * cam.scale,
+  y2: 540 + (box.y2 - cam.cy) * cam.scale,
+});
+
+const safeOpacity = (box: Box) => {
+  const inset = Math.min(box.x1 - SAFE, 1920 - SAFE - box.x2, box.y1 - SAFE, 1080 - SAFE - box.y2);
+  if (inset <= 0) return 0;
+  return clamp(inset / SAFE_FADE);
+};
+
+const insideBox = (box: Box, p: Pt) => p.x >= box.x1 && p.x <= box.x2 && p.y >= box.y1 && p.y <= box.y2;
+
+const shotOpacity = (state: CameraState, p: Pt) => {
+  const from = insideBox(state.fromBox, p) ? 1 : 0;
+  const to = insideBox(state.toBox, p) ? 1 : 0;
+  return clamp(from + (to - from) * state.t);
+};
+
+const frameGeometry = (f: number) => {
+  const cameraState = cameraAt(f);
+  const cam = cameraState.cam;
+  const wide = f >= CUE('7d').start - WIDE_LEAD;
+  const serviceOpacity = wide ? 0 : clamp((cam.scale - 1) / 0.12);
+  const sep = ease(f, CUE('3d').start + 10, CUE('3d').start + 40);
+  const dx: Record<string, number> = {website: -10 * sep, queue: 10 * sep};
+  return {cameraState, cam, wide, serviceOpacity, dx};
+};
+
+const nodeX = (def: NodeDef, dx: Record<string, number>) => def.x + (def.dxKey ? dx[def.dxKey] : 0);
+
+export const STILLS = [
+  {row: '3a', frame: 18},
+  {row: '3b', frame: 185},
+  {row: '3c', frame: 355},
+  {row: '3d', frame: 609},
+  {row: '4', frame: 1027},
+  {row: '5a', frame: 1217},
+  {row: '5b', frame: 1349},
+  {row: '5c', frame: 1420},
+  {row: '5d', frame: 1829},
+  {row: '6', frame: 2200},
+  {row: '7a', frame: 2481},
+  {row: '7b', frame: 2740},
+  {row: '7c', frame: 2860},
+  {row: '7d', frame: 2957},
+  {row: '7e', frame: 3043},
+  {row: '7f', frame: 3269},
+];
+
+export const runSafeAreaCheck = () => {
+  let failed = 0;
+  for (const still of STILLS) {
+    const f = still.frame;
+    const {cameraState, cam, wide, serviceOpacity, dx} = frameGeometry(f);
+    let count = 0;
+    let bad = 0;
+    for (const def of NODES) {
+      const state = wide ? 'idle' : stateAt(f, def.keys).state;
+      if (state === 'hidden' || f < def.appear) continue;
+      const x = nodeX(def, dx);
+      const box = screenBox(
+        nodeWorldBox(def, x, wide, serviceOpacity > 0.01, f >= def.keyAt),
+        cam,
+      );
+      if (shotOpacity(cameraState, {x, y: def.y}) <= 0.02) continue;
+      count += 1;
+      if (box.x1 < SAFE || box.x2 > 1920 - SAFE || box.y1 < SAFE || box.y2 > 1080 - SAFE) {
+        bad += 1;
+        console.warn(
+          `[v6 safe-area] ${still.row} frame ${f}: ${def.label} box ${Math.round(box.x1)},${Math.round(box.y1)} - ${Math.round(box.x2)},${Math.round(box.y2)} crosses the ${SAFE}px safe area`,
+        );
+      }
+    }
+    if (bad > 0) failed += 1;
+    else console.info(`[v6 safe-area] ${still.row} frame ${f}: OK (${count} visible nodes)`);
+  }
+  if (failed > 0) console.warn(`[v6 safe-area] ${failed}/${STILLS.length} stills failed`);
+  else console.info(`[v6 safe-area] ${STILLS.length}/${STILLS.length} stills OK`);
+};
+
+let checkQueued = false;
+const queueSafeAreaCheck = () => {
+  if (checkQueued || typeof window === 'undefined') return;
+  checkQueued = true;
+  const run = () => runSafeAreaCheck();
+  if (document.fonts?.ready) document.fonts.ready.then(run).catch(run);
+  else run();
+};
+
 const Readout: React.FC<{f: number}> = ({f}) => {
   const opacity =
     ease(f, CUE('4', 1).start - 8, CUE('4', 1).start + 4) *
@@ -323,10 +493,10 @@ const Readout: React.FC<{f: number}> = ({f}) => {
       }}
     >
       <span style={{color: C.text, opacity: length, display: 'flex', alignItems: 'center', gap: 14}}>
-        length 0:44 <span style={{color: C.hot, display: 'inline-flex'}}><Icon name="tick" size={38} /></span>
+        length 0:44 <span style={{color: C.hot, display: 'inline-flex'}}><Icon name="tick" size={56} /></span>
       </span>
       <span style={{color: C.text, opacity: price, display: 'flex', alignItems: 'center', gap: 14}}>
-        price <span style={{color: C.hot, display: 'inline-flex'}}><Icon name="tick" size={38} /></span>
+        price <span style={{color: C.hot, display: 'inline-flex'}}><Icon name="tick" size={56} /></span>
       </span>
     </div>
   );
@@ -409,13 +579,16 @@ const GpuPanel: React.FC<{f: number}> = ({f}) => {
         fontFamily,
         opacity,
         transform: `scale(${0.96 + 0.04 * opacity})`,
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'center',
       }}
     >
-      <div style={{display: 'flex', alignItems: 'center', gap: 18, color: '#FFC08A'}}>
+      <div style={{display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 18, color: '#FFC08A'}}>
         <Icon name="model" size={50} />
         <div style={{fontSize: 52, fontWeight: 600, letterSpacing: '-.03em', color: C.text}}>TRIBE (Meta)</div>
       </div>
-      <div style={{display: 'flex', gap: 34, marginTop: 16}}>
+      <div style={{display: 'flex', justifyContent: 'center', gap: 34, marginTop: 16}}>
         {[
           {icon: 'speaker' as const, label: 'sound on'},
           {icon: 'muted' as const, label: 'muted'},
@@ -485,13 +658,14 @@ const CreditBar: React.FC<{f: number}> = ({f}) => {
         <div
           style={{
             position: 'absolute',
-            right: 0,
+            left: barW - 150,
             top: 0,
             width: 150,
             height: 28,
             background:
               'repeating-linear-gradient(135deg, rgba(9,11,14,.72) 0 8px, rgba(255,138,42,.9) 8px 15px)',
-            transform: `translateX(${returned * (barW + 20)}px)`,
+            opacity: 1 - ease(f, CUE('7a', 1).start + 104, CUE('7a', 1).start + 120),
+            transform: `translateX(${-returned * (barW - 150)}px)`,
           }}
         />
       </div>
@@ -503,24 +677,28 @@ const CreditBar: React.FC<{f: number}> = ({f}) => {
 };
 
 const DuplicateJob: React.FC<{f: number}> = ({f}) => {
-  const opacity =
-    ease(f, CUE('7b').start + 10, CUE('7b').start + 24) *
-    (1 - ease(f, CUE('7c').start - 10, CUE('7c').start + 6));
+  const start = CUE('7b').start;
+  const opacity = ease(f, start + 10, start + 24) * (1 - ease(f, CUE('7c').start - 10, CUE('7c').start + 6));
   if (opacity <= 0.001) return null;
-  const first = ease(f, CUE('7b').start + 26, CUE('7b').start + 52);
-  const second = ease(f, CUE('7b').start + 70, CUE('7b').start + 92);
-  const bounce = ease(f, CUE('7b').start + 92, CUE('7b').start + 120);
-  const firstX = 2000 + 130 * first;
-  const secondX = 2000 + 140 * second - 92 * bounce;
-  const secondOpacity = 1 - ease(f, CUE('7b').start + 112, CUE('7b').start + 132);
-  const stamp = ease(f, CUE('7b').start + 58, CUE('7b').start + 74);
-  const stampPulse = 1 + 0.06 * ease(f, CUE('7b').start + 58, CUE('7b').start + 64) * (1 - ease(f, CUE('7b').start + 64, CUE('7b').start + 80));
+  const first = ease(f, start + 24, start + 54);
+  const accepted = ease(f, start + 52, start + 62);
+  const second = ease(f, start + 66, start + 98);
+  const bounce = ease(f, start + 98, start + 124);
+  const firstX = 1200 + (FIRST_JOB_X - 1200) * first;
+  const secondX = SECOND_JOB_START + (SECOND_JOB_HIT - SECOND_JOB_START) * second + (SECOND_JOB_BOUNCE - SECOND_JOB_HIT) * bounce;
+  const secondOpacity = 1 - ease(f, start + 118, start + 138);
+  const stamp = ease(f, start + 52, start + 68);
+  const stampPulse =
+    1 +
+    0.06 *
+      ease(f, start + 52, start + 58) *
+      (1 - ease(f, start + 58, start + 74));
   const jobCard = (left: number, alpha: number) => (
     <div
       style={{
         position: 'absolute',
         left: left - 100,
-        top: 890,
+        top: JOB_LANE_Y - 50,
         width: 200,
         height: 100,
         borderRadius: 24,
@@ -549,10 +727,30 @@ const DuplicateJob: React.FC<{f: number}> = ({f}) => {
       <div
         style={{
           position: 'absolute',
-          left: 2240,
-          top: 882,
-          width: 280,
-          height: 120,
+          left: FIRST_JOB_X + 100,
+          top: JOB_LANE_Y - 22,
+          width: 44,
+          height: 44,
+          borderRadius: 22,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: 'rgba(12,16,12,.94)',
+          border: '2px solid rgba(255,158,84,.8)',
+          color: C.hot,
+          opacity: accepted,
+          transform: `scale(${0.8 + 0.2 * accepted})`,
+        }}
+      >
+        <Icon name="tick" size={30} />
+      </div>
+      <div
+        style={{
+          position: 'absolute',
+          left: STAMP.x - STAMP.width / 2,
+          top: STAMP.y - STAMP.height / 2,
+          width: STAMP.width,
+          height: STAMP.height,
           boxSizing: 'border-box',
           display: 'flex',
           alignItems: 'center',
@@ -644,13 +842,12 @@ const TerraformOutline: React.FC<{f: number}> = ({f}) => {
 
 export const WalkthroughV6Diagram: React.FC = () => {
   const f = useCurrentFrame();
-  const cam = cameraAt(f);
-  const wide = f >= CUE('7d').start;
-  const serviceOpacity = wide ? 0 : clamp((cam.scale - 1) / 0.12);
+  queueSafeAreaCheck();
+  const {cameraState, cam, wide, serviceOpacity, dx} = frameGeometry(f);
   const panelDim = panelOpacity(f);
   const sep = ease(f, CUE('3d').start + 10, CUE('3d').start + 40);
-  const dxW = -10 * sep;
-  const dxQ = 10 * sep;
+  const dxW = dx.website;
+  const dxQ = dx.queue;
 
   const browserToWebsite = {from: {x: P.browser.x + 84, y: P.browser.y}, to: {x: P.website.x - 84 + dxW, y: P.website.y}};
   const browserToStorage = {
@@ -666,10 +863,10 @@ export const WalkthroughV6Diagram: React.FC = () => {
     to: {x: P.database.x, y: P.database.y - 84},
     control: {x: 970, y: 890},
   };
-  const checkToDead = {
-    from: {x: P.check.x + 84, y: P.check.y + 34},
+  const gpuToDead = {
+    from: {x: P.gpu.x + 110, y: P.gpu.y + 30},
     to: {x: P.dead.x - 84, y: P.dead.y},
-    control: {x: 1960, y: 1010},
+    control: {x: P.gpu.x + 330, y: P.dead.y - 110},
   };
   const watchdogToGpu = {
     from: {x: P.watchdog.x + 60, y: P.watchdog.y + 64},
@@ -714,16 +911,22 @@ export const WalkthroughV6Diagram: React.FC = () => {
     ease(f, CUE('7a').start + 6, CUE('7a').start + 18) *
     (1 - ease(f, CUE('7b').start - 10, CUE('7b').start + 10));
 
-  const keyBase = CUE('7f').start;
+  const linkOpacity = (a: Pt, b: Pt) =>
+    Math.min(shotOpacity(cameraState, a), shotOpacity(cameraState, b));
 
-  const pool = (p: Pt, keys: StateKey[]) => ({
-    x: p.x,
-    y: p.y + 66,
-    rx: 200,
-    ry: 88,
-    opacity: 0.16 + 0.58 * glowOf(f, keys),
-    color: 'rgba(255,138,42,.26)',
-  });
+  const pool = (def: NodeDef) => {
+    const x = nodeX(def, dx);
+    const state = wide ? 'idle' : stateAt(f, def.keys).state;
+    const glow = wide ? 0.2 : glowOf(f, def.keys);
+    return {
+      x,
+      y: def.y + 66,
+      rx: 200,
+      ry: 88,
+      opacity: state === 'hidden' ? 0 : shotOpacity(cameraState, {x, y: def.y}) * (0.16 + 0.58 * glow),
+      color: 'rgba(255,138,42,.26)',
+    };
+  };
 
   return (
     <AbsoluteFill style={{background: 'radial-gradient(1300px 900px at 50% 42%, #0B0E13 0%, #07090C 58%, #040507 100%)'}}>
@@ -737,19 +940,7 @@ export const WalkthroughV6Diagram: React.FC = () => {
               filter: panelDim > 0.001 ? `blur(${panelDim * 14}px) brightness(${1 - 0.66 * panelDim})` : undefined,
             }}
           >
-          <Floor
-            pools={[
-              pool(P.browser, BROWSER),
-              pool(P.website, WEBSITE),
-              pool(P.storage, STORAGE),
-              pool(P.queue, QUEUE),
-              pool(P.check, CHECK),
-              pool(P.gpu, GPU),
-              pool(P.database, DATABASE),
-              pool(P.watchdog, WATCHDOG),
-              pool(P.dead, DEAD),
-            ]}
-          />
+          <Floor pools={NODES.map(pool)} />
 
           <svg width={3000} height={1600} viewBox="0 0 3000 1600" style={{position: 'absolute', left: 0, top: 0, overflow: 'visible'}}>
             <defs>
@@ -761,12 +952,20 @@ export const WalkthroughV6Diagram: React.FC = () => {
               </filter>
             </defs>
 
-            <Link path={browserToWebsite} appear={10} draw={18} width={1.8} colour="rgba(150,166,188,.5)" />
+            <Link
+              path={browserToWebsite}
+              appear={10}
+              draw={18}
+              width={1.8}
+              colour="rgba(150,166,188,.5)"
+              opacity={linkOpacity(browserToWebsite.from, browserToWebsite.to)}
+            />
             <Link
               path={browserToStorage}
               appear={CUE('3b').start - 4}
               draw={18}
               arrow
+              opacity={linkOpacity(browserToStorage.from, browserToStorage.to)}
               hot={ease(f, CUE('3b').start + 6, CUE('3b').start + 22) * (1 - ease(f, CUE('3b').start + 96, CUE('3b').start + 126))}
             />
             <Link
@@ -774,20 +973,22 @@ export const WalkthroughV6Diagram: React.FC = () => {
               appear={CUE('3c').start - 4}
               draw={18}
               arrow
+              opacity={linkOpacity(websiteToQueue.from, websiteToQueue.to)}
               dashed={f >= CUE('3d').start + 4}
               dashedAt={CUE('3d').start + 4}
               gap={28 * sep}
             />
-            <Link path={queueToCheck} appear={CUE('4').start - 4} draw={18} arrow />
-            <Link path={checkToGpu} appear={CUE('4', 2).start - 30} draw={18} arrow />
-            <Link path={websiteToDatabase} appear={CUE('5c').start - 4} draw={18} arrow />
-            <Link path={checkToDead} appear={CUE('7c').start - 2} draw={20} arrow />
-            <Link path={watchdogToGpu} appear={CUE('7c').start + 18} draw={20} arrow />
+            <Link path={queueToCheck} appear={CUE('4').start - 4} draw={18} arrow opacity={linkOpacity(queueToCheck.from, queueToCheck.to)} />
+            <Link path={checkToGpu} appear={CUE('4', 2).start - 30} draw={18} arrow opacity={linkOpacity(checkToGpu.from, checkToGpu.to)} />
+            <Link path={websiteToDatabase} appear={CUE('5c').start - 4} draw={18} arrow opacity={linkOpacity(websiteToDatabase.from, websiteToDatabase.to)} />
+            <Link path={gpuToDead} appear={CUE('7c').start - 2} draw={20} arrow opacity={linkOpacity(gpuToDead.from, gpuToDead.to)} />
+            <Link path={watchdogToGpu} appear={CUE('7c').start + 18} draw={20} arrow opacity={linkOpacity(watchdogToGpu.from, watchdogToGpu.to)} />
             <Link
               path={forbidden}
               appear={CUE('7f').start + 6}
               draw={20}
               colour="rgba(160,176,198,.5)"
+              opacity={linkOpacity(forbidden.from, forbidden.to)}
               blocked={ease(f, CUE('7f').start + 34, CUE('7f').start + 50)}
               arrow
             />
@@ -807,7 +1008,7 @@ export const WalkthroughV6Diagram: React.FC = () => {
               stopAt={0.75}
             />
             <Traveller
-              path={{from: {x: P.queue.x, y: P.queue.y - 210}, to: {x: P.queue.x, y: P.queue.y - 52}}}
+              path={{from: {x: P.queue.x, y: P.queue.y - 250}, to: {x: P.queue.x, y: P.queue.y - 140}}}
               start={CUE('3c').start + 18}
               end={CUE('3c').start + 44}
               kind="job"
@@ -827,7 +1028,7 @@ export const WalkthroughV6Diagram: React.FC = () => {
             />
             <Traveller path={checkToGpu} start={CUE('5a', 1).start - 4} end={CUE('5a', 1).start + 48} kind="dot" />
             <Traveller
-              path={checkToDead}
+              path={gpuToDead}
               start={CUE('7c').start + 46}
               end={CUE('7c').start + 96}
               kind="dot"
@@ -847,115 +1048,34 @@ export const WalkthroughV6Diagram: React.FC = () => {
             ) : null}
           </svg>
 
-          <Node
-            x={P.browser.x}
-            y={P.browser.y}
-            label="Browser"
-            service="the file"
-            icon="browser"
-            {...nodeState(f, BROWSER)}
-            appear={6}
-            keyAt={keyBase}
-            wide={wide}
-            serviceOpacity={serviceOpacity}
-          />
-          <Node
-            x={P.website.x + dxW}
-            y={P.website.y}
-            label="Website"
-            service="Lambda"
-            icon="website"
-            {...nodeState(f, WEBSITE)}
-            appear={2}
-            keyAt={keyBase + 7}
-            wide={wide}
-            serviceOpacity={serviceOpacity}
-          />
-          <Node
-            x={P.storage.x}
-            y={P.storage.y}
-            label="Storage"
-            service="S3"
-            icon="storage"
-            {...nodeState(f, STORAGE)}
-            appear={CUE('3b').start}
-            keyAt={keyBase + 14}
-            wide={wide}
-            serviceOpacity={serviceOpacity}
-          />
-          <Node
-            x={P.queue.x + dxQ}
-            y={P.queue.y}
-            label="Queue"
-            service="SQS"
-            icon="queue"
-            {...nodeState(f, QUEUE)}
-            appear={CUE('3c').start}
-            keyAt={keyBase + 21}
-            wide={wide}
-            serviceOpacity={serviceOpacity}
-          />
-          <Node
-            x={P.check.x}
-            y={P.check.y}
-            label="Check"
-            service="Lambda"
-            icon="check"
-            {...nodeState(f, CHECK)}
-            appear={CUE('4').start}
-            keyAt={keyBase + 28}
-            wide={wide}
-            serviceOpacity={serviceOpacity}
-          />
-          <Node
-            x={P.gpu.x}
-            y={P.gpu.y}
-            label="GPU"
-            service="SageMaker"
-            icon="gpu"
-            {...nodeState(f, GPU)}
-            appear={CUE('5a').start}
-            keyAt={keyBase + 35}
-            wide={wide}
-            serviceOpacity={serviceOpacity}
-            keySide="left"
-          />
-          <Node
-            x={P.database.x}
-            y={P.database.y}
-            label="Database"
-            service="Aurora Serverless"
-            icon="database"
-            {...nodeState(f, DATABASE)}
-            appear={CUE('5c').start}
-            keyAt={keyBase + 42}
-            wide={wide}
-            serviceOpacity={serviceOpacity}
-          />
-          <Node
-            x={P.watchdog.x}
-            y={P.watchdog.y}
-            label="Watchdog"
-            service="Lambda"
-            icon="watchdog"
-            {...nodeState(f, WATCHDOG)}
-            appear={CUE('7c').start}
-            keyAt={keyBase + 49}
-            wide={wide}
-            serviceOpacity={serviceOpacity}
-          />
-          <Node
-            x={P.dead.x}
-            y={P.dead.y}
-            label="Dead-letter"
-            service="SQS"
-            icon="deadLetter"
-            {...nodeState(f, DEAD)}
-            appear={CUE('7c').start}
-            keyAt={keyBase + 56}
-            wide={wide}
-            serviceOpacity={serviceOpacity}
-          />
+          {NODES.map((def) => {
+            const x = nodeX(def, dx);
+            const serviceShown = serviceOpacity > 0.01;
+            const box = nodeWorldBox(def, x, wide, serviceShown, f >= def.keyAt);
+            const visible =
+              shotOpacity(cameraState, {x, y: def.y}) * safeOpacity(screenBox(box, cam));
+            const state = nodeState(f, def.keys);
+            const stateProps = wide
+              ? {state: 'idle' as NodeState, stateAt: 0, prev: undefined}
+              : state;
+            return (
+              <Node
+                key={def.id}
+                x={x}
+                y={def.y}
+                label={def.label}
+                service={def.service}
+                icon={def.icon}
+                {...stateProps}
+                appear={def.appear}
+                keyAt={def.keyAt}
+                keySide={def.keySide}
+                wide={wide}
+                serviceOpacity={serviceOpacity}
+                safe={visible}
+              />
+            );
+          })}
 
           <Readout f={f} />
           <ClockNote f={f} />
@@ -970,7 +1090,7 @@ export const WalkthroughV6Diagram: React.FC = () => {
 
       <Caption text="asynchronous" from={CUE('3d').start + 8} to={CUE('4').start - 10} hot="asynchronous" />
       <Caption text="scale to zero" from={CUE('5b').start + 4} to={CUE('5c').start - 8} hot="zero" />
-      <Caption text="serverless" from={CUE('5c').start + 6} to={CUE('5d').start - 10} hot="serverless" />
+      <Caption text="serverless" from={CUE('5c').start + 6} to={CUE('5d').start - 10} hot="serverless" y={985} />
       <Caption text="idempotent" from={CUE('7b').start + 6} to={CUE('7c').start - 10} hot="idempotent" />
       <Caption text="infrastructure as code" from={CUE('7d').start + 6} to={CUE('7e').start - 6} hot="code" />
       <Caption text="least privilege" from={CUE('7f').start + 8} to={CUE('7f').end + 4} hot="privilege" />
