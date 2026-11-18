@@ -1,5 +1,5 @@
 import React from 'react';
-import {AbsoluteFill, interpolate, useCurrentFrame} from 'remotion';
+import {AbsoluteFill, Easing, interpolate, useCurrentFrame} from 'remotion';
 import {C, fontFamily} from '../edit/ui';
 import {clamp, ease} from '../edit/anim';
 import {
@@ -19,7 +19,7 @@ import {
   pathPoint,
   stateAt,
 } from './Diagram';
-import {ClipArt} from './styles/shared';
+import {bez, ClipArt} from './styles/shared';
 
 const RATE = 2.6;
 const HOLD = 0.5;
@@ -170,8 +170,8 @@ const CAMS: Shot[] = [
     [nodeBox(P.queue), nodeBox(P.check), nodeBox(P.gpu), propBox(CLOCK.left, CLOCK.top, CLOCK.width, CLOCK.height)],
     {primary: {x: 1900, y: 600}},
   ),
-  {at: CUE('6').start + 56, cam: camera(1970, 720, 1.95), box: nodeBox(P.gpu), move: 56},
-  makeShot(CUE('7a').start, [nodeBox(P.queue), nodeBox(P.check), nodeBox(P.gpu)], {primary: P.gpu}, 80),
+  {at: CUE('6').start + 56, cam: camera(1970, 720, 1.9), box: nodeBox(P.gpu), move: 56},
+  makeShot(CUE('7a').start, [nodeBox(P.storage), nodeBox(P.queue), nodeBox(P.check), nodeBox(P.gpu)], {primary: P.gpu}, 80),
   makeShot(
     CUE('7b').start,
     [
@@ -264,6 +264,8 @@ const STORAGE: StateKey[] = [
   {at: CUE('3b').start, state: 'idle'},
   {at: CUE('3b').start + 22, state: 'lit'},
   {at: CUE('3b').start + 112, state: 'idle'},
+  {at: CUE('7a', 1).start + 24, state: 'lit'},
+  {at: CUE('7b').start - 12, state: 'idle'},
 ];
 
 const QUEUE: StateKey[] = [
@@ -283,7 +285,7 @@ const CHECK: StateKey[] = [
 const GPU: StateKey[] = [
   {at: CUE('5a').start, state: 'idle'},
   {at: CUE('5a', 1).start, state: 'lit'},
-  {at: CUE('5b').start, state: 'dim'},
+  {at: CUE('5b').start, state: 'off'},
   {at: CUE('5d').start, state: 'idle'},
   {at: CUE('6').start, state: 'lit'},
   {at: CUE('7a', 1).start, state: 'off'},
@@ -320,6 +322,7 @@ type NodeDef = {
   y: number;
   label: string;
   service: string;
+  purpose: string;
   icon: IconName;
   keys: StateKey[];
   appear: number;
@@ -329,15 +332,15 @@ type NodeDef = {
 };
 
 const NODES: NodeDef[] = [
-  {id: 'browser', x: P.browser.x, y: P.browser.y, label: 'Browser', service: 'the file', icon: 'browser', keys: BROWSER, appear: 6, keyAt: KEY_BASE},
-  {id: 'website', x: P.website.x, y: P.website.y, label: 'Website', service: 'Lambda', icon: 'website', keys: WEBSITE, appear: 2, keyAt: KEY_BASE + 7, dxKey: 'website'},
-  {id: 'storage', x: P.storage.x, y: P.storage.y, label: 'Storage', service: 'S3', icon: 'storage', keys: STORAGE, appear: CUE('3b').start, keyAt: KEY_BASE + 14},
-  {id: 'queue', x: P.queue.x, y: P.queue.y, label: 'Queue', service: 'SQS', icon: 'queue', keys: QUEUE, appear: CUE('3c').start, keyAt: KEY_BASE + 21, dxKey: 'queue'},
-  {id: 'check', x: P.check.x, y: P.check.y, label: 'Check', service: 'Lambda', icon: 'check', keys: CHECK, appear: CUE('4').start, keyAt: KEY_BASE + 28},
-  {id: 'gpu', x: P.gpu.x, y: P.gpu.y, label: 'GPU', service: 'SageMaker', icon: 'gpu', keys: GPU, appear: CUE('5a').start, keyAt: KEY_BASE + 35, keySide: 'left'},
-  {id: 'database', x: P.database.x, y: P.database.y, label: 'Database', service: 'Aurora Serverless', icon: 'database', keys: DATABASE, appear: CUE('5c').start, keyAt: KEY_BASE + 42},
-  {id: 'watchdog', x: P.watchdog.x, y: P.watchdog.y, label: 'Watchdog', service: 'Lambda', icon: 'watchdog', keys: WATCHDOG, appear: CUE('7c').start, keyAt: KEY_BASE + 49},
-  {id: 'dead', x: P.dead.x, y: P.dead.y, label: 'Dead-letter', service: 'SQS', icon: 'deadLetter', keys: DEAD, appear: CUE('7c').start, keyAt: KEY_BASE + 56},
+  {id: 'browser', x: P.browser.x, y: P.browser.y, label: 'Browser', service: '', purpose: 'your video', icon: 'browser', keys: BROWSER, appear: 6, keyAt: KEY_BASE},
+  {id: 'website', x: P.website.x, y: P.website.y, label: 'Website', service: 'Lambda', purpose: 'sign-in & upload', icon: 'website', keys: WEBSITE, appear: 2, keyAt: KEY_BASE + 7, dxKey: 'website'},
+  {id: 'storage', x: P.storage.x, y: P.storage.y, label: 'Storage', service: 'S3', purpose: 'videos & results', icon: 'storage', keys: STORAGE, appear: CUE('3b').start, keyAt: KEY_BASE + 14},
+  {id: 'queue', x: P.queue.x, y: P.queue.y, label: 'Queue', service: 'SQS', purpose: 'jobs wait here', icon: 'queue', keys: QUEUE, appear: CUE('3c').start, keyAt: KEY_BASE + 21, dxKey: 'queue'},
+  {id: 'check', x: P.check.x, y: P.check.y, label: 'Check', service: 'Lambda', purpose: 'checks length & price', icon: 'check', keys: CHECK, appear: CUE('4').start, keyAt: KEY_BASE + 28},
+  {id: 'gpu', x: P.gpu.x, y: P.gpu.y, label: 'GPU', service: 'SageMaker', purpose: 'runs the brain model', icon: 'gpu', keys: GPU, appear: CUE('5a').start, keyAt: KEY_BASE + 35, keySide: 'left'},
+  {id: 'database', x: P.database.x, y: P.database.y, label: 'Database', service: 'Aurora Serverless', purpose: 'credits & job records', icon: 'database', keys: DATABASE, appear: CUE('5c').start, keyAt: KEY_BASE + 42},
+  {id: 'watchdog', x: P.watchdog.x, y: P.watchdog.y, label: 'Watchdog', service: 'Lambda', purpose: 'stops stuck jobs', icon: 'watchdog', keys: WATCHDOG, appear: CUE('7c').start, keyAt: KEY_BASE + 49},
+  {id: 'dead', x: P.dead.x, y: P.dead.y, label: 'Dead-letter', service: 'SQS', purpose: 'failed jobs, refunded', icon: 'deadLetter', keys: DEAD, appear: CUE('7c').start, keyAt: KEY_BASE + 56},
 ];
 
 let textCtx: CanvasRenderingContext2D | null = null;
@@ -360,12 +363,16 @@ const nodeWorldBox = (
   const labelSize = wide ? 64 : 58;
   const labelW = textWidth(def.label, labelSize, wide ? 700 : 600);
   const serviceW = serviceShown ? textWidth(def.service, 42, 400, 0.04) : 0;
-  const half = Math.max(64, labelW / 2, serviceW / 2, keyShown ? 83 : 0);
+  const purposeW = serviceShown ? textWidth(def.purpose, 34, 400) : 0;
+  const half = Math.max(64, labelW / 2, serviceW / 2, purposeW / 2, keyShown ? 83 : 0);
   return {
     x1: x - half,
     y1: def.y - 64 - (keyShown ? 8 : 0),
     x2: x + half,
-    y2: def.y - 64 + 128 + 16 + labelSize + (serviceShown ? 12 + 42 : 0),
+    y2:
+      def.y - 64 + 128 + 16 + labelSize +
+      (serviceShown && def.service ? 12 + 42 : 0) +
+      (serviceShown && def.purpose ? 10 + 34 : 0),
   };
 };
 
@@ -778,6 +785,126 @@ const DuplicateJob: React.FC<{f: number}> = ({f}) => {
   );
 };
 
+const glide = (f: number, a: number, b: number) =>
+  interpolate(f, [a, b], [0, 1], {
+    extrapolateLeft: 'clamp',
+    extrapolateRight: 'clamp',
+    easing: Easing.inOut(Easing.cubic),
+  });
+
+const THUMB_START: Pt = {x: P.browser.x - 150, y: P.browser.y - 100};
+const THUMB_STOPS = {
+  website: {from: 40, to: 72, at: {x: P.website.x - 150, y: P.website.y - 100}},
+  storage: {
+    from: CUE('3b').start + 18,
+    to: CUE('3b').start + 66,
+    at: {x: P.storage.x - 150, y: P.storage.y},
+    control: {x: 700, y: 480},
+  },
+  queue: {
+    from: CUE('3c').start + 18,
+    to: CUE('3c').start + 66,
+    at: {x: P.queue.x - 150, y: P.queue.y - 100},
+    control: {x: 1050, y: 420},
+  },
+  check: {from: CUE('4').start + 18, to: CUE('4').start + 66, at: {x: P.check.x - 150, y: P.check.y - 100}},
+  gpu: {
+    from: CUE('5a', 1).start + 4,
+    to: CUE('5a', 1).start + 52,
+    at: {x: P.gpu.x - 220, y: P.gpu.y + 80},
+    control: {x: 1600, y: 500},
+  },
+  result: {
+    from: CUE('7a', 1).start + 12,
+    to: CUE('7a', 1).start + 64,
+    at: {x: P.storage.x - 150, y: P.storage.y},
+    control: {x: 1450, y: 330},
+  },
+};
+
+type ThumbMove = {from: number; to: number; at: Pt; control?: Pt};
+
+const THUMB_MOVES: ThumbMove[] = [
+  THUMB_STOPS.website,
+  THUMB_STOPS.storage,
+  THUMB_STOPS.queue,
+  THUMB_STOPS.check,
+  THUMB_STOPS.gpu,
+  THUMB_STOPS.result,
+];
+
+const thumbAt = (f: number): Pt => {
+  let at = THUMB_START;
+  for (const move of THUMB_MOVES) {
+    if (f <= move.from) return at;
+    const t = glide(f, move.from, move.to);
+    if (f < move.to) {
+      if (move.control) return bez(at, move.control, move.at, t);
+      return {x: at.x + (move.at.x - at.x) * t, y: at.y + (move.at.y - at.y) * t};
+    }
+    at = move.at;
+  }
+  return at;
+};
+
+const JobThumb: React.FC<{f: number}> = ({f}) => {
+  const at = thumbAt(f);
+  const opacity = glide(f, 10, 22);
+  if (opacity <= 0.001) return null;
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        left: at.x - 46,
+        top: at.y - 82,
+        width: 92,
+        opacity,
+        pointerEvents: 'none',
+      }}
+    >
+      <ClipArt
+        width={92}
+        radius={14}
+        border="1.5px solid rgba(255,255,255,.72)"
+        style={{
+          boxShadow: '0 0 0 1px rgba(255,138,42,.4), 0 18px 40px rgba(0,0,0,.78), 0 0 42px rgba(255,138,42,.3)',
+        }}
+      />
+    </div>
+  );
+};
+
+const IdleCost: React.FC<{f: number}> = ({f}) => {
+  const opacity =
+    ease(f, CUE('5b').start + 36, CUE('5b').start + 48) *
+    (1 - ease(f, CUE('5c').start - 14, CUE('5c').start - 2));
+  if (opacity <= 0.001) return null;
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        left: P.gpu.x,
+        top: P.gpu.y + 300,
+        transform: 'translate(-50%, -50%)',
+        fontFamily,
+        fontSize: 38,
+        fontWeight: 600,
+        letterSpacing: '.005em',
+        color: C.text,
+        background: 'rgba(8,9,11,.8)',
+        border: `1px solid ${C.rule}`,
+        borderRadius: 999,
+        padding: '12px 26px 14px',
+        whiteSpace: 'nowrap',
+        boxShadow: '0 14px 40px rgba(0,0,0,.5)',
+        opacity,
+      }}
+    >
+      <span style={{color: C.hot}}>$0</span> when idle
+    </div>
+  );
+};
+
 const TerraformOutline: React.FC<{f: number}> = ({f}) => {
   const draw = ease(f, CUE('7d').start + 6, CUE('7d').start + 42);
   const label = ease(f, CUE('7d').start + 28, CUE('7d').start + 46);
@@ -962,26 +1089,26 @@ export const WalkthroughV6Diagram: React.FC = () => {
             />
             <Link
               path={browserToStorage}
-              appear={CUE('3b').start - 4}
-              draw={18}
+              appear={CUE('3b').start + 12}
+              draw={16}
               arrow
               opacity={linkOpacity(browserToStorage.from, browserToStorage.to)}
               hot={ease(f, CUE('3b').start + 6, CUE('3b').start + 22) * (1 - ease(f, CUE('3b').start + 96, CUE('3b').start + 126))}
             />
             <Link
               path={websiteToQueue}
-              appear={CUE('3c').start - 4}
-              draw={18}
+              appear={CUE('3c').start + 12}
+              draw={16}
               arrow
               opacity={linkOpacity(websiteToQueue.from, websiteToQueue.to)}
               dashed={f >= CUE('3d').start + 4}
               dashedAt={CUE('3d').start + 4}
               gap={28 * sep}
             />
-            <Link path={queueToCheck} appear={CUE('4').start - 4} draw={18} arrow opacity={linkOpacity(queueToCheck.from, queueToCheck.to)} />
+            <Link path={queueToCheck} appear={CUE('4').start + 12} draw={16} arrow opacity={linkOpacity(queueToCheck.from, queueToCheck.to)} />
             <Link path={checkToGpu} appear={CUE('4', 2).start - 30} draw={18} arrow opacity={linkOpacity(checkToGpu.from, checkToGpu.to)} />
-            <Link path={websiteToDatabase} appear={CUE('5c').start - 4} draw={18} arrow opacity={linkOpacity(websiteToDatabase.from, websiteToDatabase.to)} />
-            <Link path={gpuToDead} appear={CUE('7c').start - 2} draw={20} arrow opacity={linkOpacity(gpuToDead.from, gpuToDead.to)} />
+            <Link path={websiteToDatabase} appear={CUE('5c').start + 12} draw={16} arrow opacity={linkOpacity(websiteToDatabase.from, websiteToDatabase.to)} />
+            <Link path={gpuToDead} appear={CUE('7c').start + 14} draw={18} arrow opacity={linkOpacity(gpuToDead.from, gpuToDead.to)} />
             <Link path={watchdogToGpu} appear={CUE('7c').start + 18} draw={20} arrow opacity={linkOpacity(watchdogToGpu.from, watchdogToGpu.to)} />
             <Link
               path={forbidden}
@@ -1000,14 +1127,6 @@ export const WalkthroughV6Diagram: React.FC = () => {
             ) : null}
 
             <Traveller
-              path={browserToStorage}
-              start={CUE('3b').start + 8}
-              end={CUE('3b').start + 102}
-              kind="clip"
-              subLabel="0:44"
-              stopAt={0.75}
-            />
-            <Traveller
               path={{from: {x: P.queue.x, y: P.queue.y - 250}, to: {x: P.queue.x, y: P.queue.y - 140}}}
               start={CUE('3c').start + 18}
               end={CUE('3c').start + 44}
@@ -1015,7 +1134,6 @@ export const WalkthroughV6Diagram: React.FC = () => {
               linger
               outAt={CUE('3c').start + 104}
             />
-            <Traveller path={queueToCheck} start={CUE('4').start + 10} end={CUE('4').start + 50} kind="dot" />
             <Traveller
               path={checkToGpu}
               start={CUE('4', 2).start - 8}
@@ -1026,7 +1144,6 @@ export const WalkthroughV6Diagram: React.FC = () => {
               linger
               outAt={CUE('5a').start}
             />
-            <Traveller path={checkToGpu} start={CUE('5a', 1).start - 4} end={CUE('5a', 1).start + 48} kind="dot" />
             <Traveller
               path={gpuToDead}
               start={CUE('7c').start + 46}
@@ -1048,6 +1165,8 @@ export const WalkthroughV6Diagram: React.FC = () => {
             ) : null}
           </svg>
 
+          <JobThumb f={f} />
+
           {NODES.map((def) => {
             const x = nodeX(def, dx);
             const serviceShown = serviceOpacity > 0.01;
@@ -1065,6 +1184,7 @@ export const WalkthroughV6Diagram: React.FC = () => {
                 y={def.y}
                 label={def.label}
                 service={def.service}
+                purpose={def.purpose}
                 icon={def.icon}
                 {...stateProps}
                 appear={def.appear}
@@ -1079,6 +1199,7 @@ export const WalkthroughV6Diagram: React.FC = () => {
 
           <Readout f={f} />
           <ClockNote f={f} />
+          <IdleCost f={f} />
           <Counter x={P.gpu.x + 150} y={P.gpu.y - 118} value={running} opacity={counterOpacity} />
           <DuplicateJob f={f} />
           </div>

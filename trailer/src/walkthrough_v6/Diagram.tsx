@@ -227,6 +227,7 @@ type NodeProps = {
   y: number;
   label: string;
   service: string;
+  purpose?: string;
   icon: IconName;
   state: NodeState;
   stateAt: number;
@@ -246,6 +247,7 @@ export const Node: React.FC<NodeProps> = ({
   y,
   label,
   service,
+  purpose = '',
   icon,
   state,
   stateAt: stateFrame,
@@ -374,7 +376,7 @@ export const Node: React.FC<NodeProps> = ({
       >
         {label}
       </div>
-      {showService && serviceOpacity > 0.01 ? (
+      {showService && serviceOpacity > 0.01 && service ? (
         <div
           style={{
             marginTop: 12,
@@ -389,36 +391,33 @@ export const Node: React.FC<NodeProps> = ({
           {service}
         </div>
       ) : null}
+      {purpose && serviceOpacity > 0.01 ? (
+        <div
+          style={{
+            marginTop: 10,
+            fontSize: 34,
+            letterSpacing: '.005em',
+            lineHeight: 1,
+            color: mix('#7E8894', '#BFA58E', glow * 0.7),
+            whiteSpace: 'nowrap',
+            opacity: serviceOpacity,
+          }}
+        >
+          {purpose}
+        </div>
+      ) : null}
     </div>
   );
 };
 
 export type Pool = {x: number; y: number; rx?: number; ry?: number; color?: string; opacity?: number};
 
-export const Floor: React.FC<{cx?: number; cy?: number; size?: number; pools?: Pool[]}> = ({
+export const Floor: React.FC<{cx?: number; cy?: number; pools?: Pool[]}> = ({
   cx = 1330,
   cy = 710,
-  size = 3900,
   pools = [],
 }) => (
   <>
-    <div
-      style={{
-        position: 'absolute',
-        left: cx,
-        top: cy,
-        width: size,
-        height: size,
-        transform: 'translate(-50%, -50%) rotateX(58deg) rotateZ(-45deg)',
-        backgroundImage:
-          'linear-gradient(rgba(139,166,194,.12) 1px, transparent 1px), linear-gradient(90deg, rgba(139,166,194,.12) 1px, transparent 1px)',
-        backgroundSize: '84px 84px',
-        border: '1px solid rgba(139,166,194,.09)',
-        borderRadius: 90,
-        maskImage: 'radial-gradient(closest-side, #000 0%, rgba(0,0,0,.85) 44%, transparent 76%)',
-        WebkitMaskImage: 'radial-gradient(closest-side, #000 0%, rgba(0,0,0,.85) 44%, transparent 76%)',
-      }}
-    />
     <div
       style={{
         position: 'absolute',
