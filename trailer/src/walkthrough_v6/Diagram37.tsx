@@ -190,13 +190,6 @@ const unionBox = (...boxes: Box[]): Box => ({
   y2: Math.max(...boxes.map((box) => box.y2)),
 });
 
-const propBox = (left: number, top: number, width: number, height: number): Box => ({
-  x1: left,
-  y1: top,
-  x2: left + width,
-  y2: top + height,
-});
-
 let textCtx: CanvasRenderingContext2D | null = null;
 
 const textWidth = (text: string, size: number, weight: number, spacing = 0) => {
@@ -578,6 +571,12 @@ const pathPointsOf = (path: PathSpec, count = 24): Pt[] => {
   return Array.from({length: count + 1}, (_, index) => bez(path.from, control, path.to, index / count));
 };
 
+const browserStoragePath = (browser: Pt, storage: Pt): PathSpec => ({
+  from: {x: browser.x + 42, y: browser.y - 40},
+  to: {x: storage.x - 42, y: storage.y - 40},
+  bend: -170,
+});
+
 const autoPath = (a: Pt, b: Pt, gap = 88): PathSpec => {
   const dx = b.x - a.x;
   const dy = b.y - a.y;
@@ -632,7 +631,7 @@ const linksAt = (f: number): LinkDraw[] => {
     const to = pos('storage');
     links.push({
       id: 'browser-storage',
-      path: {from: {x: from.x + 42, y: from.y - 40}, to: {x: to.x - 42, y: to.y - 40}, bend: -170},
+      path: browserStoragePath(from, to),
       appear: CUE('3b').start + 10,
       draw: 16,
       arrow: true,
@@ -777,23 +776,91 @@ const runningAt = (f: number) => {
   return 1 - ease(f, down, down + 26);
 };
 
-const CARD = {
-  readout: propBox(1920 - SAFE - 760, SAFE, 760, 112),
-  refunded: propBox(1920 - SAFE - 320, SAFE, 320, 96),
-  status: propBox(1920 - SAFE - 360, SAFE, 360, 104),
-  clock: propBox(1920 - SAFE - 560, SAFE, 560, 130),
-  credit: propBox(1920 - SAFE - 560, SAFE, 560, 210),
+const CARD_GAP = 28;
+const FFPROBE_STACK = 42;
+
+type CardId = 'readout' | 'refunded' | 'status' | 'clock' | 'credit';
+
+const CARD_SIZE: Record<CardId, {w: number; h: number}> = {
+  readout: {w: 700, h: 112},
+  refunded: {w: 320, h: 96},
+  status: {w: 360, h: 104},
+  clock: {w: 560, h: 130},
+  credit: {w: 560, h: 210},
 };
 
-type CardSpec = {id: string; box: Box; opacity: number};
+const CARD_NODE: Record<CardId, NodeId> = {
+  readout: 'check',
+  refunded: 'check',
+  status: 'gpu',
+  clock: 'gpu',
+  credit: 'dead',
+};
 
-const cardSpecsAt = (f: number): CardSpec[] => [
-  {id: 'readout', box: CARD.readout, opacity: readoutOpacity(f)},
-  {id: 'refunded', box: CARD.refunded, opacity: refundOpacity(f)},
-  {id: 'status', box: CARD.status, opacity: statusOpacity(f)},
-  {id: 'clock', box: CARD.clock, opacity: clockOpacity(f)},
-  {id: 'credit', box: CARD.credit, opacity: creditOpacity(f)},
-];
+const CARD_ORDER: CardId[] = ['readout', 'refunded', 'status', 'clock', 'credit'];
+
+const ffprobeOpacity = (f: number) =>
+  ease(f, beat('4', 0.22), beat('4', 0.34)) * (1 - ease(f, CUE('4r').start - 8, CUE('4r').start + 4));
+
+const presignedOpacity = (f: number) =>
+  ease(f, CUE('3b').start + 18, CUE('3b').start + 32) * (1 - ease(f, CUE('3c').start - 14, CUE('3c').start));
+
+const CARD_OPACITY: Record<CardId, (f: number) => number> = {
+  readout: readoutOpacity,
+  refunded: refundOpacity,
+  status: statusOpacity,
+  clock: clockOpacity,
+  credit: creditOpacity,
+};
+
+type CardSpec = {id: CardId; box: Box; opacity: number};
+
+const placeCard = (anchor: Box, w: number, h: number, taken: Box[]): Box => {
+  const cx = (anchor.x1 + anchor.x2) / 2;
+  const left = (boxLeft: number) => Math.max(SAFE, Math.min(boxLeft, 1920 - SAFE - w));
+  const boxLeft = left(cx - w / 2);
+  const below: Box = {x1: boxLeft, y1: anchor.y2 + CARD_GAP, x2: boxLeft + w, y2: anchor.y2 + CARD_GAP + h};
+  const aboveTop = anchor.y1 - CARD_GAP - h;
+  const above: Box = {x1: boxLeft, y1: aboveTop, x2: boxLeft + w, y2: aboveTop + h};
+  const blocked = (box: Box) => taken.some((other) => overlaps(box, other));
+  const belowFits = below.y2 <= 1080 - SAFE;
+  const aboveFits = aboveTop >= SAFE;
+  if (belowFits && !blocked(below)) return below;
+  if (aboveFits && !blocked(above)) return above;
+  if (aboveFits) return above;
+  return below;
+};
+
+const takenBoxesAt = (f: number, cam: Camera): Box[] => {
+  const boxes = labelTextBoxesAt(f).map((item) => item.box);
+  const thumb = thumbStateAt(f);
+  if (thumb.opacity > 0.02) boxes.push(screenBox(thumb.box, cam));
+  return boxes;
+};
+
+const cardSpecsAt = (f: number): CardSpec[] => {
+  const {positions} = layoutAt(f);
+  const cam = cameraAt(f);
+  const wide = isWide(f);
+  const taken = takenBoxesAt(f, cam);
+  const specs: CardSpec[] = [];
+  for (const id of CARD_ORDER) {
+    const opacity = CARD_OPACITY[id](f);
+    if (opacity <= 0.001) continue;
+    const nodeId = CARD_NODE[id];
+    const def = NODES_BY_ID[nodeId];
+    const pos = positions[nodeId];
+    if (!def || !pos) continue;
+    const reservePurpose = id !== 'clock';
+    let world = nodeWorldBox(def, pos.x, pos.y, wide, true, reservePurpose);
+    if (id === 'readout' && ffprobeOpacity(f) > 0.02) {
+      world = {...world, y2: world.y2 + FFPROBE_STACK};
+    }
+    const size = CARD_SIZE[id];
+    specs.push({id, box: placeCard(screenBox(world, cam), size.w, size.h, taken), opacity});
+  }
+  return specs;
+};
 
 const CardShell: React.FC<{box: Box; opacity: number; children: React.ReactNode}> = ({box, opacity, children}) => {
   if (opacity <= 0.001) return null;
@@ -821,11 +888,11 @@ const CardShell: React.FC<{box: Box; opacity: number; children: React.ReactNode}
   );
 };
 
-const ReadoutCard: React.FC<{f: number}> = ({f}) => {
+const ReadoutCard: React.FC<{f: number; box: Box; opacity: number}> = ({f, box, opacity}) => {
   const lengthOn = ease(f, beat('4', 0.26), beat('4', 0.36));
   const priceOn = ease(f, beat('4', 0.56), beat('4', 0.68));
   return (
-    <CardShell box={CARD.readout} opacity={readoutOpacity(f)}>
+    <CardShell box={box} opacity={opacity}>
       <div style={{display: 'flex', alignItems: 'center', gap: 30, height: '100%', fontSize: 48, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap'}}>
         <span style={{display: 'flex', alignItems: 'center', gap: 12, opacity: lengthOn}}>
           length 0:44 <span style={{color: C.hot, display: 'inline-flex'}}><Icon name="tick" size={48} /></span>
@@ -838,8 +905,8 @@ const ReadoutCard: React.FC<{f: number}> = ({f}) => {
   );
 };
 
-const RefundCard: React.FC<{f: number}> = ({f}) => (
-  <CardShell box={CARD.refunded} opacity={refundOpacity(f)}>
+const RefundCard: React.FC<{box: Box; opacity: number}> = ({box, opacity}) => (
+  <CardShell box={box} opacity={opacity}>
     <div style={{display: 'flex', alignItems: 'center', gap: 14, height: '100%', fontSize: 44, color: '#C6CCD4'}}>
       <span style={{color: C.hot, display: 'inline-flex'}}><Icon name="tick" size={38} /></span>
       refunded
@@ -847,11 +914,11 @@ const RefundCard: React.FC<{f: number}> = ({f}) => (
   </CardShell>
 );
 
-const StatusCard: React.FC<{f: number}> = ({f}) => {
+const StatusCard: React.FC<{f: number; box: Box; opacity: number}> = ({f, box, opacity}) => {
   const running = runningAt(f);
   const live = running > 0.5;
   return (
-    <CardShell box={CARD.status} opacity={statusOpacity(f)}>
+    <CardShell box={box} opacity={opacity}>
       <div style={{display: 'flex', alignItems: 'center', gap: 14, height: '100%', fontSize: 48, fontWeight: 600, fontVariantNumeric: 'tabular-nums'}}>
         <span style={{width: 14, height: 14, borderRadius: 7, background: live ? C.hot : '#5C6775'}} />
         <span style={{color: live ? '#FFC08A' : '#8E9AAB'}}>{Math.round(running)} running</span>
@@ -860,18 +927,18 @@ const StatusCard: React.FC<{f: number}> = ({f}) => {
   );
 };
 
-const ClockCard: React.FC<{f: number}> = ({f}) => (
-  <CardShell box={CARD.clock} opacity={clockOpacity(f)}>
+const ClockCard: React.FC<{box: Box; opacity: number}> = ({box, opacity}) => (
+  <CardShell box={box} opacity={opacity}>
     <div style={{display: 'flex', alignItems: 'center', gap: 16, height: '100%', fontSize: 42, color: '#FFC08A', whiteSpace: 'nowrap'}}>
       <Icon name="clock" size={44} /> a few minutes to start
     </div>
   </CardShell>
 );
 
-const CreditCard: React.FC<{f: number}> = ({f}) => {
+const CreditCard: React.FC<{f: number; box: Box; opacity: number}> = ({f, box, opacity}) => {
   const returned = ease(f, beat('7a', 0.68), beat('7a', 0.9));
   return (
-    <CardShell box={CARD.credit} opacity={creditOpacity(f)}>
+    <CardShell box={box} opacity={opacity}>
       <div style={{display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 44, fontWeight: 600}}>
         <span>credit balance</span>
         <span style={{color: C.hot, opacity: 1 - returned}}>held</span>
@@ -886,29 +953,33 @@ const CreditCard: React.FC<{f: number}> = ({f}) => {
   );
 };
 
-const FfprobeChip: React.FC<{f: number; pos: Pt}> = ({f, pos}) => {
-  const opacity =
-    ease(f, beat('4', 0.22), beat('4', 0.34)) * (1 - ease(f, CUE('4r').start - 8, CUE('4r').start + 4));
+const MonoCaption: React.FC<{text: string; x: number; y: number; opacity: number; pill?: boolean}> = ({
+  text,
+  x,
+  y,
+  opacity,
+  pill = false,
+}) => {
   if (opacity <= 0.001) return null;
   return (
     <div
       style={{
         position: 'absolute',
-        left: pos.x + 78,
-        top: pos.y - 28,
-        padding: '8px 16px',
-        borderRadius: 12,
-        border: `1.4px solid ${C.rule}`,
-        background: 'rgba(13,15,18,.96)',
+        left: x,
+        top: y,
+        transform: 'translate(-50%, -50%)',
+        padding: pill ? '3px 10px' : undefined,
+        borderRadius: pill ? 8 : undefined,
+        background: pill ? 'rgba(11,12,15,.92)' : undefined,
         fontFamily: MONO,
-        fontSize: 28,
+        fontSize: 26,
         letterSpacing: '.02em',
-        color: '#B9C2CE',
+        color: '#8E98A5',
         opacity,
         whiteSpace: 'nowrap',
       }}
     >
-      ffprobe
+      {text}
     </div>
   );
 };
@@ -972,7 +1043,7 @@ const BadFile: React.FC<{f: number; check: Pt}> = ({f, check}) => {
   if (opacity <= 0.001) return null;
   const t = glide(f, beat('4r', 0.16), beat('4r', 0.46));
   const start = check.x - 470;
-  const end = check.x - 254;
+  const end = check.x - 288;
   const left = start + (end - start) * t;
   return (
     <div
@@ -1242,9 +1313,9 @@ const GpuPanel: React.FC<{f: number; gpu: Pt}> = ({f, gpu}) => {
         width: 780,
         height: 600,
         boxSizing: 'border-box',
-        padding: '26px 36px 28px',
+        padding: '22px 36px 24px',
         borderRadius: 44,
-        background: 'rgba(11,13,16,.98)',
+        background: '#0B0D10',
         border: '2px solid rgba(255,138,42,.58)',
         boxShadow: '0 0 60px rgba(255,138,42,.18), 0 30px 70px rgba(0,0,0,.7)',
         fontFamily,
@@ -1269,7 +1340,7 @@ const GpuPanel: React.FC<{f: number; gpu: Pt}> = ({f, gpu}) => {
           {icon: 'muted' as const, label: 'muted'},
         ].map((copy) => (
           <div key={copy.label} style={{display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12}}>
-            <div style={{width: 110, height: 196, borderRadius: 14, overflow: 'hidden', border: '1.5px solid rgba(255,255,255,.24)', boxSizing: 'border-box'}}>
+            <div style={{width: 210, height: 373, borderRadius: 16, overflow: 'hidden', border: '1.5px solid rgba(255,255,255,.24)', boxSizing: 'border-box'}}>
               <Img src={staticFile(CLIP_SRC)} style={{width: '100%', height: '100%', objectFit: 'cover', display: 'block'}} />
             </div>
             <div style={{display: 'flex', alignItems: 'center', gap: 10, fontSize: 32, fontWeight: 500, color: '#C6CCD4'}}>
@@ -1287,7 +1358,7 @@ const ProgressRing: React.FC<{f: number; gpu: Pt}> = ({f, gpu}) => {
   const opacity = ease(f, CUE('5b').start + 2, CUE('5b').start + 14) * (1 - ease(f, CUE('5c').start - 8, CUE('5c').start + 4));
   if (opacity <= 0.001) return null;
   const progress = ease(f, CUE('5b').start + 10, CUE('5b').start + 80);
-  const r = 108;
+  const r = 70;
   const circumference = 2 * Math.PI * r;
   return (
     <svg width={1} height={1} style={{position: 'absolute', left: 0, top: 0, overflow: 'visible', opacity}}>
@@ -1507,6 +1578,18 @@ export const WalkthroughV6Diagram: React.FC = () => {
   const check = positions.check;
   const gpu = positions.gpu;
   const dead = positions.dead;
+  const cards = cardSpecsAt(f);
+  const checkBottom = check
+    ? nodeWorldBox(NODES_BY_ID.check, check.x, check.y, wide, true, true).y2
+    : 0;
+  const ffprobe = ffprobeOpacity(f);
+  const browser = positions.browser;
+  const storage = positions.storage;
+  let presign: Pt | null = null;
+  if (browser && storage) {
+    const path = browserStoragePath(browser, storage);
+    presign = bez(path.from, linkControl(path), path.to, 0.5);
+  }
 
   return (
     <AbsoluteFill style={{background: '#0B0C0F'}}>
@@ -1575,7 +1658,18 @@ export const WalkthroughV6Diagram: React.FC = () => {
           );
         })}
 
-        {check ? <FfprobeChip f={f} pos={check} /> : null}
+        {check && ffprobe > 0.001 ? (
+          <MonoCaption text="ffprobe" x={check.x} y={checkBottom + 22} opacity={ffprobe} />
+        ) : null}
+        {presign ? (
+          <MonoCaption
+            text="presigned URL"
+            x={presign.x}
+            y={presign.y - 16}
+            opacity={presignedOpacity(f)}
+            pill
+          />
+        ) : null}
         {check ? <BadFile f={f} check={check} /> : null}
         {check && gpu ? <JobArrival f={f} check={check} gpu={gpu} /> : null}
         {gpu && dead ? <FailureJob f={f} gpu={gpu} dead={dead} /> : null}
@@ -1595,11 +1689,13 @@ export const WalkthroughV6Diagram: React.FC = () => {
       <Caption text="idempotent" from={CUE('7b').start + 6} to={CUE('7c').start - 10} hot="idempotent" />
       <Caption text="infrastructure as code" from={CUE('7d').start + 8} to={DURATION - 4} hot="code" y={995} />
 
-      <ReadoutCard f={f} />
-      <RefundCard f={f} />
-      <StatusCard f={f} />
-      <ClockCard f={f} />
-      <CreditCard f={f} />
+      {cards.map((card) => {
+        if (card.id === 'readout') return <ReadoutCard key={card.id} f={f} box={card.box} opacity={card.opacity} />;
+        if (card.id === 'refunded') return <RefundCard key={card.id} box={card.box} opacity={card.opacity} />;
+        if (card.id === 'status') return <StatusCard key={card.id} f={f} box={card.box} opacity={card.opacity} />;
+        if (card.id === 'clock') return <ClockCard key={card.id} box={card.box} opacity={card.opacity} />;
+        return <CreditCard key={card.id} f={f} box={card.box} opacity={card.opacity} />;
+      })}
     </AbsoluteFill>
   );
 };

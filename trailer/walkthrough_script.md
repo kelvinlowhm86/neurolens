@@ -23,7 +23,7 @@ This is a TikTok from Swee Choon, a dim sum restaurant.
 Drop it in, and you see the price before anything runs.
 That amount is held from your credit, not spent.
 
-## 3. Where the video goes (diagram: S3, Lambda, SQS)
+## 3. Where the video goes (diagram: S3, Lambda, SQS; small caption "presigned URL" on the upload arc)
 [So where does the video go?]
 The video goes straight into S3, through a short-lived upload link. It never passes through the
 website, so a big file can't slow it down for anyone else.
@@ -76,7 +76,7 @@ But a lot of feeds autoplay on mute.
 Turn the sound off, and the whole line drops.
 Most of this response is coming from her voice.
 
-## 9. The report (report tab; on screen: the 0:08-0:13 "Do" line)
+## 9. The report (report tab; on screen: caption "Claude · Amazon Bedrock", then the 0:08-0:13 "Do" line)
 [Do I have to read the chart myself?]
 Then the report reads the whole thing for you, in plain words.
 It goes moment by moment. What's on screen, what the brain is doing, and what to change.
