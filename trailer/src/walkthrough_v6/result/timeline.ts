@@ -1,14 +1,17 @@
 import swee from '../../../public/walkthrough/swee/result.json';
+import {Line, buildTimeline} from '../common';
 
-export const FPS = 30;
+export {FPS} from '../common';
 export const WIDTH = 1920;
 export const HEIGHT = 1080;
 
 export const OVERALL = swee.signals.overall as number[];
 export const MUTED = swee.muted.overall as number[];
+// The muted series is cut to the length both passes share, as the product does.
 export const SHARED = Math.min(OVERALL.length, MUTED.length);
 export const TO = SHARED - 1;
 
+// The peak comes from the data, never from the script's wording.
 export const PEAK = OVERALL.reduce((best, value, second) => (value > OVERALL[best] ? second : best), 0);
 export const PEAK_SCORE = OVERALL[PEAK];
 
@@ -18,37 +21,25 @@ const HIGH = Math.max(...ALL);
 const PAD = (HIGH - LOW) * 0.12 || 0.04;
 export const RANGE: [number, number] = [LOW - PAD, HIGH + PAD];
 
-export const CHART = {x: 60, y: 612, w: 1800, h: 360};
-
-const A = 96;
-const B = 177;
-const C = 153;
-const D = 188;
-const E = 96;
-const F = 107;
-const G = 238;
-
-export const SHOT = {
-  a: {start: 0, end: A},
-  b: {start: A, end: A + B},
-  c: {start: A + B, end: A + B + C},
-  d: {start: A + B + C, end: A + B + C + D},
-  e: {start: A + B + C + D, end: A + B + C + D + E},
-  f: {start: A + B + C + D + E, end: A + B + C + D + E + F},
-  g: {start: A + B + C + D + E + F, end: A + B + C + D + E + F + G},
-};
-
-export const PEAK_CLICK = SHOT.d.start + 150;
-export const TOGGLE_CLICK = SHOT.f.start + 60;
-
-export const DURATION = SHOT.g.end + 15;
-
-export const TIMING = [
-  {shot: '8a', words: 7, start: SHOT.a.start, end: SHOT.a.end},
-  {shot: '8b', words: 14, start: SHOT.b.start, end: SHOT.b.end},
-  {shot: '8c', words: 12, start: SHOT.c.start, end: SHOT.c.end},
-  {shot: '8d', words: 15, start: SHOT.d.start, end: SHOT.d.end},
-  {shot: '8e', words: 7, start: SHOT.e.start, end: SHOT.e.end},
-  {shot: '8f', words: 8, start: SHOT.f.start, end: SHOT.f.end},
-  {shot: '8g', words: 18, start: SHOT.g.start, end: SHOT.g.end},
+// Scratch timings (2.6 words per second plus a 0.5 s hold). The real voice replaces these lines' lengths.
+export const LINES: Line[] = [
+  ['8a', "About ten minutes later, here's the result."],
+  ['8b', "The line shows how strong the response is. The brain shows where it's happening."],
+  ['8c', 'Anything above the dashed line is a stronger response than ordinary viewing.'],
+  ['8d', 'It peaks at eight seconds. Click the peak, and the video jumps right to it.'],
+  ['8e', "She's telling the story over old photos."],
+  ['8f', 'But a lot of feeds autoplay on mute.'],
+  ['8g', 'Turn the sound off, and the whole line drops. Most of this response is coming from her voice.'],
 ];
+
+const built = buildTimeline(LINES);
+export const CUES = built.cues;
+export const DURATION = built.duration + 15;
+
+export const SHOT = Object.fromEntries(CUES.map((cue) => [cue.shot.slice(1), cue])) as Record<
+  'a' | 'b' | 'c' | 'd' | 'e' | 'f' | 'g',
+  (typeof CUES)[number]
+>;
+
+export const PEAK_CLICK = SHOT.d.start + 112;
+export const TOGGLE_CLICK = SHOT.f.start + 66;
