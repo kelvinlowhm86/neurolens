@@ -37,22 +37,18 @@ rather than trusting what the browser said. It works the price out again from th
 If the file won't open, runs too long, or there isn't enough credit, you're refunded right there,
 and no GPU ever wakes up.
 
-## 5. Scale to zero (diagram: SageMaker, Lambda, Aurora Serverless; parts grey out as they sleep)
+## 5. Scale to zero (diagram: SageMaker; GPU greys out when idle)
 [So is a GPU running all day?]
 GPUs are expensive, so none is left running. The model runs on SageMaker, which starts a GPU when
 a job arrives, and scales back to zero when things go quiet.
 The catch is that starting one takes a few minutes. For a chatbot, that would be a problem. But
 you're not waiting for a reply here; you're getting an analysis to study. So a few minutes is a
 fair price for paying nothing while nobody's using it.
-The website and the database work the same way. Lambda and Aurora Serverless cost almost nothing
-when idle, and there's no server to look after.
 
 ## 6. The model (diagram)
 [What actually runs on the GPU?]
-Once it's up, it runs TRIBE, a research model from Meta. It learned from the brain scans of over
-seven hundred people as they watched films and listened to podcasts, so it can predict how a
-brain responds to a video it's never seen.
-It watches yours twice. Once with sound, once on mute. You'll see why.
+Once it's up, it runs TRIBE, a research model from Meta, trained on brain scans from over seven
+hundred people, so it can predict how a brain responds to a video it's never seen.
 
 ## 7. When things go wrong (diagram: retry, dead-letter queue, watchdog Lambda)
 [What if it breaks? Do I lose my money?]
@@ -68,21 +64,13 @@ down in one go.
 
 ## 8. The result (real page, large and calm)
 About ten minutes later, here's the result.
-The line shows how strong the response is. The brain shows where it's happening.
-Anything above the dashed line is a stronger response than ordinary viewing.
-It peaks at nine seconds. Click the peak, and the video jumps right to it.
-She's telling the story over old photos.
-But a lot of feeds autoplay on mute.
-Turn the sound off, and the whole line drops.
-Most of this response is coming from her voice.
+The line shows how strong the response is, and the brain shows where.
+Click the peak, and the video jumps right to it.
 
-## 9. The report (report tab; on screen: caption "Claude · Amazon Bedrock", then the 0:08-0:13 "Do" line)
+## 9. The report (report card; caption "Claude · Amazon Bedrock", then the 0:08-0:13 "Do" line)
 [Do I have to read the chart myself?]
-Then the report reads the whole thing for you, in plain words.
-It goes moment by moment. What's on screen, what the brain is doing, and what to change.
-It's written by Claude, on Amazon Bedrock.
-For the old photos, it suggests cutting in a second of her face, reacting.
-A face holds attention, even with the sound off.
+Then Claude, on Amazon Bedrock, writes it up moment by moment, with what to change.
+For the old photos, it suggests cutting in a second of her face.
 
 ## 10. Honest limit
 [So will this get me views?]
