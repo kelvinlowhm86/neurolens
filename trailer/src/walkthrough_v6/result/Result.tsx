@@ -8,9 +8,9 @@ import {
 import {DURATION, FPS, MUTED, OVERALL, PEAK, PEAK_CLICK, PEAK_SCORE, RANGE, SHOT, TO, TOGGLE_CLICK} from './timeline';
 
 // Fixed, centred layout: clip and brain in a band on top, the chart under them. Between
-// shots only brightness changes (plus one slow lift of the clip in 8e), so the frame stays calm.
+// shots only brightness changes, except 8e: the chart and brain fade out and the clip moves to the middle, alone.
 const CLIP = {x: 560, y: 36, w: 246};
-const CLIP_HERO = {x: 780, y: 170, w: 360};
+const CLIP_HERO = {x: 750, y: 166, w: 420}; // 8e: centred, alone
 const BRAIN = {x: 900, y: 20, size: 470};
 const CHART = {x: 150, y: 545, w: 1620, h: 320};
 const CHART_BIG = {y: 270, h: 440}; // 8g: the chart rises and grows once the clip and brain have left
@@ -42,9 +42,9 @@ export const Result: React.FC = () => {
   const frame = useCurrentFrame();
 
   const clipOpacity = level(frame, {a: 1, b: 1, c: 0.3, d: 1, e: 1, f: 0, g: 0});
-  const brainOpacity = level(frame, {a: 0.5, b: 1, c: 0.3, d: 0.45, e: 0.2, f: 0, g: 0});
-  const chartOpacity = level(frame, {a: 1, b: 1, c: 1, d: 1, e: 0.14, f: 0.22, g: 1});
-  const clipLift = easeInOut(frame, SHOT.e.start + 6, SHOT.e.end - 12) - easeInOut(frame, SHOT.f.start - 4, SHOT.f.start + 10);
+  const brainOpacity = level(frame, {a: 0.5, b: 1, c: 0.3, d: 0.45, e: 0, f: 0, g: 0});
+  const chartOpacity = level(frame, {a: 1, b: 1, c: 1, d: 1, e: 0, f: 0.22, g: 1});
+  const clipLift = easeInOut(frame, SHOT.e.start + 8, SHOT.e.start + 44);
   const clipBox = {x: lerp(CLIP.x, CLIP_HERO.x, clipLift), y: lerp(CLIP.y, CLIP_HERO.y, clipLift), w: lerp(CLIP.w, CLIP_HERO.w, clipLift)};
   const jumpGlow = frame >= PEAK_CLICK ? 1 - easeOut(frame, PEAK_CLICK, PEAK_CLICK + 24) : 0;
 
@@ -106,7 +106,8 @@ export const Result: React.FC = () => {
     const p = easeInOut(frame, SHOT.f.start + 30, TOGGLE_CLICK - 4);
     cursor = {x: lerp(rest.x, press.x, p), y: lerp(rest.y, press.y, p)};
   }
-  const cursorOpacity = Math.min(easeOut(frame, SHOT.d.start + 30, SHOT.d.start + 44), 1 - easeOut(frame, TOGGLE_CLICK + 14, TOGGLE_CLICK + 30));
+  const cursorGate = 1 - (easeOut(frame, SHOT.e.start - 4, SHOT.e.start + 8) - easeOut(frame, SHOT.f.start + 26, SHOT.f.start + 38));
+  const cursorOpacity = cursorGate * Math.min(easeOut(frame, SHOT.d.start + 30, SHOT.d.start + 44), 1 - easeOut(frame, TOGGLE_CLICK + 14, TOGGLE_CLICK + 30));
   const pressed = (frame >= PEAK_CLICK && frame < PEAK_CLICK + 5) || (frame >= TOGGLE_CLICK && frame < TOGGLE_CLICK + 5);
 
   const accent = muted ? C.cool : C.hot;
@@ -193,7 +194,7 @@ export const Result: React.FC = () => {
       <Ring x={press.x} y={press.y} p={clamp((frame - TOGGLE_CLICK) / 18)} />
       {cursorOpacity > 0.01 ? <Cursor x={cursor.x} y={cursor.y} opacity={cursorOpacity} pressed={pressed} /> : null}
 
-      <div style={{position: 'absolute', inset: 0, background: '#000', opacity: 1 - easeOut(frame, 0, 12), pointerEvents: 'none'}} />
+      <div style={{position: 'absolute', inset: 0, background: '#000', opacity: 1 - easeOut(frame, 0, 12), pointerEvents: 'none', zIndex: 100}} />
     </Stage>
   );
 };

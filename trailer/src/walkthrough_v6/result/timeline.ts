@@ -26,7 +26,7 @@ export const LINES: Line[] = [
   ['8a', "About ten minutes later, here's the result."],
   ['8b', "The line shows how strong the response is. The brain shows where it's happening."],
   ['8c', 'Anything above the dashed line is a stronger response than ordinary viewing.'],
-  ['8d', 'It peaks at eight seconds. Click the peak, and the video jumps right to it.'],
+  ['8d', 'It peaks at nine seconds. Click the peak, and the video jumps right to it.'],
   ['8e', "She's telling the story over old photos."],
   ['8f', 'But a lot of feeds autoplay on mute.'],
   ['8g', 'Turn the sound off, and the whole line drops. Most of this response is coming from her voice.'],

@@ -929,7 +929,7 @@ const creditGlowAt = (f: number) =>
     ease(f, beat('7b', 0.26), beat('7b', 0.36)) * (1 - ease(f, beat('7b', 0.46), beat('7b', 0.58))),
   );
 
-const creditWidgetOpacity = (f: number) =>
+export const creditWidgetOpacity = (f: number) =>
   ease(f, CUE('3b').start + 6, CUE('3b').start + 20) * (1 - ease(f, CUE('7b').end - 14, CUE('7b').end + 2));
 
 type CardSpec = {id: CardId; box: Box; opacity: number};

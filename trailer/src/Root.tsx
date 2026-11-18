@@ -16,6 +16,7 @@ import {Intro as V6Intro} from './walkthrough_v6/intro/Intro';
 import {DURATION as V6_INTRO_DURATION} from './walkthrough_v6/intro/timeline';
 import {Outro as V6Outro} from './walkthrough_v6/outro/Outro';
 import {DURATION as V6_OUTRO_DURATION} from './walkthrough_v6/outro/timeline';
+import {WalkthroughV6Full, DURATION as V6_FULL_DURATION} from './walkthrough_v6/Full';
 import {StyleA_Glass} from './walkthrough_v6/styles/StyleA_Glass';
 import {StyleB_Icons} from './walkthrough_v6/styles/StyleB_Icons';
 import {StyleC_Blueprint} from './walkthrough_v6/styles/StyleC_Blueprint';
@@ -32,6 +33,7 @@ export const Root: React.FC = () => <>
   <Composition id="WalkthroughV6Result" component={V6Result} durationInFrames={V6_RESULT_DURATION} fps={30} width={1920} height={1080} />
   <Composition id="WalkthroughV6Intro" component={V6Intro} durationInFrames={V6_INTRO_DURATION} fps={30} width={1920} height={1080} />
   <Composition id="WalkthroughV6Outro" component={V6Outro} durationInFrames={V6_OUTRO_DURATION} fps={30} width={1920} height={1080} />
+  <Composition id="WalkthroughV6Full" component={WalkthroughV6Full} durationInFrames={V6_FULL_DURATION} fps={30} width={1920} height={1080} />
   <Composition id="StyleA-Glass" component={StyleA_Glass} durationInFrames={STYLE_DURATION} fps={30} width={1920} height={1080} />
   <Composition id="StyleB-Icons" component={StyleB_Icons} durationInFrames={STYLE_DURATION} fps={30} width={1920} height={1080} />
   <Composition id="StyleC-Blueprint" component={StyleC_Blueprint} durationInFrames={STYLE_DURATION} fps={30} width={1920} height={1080} />

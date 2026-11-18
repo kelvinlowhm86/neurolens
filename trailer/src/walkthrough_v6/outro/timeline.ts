@@ -8,9 +8,6 @@ export const HEIGHT = 1080;
 // The report text is the real one from data/samples.json (sample tiktok_ZSg5soxrR), copied to swee_report.json.
 export const REPORT = report;
 
-// Placeholder: confirm the final address before publishing.
-export const URL_TEXT = 'df6girqyykyfa.cloudfront.net';
-
 export const LINES: Line[] = [
   ['9a', 'Then the report reads the whole thing for you, in plain words.'],
   ['9b', "It goes moment by moment. What's on screen, what the brain is doing, and what to change."],

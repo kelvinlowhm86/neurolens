@@ -70,7 +70,7 @@ down in one go.
 About ten minutes later, here's the result.
 The line shows how strong the response is. The brain shows where it's happening.
 Anything above the dashed line is a stronger response than ordinary viewing.
-It peaks at eight seconds. Click the peak, and the video jumps right to it.
+It peaks at nine seconds. Click the peak, and the video jumps right to it.
 She's telling the story over old photos.
 But a lot of feeds autoplay on mute.
 Turn the sound off, and the whole line drops.
