@@ -39,7 +39,7 @@ and no GPU ever wakes up.
 
 ## 5. Scale to zero (diagram: SageMaker; GPU greys out when idle)
 [So is a GPU running all day?]
-GPUs are expensive, so none is left running. The model runs on SageMaker, which starts a GPU when
+Left on all month, this GPU would cost about thirteen hundred dollars, so none is left running. The model runs on SageMaker, which starts a GPU when
 a job arrives, and scales back to zero when things go quiet.
 The catch is that starting one takes a few minutes. For a chatbot, that would be a problem. But
 you're not waiting for a reply here; you're getting an analysis to study. So a few minutes is a
