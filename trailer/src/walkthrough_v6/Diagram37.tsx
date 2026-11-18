@@ -123,6 +123,8 @@ const COUNTER = {x: P.gpu.x + 150, y: P.gpu.y - 118};
 const READOUT = {left: 1180, top: 920, width: 760, height: 108};
 const CLOCK = {left: 1560, top: 460, width: 660, height: 220};
 const JOBS = {left: 1740, top: 995, width: 1020, height: 140};
+const CREDIT = {left: 1220, top: 300, width: 620, height: 248};
+const CREDIT_BAR = 552;
 
 const JOB_LANE_Y = 1055;
 const FIRST_JOB_X = 1840;
@@ -264,8 +266,6 @@ const STORAGE: StateKey[] = [
   {at: CUE('3b').start, state: 'idle'},
   {at: CUE('3b').start + 22, state: 'lit'},
   {at: CUE('3b').start + 112, state: 'idle'},
-  {at: CUE('7a', 1).start + 24, state: 'lit'},
-  {at: CUE('7b').start - 12, state: 'idle'},
 ];
 
 const QUEUE: StateKey[] = [
@@ -435,6 +435,7 @@ export const runSafeAreaCheck = () => {
     const {cameraState, cam, wide, serviceOpacity, dx} = frameGeometry(f);
     let count = 0;
     let bad = 0;
+    const labels: {label: string; box: Box}[] = [];
     for (const def of NODES) {
       const state = wide ? 'idle' : stateAt(f, def.keys).state;
       if (state === 'hidden' || f < def.appear) continue;
@@ -445,6 +446,7 @@ export const runSafeAreaCheck = () => {
       );
       if (shotOpacity(cameraState, {x, y: def.y}) <= 0.02) continue;
       count += 1;
+      labels.push({label: def.label, box});
       if (box.x1 < SAFE || box.x2 > 1920 - SAFE || box.y1 < SAFE || box.y2 > 1080 - SAFE) {
         bad += 1;
         console.warn(
@@ -452,8 +454,32 @@ export const runSafeAreaCheck = () => {
         );
       }
     }
+    if (thumbOpacityAt(f) > 0.02) {
+      const box = screenBox(thumbBoxAt(f), cam);
+      const onScreen = box.x2 > 0 && box.x1 < 1920 && box.y2 > 0 && box.y1 < 1080;
+      if (onScreen) {
+        count += 1;
+        if (box.x1 < SAFE || box.x2 > 1920 - SAFE || box.y1 < SAFE || box.y2 > 1080 - SAFE) {
+          bad += 1;
+          console.warn(
+            `[v6 safe-area] ${still.row} frame ${f}: thumbnail box ${Math.round(box.x1)},${Math.round(box.y1)} - ${Math.round(box.x2)},${Math.round(box.y2)} crosses the ${SAFE}px safe area`,
+          );
+        }
+      }
+    }
+    if (creditOpacityAt(f) > 0.02) {
+      const card = propBox(CREDIT.left, CREDIT.top, CREDIT.width, CREDIT.height);
+      for (const item of labels) {
+        if (item.box.x1 < card.x2 && item.box.x2 > card.x1 && item.box.y1 < card.y2 && item.box.y2 > card.y1) {
+          bad += 1;
+          console.warn(
+            `[v6 safe-area] ${still.row} frame ${f}: credit card overlaps ${item.label} (${Math.round(item.box.x1)},${Math.round(item.box.y1)} - ${Math.round(item.box.x2)},${Math.round(item.box.y2)})`,
+          );
+        }
+      }
+    }
     if (bad > 0) failed += 1;
-    else console.info(`[v6 safe-area] ${still.row} frame ${f}: OK (${count} visible nodes)`);
+    else console.info(`[v6 safe-area] ${still.row} frame ${f}: OK (${count} visible elements)`);
   }
   if (failed > 0) console.warn(`[v6 safe-area] ${failed}/${STILLS.length} stills failed`);
   else console.info(`[v6 safe-area] ${STILLS.length}/${STILLS.length} stills OK`);
@@ -613,21 +639,23 @@ const GpuPanel: React.FC<{f: number}> = ({f}) => {
   );
 };
 
+const creditOpacityAt = (f: number) =>
+  ease(f, CUE('7a').start - 2, CUE('7a').start + 18) *
+  (1 - ease(f, CUE('7b').start - 18, CUE('7b').start + 4));
+
 const CreditBar: React.FC<{f: number}> = ({f}) => {
-  const opacity =
-    ease(f, CUE('7a').start - 2, CUE('7a').start + 18) *
-    (1 - ease(f, CUE('7b').start - 18, CUE('7b').start + 4));
+  const opacity = creditOpacityAt(f);
   if (opacity <= 0.001) return null;
   const returned = ease(f, CUE('7a', 1).start + 20, CUE('7a', 1).start + 84);
-  const barW = 600;
+  const barW = CREDIT_BAR;
   return (
     <div
       style={{
         position: 'absolute',
-        left: 70,
-        top: 760,
-        width: 690,
-        height: 248,
+        left: CREDIT.left,
+        top: CREDIT.top,
+        width: CREDIT.width,
+        height: CREDIT.height,
         boxSizing: 'border-box',
         padding: '26px 34px',
         borderRadius: 30,
@@ -808,17 +836,17 @@ const THUMB_STOPS = {
     control: {x: 1050, y: 420},
   },
   check: {from: CUE('4').start + 18, to: CUE('4').start + 66, at: {x: P.check.x - 150, y: P.check.y - 100}},
+  checkPass: {
+    from: CUE('4', 1).start + 84,
+    to: CUE('4', 1).start + 116,
+    at: {x: P.check.x + 120, y: P.check.y - 120},
+    control: {x: P.check.x, y: P.check.y - 200},
+  },
   gpu: {
     from: CUE('5a', 1).start + 4,
     to: CUE('5a', 1).start + 52,
     at: {x: P.gpu.x - 220, y: P.gpu.y + 80},
     control: {x: 1600, y: 500},
-  },
-  result: {
-    from: CUE('7a', 1).start + 12,
-    to: CUE('7a', 1).start + 64,
-    at: {x: P.storage.x - 150, y: P.storage.y},
-    control: {x: 1450, y: 330},
   },
 };
 
@@ -829,8 +857,8 @@ const THUMB_MOVES: ThumbMove[] = [
   THUMB_STOPS.storage,
   THUMB_STOPS.queue,
   THUMB_STOPS.check,
+  THUMB_STOPS.checkPass,
   THUMB_STOPS.gpu,
-  THUMB_STOPS.result,
 ];
 
 const thumbAt = (f: number): Pt => {
@@ -847,60 +875,69 @@ const thumbAt = (f: number): Pt => {
   return at;
 };
 
+const THUMB_W = 92;
+const THUMB_H = (THUMB_W * 16) / 9;
+
+const thumbBoxAt = (f: number): Box => {
+  const at = thumbAt(f);
+  return {x1: at.x - THUMB_W / 2, y1: at.y - 82, x2: at.x + THUMB_W / 2, y2: at.y - 82 + THUMB_H};
+};
+
+const thumbOpacityAt = (f: number) =>
+  glide(f, 10, 22) * (1 - ease(f, CUE('7b').start - 26, CUE('7b').start - 2));
+
 const JobThumb: React.FC<{f: number}> = ({f}) => {
   const at = thumbAt(f);
-  const opacity = glide(f, 10, 22);
+  const opacity = thumbOpacityAt(f);
   if (opacity <= 0.001) return null;
+  const failed = ease(f, CUE('7a').start + 6, CUE('7a').start + 20);
+  const accepted =
+    ease(f, CUE('4', 1).start + 80, CUE('4', 1).start + 96) * (1 - failed);
   return (
     <div
       style={{
         position: 'absolute',
-        left: at.x - 46,
+        left: at.x - THUMB_W / 2,
         top: at.y - 82,
-        width: 92,
-        opacity,
+        width: THUMB_W,
+        opacity: opacity * (1 - 0.35 * failed),
+        filter: failed > 0.001 ? `grayscale(${failed}) brightness(${1 - 0.45 * failed})` : undefined,
         pointerEvents: 'none',
       }}
     >
       <ClipArt
-        width={92}
+        width={THUMB_W}
         radius={14}
         border="1.5px solid rgba(255,255,255,.72)"
         style={{
-          boxShadow: '0 0 0 1px rgba(255,138,42,.4), 0 18px 40px rgba(0,0,0,.78), 0 0 42px rgba(255,138,42,.3)',
+          boxShadow: failed > 0.001
+            ? '0 0 0 1px rgba(150,168,190,.3), 0 18px 40px rgba(0,0,0,.6)'
+            : '0 0 0 1px rgba(255,138,42,.4), 0 18px 40px rgba(0,0,0,.78), 0 0 42px rgba(255,138,42,.3)',
         }}
       />
-    </div>
-  );
-};
-
-const IdleCost: React.FC<{f: number}> = ({f}) => {
-  const opacity =
-    ease(f, CUE('5b').start + 36, CUE('5b').start + 48) *
-    (1 - ease(f, CUE('5c').start - 14, CUE('5c').start - 2));
-  if (opacity <= 0.001) return null;
-  return (
-    <div
-      style={{
-        position: 'absolute',
-        left: P.gpu.x,
-        top: P.gpu.y + 300,
-        transform: 'translate(-50%, -50%)',
-        fontFamily,
-        fontSize: 38,
-        fontWeight: 600,
-        letterSpacing: '.005em',
-        color: C.text,
-        background: 'rgba(8,9,11,.8)',
-        border: `1px solid ${C.rule}`,
-        borderRadius: 999,
-        padding: '12px 26px 14px',
-        whiteSpace: 'nowrap',
-        boxShadow: '0 14px 40px rgba(0,0,0,.5)',
-        opacity,
-      }}
-    >
-      <span style={{color: C.hot}}>$0</span> when idle
+      {accepted > 0.01 ? (
+        <div
+          style={{
+            position: 'absolute',
+            right: 6,
+            top: 6,
+            width: 34,
+            height: 34,
+            borderRadius: 17,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: 'rgba(12,16,12,.94)',
+            border: '2px solid rgba(255,158,84,.8)',
+            boxShadow: '0 6px 16px rgba(0,0,0,.6)',
+            color: C.hot,
+            opacity: accepted,
+            transform: `scale(${0.8 + 0.2 * accepted})`,
+          }}
+        >
+          <Icon name="tick" size={22} />
+        </div>
+      ) : null}
     </div>
   );
 };
@@ -1199,7 +1236,6 @@ export const WalkthroughV6Diagram: React.FC = () => {
 
           <Readout f={f} />
           <ClockNote f={f} />
-          <IdleCost f={f} />
           <Counter x={P.gpu.x + 150} y={P.gpu.y - 118} value={running} opacity={counterOpacity} />
           <DuplicateJob f={f} />
           </div>
