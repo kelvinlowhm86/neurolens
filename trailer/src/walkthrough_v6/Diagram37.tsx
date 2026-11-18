@@ -34,22 +34,29 @@ const BAR_W = 900;
 const BAR_H = 18;
 const STRIP_BOX: Box = {x1: 0, y1: STRIP_TOP, x2: 1920, y2: 1080};
 const CREDIT_HOLD = 0.32;
+// Captions sit above the strip; the box height is measured from the rendered pill.
+const CAPTION_Y = 836;
+const CAPTION_H = 88;
+const CAPTION_GAP = 40;
+const CAPTION_MIDDLE_Y = AREA_CY - CAPTION_H / 2;
+// How far the lit subject's centre may be from the centre of the area above the strip.
+const CENTRE_TOLERANCE = 0.04;
 
 // Camera scale per shot in pass 10 (measured); the framing check refuses to go below these.
 const PASS10_SCALE: Record<string, number> = {
-  '3b': 1.3341,
+  '3b': 1.25, // lowered from 1.3341: Storage must be on screen at the same time as the Browser
   '3c': 1.35,
   '3d': 1.35,
   '4': 0.988,
   '4r': 1.1463,
   '5a': 1.15,
   '5b': 1.55,
-  '5c': 0.99,
+  '5c': 0.96, // lowered from 0.99: both nodes and the caption gap must fit above the strip
   '6': 1.28,
   '7a': 1.05,
   '7b': 1.3232,
-  '7c': 0.99,
-  '7d': 0.5069,
+  '7c': 0.96, // lowered from 0.99: the lit subject must keep clear of the safe margins
+  '7d': 0.48, // lowered from 0.5069: the Terraform outline must keep clear of the safe margins
 };
 
 const WAVE: number[] = (envelope as {samples: number[]}).samples;
@@ -158,7 +165,6 @@ const QUEUE: StateKey[] = [
   {at: beat('3c', 0.22), state: 'lit'},
   {at: beat('3c', 0.62), state: 'idle'},
   {at: beat('3d', 0.62), state: 'lit'},
-  {at: beat('3d', 0.78), state: 'idle'},
   {at: CUE('4').start, state: 'lit'},
   {at: beat('4', 0.3), state: 'idle'},
   {at: CUE('5a').start, state: 'lit'},
@@ -351,7 +357,13 @@ const radiusBox = (x: number, y: number, rx: number, ry: number): Box => ({
 type Layout = {
   row: string;
   at: number;
+  // Nodes that are lit at the hold: they, `extra` and `thumbNodes` are the subject the camera centres.
   ids?: NodeId[];
+  // Nodes the voice line names but that may be dim: they must stay visible, they need not be centred.
+  named?: NodeId[];
+  // A caption is showing at the hold and counts as part of the centred subject: at the bottom of
+  // the frame ('below'), or in the gap between two lit nodes ('middle').
+  caption?: 'below' | 'middle';
   move?: number;
   extra?: Box[];
   thumbNodes?: NodeId[];
@@ -445,16 +457,36 @@ const QUEUE_JOB_H = 72;
 const QUEUE_JOB_GAP = 12;
 const queueJobTop = (queue: Pt, slot = 0) =>
   queue.y - 64 - QUEUE_JOB_GAP - QUEUE_JOB_H - slot * (QUEUE_JOB_H + 10);
-const QUEUE_JOB_EXTRA = [radiusBox(FIXED_POSITIONS.queue.x, -150, 105, 190)];
+// The first job, as it sits above the queue once it has dropped in.
+const QUEUE_JOB_BOX: Box = {
+  x1: FIXED_POSITIONS.queue.x - QUEUE_JOB_W / 2,
+  y1: queueJobTop(FIXED_POSITIONS.queue, 0),
+  x2: FIXED_POSITIONS.queue.x + QUEUE_JOB_W / 2,
+  y2: queueJobTop(FIXED_POSITIONS.queue, 0) + QUEUE_JOB_H,
+};
+// The two stacked jobs above the queue, as they sit at the end of 3d.
+const QUEUE_JOBS_BOX: Box = {
+  x1: FIXED_POSITIONS.queue.x - QUEUE_JOB_W / 2,
+  y1: queueJobTop(FIXED_POSITIONS.queue, 1),
+  x2: FIXED_POSITIONS.queue.x + QUEUE_JOB_W / 2,
+  y2: queueJobTop(FIXED_POSITIONS.queue, 0) + QUEUE_JOB_H,
+};
 const CHECK_BOX = nodeWorldBox(NODES_BY_ID.check, FIXED_POSITIONS.check.x, FIXED_POSITIONS.check.y, false, true, true);
 const FFPROBE_EXTRA = [{x1: CHECK_BOX.x1 - 40, y1: CHECK_BOX.y2, x2: CHECK_BOX.x2 + 40, y2: CHECK_BOX.y2 + 70}];
 const READOUT_SPACE: Box = {
   x1: CHECK_BOX.x1 - 430,
   y1: CHECK_BOX.y2,
   x2: CHECK_BOX.x2 + 430,
-  y2: CHECK_BOX.y2 + 300,
+  y2: CHECK_BOX.y2 + 201,
 };
 const BAD_FILE_EXTRA = radiusBox(FIXED_POSITIONS.check.x - 190, 0, 300, 90);
+// The 'a few minutes to start' card under the GPU while it boots.
+const CLOCK_EXTRA: Box = {
+  x1: FIXED_POSITIONS.gpu.x - 178,
+  y1: FIXED_POSITIONS.gpu.y + 211,
+  x2: FIXED_POSITIONS.gpu.x + 178,
+  y2: FIXED_POSITIONS.gpu.y + 294,
+};
 const RING_EXTRA = radiusBox(FIXED_POSITIONS.gpu.x, FIXED_POSITIONS.gpu.y, 135, 135);
 const PANEL_EXTRA: Box = {
   x1: FIXED_POSITIONS.gpu.x - 500,
@@ -462,42 +494,72 @@ const PANEL_EXTRA: Box = {
   x2: FIXED_POSITIONS.gpu.x + 500,
   y2: FIXED_POSITIONS.gpu.y + 300,
 };
-const DUPLICATE_EXTRA = radiusBox(FIXED_POSITIONS.gpu.x, FIXED_POSITIONS.gpu.y + 390, 330, 150);
+const STATUS_EXTRA: Box = {
+  x1: FIXED_POSITIONS.gpu.x - 170,
+  y1: FIXED_POSITIONS.gpu.y + 270,
+  x2: FIXED_POSITIONS.gpu.x + 170,
+  y2: FIXED_POSITIONS.gpu.y + 390,
+};
+const DUPLICATE_EXTRA: Box = {
+  x1: FIXED_POSITIONS.gpu.x - 330,
+  y1: FIXED_POSITIONS.gpu.y + 270,
+  x2: FIXED_POSITIONS.gpu.x + 330,
+  y2: FIXED_POSITIONS.gpu.y + 475,
+};
+
+// The frame each shot is judged at: its subject is fully lit and its camera is at rest.
+export const STILLS = [
+  {row: '3b', frame: beat('3b', 0.52)},
+  {row: '3c', frame: beat('3c', 0.55)},
+  {row: '3d', frame: beat('3d', 0.88)},
+  {row: '4', frame: beat('4', 0.82)},
+  {row: '4r', frame: beat('4r', 0.72)},
+  {row: '5a', frame: beat('5a', 0.68)},
+  {row: '5b', frame: beat('5b', 0.52)},
+  {row: '5c', frame: beat('5c', 0.5)},
+  {row: '6 pass 1', frame: CUE('6', 1).start + 50},
+  {row: '6 pass 2', frame: CUE('6', 1).start + 130},
+  {row: '7a', frame: beat('7a', 0.86)},
+  {row: '7b', frame: beat('7b', 0.72)},
+  {row: '7c', frame: beat('7c', 0.42)},
+  {row: '7d', frame: beat('7d', 0.82)},
+];
 
 const LAYOUTS: Layout[] = [
   {
     row: '3b',
     at: CUE('3b').start,
-    ids: ['browser', 'website', 'storage'],
+    ids: ['browser', 'storage'],
+    named: ['website'],
     extra: [PRESIGN.box, UPLOAD_ARC_EXTRA],
     maxScale: 1.4,
     width: 0.84,
-    height: 0.84,
   },
-  {row: '3c', at: CUE('3c').start, ids: ['website', 'queue'], extra: QUEUE_JOB_EXTRA, maxScale: 1.35},
-  {row: '3d', at: CUE('3d').start, ids: ['website', 'queue'], extra: QUEUE_JOB_EXTRA, maxScale: 1.35},
+  {row: '3c', at: CUE('3c').start, ids: ['website', 'queue'], extra: [QUEUE_JOB_BOX], maxScale: 1.35},
+  {row: '3d', at: CUE('3d').start, ids: ['queue'], named: ['website'], extra: [QUEUE_JOBS_BOX], maxScale: 1.6, caption: 'below'},
   {
     row: '4',
     at: CUE('4').start,
-    ids: ['queue', 'check'],
+    ids: ['check'],
     thumbNodes: ['check'],
     extra: [...FFPROBE_EXTRA, READOUT_SPACE],
     maxScale: 1.3,
   },
   {row: '4r', at: CUE('4r').start, ids: ['check', 'gpu'], extra: [BAD_FILE_EXTRA], maxScale: 1.45},
-  {row: '5a', at: CUE('5a').start, ids: ['queue', 'check', 'gpu'], maxScale: 1.15},
-  {row: '5b', at: CUE('5b').start, ids: ['gpu'], extra: [RING_EXTRA], maxScale: 1.55},
-  {row: '5c', at: CUE('5c').start, ids: ['website', 'database'], maxScale: 1.55, height: 0.77},
-  {row: '6', at: CUE('6').start, ids: ['gpu'], extra: [PANEL_EXTRA], maxScale: 1.5, height: 0.85},
+  {row: '5a', at: CUE('5a').start, ids: ['gpu'], extra: [STATUS_EXTRA], maxScale: 1.55, caption: 'below'},
+  {row: '5b', at: CUE('5b').start, ids: [], named: ['gpu'], extra: [RING_EXTRA, CLOCK_EXTRA], maxScale: 1.55},
+  {row: '5c', at: CUE('5c').start, ids: ['website', 'database'], maxScale: 1.55, caption: 'middle'},
+  {row: '6', at: CUE('6').start, ids: ['gpu'], extra: [PANEL_EXTRA], maxScale: 1.5},
   {
     row: '7a',
     at: CUE('7a').start,
-    ids: ['check', 'gpu', 'dead'],
+    ids: ['dead'],
+    named: ['gpu'],
     thumbNodes: ['gpu'],
     maxScale: 1.05,
   },
-  {row: '7b', at: CUE('7b').start, ids: ['gpu'], extra: [DUPLICATE_EXTRA], maxScale: 1.4},
-  {row: '7c', at: CUE('7c').start, ids: ['watchdog', 'gpu'], maxScale: 1.55, height: 0.77},
+  {row: '7b', at: CUE('7b').start, ids: ['gpu'], extra: [DUPLICATE_EXTRA], maxScale: 1.4, caption: 'below'},
+  {row: '7c', at: CUE('7c').start, ids: ['watchdog', 'gpu'], maxScale: 1.55},
   {
     row: '7d',
     at: CUE('7d').start,
@@ -505,32 +567,31 @@ const LAYOUTS: Layout[] = [
     extra: [WIDE_OUTLINE_BOX, TF_LABEL_BOX],
     move: 50,
     maxScale: 1.4,
-    height: 0.78,
   },
 ];
 
-const focusBoxes = (
-  boxes: Box[],
-  options: {width?: number; height?: number; maxScale?: number} = {},
-): Camera => {
-  const area = unionBox(...boxes);
-  const cx = (area.x1 + area.x2) / 2;
-  const cy = (area.y1 + area.y2) / 2;
-  const halfW = Math.max(1, cx - area.x1, area.x2 - cx);
-  const halfH = Math.max(1, cy - area.y1, area.y2 - cy);
-  const scale = Math.min(
-    (1920 * (options.width ?? 0.8)) / (halfW * 2),
-    (1080 * (options.height ?? 0.74)) / (halfH * 2),
-    options.maxScale ?? 1.55,
-  );
-  return camera(cx, cy, scale);
+const holdOf = (layout: Layout): number => {
+  const still = STILLS.find((item) => item.row.split(' ')[0] === layout.row);
+  if (!still) throw new Error(`no still (hold frame) for shot ${layout.row}`);
+  return still.frame;
 };
 
-const subjectBoxesForLayout = (layout: Layout): Box[] => {
-  const ids = layout.ids ?? ALL_NODE_IDS;
-  const boxes = ids.map((id) =>
-    nodeWorldBox(NODES_BY_ID[id], FIXED_POSITIONS[id].x, FIXED_POSITIONS[id].y, false, true, true),
+// A node's box as it is at the hold: its purpose line only takes space while it is lit.
+const nodeBoxAt = (id: NodeId, f: number): Box =>
+  nodeWorldBox(
+    NODES_BY_ID[id],
+    FIXED_POSITIONS[id].x,
+    FIXED_POSITIONS[id].y,
+    false,
+    true,
+    stateAt(f, NODES_BY_ID[id].keys).state === 'lit',
   );
+
+// The subject is what is lit at the hold: lit nodes, their cards, thumbnail, panel and arcs.
+// Dim context nodes are left out, so they may fall anywhere, including off-frame.
+const subjectBoxesForLayout = (layout: Layout): Box[] => {
+  const f = holdOf(layout);
+  const boxes = (layout.ids ?? ALL_NODE_IDS).map((id) => nodeBoxAt(id, f));
   if (layout.extra) boxes.push(...layout.extra);
   if (layout.thumbNodes) {
     boxes.push(
@@ -543,12 +604,26 @@ const subjectBoxesForLayout = (layout: Layout): Box[] => {
   return boxes;
 };
 
-const cameraForLayout = (layout: Layout): Camera =>
-  focusBoxes(subjectBoxesForLayout(layout), {
-    width: layout.width,
-    maxScale: layout.maxScale,
-    height: layout.height,
-  });
+const cameraForLayout = (layout: Layout): Camera => {
+  const subject = unionBox(...subjectBoxesForLayout(layout));
+  const cx = (subject.x1 + subject.x2) / 2;
+  const cy = (subject.y1 + subject.y2) / 2;
+  // Named nodes must stay on screen around the lit subject even when they are dim.
+  const fit = unionBox(subject, ...(layout.named ?? []).map((id) => nodeBoxAt(id, holdOf(layout))));
+  const halfW = Math.max(1, cx - fit.x1, fit.x2 - cx);
+  const halfH = Math.max(1, cy - fit.y1, fit.y2 - cy);
+  let scale = Math.min(
+    (1920 * (layout.width ?? 0.8)) / (halfW * 2),
+    (AREA_H - 2 * SAFE) / (halfH * 2),
+    layout.maxScale ?? 1.55,
+  );
+  if (layout.caption !== 'below') return camera(cx, cy, scale);
+  // A caption at the bottom is part of the lit subject: keep the subject clear of it, then put
+  // the subject's top as high as the safe area allows (the caption's bottom fixes the other end).
+  scale = Math.min(scale, (CAPTION_Y - CAPTION_GAP - SAFE) / (subject.y2 - subject.y1));
+  const top = Math.max(SAFE, 2 * AREA_CY - (CAPTION_Y + CAPTION_H));
+  return camera(cx, subject.y1 - (top - AREA_CY) / scale, scale);
+};
 
 const CAMS = LAYOUTS.map((layout) => ({at: layout.at, cam: cameraForLayout(layout), move: layout.move ?? 30}));
 
@@ -583,7 +658,10 @@ const layoutAt = (f: number) => {
   return {positions: FIXED_POSITIONS, presence: FIXED_PRESENCE, current: LAYOUTS[index]};
 };
 
-const focusIdsAt = (f: number): NodeId[] => layoutAt(f).current.ids ?? ALL_NODE_IDS;
+const focusIdsAt = (f: number): NodeId[] => {
+  const {ids, named} = layoutAt(f).current;
+  return [...(ids ?? ALL_NODE_IDS), ...(named ?? [])];
+};
 
 const isWide = (f: number) => f >= CUE('7d').start - 4;
 
@@ -598,6 +676,18 @@ const glowOf = (f: number, keys: StateKey[]) => {
   const from = s.prev ? value[s.prev] : value[s.state];
   const t = s.prev ? glide(f, s.at, s.at + 10) : 1;
   return from + (value[s.state] - from) * t;
+};
+
+// How visible a node is: focus nodes (lit or named) only fade if they overflow the safe area,
+// dim context nodes fade out as they near its edge.
+const nodeOpacityAt = (def: NodeDef, f: number, cam: Camera): number => {
+  const pos = FIXED_POSITIONS[def.id];
+  const state = stateAt(f, def.keys);
+  const purposeOn = state.state === 'lit' ? clamp((glowOf(f, def.keys) - 0.45) / 0.55) : 0;
+  const screen = screenBox(nodeWorldBox(def, pos.x, pos.y, false, true, purposeOn > 0.01), cam);
+  const margin = Math.min(screen.x1 - SAFE, 1920 - SAFE - screen.x2, screen.y1 - SAFE, STRIP_TOP - screen.y2);
+  const show = FIXED_PRESENCE[def.id];
+  return show * (new Set(focusIdsAt(f)).has(def.id) ? (margin >= 0 ? 1 : clamp(1 + margin / 40)) : clamp(margin / 40));
 };
 
 const autoPath = (a: Pt, b: Pt, gap = 88): PathSpec => {
@@ -628,7 +718,9 @@ type LinkDraw = {
 
 const linksAt = (f: number): LinkDraw[] => {
   const {positions, presence} = layoutAt(f);
-  const visible = (id: NodeId) => presence[id] ?? 0;
+  const cam = cameraAt(f);
+  // A link fades with the nodes it joins, so no arrow points at or from a node that is off-frame.
+  const visible = (id: NodeId) => (presence[id] ?? 0) * nodeOpacityAt(NODES_BY_ID[id], f, cam);
   const wideOn = f >= CUE('7d').start;
   const inWindow = (from: number, to: number) => f >= from && f < to;
   const pair = (a: NodeId, b: NodeId, from: number, to: number) =>
@@ -1748,22 +1840,6 @@ const TerraformOutline: React.FC<{f: number}> = ({f}) => {
   );
 };
 
-export const STILLS = [
-  {row: '3b', frame: beat('3b', 0.52)},
-  {row: '3c', frame: beat('3c', 0.55)},
-  {row: '3d', frame: beat('3d', 0.6)},
-  {row: '4', frame: beat('4', 0.82)},
-  {row: '4r', frame: beat('4r', 0.72)},
-  {row: '5a', frame: beat('5a', 0.5)},
-  {row: '5b', frame: beat('5b', 0.52)},
-  {row: '5c', frame: beat('5c', 0.5)},
-  {row: '6 pass 1', frame: CUE('6', 1).start + 50},
-  {row: '6 pass 2', frame: CUE('6', 1).start + 130},
-  {row: '7a', frame: beat('7a', 0.86)},
-  {row: '7b', frame: beat('7b', 0.72)},
-  {row: '7c', frame: beat('7c', 0.62)},
-  {row: '7d', frame: beat('7d', 0.82)},
-];
 
 const labelItemsAt = (f: number, textOnly: boolean) => {
   const {positions, presence} = layoutAt(f);
@@ -1912,16 +1988,6 @@ export const runSafeAreaCheck = () => {
       }
     }
 
-    if (f < CUE('3c').start - 40) {
-      const trio = (['browser', 'website', 'storage'] as NodeId[]).map((id) =>
-        screenBox(nodeWorldBox(NODES_BY_ID[id], positions[id].x, positions[id].y, false, true, true), cam),
-      );
-      const group = unionBox(...trio);
-      if (Math.abs((group.x1 + group.x2) / 2 - AREA_CX) > 40 || Math.abs((group.y1 + group.y2) / 2 - AREA_CY) > 40) {
-        fail('3b Browser/Storage/Website group is off centre');
-      }
-    }
-
     if (isWide(f)) {
       const outline = screenBox(WIDE_OUTLINE_BOX, cam);
       if (crossesSafeArea(outline)) fail('Terraform outline crosses the safe area');
@@ -1951,34 +2017,54 @@ export const runNodeStabilityCheck = () => {
   else console.info(`[v6 node-stability] ${DURATION}/${DURATION} frames OK`);
 };
 
-// Pass 12 framing check: at every shot's hold the subject must sit centred in the
-// area above the credit strip, clear of the strip, and no smaller than in pass 10.
+// Framing check: at every still's hold the lit subject (plus the caption, when one is showing)
+// must sit centred in the area above the credit strip, clear of the strip, no smaller than in
+// pass 10, and every node the voice line names must be visible. The rendered stills are
+// measured the same way from their bright pixels by check_stills.mjs.
 export const runFramingCheck = (): string[] => {
   const failures: string[] = [];
-  LAYOUTS.forEach((layout, index) => {
-    const next = LAYOUTS[index + 1];
-    const move = next ? Math.min(next.move ?? 30, next.at - layout.at) : 0;
-    const holdEnd = next ? next.at - move : DURATION;
-    const hold = Math.round((layout.at + holdEnd) / 2);
-    const cam = cameraAt(hold);
+  for (const still of STILLS) {
+    const row = still.row.split(' ')[0];
+    const layout = LAYOUTS.find((item) => item.row === row);
+    const fail = (message: string) => failures.push(`shot ${still.row} (frame ${still.frame}): ${message}`);
+    if (!layout) {
+      fail('no layout for this still');
+      continue;
+    }
+    const f = still.frame;
+    const cam = cameraAt(f);
     const subject = screenBox(unionBox(...subjectBoxesForLayout(layout)), cam);
-    const fail = (message: string) => failures.push(`shot ${layout.row} (frame ${hold}): ${message}`);
-    const cx = (subject.x1 + subject.x2) / 2;
-    const cy = (subject.y1 + subject.y2) / 2;
-    if (Math.abs(cx - AREA_CX) > 0.06 * 1920) {
-      fail(`subject centre x ${Math.round(cx)} is more than 6% off ${AREA_CX}`);
+    const captionY = layout.caption === 'middle' ? CAPTION_MIDDLE_Y : CAPTION_Y;
+    const caption: Box = {x1: subject.x1, y1: captionY, x2: subject.x2, y2: captionY + CAPTION_H};
+    const lit = layout.caption ? unionBox(subject, caption) : subject;
+    const cx = (lit.x1 + lit.x2) / 2;
+    const cy = (lit.y1 + lit.y2) / 2;
+    if (Math.abs(cx - AREA_CX) > CENTRE_TOLERANCE * 1920) {
+      fail(`lit subject centre x ${Math.round(cx)} is more than ${CENTRE_TOLERANCE * 100}% off ${AREA_CX}`);
     }
-    if (Math.abs(cy - AREA_CY) > 0.06 * AREA_H) {
-      fail(`subject centre y ${Math.round(cy)} is more than 6% off ${AREA_CY}`);
+    if (Math.abs(cy - AREA_CY) > CENTRE_TOLERANCE * AREA_H) {
+      fail(`lit subject centre y ${Math.round(cy)} is more than ${CENTRE_TOLERANCE * 100}% off ${AREA_CY}`);
     }
-    if (subject.y2 > STRIP_TOP) {
-      fail(`subject overlaps the credit strip (bottom edge ${Math.round(subject.y2)} > ${STRIP_TOP})`);
+    if (lit.y2 > STRIP_TOP) fail(`subject overlaps the credit strip (bottom edge ${Math.round(lit.y2)} > ${STRIP_TOP})`);
+    if (layout.caption === 'below' && subject.y2 > CAPTION_Y - CAPTION_GAP / 2) {
+      fail(`subject comes within ${CAPTION_GAP / 2}px of the caption (bottom edge ${Math.round(subject.y2)})`);
+    }
+    if (layout.caption === 'middle') {
+      for (const id of layout.ids ?? []) {
+        const node = screenBox(nodeBoxAt(id, f), cam);
+        if (overlaps(node, caption)) fail(`caption overlaps the ${NODES_BY_ID[id].label} node`);
+      }
     }
     const pass10 = PASS10_SCALE[layout.row];
     if (pass10 !== undefined && cam.scale < pass10 - 1e-4) {
       fail(`camera scale ${cam.scale.toFixed(4)} is smaller than pass 10's ${pass10}`);
     }
-  });
+    for (const id of new Set([...(layout.ids ?? ALL_NODE_IDS), ...(layout.named ?? [])])) {
+      const def = NODES_BY_ID[id];
+      if (stateAt(f, def.keys).state === 'hidden') fail(`${def.label} is hidden`);
+      else if (nodeOpacityAt(def, f, cam) < 0.99) fail(`${def.label} is not fully visible inside the safe area`);
+    }
+  }
   return failures;
 };
 
@@ -2018,7 +2104,6 @@ export const WalkthroughV6Diagram: React.FC = () => {
   const gpu = positions.gpu;
   const dead = positions.dead;
   const cards = cardSpecsAt(f);
-  const focus = new Set(focusIdsAt(f));
   const checkBottom = check
     ? nodeWorldBox(NODES_BY_ID.check, check.x, check.y, false, true, true).y2
     : 0;
@@ -2069,11 +2154,7 @@ export const WalkthroughV6Diagram: React.FC = () => {
           const state = stateAt(f, def.keys);
           if (state.state === 'hidden') return null;
           const purposeOn = state.state === 'lit' ? clamp((glowOf(f, def.keys) - 0.45) / 0.55) : 0;
-          const worldBox = nodeWorldBox(def, pos.x, pos.y, false, true, purposeOn > 0.01);
-          const screen = screenBox(worldBox, cam);
-          const margin = Math.min(screen.x1 - SAFE, 1920 - SAFE - screen.x2, screen.y1 - SAFE, STRIP_TOP - screen.y2);
-          const base = show * (focus.has(def.id) ? (margin >= 0 ? 1 : clamp(1 + margin / 40)) : clamp(margin / 40));
-          const safe = base;
+          const safe = nodeOpacityAt(def, f, cam);
           return (
             <Node
               key={def.id}
@@ -2112,11 +2193,11 @@ export const WalkthroughV6Diagram: React.FC = () => {
         <TerraformOutline f={f} />
       </AbsoluteFill>
 
-      <Caption text="asynchronous" from={CUE('3d').start + 8} to={CUE('4').start - 10} hot="asynchronous" />
-      <Caption text="scale to zero" from={beat('5a', 0.62)} to={CUE('5b').start - 8} hot="zero" />
-      <Caption text="serverless" from={CUE('5c').start + 6} to={CUE('6').start - 10} hot="serverless" />
-      <Caption text="idempotent" from={CUE('7b').start + 6} to={CUE('7c').start - 10} hot="idempotent" />
-      <Caption text="infrastructure as code" from={CUE('7d').start + 8} to={DURATION - 4} hot="code" />
+      <Caption y={CAPTION_Y} text="asynchronous" from={CUE('3d').start + 8} to={CUE('4').start - 10} hot="asynchronous" />
+      <Caption y={CAPTION_Y} text="scale to zero" from={beat('5a', 0.62)} to={CUE('5b').start - 8} hot="zero" />
+      <Caption y={CAPTION_MIDDLE_Y} text="serverless" from={CUE('5c').start + 6} to={CUE('6').start - 10} hot="serverless" />
+      <Caption y={CAPTION_Y} text="idempotent" from={CUE('7b').start + 6} to={CUE('7c').start - 10} hot="idempotent" />
+      <Caption y={CAPTION_Y} text="infrastructure as code" from={CUE('7d').start + 8} to={DURATION - 4} hot="code" />
 
       {cards.map((card) => {
         if (card.id === 'readout') return <ReadoutCard key={card.id} f={f} box={card.box} opacity={card.opacity} />;
