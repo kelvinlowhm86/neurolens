@@ -1,5 +1,5 @@
 import React, {useMemo} from 'react';
-import {AbsoluteFill, Easing, Img, cancelRender, interpolate, interpolateColors, staticFile, useCurrentFrame} from 'remotion';
+import {AbsoluteFill, Easing, Img, cancelRender, interpolate, staticFile, useCurrentFrame} from 'remotion';
 import {C, fontFamily} from '../edit/ui';
 import {clamp, ease} from '../edit/anim';
 import {
@@ -37,7 +37,6 @@ const CREDIT_HOLD = 0.32;
 const CAPTION_Y = 836;
 const CAPTION_H = 88;
 const CAPTION_GAP = 40;
-const CAPTION_MIDDLE_Y = AREA_CY - CAPTION_H / 2;
 // How far the lit subject's centre may be from the centre of the area above the strip.
 const CENTRE_TOLERANCE = 0.04;
 
@@ -50,7 +49,6 @@ const PASS10_SCALE: Record<string, number> = {
   '4r': 1.1463,
   '5a': 1.15,
   '5b': 1.55,
-  '5c': 0.96, // lowered from 0.99: both nodes and the caption gap must fit above the strip
   '6': 1.28,
   '7a': 1.05,
   '7b': 1.3232,
@@ -71,10 +69,8 @@ const SHOT_LINES: {row: string; id: string; sectionEnd?: boolean}[] = [
   {row: '4', id: '4.1'},
   {row: '4r', id: '4.2', sectionEnd: true},
   {row: '5a', id: '5.1'},
-  {row: '5b', id: '5.2'},
-  {row: '5c', id: '5.3', sectionEnd: true},
-  {row: '6', id: '6.1'},
-  {row: '6', id: '6.2', sectionEnd: true},
+  {row: '5b', id: '5.2', sectionEnd: true},
+  {row: '6', id: '6.1', sectionEnd: true},
   {row: '7a', id: '7.1'},
   {row: '7b', id: '7.2'},
   {row: '7c', id: '7.3', sectionEnd: true},
@@ -86,19 +82,20 @@ export const TIMING = built.cues.map((cue) => ({row: cue.shot, line: cue.lines[0
 export const DURATION = built.duration;
 export const LINE_CUES: LineCue[] = TIMING.map((cue) => cue.line);
 
-const CUE = (row: string, occurrence = 0) => {
-  const matches = TIMING.filter((line) => line.row === row);
-  return matches[occurrence] ?? matches[0];
+const CUE = (row: string) => {
+  const cue = TIMING.find((line) => line.row === row);
+  if (!cue) throw new Error(`no shot "${row}"`);
+  return cue;
 };
 
 // A fraction of the way through the shot's speech (the hold after the last word is not counted).
-const beat = (row: string, progress = 0, occurrence = 0) => speechFrame(CUE(row, occurrence).line, progress);
+const beat = (row: string, progress = 0) => speechFrame(CUE(row).line, progress);
 
 // The frame a word of the shot's line starts (or ends), estimated from the line's length.
-const word = (row: string, token: string, occurrence = 0, edge: 'start' | 'end' = 'start', pass = 0) =>
-  wordFrame(CUE(row, pass).line, token, occurrence, edge);
+const word = (row: string, token: string, occurrence = 0, edge: 'start' | 'end' = 'start') =>
+  wordFrame(CUE(row).line, token, occurrence, edge);
 
-type NodeId = 'browser' | 'website' | 'storage' | 'queue' | 'check' | 'gpu' | 'database' | 'watchdog' | 'dead';
+type NodeId = 'browser' | 'website' | 'storage' | 'queue' | 'check' | 'gpu' | 'watchdog' | 'dead';
 
 type NodeDef = {
   id: NodeId;
@@ -121,8 +118,6 @@ const WEBSITE: StateKey[] = [
   {at: CUE('3d').start, state: 'dim'},
   {at: CUE('3d').start + 76, state: 'lit'},
   {at: CUE('3d').start + 109, state: 'dim'},
-  {at: CUE('5c').start, state: 'lit'},
-  {at: beat('5c', 0.55), state: 'idle'},
 ];
 
 const STORAGE: StateKey[] = [
@@ -149,7 +144,7 @@ const CHECK: StateKey[] = [
 
 const GPU: StateKey[] = [
   {at: CUE('4r').start, state: 'off'},
-  {at: word('5a', 'GPU'), state: 'lit'}, // "starts a GPU when a job arrives"
+  {at: word('5a', 'GPU', 1), state: 'lit'}, // "starts a GPU when a job arrives"
   {at: word('5a', 'zero'), state: 'off'},
   {at: CUE('5b').start, state: 'off'},
   {at: CUE('6').start, state: 'lit'},
@@ -160,12 +155,6 @@ const GPU: StateKey[] = [
   {at: CUE('7c').start, state: 'lit'},
   {at: beat('7c', 0.55), state: 'off'},
   {at: CUE('7d').start, state: 'idle'},
-];
-
-const DATABASE: StateKey[] = [
-  {at: CUE('5c').start, state: 'idle'},
-  {at: word('5c', 'database'), state: 'lit'},
-  {at: word('5c', 'nothing'), state: 'idle'},
 ];
 
 const WATCHDOG: StateKey[] = [
@@ -187,7 +176,6 @@ const NODES: NodeDef[] = [
   {id: 'queue', label: 'Queue', service: 'SQS', purpose: 'jobs wait here', icon: 'queue', keys: QUEUE, appear: CUE('3c').start},
   {id: 'check', label: 'Check', service: 'Lambda', purpose: 'checks length & price', icon: 'check', keys: CHECK, appear: CUE('4').start},
   {id: 'gpu', label: 'GPU', service: 'SageMaker', purpose: 'runs the brain model', icon: 'gpu', keys: GPU, appear: CUE('4r').start},
-  {id: 'database', label: 'Database', service: 'Aurora Serverless', purpose: 'credits & job records', icon: 'database', keys: DATABASE, appear: CUE('5c').start},
   {id: 'watchdog', label: 'Watchdog', service: 'Lambda', purpose: 'stops stuck jobs', icon: 'watchdog', keys: WATCHDOG, appear: CUE('7c').start},
   {id: 'dead', label: 'Dead-letter', service: 'SQS', purpose: 'failed jobs, refunded', icon: 'deadLetter', keys: DEAD, appear: CUE('7a').start},
 ];
@@ -303,7 +291,7 @@ const OFF_ROW = 540;
 const STORAGE_ROW = 380;
 
 const MAIN_ROW: NodeId[] = ['browser', 'website', 'queue', 'check', 'gpu', 'dead'];
-const ALL_NODE_IDS: NodeId[] = [...MAIN_ROW, 'storage', 'database', 'watchdog'];
+const ALL_NODE_IDS: NodeId[] = [...MAIN_ROW, 'storage', 'watchdog'];
 
 const FIXED_POSITIONS: Record<NodeId, Pt> = (() => {
   const positions = {} as Record<NodeId, Pt>;
@@ -311,7 +299,6 @@ const FIXED_POSITIONS: Record<NodeId, Pt> = (() => {
     positions[id] = {x: (index - (MAIN_ROW.length - 1) / 2) * ROW_GAP, y: ROW_Y};
   });
   positions.storage = {x: (positions.browser.x + positions.website.x) / 2, y: -STORAGE_ROW};
-  positions.database = {x: positions.website.x, y: OFF_ROW};
   positions.watchdog = {x: positions.gpu.x, y: -OFF_ROW};
   return positions;
 })();
@@ -332,9 +319,8 @@ type Layout = {
   ids?: NodeId[];
   // Nodes the voice line names but that may be dim: they must stay visible, they need not be centred.
   named?: NodeId[];
-  // A caption is showing at the hold and counts as part of the centred subject: at the bottom of
-  // the frame ('below'), or in the gap between two lit nodes ('middle').
-  caption?: 'below' | 'middle';
+  // A caption is showing at the hold, at the bottom of the frame, and counts as part of the centred subject.
+  caption?: 'below';
   move?: number;
   extra?: Box[];
   thumbNodes?: NodeId[];
@@ -487,9 +473,7 @@ export const STILLS = [
   {row: '4r', frame: beat('4r', 0.72)},
   {row: '5a', frame: word('5a', 'scales') + 20},
   {row: '5b', frame: beat('5b', 0.52)},
-  {row: '5c', frame: beat('5c', 0.5)},
-  {row: '6 pass 1', frame: CUE('6', 1).start + 50},
-  {row: '6 pass 2', frame: CUE('6', 1).start + 126},
+  {row: '6', frame: CUE('6').start + 50},
   {row: '7a', frame: word('7a', 'back') + 6},
   {row: '7b', frame: beat('7b', 0.72)},
   {row: '7c', frame: beat('7c', 0.42)},
@@ -519,7 +503,6 @@ const LAYOUTS: Layout[] = [
   {row: '4r', at: CUE('4r').start, ids: ['check', 'gpu'], extra: [BAD_FILE_EXTRA], maxScale: 1.45},
   {row: '5a', at: CUE('5a').start, ids: ['gpu'], extra: [STATUS_EXTRA], maxScale: 1.55, caption: 'below'},
   {row: '5b', at: CUE('5b').start, ids: [], named: ['gpu'], extra: [RING_EXTRA, CLOCK_EXTRA], maxScale: 1.55},
-  {row: '5c', at: CUE('5c').start, ids: ['website', 'database'], maxScale: 1.55, caption: 'middle'},
   {row: '6', at: CUE('6').start, ids: ['gpu'], extra: [PANEL_EXTRA], maxScale: 1.5},
   {
     row: '7a',
@@ -753,16 +736,6 @@ const linksAt = (f: number): LinkDraw[] => {
       opacity: pair('check', 'gpu', CUE('5a').start, CUE('5b').start),
     });
   }
-  if (pos('website') && pos('database')) {
-    links.push({
-      id: 'website-database',
-      path: rowOffRowPath(pos('website'), pos('database')),
-      appear: CUE('5c').start + 10,
-      draw: 16,
-      arrow: true,
-      opacity: pair('website', 'database', CUE('5c').start, CUE('6').start),
-    });
-  }
   if (pos('gpu') && pos('dead')) {
     links.push({
       id: 'gpu-dead',
@@ -829,13 +802,13 @@ const statusOpacity = (f: number) =>
   ease(f, CUE('5a').start - 4, CUE('5a').start + 8) * (1 - ease(f, CUE('5b').start - 8, CUE('5b').start + 4));
 
 const clockOpacity = (f: number) =>
-  ease(f, CUE('5b').start - 2, CUE('5b').start + 10) * (1 - ease(f, CUE('5c').start - 10, CUE('5c').start + 4));
+  ease(f, CUE('5b').start - 2, CUE('5b').start + 10) * (1 - ease(f, CUE('6').start - 10, CUE('6').start + 4));
 
 const gpuPanelOpacity = (f: number) =>
   ease(f, CUE('6').start, CUE('6').start + 24) * (1 - ease(f, CUE('7a').start - 34, CUE('7a').start - 26));
 
 const runningAt = (f: number) => {
-  const up = word('5a', 'GPU');
+  const up = word('5a', 'GPU', 1);
   const down = word('5a', 'zero');
   if (f < up) return 0;
   if (f < down) return ease(f, up, up + 14);
@@ -979,7 +952,7 @@ const CardShell: React.FC<{box: Box; opacity: number; children: React.ReactNode}
   );
 };
 
-const Strike: React.FC<{progress: number; colour?: string; children: React.ReactNode}> = ({progress, colour = C.hot, children}) => (
+const Strike: React.FC<{progress: number; children: React.ReactNode}> = ({progress, children}) => (
   <span style={{position: 'relative', display: 'inline-block', fontVariantNumeric: 'tabular-nums'}}>
     {children}
     <span
@@ -990,7 +963,7 @@ const Strike: React.FC<{progress: number; colour?: string; children: React.React
         top: '50%',
         height: 3,
         borderRadius: 2,
-        background: colour,
+        background: C.hot,
         transform: `scaleX(${progress})`,
         transformOrigin: 'left center',
       }}
@@ -1582,19 +1555,16 @@ const DuplicateJobs: React.FC<{f: number; gpu: Pt}> = ({f, gpu}) => {
 const GpuPanel: React.FC<{f: number; gpu: Pt}> = ({f, gpu}) => {
   const opacity = gpuPanelOpacity(f);
   if (opacity <= 0.001) return null;
-  const pass = CUE('6', 1);
-  const cut = word('6', 'once', 1, 'start', 1); // "once on mute"
-  const passOn = ease(f, pass.start + 4, pass.start + 18);
+  const {line} = CUE('6');
+  const passOn = ease(f, line.start + 4, line.start + 18);
   const inputBrightness = 0.45 + 0.55 * passOn;
-  const cutOn = ease(f, cut, cut + 6);
-  const pass1Caption = ease(f, pass.start + 6, pass.start + 18) * (1 - ease(f, cut, cut + 10));
-  const pass2Caption = ease(f, cut + 10, cut + 24);
-  const playhead = glide(f, pass.start + 4, cut);
+  const captionOn = ease(f, line.start + 6, line.start + 18);
+  const playhead = glide(f, line.start + 4, line.start + line.frames);
   const coreGlow = passOn;
   const cellW = 106;
   const phase = ((f - CUE('6').start) / FPS) * 0.55 % 5;
   const cells = Array.from({length: 10}, (_, index) => CLIP_FRAMES[index % CLIP_FRAMES.length]);
-  const barHeight = (value: number) => lerp(10 + value * 64, 2, cutOn);
+  const barHeight = (value: number) => 10 + value * 64;
   return (
     <div
       style={{
@@ -1649,9 +1619,7 @@ const GpuPanel: React.FC<{f: number; gpu: Pt}> = ({f, gpu}) => {
       </div>
 
       <div style={{position: 'absolute', left: 60, top: 370, fontSize: 24, letterSpacing: '.08em', color: '#8E98A5', textTransform: 'uppercase', opacity: inputBrightness}}>
-        <Strike progress={cutOn} colour="#8E98A5">
-          <span>sound</span>
-        </Strike>
+        sound
       </div>
       <div
         style={{
@@ -1662,10 +1630,10 @@ const GpuPanel: React.FC<{f: number; gpu: Pt}> = ({f, gpu}) => {
           height: 92,
           borderRadius: 12,
           overflow: 'hidden',
-          border: `1.5px solid ${cutOn > 0.5 ? 'rgba(150,168,190,.34)' : 'rgba(255,255,255,.2)'}`,
+          border: '1.5px solid rgba(255,255,255,.2)',
           boxSizing: 'border-box',
           background: '#0E1014',
-          opacity: inputBrightness * (1 - 0.25 * cutOn),
+          opacity: inputBrightness,
         }}
       >
         <div style={{position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', padding: '0 10px'}}>
@@ -1678,35 +1646,19 @@ const GpuPanel: React.FC<{f: number; gpu: Pt}> = ({f, gpu}) => {
                   flex: 1,
                   height: barHeight(value),
                   borderRadius: 2,
-                  background: interpolateColors(cutOn, [0, 1], [
-                    played ? 'rgba(255,178,122,.88)' : 'rgba(255,158,84,.42)',
-                    'rgba(150,168,190,.55)',
-                  ]),
+                  background: played ? 'rgba(255,178,122,.88)' : 'rgba(255,158,84,.42)',
                 }}
               />
             );
           })}
         </div>
-        <div style={{position: 'absolute', top: 0, bottom: 0, left: `${(10 / 600) * 100}%`, width: 2, background: C.hot, opacity: passOn * (1 - cutOn), transform: `translateX(${playhead * 578}px)`}} />
+        <div style={{position: 'absolute', top: 0, bottom: 0, left: `${(10 / 600) * 100}%`, width: 2, background: C.hot, opacity: passOn, transform: `translateX(${playhead * 578}px)`}} />
       </div>
 
-      <div
-        style={{
-          position: 'absolute',
-          left: 656,
-          top: 394,
-          width: 3,
-          height: 104,
-          borderRadius: 2,
-          background: DANGER,
-          opacity: cutOn * (1 - ease(f, cut + 6, cut + 22)),
-          transform: `rotate(${cutOn * 14}deg)`,
-        }}
-      />
       <div style={{position: 'absolute', left: 664, top: 256, width: 52, height: 2, background: '#FFB47C', opacity: passOn * 0.8}} />
       <div style={{position: 'absolute', left: 712, top: 251, width: 0, height: 0, borderTop: '6px solid transparent', borderBottom: '6px solid transparent', borderLeft: `10px solid #FFB47C`, opacity: passOn * 0.8}} />
-      <div style={{position: 'absolute', left: 664, top: 445, width: 52, height: 2, background: '#FFB47C', opacity: passOn * (1 - cutOn) * 0.8}} />
-      <div style={{position: 'absolute', left: 712, top: 440, width: 0, height: 0, borderTop: '6px solid transparent', borderBottom: '6px solid transparent', borderLeft: `10px solid #FFB47C`, opacity: passOn * (1 - cutOn) * 0.8}} />
+      <div style={{position: 'absolute', left: 664, top: 445, width: 52, height: 2, background: '#FFB47C', opacity: passOn * 0.8}} />
+      <div style={{position: 'absolute', left: 712, top: 440, width: 0, height: 0, borderTop: '6px solid transparent', borderBottom: '6px solid transparent', borderLeft: `10px solid #FFB47C`, opacity: passOn * 0.8}} />
 
       <div
         style={{
@@ -1729,22 +1681,19 @@ const GpuPanel: React.FC<{f: number; gpu: Pt}> = ({f, gpu}) => {
         </span>
       </div>
 
-      <div style={{position: 'absolute', left: 60, top: 514, display: 'flex', alignItems: 'baseline', gap: 8, fontSize: 30, fontWeight: 500, opacity: pass1Caption, whiteSpace: 'nowrap'}}>
+      <div style={{position: 'absolute', left: 60, top: 514, display: 'flex', alignItems: 'baseline', gap: 8, fontSize: 30, fontWeight: 500, opacity: captionOn, whiteSpace: 'nowrap'}}>
         <span style={{color: '#FFC08A'}}>picture</span>
         <span style={{color: '#8E98A5'}}>+</span>
         <span style={{color: '#FFC08A'}}>sound</span>
-      </div>
-      <div style={{position: 'absolute', left: 60, top: 514, fontSize: 30, fontWeight: 500, color: '#FFC08A', opacity: pass2Caption, whiteSpace: 'nowrap'}}>
-        picture only
       </div>
     </div>
   );
 };
 
 const ProgressRing: React.FC<{f: number; gpu: Pt}> = ({f, gpu}) => {
-  const opacity = ease(f, CUE('5b').start + 2, CUE('5b').start + 14) * (1 - ease(f, CUE('5c').start - 8, CUE('5c').start + 4));
+  const opacity = ease(f, CUE('5b').start + 2, CUE('5b').start + 14) * (1 - ease(f, CUE('6').start - 8, CUE('6').start + 4));
   if (opacity <= 0.001) return null;
-  const progress = glide(f, CUE('5b').start + 10, CUE('5c').start - 12);
+  const progress = glide(f, CUE('5b').start + 10, CUE('6').start - 12);
   const r = 70;
   const circumference = 2 * Math.PI * r;
   return (
@@ -2008,8 +1957,7 @@ export const runFramingCheck = (): string[] => {
     const f = still.frame;
     const cam = cameraAt(f);
     const subject = screenBox(unionBox(...subjectBoxesForLayout(layout)), cam);
-    const captionY = layout.caption === 'middle' ? CAPTION_MIDDLE_Y : CAPTION_Y;
-    const caption: Box = {x1: subject.x1, y1: captionY, x2: subject.x2, y2: captionY + CAPTION_H};
+    const caption: Box = {x1: subject.x1, y1: CAPTION_Y, x2: subject.x2, y2: CAPTION_Y + CAPTION_H};
     const lit = layout.caption ? unionBox(subject, caption) : subject;
     const cx = (lit.x1 + lit.x2) / 2;
     const cy = (lit.y1 + lit.y2) / 2;
@@ -2022,12 +1970,6 @@ export const runFramingCheck = (): string[] => {
     if (lit.y2 > STRIP_TOP) fail(`subject overlaps the credit strip (bottom edge ${Math.round(lit.y2)} > ${STRIP_TOP})`);
     if (layout.caption === 'below' && subject.y2 > CAPTION_Y - CAPTION_GAP / 2) {
       fail(`subject comes within ${CAPTION_GAP / 2}px of the caption (bottom edge ${Math.round(subject.y2)})`);
-    }
-    if (layout.caption === 'middle') {
-      for (const id of layout.ids ?? []) {
-        const node = screenBox(nodeBoxAt(id, f), cam);
-        if (overlaps(node, caption)) fail(`caption overlaps the ${NODES_BY_ID[id].label} node`);
-      }
     }
     const pass10 = PASS10_SCALE[layout.row];
     if (pass10 !== undefined && cam.scale < pass10 - 1e-4) {
@@ -2169,7 +2111,6 @@ export const WalkthroughV6Diagram: React.FC = () => {
 
       <Caption y={CAPTION_Y} text="asynchronous" from={CUE('3d').start + 8} to={CUE('4').start - 10} hot="asynchronous" />
       <Caption y={CAPTION_Y} text="scale to zero" from={word('5a', 'scales')} to={CUE('5b').start - 8} hot="zero" />
-      <Caption y={CAPTION_MIDDLE_Y} text="serverless" from={word('5c', 'Lambda')} to={CUE('6').start - 10} hot="serverless" />
       <Caption y={CAPTION_Y} text="idempotent" from={word('7b', 'idempotent')} to={CUE('7c').start - 10} hot="idempotent" />
       <Caption y={CAPTION_Y} text="infrastructure as code" from={CUE('7d').start + 8} to={DURATION - 4} hot="code" />
 

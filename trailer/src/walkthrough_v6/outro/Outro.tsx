@@ -2,7 +2,7 @@ import React from 'react';
 import {useCurrentFrame} from 'remotion';
 import {C, fontFamily} from '../../edit/ui';
 import {Signpost, Stage, easeInOut, easeOut, lerp} from '../common';
-import {DURATION, REPORT, ROW_IN, SHOT} from './timeline';
+import {BEDROCK_IN, DURATION, REPORT, ROW_IN, SHOT} from './timeline';
 
 const fmt = (s: number) => `0:${String(s).padStart(2, '0')}`;
 const range = `${fmt(REPORT.moment.start)}–${fmt(REPORT.moment.end)}`;
@@ -30,14 +30,14 @@ const Row: React.FC<{label: string; text: string; top: number; opacity: number; 
 export const Outro: React.FC = () => {
   const frame = useCurrentFrame();
 
-  // 9: the report card appears with "Then the report reads the whole thing" (9a), the three rows of one
-  // moment follow the voice (9b), then the Do line alone (9d). Only the Do line is written out in full.
+  // 9: the report card appears with the first words (9a) and its three rows of one moment follow the
+  // voice, then the Do line alone (9b). Only the Do line is written out in full.
   const cardIn = easeOut(frame, SHOT['9a'].start + 2, SHOT['9a'].start + 20);
   const rowsIn = (n: number) => easeOut(frame, ROW_IN[n], ROW_IN[n] + 20);
-  const rowsQuiet = easeInOut(frame, SHOT['9d'].start + 4, SHOT['9d'].start + 22);
+  const rowsQuiet = easeInOut(frame, SHOT['9b'].start + 4, SHOT['9b'].start + 22);
   const cardOut = 1 - easeOut(frame, SHOT['10a'].start - 6, SHOT['10a'].start + 6);
-  const bedrock = easeOut(frame, SHOT['9c'].start + 6, SHOT['9c'].start + 20) * (1 - easeOut(frame, SHOT['9d'].start, SHOT['9d'].start + 12));
-  const push = 1 + 0.04 * easeInOut(frame, SHOT['9d'].start + 10, SHOT['9d'].end);
+  const bedrock = easeOut(frame, BEDROCK_IN, BEDROCK_IN + 14) * (1 - easeOut(frame, SHOT['9b'].start, SHOT['9b'].start + 12));
+  const push = 1 + 0.04 * easeInOut(frame, SHOT['9b'].start + 10, SHOT['9b'].end);
 
   // 10: two sentences.
   const first = easeOut(frame, SHOT['10a'].start + 4, SHOT['10a'].start + 22);
