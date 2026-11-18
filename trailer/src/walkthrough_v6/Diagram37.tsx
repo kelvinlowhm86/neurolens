@@ -1,5 +1,5 @@
 import React from 'react';
-import {AbsoluteFill, Easing, Img, interpolate, staticFile, useCurrentFrame} from 'remotion';
+import {AbsoluteFill, Easing, Img, interpolate, interpolateColors, staticFile, useCurrentFrame} from 'remotion';
 import {C, fontFamily} from '../edit/ui';
 import {clamp, ease} from '../edit/anim';
 import {
@@ -22,6 +22,14 @@ const RATE = 2.6;
 const HOLD = 0.5;
 const FPS = 30;
 const SAFE = 80;
+
+const CREDIT_W = 460;
+const CREDIT_H = 216;
+const CREDIT_X = 1920 - SAFE - CREDIT_W;
+const CREDIT_Y = SAFE + 14;
+const CREDIT_CLEAR = 20;
+const CREDIT_HOLD = 0.32;
+const CREDIT_BOX: Box = {x1: CREDIT_X, y1: CREDIT_Y, x2: CREDIT_X + CREDIT_W, y2: CREDIT_Y + CREDIT_H};
 
 const WAVE: number[] = (envelope as {samples: number[]}).samples;
 const CLIP_FRAMES = ['f0', 'f5', 'f15', 'f25', 'f35'].map(
@@ -120,8 +128,8 @@ const WEBSITE: StateKey[] = [
 
 const STORAGE: StateKey[] = [
   {at: 0, state: 'idle'},
-  {at: beat('3b', 0.16), state: 'lit'},
-  {at: beat('3b', 0.58), state: 'idle'},
+  {at: beat('3b', 0.4), state: 'lit'},
+  {at: CUE('3c').start, state: 'idle'},
 ];
 
 const QUEUE: StateKey[] = [
@@ -260,8 +268,8 @@ const screenBox = (box: Box, cam: Camera): Box => ({
 const crossesSafeArea = (box: Box) =>
   box.x1 < SAFE || box.x2 > 1920 - SAFE || box.y1 < SAFE || box.y2 > 1080 - SAFE;
 
-const overlaps = (a: Box, b: Box) =>
-  a.x1 < b.x2 && a.x2 > b.x1 && a.y1 < b.y2 && a.y2 > b.y1;
+const overlaps = (a: Box, b: Box, clear = 0) =>
+  a.x1 < b.x2 + clear && a.x2 > b.x1 - clear && a.y1 < b.y2 + clear && a.y2 > b.y1 - clear;
 
 const insideBox = (box: Box, point: Pt) =>
   point.x >= box.x1 && point.x <= box.x2 && point.y >= box.y1 && point.y <= box.y2;
@@ -357,8 +365,8 @@ const pathExtra = (path: PathSpec): Box => {
 
 const browserStoragePath = (browser: Pt, storage: Pt): PathSpec => ({
   from: {x: browser.x + 48, y: browser.y - 42},
-  to: {x: storage.x + 56, y: storage.y + 64},
-  control: {x: storage.x + 150, y: (browser.y + storage.y) / 2},
+  to: {x: storage.x + 56, y: storage.y + 32},
+  control: {x: storage.x + 420, y: (browser.y + storage.y) / 2},
 });
 
 const rowOffRowPath = (row: Pt, off: Pt): PathSpec => {
@@ -411,7 +419,12 @@ const TF_LABEL_BOX: Box = {
   y2: WIDE_OUTLINE_BOX.y1 - 18,
 };
 
-const QUEUE_RACK_EXTRA = [radiusBox(FIXED_POSITIONS.queue.x, -260, 150, 190)];
+const QUEUE_JOB_W = 190;
+const QUEUE_JOB_H = 72;
+const QUEUE_JOB_GAP = 12;
+const queueJobTop = (queue: Pt, slot = 0) =>
+  queue.y - 64 - QUEUE_JOB_GAP - QUEUE_JOB_H - slot * (QUEUE_JOB_H + 10);
+const QUEUE_JOB_EXTRA = [radiusBox(FIXED_POSITIONS.queue.x, -150, 105, 190)];
 const CHECK_BOX = nodeWorldBox(NODES_BY_ID.check, FIXED_POSITIONS.check.x, FIXED_POSITIONS.check.y, false, true, true);
 const FFPROBE_EXTRA = [{x1: CHECK_BOX.x1 - 40, y1: CHECK_BOX.y2, x2: CHECK_BOX.x2 + 40, y2: CHECK_BOX.y2 + 70}];
 const READOUT_SPACE: Box = {
@@ -440,8 +453,8 @@ const LAYOUTS: Layout[] = [
     height: 0.84,
     centre: true,
   },
-  {at: CUE('3c').start, ids: ['website', 'queue'], extra: QUEUE_RACK_EXTRA, maxScale: 1.35},
-  {at: CUE('3d').start, ids: ['website', 'queue'], extra: QUEUE_RACK_EXTRA, maxScale: 1.35},
+  {at: CUE('3c').start, ids: ['website', 'queue'], extra: QUEUE_JOB_EXTRA, maxScale: 1.35},
+  {at: CUE('3d').start, ids: ['website', 'queue'], extra: QUEUE_JOB_EXTRA, maxScale: 1.35},
   {
     at: CUE('4').start,
     ids: ['queue', 'check'],
@@ -472,6 +485,18 @@ const LAYOUTS: Layout[] = [
   },
 ];
 
+const fitRegion = (area: Box, region: Box, maxScale: number): {cx: number; cy: number; scale: number} | null => {
+  const width = region.x2 - region.x1;
+  const height = region.y2 - region.y1;
+  if (width <= 1 || height <= 1) return null;
+  const scale = Math.min(width / Math.max(1, area.x2 - area.x1), height / Math.max(1, area.y2 - area.y1), maxScale);
+  return {
+    cx: (area.x1 + area.x2) / 2 - ((region.x1 + region.x2) / 2 - 960) / scale,
+    cy: (area.y1 + area.y2) / 2 - ((region.y1 + region.y2) / 2 - 540) / scale,
+    scale,
+  };
+};
+
 const focusBoxes = (
   boxes: Box[],
   options: {width?: number; height?: number; maxScale?: number} = {},
@@ -488,6 +513,19 @@ const focusBoxes = (
     options.maxScale ?? 1.55,
   );
   return camera(cx, cy, scale);
+};
+
+const creditReserved = (at: number) => at >= CUE('3b').start && at < CUE('7c').start;
+
+const clearOfCredit = (boxes: Box[], cam: Camera): Camera => {
+  const blocked = boxes.some((box) => overlaps(screenBox(box, cam), CREDIT_BOX, 4));
+  if (!blocked) return cam;
+  const area = unionBox(...boxes);
+  const maxScale = Math.max(cam.scale, 1);
+  const left = fitRegion(area, {x1: SAFE, y1: SAFE, x2: CREDIT_BOX.x1 - CREDIT_CLEAR, y2: 1080 - SAFE}, maxScale);
+  const below = fitRegion(area, {x1: SAFE, y1: CREDIT_BOX.y2 + CREDIT_CLEAR, x2: 1920 - SAFE, y2: 1080 - SAFE}, maxScale);
+  const best = [left, below].filter((item): item is {cx: number; cy: number; scale: number} => item !== null).sort((a, b) => b.scale - a.scale)[0];
+  return best ? camera(best.cx, best.cy, best.scale) : cam;
 };
 
 const cameraForLayout = (layout: Layout): Camera => {
@@ -507,7 +545,8 @@ const cameraForLayout = (layout: Layout): Camera => {
   const xs = ids.map((id) => FIXED_POSITIONS[id].x);
   const rowCenter = (Math.min(...xs) + Math.max(...xs)) / 2;
   const centerX = layout.centre ? undefined : rowCenter;
-  return focusBoxes(boxes, {width: layout.width, maxScale: layout.maxScale, height: layout.height}, centerX);
+  const cam = focusBoxes(boxes, {width: layout.width, maxScale: layout.maxScale, height: layout.height}, centerX);
+  return creditReserved(layout.at) ? clearOfCredit(boxes, cam) : cam;
 };
 
 const CAMS = LAYOUTS.map((layout) => ({at: layout.at, cam: cameraForLayout(layout), move: layout.move ?? 30}));
@@ -728,6 +767,9 @@ const statusOpacity = (f: number) =>
 const clockOpacity = (f: number) =>
   ease(f, CUE('5b').start - 2, CUE('5b').start + 10) * (1 - ease(f, CUE('5c').start - 10, CUE('5c').start + 4));
 
+const gpuPanelOpacity = (f: number) =>
+  ease(f, CUE('6').start, CUE('6').start + 24) * (1 - ease(f, CUE('7a').start - 34, CUE('7a').start - 26));
+
 const runningAt = (f: number) => {
   const up = beat('5a', 0.2);
   const down = beat('5a', 0.7);
@@ -781,13 +823,6 @@ const CARD_OPACITY: Record<CardId, (f: number) => number> = {
   status: statusOpacity,
   clock: clockOpacity,
 };
-
-const CREDIT_W = 340;
-const CREDIT_H = 142;
-const CREDIT_X = 1920 - SAFE - CREDIT_W;
-const CREDIT_Y = SAFE + 14;
-const CREDIT_BOX: Box = {x1: CREDIT_X, y1: CREDIT_Y, x2: CREDIT_X + CREDIT_W, y2: CREDIT_Y + CREDIT_H};
-const CREDIT_HOLD = 0.32;
 
 const creditWidgetOpacity = (f: number) =>
   ease(f, CUE('3b').start + 6, CUE('3b').start + 20) * (1 - ease(f, CUE('7b').end - 14, CUE('7b').end + 2));
@@ -884,7 +919,7 @@ const CardShell: React.FC<{box: Box; opacity: number; children: React.ReactNode}
   );
 };
 
-const Strike: React.FC<{progress: number; children: React.ReactNode}> = ({progress, children}) => (
+const Strike: React.FC<{progress: number; colour?: string; children: React.ReactNode}> = ({progress, colour = C.hot, children}) => (
   <span style={{position: 'relative', display: 'inline-block', fontVariantNumeric: 'tabular-nums'}}>
     {children}
     <span
@@ -895,7 +930,7 @@ const Strike: React.FC<{progress: number; children: React.ReactNode}> = ({progre
         top: '50%',
         height: 3,
         borderRadius: 2,
-        background: C.hot,
+        background: colour,
         transform: `scaleX(${progress})`,
         transformOrigin: 'left center',
       }}
@@ -998,7 +1033,8 @@ const CreditWidget: React.FC<{f: number}> = ({f}) => {
   const holdWidth = CREDIT_HOLD * (1 - charged);
   const solidWidth = 1 - CREDIT_HOLD + holdWidth * returned;
   const hatchWidth = holdWidth * (1 - returned);
-  const status = charged > 0.5 ? 'charged once' : returned > 0.5 ? 'hold returned' : 'held';
+  const refunded = badVisible > 0.5 && badReturned > 0.5;
+  const status = charged > 0.5 ? 'charged once' : returned > 0.5 ? 'hold returned' : refunded ? 'refunded' : 'held';
   const lit = charged > 0.02 || returned > 0.02 || glow > 0.02;
   return (
     <div
@@ -1009,20 +1045,18 @@ const CreditWidget: React.FC<{f: number}> = ({f}) => {
         width: CREDIT_W,
         height: CREDIT_H,
         boxSizing: 'border-box',
-        padding: '14px 16px',
-        borderRadius: 20,
+        padding: '20px 22px',
+        borderRadius: 24,
         background: 'rgba(13,15,18,.94)',
         border: `1.5px solid ${lit ? 'rgba(255,158,84,.5)' : C.rule}`,
-        boxShadow: lit ? '0 0 30px rgba(255,138,42,.2), 0 14px 34px rgba(0,0,0,.55)' : '0 14px 34px rgba(0,0,0,.45)',
+        boxShadow: lit ? '0 0 34px rgba(255,138,42,.2), 0 16px 38px rgba(0,0,0,.55)' : '0 16px 38px rgba(0,0,0,.45)',
         fontFamily,
-        opacity: opacity * (0.62 + 0.38 * glow),
+        opacity: opacity * (0.8 + 0.2 * glow),
       }}
     >
-      <div style={{display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8}}>
-        <span style={{fontSize: 26, fontWeight: 600, letterSpacing: '-.01em', color: '#D6DCE4'}}>your credit</span>
-        <span style={{fontSize: 22, fontWeight: 500, color: lit ? '#FFC08A' : '#8E98A5', whiteSpace: 'nowrap'}}>{status}</span>
-      </div>
-      <div style={{position: 'relative', marginTop: 10, height: 16, borderRadius: 8, background: '#232830', overflow: 'hidden'}}>
+      <div style={{fontSize: 48, fontWeight: 600, lineHeight: '50px', letterSpacing: '-.015em', color: '#E4E9EF'}}>your credit</div>
+      <div style={{fontSize: 52, fontWeight: 600, lineHeight: '56px', marginTop: 2, letterSpacing: '-.01em', color: lit ? '#FFC08A' : '#D6DCE4', whiteSpace: 'nowrap'}}>{status}</div>
+      <div style={{position: 'relative', marginTop: 12, height: 22, borderRadius: 11, background: '#232830', overflow: 'hidden'}}>
         <div style={{position: 'absolute', left: 0, top: 0, bottom: 0, width: `${solidWidth * 100}%`, background: C.hot, opacity: 0.82}} />
         {hatchWidth > 0.001 ? (
           <div
@@ -1032,16 +1066,16 @@ const CreditWidget: React.FC<{f: number}> = ({f}) => {
               top: 0,
               bottom: 0,
               width: `${hatchWidth * 100}%`,
-              background: 'repeating-linear-gradient(135deg, rgba(255,158,84,.5) 0 4px, rgba(255,158,84,.08) 4px 9px)',
-              borderLeft: '1.5px solid rgba(255,158,84,.6)',
+              background: 'repeating-linear-gradient(135deg, rgba(255,158,84,.5) 0 5px, rgba(255,158,84,.08) 5px 11px)',
+              borderLeft: '2px solid rgba(255,158,84,.6)',
               boxSizing: 'border-box',
             }}
           />
         ) : null}
       </div>
-      <div style={{height: 34, display: 'flex', alignItems: 'center', gap: 10, opacity: badVisible, fontSize: 20, whiteSpace: 'nowrap'}}>
+      <div style={{height: 32, display: 'flex', alignItems: 'center', gap: 10, opacity: badVisible, fontSize: 26, whiteSpace: 'nowrap'}}>
         <span style={{color: '#8E98A5'}}>bad file</span>
-        <div style={{position: 'relative', width: 92, height: 8, borderRadius: 4, background: '#232830', overflow: 'hidden'}}>
+        <div style={{position: 'relative', width: 112, height: 12, borderRadius: 6, background: '#232830', overflow: 'hidden'}}>
           <div style={{position: 'absolute', left: 0, top: 0, bottom: 0, width: `${38 * badReturned}%`, background: C.hot, opacity: 0.82}} />
           {badReturned < 0.999 ? (
             <div
@@ -1051,7 +1085,7 @@ const CreditWidget: React.FC<{f: number}> = ({f}) => {
                 top: 0,
                 bottom: 0,
                 width: `${38 * (1 - badReturned)}%`,
-                background: 'repeating-linear-gradient(135deg, rgba(255,158,84,.5) 0 3px, rgba(255,158,84,.08) 3px 6px)',
+                background: 'repeating-linear-gradient(135deg, rgba(255,158,84,.5) 0 4px, rgba(255,158,84,.08) 4px 8px)',
               }}
             />
           ) : null}
@@ -1066,18 +1100,17 @@ const QueueRack: React.FC<{f: number; queue: Pt}> = ({f, queue}) => {
   const opacity =
     ease(f, CUE('3c').start + 4, CUE('3c').start + 16) * (1 - ease(f, CUE('4').start - 10, CUE('4').start + 4));
   if (opacity <= 0.001) return null;
-  const slots = [-310, -220, -130];
   const drop = glide(f, CUE('3c').start + 12, beat('3c', 0.38));
-  const jobTop = queue.y - 450 + (queue.y - 220 - 36 - (queue.y - 450)) * drop;
+  const jobTop = lerp(queue.y - 330, queueJobTop(queue, 0), drop);
   const secondStart = CUE('3d').start + 160;
   const secondDrop = glide(f, secondStart, secondStart + 24);
   const secondOn = ease(f, secondStart, secondStart + 10);
-  const secondTop = queue.y - 450 + (queue.y - 310 - 36 - (queue.y - 450)) * secondDrop;
+  const secondTop = lerp(queue.y - 330, queueJobTop(queue, 1), secondDrop);
   const jobStyle: React.CSSProperties = {
     position: 'absolute',
-    left: queue.x - 95,
-    width: 190,
-    height: 72,
+    left: queue.x - QUEUE_JOB_W / 2,
+    width: QUEUE_JOB_W,
+    height: QUEUE_JOB_H,
     borderRadius: 14,
     background: '#1C1E22',
     border: '1.5px solid rgba(255,158,84,.6)',
@@ -1093,25 +1126,6 @@ const QueueRack: React.FC<{f: number; queue: Pt}> = ({f, queue}) => {
   };
   return (
     <div style={{position: 'absolute', inset: 0, opacity}}>
-      {slots.map((offset, index) => {
-        const active = index === 1 || (index === 0 && secondOn > 0.01);
-        return (
-          <div
-            key={offset}
-            style={{
-              position: 'absolute',
-              left: queue.x - 110,
-              top: queue.y + offset - 28,
-              width: 220,
-              height: 56,
-              borderRadius: 12,
-              border: `1.4px solid rgba(140,156,178,${active ? 0.32 : 0.18})`,
-              background: active ? 'rgba(140,156,178,.055)' : 'transparent',
-              boxSizing: 'border-box',
-            }}
-          />
-        );
-      })}
       <div style={{...jobStyle, top: jobTop}}>
         <div style={{width: 11, height: 11, borderRadius: 6, background: C.hot}} />
         job
@@ -1479,15 +1493,13 @@ const DuplicateJobs: React.FC<{f: number; gpu: Pt}> = ({f, gpu}) => {
 };
 
 const GpuPanel: React.FC<{f: number; gpu: Pt}> = ({f, gpu}) => {
-  const opacity =
-    ease(f, CUE('6').start, CUE('6').start + 24) * (1 - ease(f, CUE('7a').start - 10, CUE('7a').start + 6));
+  const opacity = gpuPanelOpacity(f);
   if (opacity <= 0.001) return null;
   const pass = CUE('6', 1);
   const cut = pass.start + Math.round(pass.frames * 0.55);
   const passOn = ease(f, pass.start + 4, pass.start + 18);
   const inputBrightness = 0.45 + 0.55 * passOn;
   const cutOn = ease(f, cut, cut + 6);
-  const fallen = ease(f, cut + 2, cut + 34);
   const pass1Caption = ease(f, pass.start + 6, pass.start + 18) * (1 - ease(f, cut, cut + 10));
   const pass2Caption = ease(f, cut + 10, cut + 24);
   const playhead = glide(f, pass.start + 4, cut);
@@ -1495,7 +1507,7 @@ const GpuPanel: React.FC<{f: number; gpu: Pt}> = ({f, gpu}) => {
   const cellW = 106;
   const phase = ((f - CUE('6').start) / FPS) * 0.55 % 5;
   const cells = Array.from({length: 10}, (_, index) => CLIP_FRAMES[index % CLIP_FRAMES.length]);
-  const barHeight = (value: number) => 10 + value * 64;
+  const barHeight = (value: number) => lerp(10 + value * 64, 2, cutOn);
   return (
     <div
       style={{
@@ -1550,7 +1562,7 @@ const GpuPanel: React.FC<{f: number; gpu: Pt}> = ({f, gpu}) => {
       </div>
 
       <div style={{position: 'absolute', left: 60, top: 370, fontSize: 24, letterSpacing: '.08em', color: '#8E98A5', textTransform: 'uppercase', opacity: inputBrightness}}>
-        <Strike progress={cutOn}>
+        <Strike progress={cutOn} colour="#8E98A5">
           <span>sound</span>
         </Strike>
       </div>
@@ -1563,26 +1575,30 @@ const GpuPanel: React.FC<{f: number; gpu: Pt}> = ({f, gpu}) => {
           height: 92,
           borderRadius: 12,
           overflow: 'hidden',
-          border: '1.5px solid rgba(255,255,255,.2)',
+          border: `1.5px solid ${cutOn > 0.5 ? 'rgba(150,168,190,.34)' : 'rgba(255,255,255,.2)'}`,
           boxSizing: 'border-box',
           background: '#0E1014',
-          opacity: inputBrightness * (1 - fallen),
-          transform: `translateY(${fallen * 170}px) rotate(${fallen * 7}deg) scaleY(${1 - 0.94 * fallen})`,
-          transformOrigin: '50% 40%',
+          opacity: inputBrightness * (1 - 0.25 * cutOn),
         }}
       >
         <div style={{position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', padding: '0 10px'}}>
-          {WAVE.map((value, index) => (
-            <div
-              key={index}
-              style={{
-                flex: 1,
-                height: barHeight(value),
-                borderRadius: 2,
-                background: index / WAVE.length < playhead ? 'rgba(255,178,122,.88)' : 'rgba(255,158,84,.42)',
-              }}
-            />
-          ))}
+          {WAVE.map((value, index) => {
+            const played = index / WAVE.length < playhead;
+            return (
+              <div
+                key={index}
+                style={{
+                  flex: 1,
+                  height: barHeight(value),
+                  borderRadius: 2,
+                  background: interpolateColors(cutOn, [0, 1], [
+                    played ? 'rgba(255,178,122,.88)' : 'rgba(255,158,84,.42)',
+                    'rgba(150,168,190,.55)',
+                  ]),
+                }}
+              />
+            );
+          })}
         </div>
         <div style={{position: 'absolute', top: 0, bottom: 0, left: `${(10 / 600) * 100}%`, width: 2, background: C.hot, opacity: passOn * (1 - cutOn), transform: `translateX(${playhead * 578}px)`}} />
       </div>
@@ -1596,7 +1612,7 @@ const GpuPanel: React.FC<{f: number; gpu: Pt}> = ({f, gpu}) => {
           height: 104,
           borderRadius: 2,
           background: DANGER,
-          opacity: cutOn * (1 - fallen),
+          opacity: cutOn * (1 - ease(f, cut + 6, cut + 22)),
           transform: `rotate(${cutOn * 14}deg)`,
         }}
       />
@@ -1842,6 +1858,24 @@ export const runSafeAreaCheck = () => {
       fail('presigned URL crosses the safe area');
     }
 
+    const arc = linksAt(f).find((link) => link.id === 'browser-storage');
+    if (arc && arc.opacity > 0.02) {
+      const arcPoints = pathPointsOf(arc.path, 40).map((point) => ({
+        x: 960 + (point.x - cam.cx) * cam.scale,
+        y: 540 + (point.y - cam.cy) * cam.scale,
+      }));
+      for (const label of labelText) {
+        const hit = arcPoints.some(
+          (point) =>
+            point.x >= label.box.x1 - 4 &&
+            point.x <= label.box.x2 + 4 &&
+            point.y >= label.box.y1 - 4 &&
+            point.y <= label.box.y2 + 4,
+        );
+        if (hit) fail(`upload arc crosses ${label.label} label`);
+      }
+    }
+
     const credit = creditWidgetBoxAt(f);
     if (credit) {
       if (crossesSafeArea(credit)) fail('credit widget crosses the safe area');
@@ -1849,6 +1883,22 @@ export const runSafeAreaCheck = () => {
       for (const label of labelText) if (overlaps(credit, label.box)) fail(`credit widget overlaps ${label.label} label`);
       for (const card of cardSpecsAt(f)) {
         if (card.opacity > 0.02 && overlaps(credit, card.box)) fail(`credit widget overlaps ${card.id} card`);
+      }
+      if (gpuPanelOpacity(f) > 0.02 && overlaps(credit, screenBox(PANEL_EXTRA, cam), 4)) {
+        fail('credit widget overlaps the TRIBE panel');
+      }
+      if (presignedOpacity(f) > 0.02 && overlaps(credit, screenBox(PRESIGN.box, cam))) {
+        fail('credit widget overlaps the presigned URL');
+      }
+    }
+
+    if (f < CUE('3c').start - 40) {
+      const trio = (['browser', 'website', 'storage'] as NodeId[]).map((id) =>
+        screenBox(nodeWorldBox(NODES_BY_ID[id], positions[id].x, positions[id].y, false, true, true), cam),
+      );
+      const group = unionBox(...trio);
+      if (Math.abs((group.x1 + group.x2) / 2 - 960) > 40 || Math.abs((group.y1 + group.y2) / 2 - 540) > 40) {
+        fail('3b Browser/Storage/Website group is off centre');
       }
     }
 
@@ -1909,6 +1959,7 @@ export const WalkthroughV6Diagram: React.FC = () => {
   const gpu = positions.gpu;
   const dead = positions.dead;
   const cards = cardSpecsAt(f);
+  const focus = new Set(focusIdsAt(f));
   const checkBottom = check
     ? nodeWorldBox(NODES_BY_ID.check, check.x, check.y, false, true, true).y2
     : 0;
@@ -1961,7 +2012,10 @@ export const WalkthroughV6Diagram: React.FC = () => {
           const purposeOn = state.state === 'lit' ? clamp((glowOf(f, def.keys) - 0.45) / 0.55) : 0;
           const worldBox = nodeWorldBox(def, pos.x, pos.y, false, true, purposeOn > 0.01);
           const screen = screenBox(worldBox, cam);
-          const safe = show * clamp(Math.min(screen.x1 - SAFE, 1920 - SAFE - screen.x2, screen.y1 - SAFE, 1080 - SAFE - screen.y2) / 40);
+          const margin = Math.min(screen.x1 - SAFE, 1920 - SAFE - screen.x2, screen.y1 - SAFE, 1080 - SAFE - screen.y2);
+          const covered = creditWidgetBoxAt(f) !== null && overlaps(screen, CREDIT_BOX, 4);
+          const base = show * (focus.has(def.id) ? (margin >= 0 ? 1 : clamp(1 + margin / 40)) : clamp(margin / 40));
+          const safe = base * (covered ? 1 - creditWidgetOpacity(f) : 1);
           return (
             <Node
               key={def.id}
