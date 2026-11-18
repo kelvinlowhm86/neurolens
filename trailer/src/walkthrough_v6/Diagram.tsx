@@ -777,7 +777,7 @@ export const Caption: React.FC<{text: string; from: number; to: number; hot?: st
   from,
   to,
   hot,
-  y = 952,
+  y = 910,
 }) => {
   const f = useCurrentFrame();
   const inP = ease(f, from, from + 10);

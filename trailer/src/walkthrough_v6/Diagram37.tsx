@@ -1,5 +1,5 @@
-import React from 'react';
-import {AbsoluteFill, Easing, Img, interpolate, interpolateColors, staticFile, useCurrentFrame} from 'remotion';
+import React, {useMemo} from 'react';
+import {AbsoluteFill, Easing, Img, cancelRender, interpolate, interpolateColors, staticFile, useCurrentFrame} from 'remotion';
 import {C, fontFamily} from '../edit/ui';
 import {clamp, ease} from '../edit/anim';
 import {
@@ -23,13 +23,34 @@ const HOLD = 0.5;
 const FPS = 30;
 const SAFE = 80;
 
-const CREDIT_W = 460;
-const CREDIT_H = 216;
-const CREDIT_X = 1920 - SAFE - CREDIT_W;
-const CREDIT_Y = SAFE + 14;
-const CREDIT_CLEAR = 20;
+// The credit strip is screen space: the bottom 110px of the frame. Subjects are
+// framed inside the area above it (1920 x 970) and never enter the strip.
+const STRIP_H = 110;
+const STRIP_TOP = 1080 - STRIP_H;
+const AREA_CX = 960;
+const AREA_CY = STRIP_TOP / 2;
+const AREA_H = STRIP_TOP;
+const BAR_W = 900;
+const BAR_H = 18;
+const STRIP_BOX: Box = {x1: 0, y1: STRIP_TOP, x2: 1920, y2: 1080};
 const CREDIT_HOLD = 0.32;
-const CREDIT_BOX: Box = {x1: CREDIT_X, y1: CREDIT_Y, x2: CREDIT_X + CREDIT_W, y2: CREDIT_Y + CREDIT_H};
+
+// Camera scale per shot in pass 10 (measured); the framing check refuses to go below these.
+const PASS10_SCALE: Record<string, number> = {
+  '3b': 1.3341,
+  '3c': 1.35,
+  '3d': 1.35,
+  '4': 0.988,
+  '4r': 1.1463,
+  '5a': 1.15,
+  '5b': 1.55,
+  '5c': 0.99,
+  '6': 1.28,
+  '7a': 1.05,
+  '7b': 1.3232,
+  '7c': 0.99,
+  '7d': 0.5069,
+};
 
 const WAVE: number[] = (envelope as {samples: number[]}).samples;
 const CLIP_FRAMES = ['f0', 'f5', 'f15', 'f25', 'f35'].map(
@@ -259,14 +280,14 @@ const nodeLabelBox = (
 };
 
 const screenBox = (box: Box, cam: Camera): Box => ({
-  x1: 960 + (box.x1 - cam.cx) * cam.scale,
-  y1: 540 + (box.y1 - cam.cy) * cam.scale,
-  x2: 960 + (box.x2 - cam.cx) * cam.scale,
-  y2: 540 + (box.y2 - cam.cy) * cam.scale,
+  x1: AREA_CX + (box.x1 - cam.cx) * cam.scale,
+  y1: AREA_CY + (box.y1 - cam.cy) * cam.scale,
+  x2: AREA_CX + (box.x2 - cam.cx) * cam.scale,
+  y2: AREA_CY + (box.y2 - cam.cy) * cam.scale,
 });
 
 const crossesSafeArea = (box: Box) =>
-  box.x1 < SAFE || box.x2 > 1920 - SAFE || box.y1 < SAFE || box.y2 > 1080 - SAFE;
+  box.x1 < SAFE || box.x2 > 1920 - SAFE || box.y1 < SAFE || box.y2 > STRIP_TOP;
 
 const overlaps = (a: Box, b: Box, clear = 0) =>
   a.x1 < b.x2 + clear && a.x2 > b.x1 - clear && a.y1 < b.y2 + clear && a.y2 > b.y1 - clear;
@@ -328,6 +349,7 @@ const radiusBox = (x: number, y: number, rx: number, ry: number): Box => ({
 });
 
 type Layout = {
+  row: string;
   at: number;
   ids?: NodeId[];
   move?: number;
@@ -336,7 +358,6 @@ type Layout = {
   maxScale?: number;
   width?: number;
   height?: number;
-  centre?: boolean;
 };
 
 const linkControl = (path: PathSpec): Pt => {
@@ -445,37 +466,40 @@ const DUPLICATE_EXTRA = radiusBox(FIXED_POSITIONS.gpu.x, FIXED_POSITIONS.gpu.y +
 
 const LAYOUTS: Layout[] = [
   {
+    row: '3b',
     at: CUE('3b').start,
     ids: ['browser', 'website', 'storage'],
     extra: [PRESIGN.box, UPLOAD_ARC_EXTRA],
     maxScale: 1.4,
     width: 0.84,
     height: 0.84,
-    centre: true,
   },
-  {at: CUE('3c').start, ids: ['website', 'queue'], extra: QUEUE_JOB_EXTRA, maxScale: 1.35},
-  {at: CUE('3d').start, ids: ['website', 'queue'], extra: QUEUE_JOB_EXTRA, maxScale: 1.35},
+  {row: '3c', at: CUE('3c').start, ids: ['website', 'queue'], extra: QUEUE_JOB_EXTRA, maxScale: 1.35},
+  {row: '3d', at: CUE('3d').start, ids: ['website', 'queue'], extra: QUEUE_JOB_EXTRA, maxScale: 1.35},
   {
+    row: '4',
     at: CUE('4').start,
     ids: ['queue', 'check'],
     thumbNodes: ['check'],
     extra: [...FFPROBE_EXTRA, READOUT_SPACE],
     maxScale: 1.3,
   },
-  {at: CUE('4r').start, ids: ['check', 'gpu'], extra: [BAD_FILE_EXTRA], maxScale: 1.45},
-  {at: CUE('5a').start, ids: ['queue', 'check', 'gpu'], maxScale: 1.15},
-  {at: CUE('5b').start, ids: ['gpu'], extra: [RING_EXTRA], maxScale: 1.55},
-  {at: CUE('5c').start, ids: ['website', 'database'], maxScale: 1.55, height: 0.77},
-  {at: CUE('6').start, ids: ['gpu'], extra: [PANEL_EXTRA], maxScale: 1.5, height: 0.85},
+  {row: '4r', at: CUE('4r').start, ids: ['check', 'gpu'], extra: [BAD_FILE_EXTRA], maxScale: 1.45},
+  {row: '5a', at: CUE('5a').start, ids: ['queue', 'check', 'gpu'], maxScale: 1.15},
+  {row: '5b', at: CUE('5b').start, ids: ['gpu'], extra: [RING_EXTRA], maxScale: 1.55},
+  {row: '5c', at: CUE('5c').start, ids: ['website', 'database'], maxScale: 1.55, height: 0.77},
+  {row: '6', at: CUE('6').start, ids: ['gpu'], extra: [PANEL_EXTRA], maxScale: 1.5, height: 0.85},
   {
+    row: '7a',
     at: CUE('7a').start,
     ids: ['check', 'gpu', 'dead'],
     thumbNodes: ['gpu'],
     maxScale: 1.05,
   },
-  {at: CUE('7b').start, ids: ['gpu'], extra: [DUPLICATE_EXTRA], maxScale: 1.4},
-  {at: CUE('7c').start, ids: ['watchdog', 'gpu'], maxScale: 1.55, height: 0.77},
+  {row: '7b', at: CUE('7b').start, ids: ['gpu'], extra: [DUPLICATE_EXTRA], maxScale: 1.4},
+  {row: '7c', at: CUE('7c').start, ids: ['watchdog', 'gpu'], maxScale: 1.55, height: 0.77},
   {
+    row: '7d',
     at: CUE('7d').start,
     ids: ALL_NODE_IDS,
     extra: [WIDE_OUTLINE_BOX, TF_LABEL_BOX],
@@ -485,25 +509,12 @@ const LAYOUTS: Layout[] = [
   },
 ];
 
-const fitRegion = (area: Box, region: Box, maxScale: number): {cx: number; cy: number; scale: number} | null => {
-  const width = region.x2 - region.x1;
-  const height = region.y2 - region.y1;
-  if (width <= 1 || height <= 1) return null;
-  const scale = Math.min(width / Math.max(1, area.x2 - area.x1), height / Math.max(1, area.y2 - area.y1), maxScale);
-  return {
-    cx: (area.x1 + area.x2) / 2 - ((region.x1 + region.x2) / 2 - 960) / scale,
-    cy: (area.y1 + area.y2) / 2 - ((region.y1 + region.y2) / 2 - 540) / scale,
-    scale,
-  };
-};
-
 const focusBoxes = (
   boxes: Box[],
   options: {width?: number; height?: number; maxScale?: number} = {},
-  centerX?: number,
 ): Camera => {
   const area = unionBox(...boxes);
-  const cx = centerX ?? (area.x1 + area.x2) / 2;
+  const cx = (area.x1 + area.x2) / 2;
   const cy = (area.y1 + area.y2) / 2;
   const halfW = Math.max(1, cx - area.x1, area.x2 - cx);
   const halfH = Math.max(1, cy - area.y1, area.y2 - cy);
@@ -515,20 +526,7 @@ const focusBoxes = (
   return camera(cx, cy, scale);
 };
 
-const creditReserved = (at: number) => at >= CUE('3b').start && at < CUE('7c').start;
-
-const clearOfCredit = (boxes: Box[], cam: Camera): Camera => {
-  const blocked = boxes.some((box) => overlaps(screenBox(box, cam), CREDIT_BOX, 4));
-  if (!blocked) return cam;
-  const area = unionBox(...boxes);
-  const maxScale = Math.max(cam.scale, 1);
-  const left = fitRegion(area, {x1: SAFE, y1: SAFE, x2: CREDIT_BOX.x1 - CREDIT_CLEAR, y2: 1080 - SAFE}, maxScale);
-  const below = fitRegion(area, {x1: SAFE, y1: CREDIT_BOX.y2 + CREDIT_CLEAR, x2: 1920 - SAFE, y2: 1080 - SAFE}, maxScale);
-  const best = [left, below].filter((item): item is {cx: number; cy: number; scale: number} => item !== null).sort((a, b) => b.scale - a.scale)[0];
-  return best ? camera(best.cx, best.cy, best.scale) : cam;
-};
-
-const cameraForLayout = (layout: Layout): Camera => {
+const subjectBoxesForLayout = (layout: Layout): Box[] => {
   const ids = layout.ids ?? ALL_NODE_IDS;
   const boxes = ids.map((id) =>
     nodeWorldBox(NODES_BY_ID[id], FIXED_POSITIONS[id].x, FIXED_POSITIONS[id].y, false, true, true),
@@ -542,12 +540,15 @@ const cameraForLayout = (layout: Layout): Camera => {
       }),
     );
   }
-  const xs = ids.map((id) => FIXED_POSITIONS[id].x);
-  const rowCenter = (Math.min(...xs) + Math.max(...xs)) / 2;
-  const centerX = layout.centre ? undefined : rowCenter;
-  const cam = focusBoxes(boxes, {width: layout.width, maxScale: layout.maxScale, height: layout.height}, centerX);
-  return creditReserved(layout.at) ? clearOfCredit(boxes, cam) : cam;
+  return boxes;
 };
+
+const cameraForLayout = (layout: Layout): Camera =>
+  focusBoxes(subjectBoxesForLayout(layout), {
+    width: layout.width,
+    maxScale: layout.maxScale,
+    height: layout.height,
+  });
 
 const CAMS = LAYOUTS.map((layout) => ({at: layout.at, cam: cameraForLayout(layout), move: layout.move ?? 30}));
 
@@ -587,7 +588,7 @@ const focusIdsAt = (f: number): NodeId[] => layoutAt(f).current.ids ?? ALL_NODE_
 const isWide = (f: number) => f >= CUE('7d').start - 4;
 
 const worldStyle = (cam: Camera): React.CSSProperties => ({
-  transform: `translate(${960 - cam.cx * cam.scale}px, ${540 - cam.cy * cam.scale}px) scale(${cam.scale})`,
+  transform: `translate(${AREA_CX - cam.cx * cam.scale}px, ${AREA_CY - cam.cy * cam.scale}px) scale(${cam.scale})`,
   transformOrigin: '0 0',
 });
 
@@ -824,9 +825,6 @@ const CARD_OPACITY: Record<CardId, (f: number) => number> = {
   clock: clockOpacity,
 };
 
-const creditWidgetOpacity = (f: number) =>
-  ease(f, CUE('3b').start + 6, CUE('3b').start + 20) * (1 - ease(f, CUE('7b').end - 14, CUE('7b').end + 2));
-
 const creditReturnedAt = (f: number) => ease(f, beat('7a', 0.68), beat('7a', 0.9));
 const creditChargedAt = (f: number) => ease(f, beat('7b', 0.28), beat('7b', 0.4));
 const badRefundAt = (f: number) => ease(f, beat('4r', 0.5), beat('4r', 0.68));
@@ -839,7 +837,8 @@ const creditGlowAt = (f: number) =>
     ease(f, beat('7b', 0.26), beat('7b', 0.36)) * (1 - ease(f, beat('7b', 0.46), beat('7b', 0.58))),
   );
 
-const creditWidgetBoxAt = (f: number): Box | null => (creditWidgetOpacity(f) > 0.02 ? CREDIT_BOX : null);
+const creditWidgetOpacity = (f: number) =>
+  ease(f, CUE('3b').start + 6, CUE('3b').start + 20) * (1 - ease(f, CUE('7b').end - 14, CUE('7b').end + 2));
 
 type CardSpec = {id: CardId; box: Box; opacity: number};
 
@@ -851,7 +850,7 @@ const placeCard = (anchor: Box, w: number, h: number, taken: Box[], belowOnly = 
   const aboveTop = anchor.y1 - CARD_GAP - h;
   const above: Box = {x1: boxLeft, y1: aboveTop, x2: boxLeft + w, y2: aboveTop + h};
   const blocked = (box: Box) => taken.some((other) => overlaps(box, other));
-  const belowFits = below.y2 <= 1080 - SAFE;
+  const belowFits = below.y2 <= STRIP_TOP;
   const aboveFits = aboveTop >= SAFE;
   if (belowFits && !blocked(below)) return below;
   if (belowOnly) return below;
@@ -864,8 +863,6 @@ const takenBoxesAt = (f: number, cam: Camera): Box[] => {
   const boxes = labelTextBoxesAt(f).map((item) => item.box);
   const thumb = thumbStateAt(f);
   if (thumb.opacity > 0.02) boxes.push(screenBox(thumb.box, cam));
-  const credit = creditWidgetBoxAt(f);
-  if (credit) boxes.push(credit);
   return boxes;
 };
 
@@ -1022,7 +1019,7 @@ const MonoCaption: React.FC<{text: string; x: number; y: number; opacity: number
   );
 };
 
-const CreditWidget: React.FC<{f: number}> = ({f}) => {
+const CreditStrip: React.FC<{f: number}> = ({f}) => {
   const opacity = creditWidgetOpacity(f);
   if (opacity <= 0.001) return null;
   const returned = creditReturnedAt(f);
@@ -1040,23 +1037,48 @@ const CreditWidget: React.FC<{f: number}> = ({f}) => {
     <div
       style={{
         position: 'absolute',
-        left: CREDIT_X,
-        top: CREDIT_Y,
-        width: CREDIT_W,
-        height: CREDIT_H,
+        left: 0,
+        right: 0,
+        top: STRIP_TOP,
+        height: STRIP_H,
         boxSizing: 'border-box',
-        padding: '20px 22px',
-        borderRadius: 24,
-        background: 'rgba(13,15,18,.94)',
-        border: `1.5px solid ${lit ? 'rgba(255,158,84,.5)' : C.rule}`,
-        boxShadow: lit ? '0 0 34px rgba(255,138,42,.2), 0 16px 38px rgba(0,0,0,.55)' : '0 16px 38px rgba(0,0,0,.45)',
-        fontFamily,
+        background: 'rgba(11,12,15,.9)',
+        borderTop: `1.5px solid ${lit ? 'rgba(255,158,84,.5)' : C.rule}`,
+        boxShadow: lit ? '0 -10px 34px rgba(255,138,42,.1)' : '0 -10px 30px rgba(0,0,0,.4)',
         opacity: opacity * (0.8 + 0.2 * glow),
       }}
     >
-      <div style={{fontSize: 48, fontWeight: 600, lineHeight: '50px', letterSpacing: '-.015em', color: '#E4E9EF'}}>your credit</div>
-      <div style={{fontSize: 52, fontWeight: 600, lineHeight: '56px', marginTop: 2, letterSpacing: '-.01em', color: lit ? '#FFC08A' : '#D6DCE4', whiteSpace: 'nowrap'}}>{status}</div>
-      <div style={{position: 'relative', marginTop: 12, height: 22, borderRadius: 11, background: '#232830', overflow: 'hidden'}}>
+      <div
+        style={{
+          position: 'absolute',
+          left: SAFE,
+          top: 0,
+          bottom: 0,
+          display: 'flex',
+          alignItems: 'center',
+          fontFamily,
+          fontSize: 34,
+          fontWeight: 600,
+          letterSpacing: '-.01em',
+          color: '#E4E9EF',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        your credit
+      </div>
+      <div
+        style={{
+          position: 'absolute',
+          left: AREA_CX - BAR_W / 2,
+          top: '50%',
+          marginTop: -BAR_H / 2,
+          width: BAR_W,
+          height: BAR_H,
+          borderRadius: BAR_H / 2,
+          background: '#232830',
+          overflow: 'hidden',
+        }}
+      >
         <div style={{position: 'absolute', left: 0, top: 0, bottom: 0, width: `${solidWidth * 100}%`, background: C.hot, opacity: 0.82}} />
         {hatchWidth > 0.001 ? (
           <div
@@ -1073,24 +1095,23 @@ const CreditWidget: React.FC<{f: number}> = ({f}) => {
           />
         ) : null}
       </div>
-      <div style={{height: 32, display: 'flex', alignItems: 'center', gap: 10, opacity: badVisible, fontSize: 26, whiteSpace: 'nowrap'}}>
-        <span style={{color: '#8E98A5'}}>bad file</span>
-        <div style={{position: 'relative', width: 112, height: 12, borderRadius: 6, background: '#232830', overflow: 'hidden'}}>
-          <div style={{position: 'absolute', left: 0, top: 0, bottom: 0, width: `${38 * badReturned}%`, background: C.hot, opacity: 0.82}} />
-          {badReturned < 0.999 ? (
-            <div
-              style={{
-                position: 'absolute',
-                right: 0,
-                top: 0,
-                bottom: 0,
-                width: `${38 * (1 - badReturned)}%`,
-                background: 'repeating-linear-gradient(135deg, rgba(255,158,84,.5) 0 4px, rgba(255,158,84,.08) 4px 8px)',
-              }}
-            />
-          ) : null}
-        </div>
-        <span style={{color: '#FFC08A', opacity: badReturned}}>refunded</span>
+      <div
+        style={{
+          position: 'absolute',
+          right: SAFE,
+          top: 0,
+          bottom: 0,
+          display: 'flex',
+          alignItems: 'center',
+          fontFamily,
+          fontSize: 34,
+          fontWeight: 600,
+          letterSpacing: '-.01em',
+          color: lit ? '#FFC08A' : '#D6DCE4',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {status}
       </div>
     </div>
   );
@@ -1876,19 +1897,18 @@ export const runSafeAreaCheck = () => {
       }
     }
 
-    const credit = creditWidgetBoxAt(f);
-    if (credit) {
-      if (crossesSafeArea(credit)) fail('credit widget crosses the safe area');
-      if (thumbScreen && overlaps(credit, thumbScreen)) fail('credit widget overlaps the thumbnail');
-      for (const label of labelText) if (overlaps(credit, label.box)) fail(`credit widget overlaps ${label.label} label`);
+    const stripVisible = creditWidgetOpacity(f) > 0.02;
+    if (stripVisible) {
+      for (const label of labelText) if (overlaps(STRIP_BOX, label.box)) fail(`${label.label} label overlaps the credit strip`);
+      if (thumbScreen && overlaps(STRIP_BOX, thumbScreen)) fail('thumbnail overlaps the credit strip');
       for (const card of cardSpecsAt(f)) {
-        if (card.opacity > 0.02 && overlaps(credit, card.box)) fail(`credit widget overlaps ${card.id} card`);
+        if (card.opacity > 0.02 && overlaps(STRIP_BOX, card.box)) fail(`${card.id} card overlaps the credit strip`);
       }
-      if (gpuPanelOpacity(f) > 0.02 && overlaps(credit, screenBox(PANEL_EXTRA, cam), 4)) {
-        fail('credit widget overlaps the TRIBE panel');
+      if (gpuPanelOpacity(f) > 0.02 && overlaps(STRIP_BOX, screenBox(PANEL_EXTRA, cam), 4)) {
+        fail('TRIBE panel overlaps the credit strip');
       }
-      if (presignedOpacity(f) > 0.02 && overlaps(credit, screenBox(PRESIGN.box, cam))) {
-        fail('credit widget overlaps the presigned URL');
+      if (presignedOpacity(f) > 0.02 && overlaps(STRIP_BOX, screenBox(PRESIGN.box, cam))) {
+        fail('presigned URL overlaps the credit strip');
       }
     }
 
@@ -1897,7 +1917,7 @@ export const runSafeAreaCheck = () => {
         screenBox(nodeWorldBox(NODES_BY_ID[id], positions[id].x, positions[id].y, false, true, true), cam),
       );
       const group = unionBox(...trio);
-      if (Math.abs((group.x1 + group.x2) / 2 - 960) > 40 || Math.abs((group.y1 + group.y2) / 2 - 540) > 40) {
+      if (Math.abs((group.x1 + group.x2) / 2 - AREA_CX) > 40 || Math.abs((group.y1 + group.y2) / 2 - AREA_CY) > 40) {
         fail('3b Browser/Storage/Website group is off centre');
       }
     }
@@ -1931,6 +1951,37 @@ export const runNodeStabilityCheck = () => {
   else console.info(`[v6 node-stability] ${DURATION}/${DURATION} frames OK`);
 };
 
+// Pass 12 framing check: at every shot's hold the subject must sit centred in the
+// area above the credit strip, clear of the strip, and no smaller than in pass 10.
+export const runFramingCheck = (): string[] => {
+  const failures: string[] = [];
+  LAYOUTS.forEach((layout, index) => {
+    const next = LAYOUTS[index + 1];
+    const move = next ? Math.min(next.move ?? 30, next.at - layout.at) : 0;
+    const holdEnd = next ? next.at - move : DURATION;
+    const hold = Math.round((layout.at + holdEnd) / 2);
+    const cam = cameraAt(hold);
+    const subject = screenBox(unionBox(...subjectBoxesForLayout(layout)), cam);
+    const fail = (message: string) => failures.push(`shot ${layout.row} (frame ${hold}): ${message}`);
+    const cx = (subject.x1 + subject.x2) / 2;
+    const cy = (subject.y1 + subject.y2) / 2;
+    if (Math.abs(cx - AREA_CX) > 0.06 * 1920) {
+      fail(`subject centre x ${Math.round(cx)} is more than 6% off ${AREA_CX}`);
+    }
+    if (Math.abs(cy - AREA_CY) > 0.06 * AREA_H) {
+      fail(`subject centre y ${Math.round(cy)} is more than 6% off ${AREA_CY}`);
+    }
+    if (subject.y2 > STRIP_TOP) {
+      fail(`subject overlaps the credit strip (bottom edge ${Math.round(subject.y2)} > ${STRIP_TOP})`);
+    }
+    const pass10 = PASS10_SCALE[layout.row];
+    if (pass10 !== undefined && cam.scale < pass10 - 1e-4) {
+      fail(`camera scale ${cam.scale.toFixed(4)} is smaller than pass 10's ${pass10}`);
+    }
+  });
+  return failures;
+};
+
 let checkQueued = false;
 const queueSafeAreaCheck = () => {
   if (checkQueued || typeof window === 'undefined') return;
@@ -1945,6 +1996,14 @@ const queueSafeAreaCheck = () => {
 
 export const WalkthroughV6Diagram: React.FC = () => {
   const f = useCurrentFrame();
+  const framingFailures = useMemo(runFramingCheck, []);
+  if (framingFailures.length > 0) {
+    cancelRender(
+      new Error(
+        `[v6 framing] ${framingFailures.length} framing failure(s) at the shots' holds:\n${framingFailures.join('\n')}`,
+      ),
+    );
+  }
   queueSafeAreaCheck();
   const {positions, presence} = layoutAt(f);
   const cam = cameraAt(f);
@@ -2012,10 +2071,9 @@ export const WalkthroughV6Diagram: React.FC = () => {
           const purposeOn = state.state === 'lit' ? clamp((glowOf(f, def.keys) - 0.45) / 0.55) : 0;
           const worldBox = nodeWorldBox(def, pos.x, pos.y, false, true, purposeOn > 0.01);
           const screen = screenBox(worldBox, cam);
-          const margin = Math.min(screen.x1 - SAFE, 1920 - SAFE - screen.x2, screen.y1 - SAFE, 1080 - SAFE - screen.y2);
-          const covered = creditWidgetBoxAt(f) !== null && overlaps(screen, CREDIT_BOX, 4);
+          const margin = Math.min(screen.x1 - SAFE, 1920 - SAFE - screen.x2, screen.y1 - SAFE, STRIP_TOP - screen.y2);
           const base = show * (focus.has(def.id) ? (margin >= 0 ? 1 : clamp(1 + margin / 40)) : clamp(margin / 40));
-          const safe = base * (covered ? 1 - creditWidgetOpacity(f) : 1);
+          const safe = base;
           return (
             <Node
               key={def.id}
@@ -2056,9 +2114,9 @@ export const WalkthroughV6Diagram: React.FC = () => {
 
       <Caption text="asynchronous" from={CUE('3d').start + 8} to={CUE('4').start - 10} hot="asynchronous" />
       <Caption text="scale to zero" from={beat('5a', 0.62)} to={CUE('5b').start - 8} hot="zero" />
-      <Caption text="serverless" from={CUE('5c').start + 6} to={CUE('6').start - 10} hot="serverless" y={985} />
+      <Caption text="serverless" from={CUE('5c').start + 6} to={CUE('6').start - 10} hot="serverless" />
       <Caption text="idempotent" from={CUE('7b').start + 6} to={CUE('7c').start - 10} hot="idempotent" />
-      <Caption text="infrastructure as code" from={CUE('7d').start + 8} to={DURATION - 4} hot="code" y={995} />
+      <Caption text="infrastructure as code" from={CUE('7d').start + 8} to={DURATION - 4} hot="code" />
 
       {cards.map((card) => {
         if (card.id === 'readout') return <ReadoutCard key={card.id} f={f} box={card.box} opacity={card.opacity} />;
@@ -2066,7 +2124,7 @@ export const WalkthroughV6Diagram: React.FC = () => {
         return <ClockCard key={card.id} box={card.box} opacity={card.opacity} />;
       })}
 
-      <CreditWidget f={f} />
+      <CreditStrip f={f} />
     </AbsoluteFill>
   );
 };
