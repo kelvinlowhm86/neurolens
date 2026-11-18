@@ -1,5 +1,5 @@
 import React from 'react';
-import {AbsoluteFill, Easing, Img, interpolate, staticFile, useCurrentFrame} from 'remotion';
+import {AbsoluteFill, Easing, Img, OffthreadVideo, Sequence, interpolate, staticFile, useCurrentFrame} from 'remotion';
 import {C, fontFamily} from '../edit/ui';
 import {clamp, ease} from '../edit/anim';
 import {
@@ -15,7 +15,7 @@ import {
   StateKey,
   stateAt,
 } from './Diagram';
-import {bez, CLIP_SRC, MONO} from './styles/shared';
+import {bez, CLIP_SRC, CLIP_VIDEO_SRC, MONO} from './styles/shared';
 
 const RATE = 2.6;
 const HOLD = 0.5;
@@ -209,8 +209,8 @@ const nodeWorldBox = (
   serviceShown: boolean,
   purposeShown: boolean,
 ): Box => {
-  const labelSize = wide ? 64 : 58;
-  const labelW = textWidth(def.label, labelSize, wide ? 700 : 600);
+  const labelSize = 58;
+  const labelW = textWidth(def.label, labelSize, 600);
   const serviceW = serviceShown ? textWidth(def.service, 42, 400, 0.04) : 0;
   const purposeW = purposeShown ? textWidth(def.purpose, 34, 400) : 0;
   const half = Math.max(64, labelW / 2, serviceW / 2, purposeW / 2);
@@ -264,7 +264,6 @@ const glide = (f: number, from: number, to: number) =>
   });
 
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
-const lerpPt = (a: Pt, b: Pt, t: number): Pt => ({x: lerp(a.x, b.x, t), y: lerp(a.y, b.y, t)});
 
 const THUMB_W = 104;
 const THUMB_H = (THUMB_W * 16) / 9;
@@ -283,48 +282,107 @@ const thumbBoxFrom = (left: number, top: number): Box => ({
 });
 
 const ROW_Y = 0;
-const ROW_GAP = 380;
+const ROW_GAP = 360;
 
-const WIDE_POSITIONS: Record<NodeId, Pt> = {
-  browser: {x: -750, y: 0},
-  website: {x: -450, y: 0},
-  queue: {x: -150, y: 0},
-  check: {x: 150, y: 0},
-  gpu: {x: 450, y: 0},
-  dead: {x: 750, y: 0},
-  storage: {x: -450, y: -340},
-  watchdog: {x: 450, y: -340},
-  database: {x: -450, y: 340},
+const MAIN_ROW: NodeId[] = ['browser', 'website', 'queue', 'check', 'gpu', 'dead'];
+const ALL_NODE_IDS: NodeId[] = [...MAIN_ROW, 'storage', 'database', 'watchdog'];
+
+const FIXED_POSITIONS: Record<NodeId, Pt> = (() => {
+  const positions = {} as Record<NodeId, Pt>;
+  MAIN_ROW.forEach((id, index) => {
+    positions[id] = {x: (index - (MAIN_ROW.length - 1) / 2) * ROW_GAP, y: ROW_Y};
+  });
+  positions.storage = {x: (positions.browser.x + positions.website.x) / 2, y: -340};
+  positions.database = {x: positions.website.x, y: 340};
+  positions.watchdog = {x: positions.gpu.x, y: -340};
+  return positions;
+})();
+
+const FIXED_PRESENCE = Object.fromEntries(ALL_NODE_IDS.map((id) => [id, 1])) as Record<NodeId, number>;
+
+const radiusBox = (x: number, y: number, rx: number, ry: number): Box => ({
+  x1: x - rx,
+  y1: y - ry,
+  x2: x + rx,
+  y2: y + ry,
+});
+
+const thumbTravelExtra = (from: Pt, to: Pt): Box => {
+  const a = thumbParkTop(from);
+  const b = thumbParkTop(to);
+  const control = {x: (a.x + b.x) / 2, y: Math.min(a.y, b.y) - 150};
+  const points = Array.from({length: 65}, (_, index) => bez(a, control, b, index / 64));
+  const xs = points.map((point) => point.x);
+  const ys = points.map((point) => point.y);
+  return {
+    x1: Math.min(...xs),
+    y1: Math.min(...ys),
+    x2: Math.max(...xs) + THUMB_W,
+    y2: Math.max(...ys) + THUMB_H,
+  };
 };
 
 type Layout = {
   at: number;
   ids?: NodeId[];
-  positions?: Record<NodeId, Pt>;
-  y?: number;
-  gap?: number;
   move?: number;
   extra?: Box[];
   thumbNodes?: NodeId[];
-  wide?: boolean;
   maxScale?: number;
   height?: number;
 };
 
-const rowPositions = (ids: NodeId[], gap = ROW_GAP, y = ROW_Y): Record<NodeId, Pt> =>
-  Object.fromEntries(ids.map((id, index) => [id, {x: (index - (ids.length - 1) / 2) * gap, y}])) as Record<NodeId, Pt>;
+const linkControl = (path: PathSpec): Pt => {
+  if (path.control) return path.control;
+  const dx = path.to.x - path.from.x;
+  const dy = path.to.y - path.from.y;
+  const len = Math.hypot(dx, dy) || 1;
+  const bend = path.bend ?? 0;
+  return {x: (path.from.x + path.to.x) / 2 + (-dy / len) * bend, y: (path.from.y + path.to.y) / 2 + (dx / len) * bend};
+};
 
-const positionsOf = (layout: Layout): Record<NodeId, Pt> =>
-  layout.positions ?? rowPositions(layout.ids ?? [], layout.gap, layout.y);
+const pathPointsOf = (path: PathSpec, count = 24): Pt[] => {
+  const control = linkControl(path);
+  return Array.from({length: count + 1}, (_, index) => bez(path.from, control, path.to, index / count));
+};
 
-const idsOf = (layout: Layout): NodeId[] =>
-  layout.ids ?? (Object.keys(layout.positions ?? {}) as NodeId[]);
+const browserStoragePath = (browser: Pt, storage: Pt): PathSpec => ({
+  from: {x: browser.x + 42, y: browser.y - 20},
+  to: {x: storage.x - 42, y: storage.y - 40},
+});
+
+const PRESIGN_GAP = 24;
+const PRESIGN_H = 38;
+
+const presignGeometry = (browser: Pt, storage: Pt) => {
+  const path = browserStoragePath(browser, storage);
+  const points = pathPointsOf(path, 96);
+  const top = points.reduce((best, point) => (point.y < best.y ? point : best), points[0]);
+  const xs = points.map((point) => point.x);
+  const width = textWidth('presigned URL', 26, 400) + 24;
+  const iconTop = storage.y - 64;
+  const bottom = Math.min(top.y - PRESIGN_GAP, iconTop - PRESIGN_GAP);
+  const cx = (Math.min(...xs) + Math.max(...xs)) / 2;
+  const cy = bottom - PRESIGN_H / 2;
+  return {
+    x: cx,
+    y: cy,
+    box: {
+      x1: cx - width / 2 - 8,
+      y1: cy - PRESIGN_H / 2 - 8,
+      x2: cx + width / 2 + 8,
+      y2: cy + PRESIGN_H / 2 + 8,
+    } as Box,
+    top,
+  };
+};
+
+const PRESIGN = presignGeometry(FIXED_POSITIONS.browser, FIXED_POSITIONS.storage);
 
 const WIDE_BOUNDS = (() => {
-  const boxes = (Object.keys(WIDE_POSITIONS) as NodeId[]).map((id) => {
-    const pos = WIDE_POSITIONS[id];
-    return nodeWorldBox(NODES_BY_ID[id], pos.x, pos.y, true, true, false);
-  });
+  const boxes = ALL_NODE_IDS.map((id) =>
+    nodeWorldBox(NODES_BY_ID[id], FIXED_POSITIONS[id].x, FIXED_POSITIONS[id].y, false, true, false),
+  );
   return unionBox(...boxes);
 })();
 
@@ -342,79 +400,68 @@ const TF_LABEL_BOX: Box = {
   y2: WIDE_OUTLINE_BOX.y1 - 18,
 };
 
-const radiusBox = (x: number, y: number, rx: number, ry: number): Box => ({
-  x1: x - rx,
-  y1: y - ry,
-  x2: x + rx,
-  y2: y + ry,
-});
-
-const QUEUE_RACK_EXTRA = [radiusBox(190, -260, 150, 190)];
+const QUEUE_RACK_EXTRA = [radiusBox(FIXED_POSITIONS.queue.x, -260, 150, 190)];
+const CHECK_BOX = nodeWorldBox(NODES_BY_ID.check, FIXED_POSITIONS.check.x, FIXED_POSITIONS.check.y, false, true, true);
+const FFPROBE_EXTRA = [{x1: CHECK_BOX.x1 - 40, y1: CHECK_BOX.y2, x2: CHECK_BOX.x2 + 40, y2: CHECK_BOX.y2 + 70}];
+const READOUT_SPACE: Box = {
+  x1: CHECK_BOX.x1 - 300,
+  y1: CHECK_BOX.y2,
+  x2: CHECK_BOX.x2 + 300,
+  y2: CHECK_BOX.y2 + 220,
+};
+const DEAD_BOX = nodeWorldBox(NODES_BY_ID.dead, FIXED_POSITIONS.dead.x, FIXED_POSITIONS.dead.y, false, true, true);
+const CREDIT_SPACE: Box = {
+  x1: DEAD_BOX.x1 - 300,
+  y1: DEAD_BOX.y2,
+  x2: DEAD_BOX.x2 + 300,
+  y2: DEAD_BOX.y2 + 220,
+};
+const BAD_FILE_EXTRA = radiusBox(FIXED_POSITIONS.check.x - 190, 0, 300, 90);
+const RING_EXTRA = radiusBox(FIXED_POSITIONS.gpu.x, FIXED_POSITIONS.gpu.y, 135, 135);
+const PANEL_EXTRA: Box = {
+  x1: FIXED_POSITIONS.gpu.x - 390,
+  y1: FIXED_POSITIONS.gpu.y - 300,
+  x2: FIXED_POSITIONS.gpu.x + 390,
+  y2: FIXED_POSITIONS.gpu.y + 300,
+};
+const DUPLICATE_EXTRA = radiusBox(FIXED_POSITIONS.gpu.x, FIXED_POSITIONS.gpu.y + 390, 330, 150);
+const THUMB_TRAVEL_EXTRA = thumbTravelExtra(FIXED_POSITIONS.browser, FIXED_POSITIONS.storage);
 
 const LAYOUTS: Layout[] = [
   {
     at: CUE('3b').start,
     ids: ['browser', 'website', 'storage'],
     thumbNodes: ['browser', 'storage'],
-    extra: [{x1: -460, y1: -440, x2: 460, y2: 0}],
+    extra: [PRESIGN.box, THUMB_TRAVEL_EXTRA],
     maxScale: 1.35,
   },
-  {
-    at: CUE('3c').start,
-    ids: ['website', 'queue'],
-    extra: QUEUE_RACK_EXTRA,
-    maxScale: 1.35,
-  },
+  {at: CUE('3c').start, ids: ['website', 'queue'], extra: QUEUE_RACK_EXTRA, maxScale: 1.35},
   {at: CUE('3d').start, ids: ['website', 'queue'], extra: QUEUE_RACK_EXTRA, maxScale: 1.35},
   {
     at: CUE('4').start,
     ids: ['queue', 'check'],
     thumbNodes: ['check'],
-    extra: [radiusBox(190, -20, 230, 100)],
+    extra: [...FFPROBE_EXTRA, READOUT_SPACE],
     maxScale: 1.3,
   },
-  {
-    at: CUE('4r').start,
-    ids: ['check', 'gpu'],
-    extra: [radiusBox(-190, 0, 300, 90)],
-    maxScale: 1.45,
-  },
+  {at: CUE('4r').start, ids: ['check', 'gpu'], extra: [BAD_FILE_EXTRA], maxScale: 1.45},
   {at: CUE('5a').start, ids: ['queue', 'check', 'gpu'], maxScale: 1.15},
-  {
-    at: CUE('5b').start,
-    ids: ['gpu'],
-    extra: [radiusBox(0, 0, 135, 135)],
-    maxScale: 1.55,
-  },
+  {at: CUE('5b').start, ids: ['gpu'], extra: [RING_EXTRA], maxScale: 1.55},
   {at: CUE('5c').start, ids: ['website', 'database'], maxScale: 1.55},
-  {
-    at: CUE('6').start,
-    ids: ['gpu'],
-    extra: [{x1: -390, y1: -300, x2: 390, y2: 300}],
-    maxScale: 1.5,
-  },
+  {at: CUE('6').start, ids: ['gpu'], extra: [PANEL_EXTRA], maxScale: 1.5},
   {
     at: CUE('7a').start,
     ids: ['check', 'gpu', 'dead'],
     thumbNodes: ['gpu'],
+    extra: [CREDIT_SPACE],
     maxScale: 1.05,
   },
-  {
-    at: CUE('7b').start,
-    ids: ['gpu'],
-    extra: [radiusBox(0, 390, 330, 150)],
-    maxScale: 1.4,
-  },
-  {
-    at: CUE('7c').start,
-    ids: ['watchdog', 'gpu'],
-    maxScale: 1.55,
-  },
+  {at: CUE('7b').start, ids: ['gpu'], extra: [DUPLICATE_EXTRA], maxScale: 1.4},
+  {at: CUE('7c').start, ids: ['watchdog', 'gpu'], maxScale: 1.55},
   {
     at: CUE('7d').start,
-    positions: WIDE_POSITIONS,
+    ids: ALL_NODE_IDS,
     extra: [WIDE_OUTLINE_BOX, TF_LABEL_BOX],
-    wide: true,
     move: 50,
     maxScale: 1.4,
     height: 0.78,
@@ -440,15 +487,47 @@ const focusBoxes = (
 };
 
 const cameraForLayout = (layout: Layout): Camera => {
-  const positions = positionsOf(layout);
-  const wide = layout.wide ?? false;
-  const boxes = idsOf(layout).map((id) => nodeWorldBox(NODES_BY_ID[id], positions[id].x, positions[id].y, wide, true, !wide));
+  const ids = layout.ids ?? ALL_NODE_IDS;
+  const boxes = ids.map((id) =>
+    nodeWorldBox(NODES_BY_ID[id], FIXED_POSITIONS[id].x, FIXED_POSITIONS[id].y, false, true, true),
+  );
   if (layout.extra) boxes.push(...layout.extra);
-  if (layout.thumbNodes) boxes.push(...layout.thumbNodes.map((id) => thumbBoxFrom(thumbParkTop(positions[id]).x, thumbParkTop(positions[id]).y)));
-  return focusBoxes(boxes, {maxScale: layout.maxScale, height: layout.height});
+  if (layout.thumbNodes) {
+    boxes.push(
+      ...layout.thumbNodes.map((id) => {
+        const park = thumbParkTop(FIXED_POSITIONS[id]);
+        return thumbBoxFrom(park.x, park.y);
+      }),
+    );
+  }
+  const xs = ids.map((id) => FIXED_POSITIONS[id].x);
+  const rowCenter = (Math.min(...xs) + Math.max(...xs)) / 2;
+  return focusBoxes(boxes, {maxScale: layout.maxScale, height: layout.height}, rowCenter);
 };
 
-const CAMS = LAYOUTS.map((layout) => ({at: layout.at, cam: cameraForLayout(layout), move: layout.move ?? 26}));
+const CAMS = LAYOUTS.map((layout) => ({at: layout.at, cam: cameraForLayout(layout), move: layout.move ?? 30}));
+
+const lerpCamera = (a: Camera, b: Camera, t: number): Camera => ({
+  cx: lerp(a.cx, b.cx, t),
+  cy: lerp(a.cy, b.cy, t),
+  scale: lerp(a.scale, b.scale, t),
+});
+
+const cameraAt = (f: number): Camera => {
+  let index = 0;
+  for (let i = 0; i < CAMS.length; i += 1) {
+    if (f >= CAMS[i].at) index = i;
+    else break;
+  }
+  const from = CAMS[index];
+  const to = CAMS[index + 1];
+  if (!to) return from.cam;
+  const span = Math.max(1, to.at - from.at);
+  const move = Math.min(to.move, span);
+  const start = to.at - move;
+  if (f > start) return lerpCamera(from.cam, to.cam, glide(f, start, to.at));
+  return from.cam;
+};
 
 const layoutAt = (f: number) => {
   let index = 0;
@@ -456,91 +535,10 @@ const layoutAt = (f: number) => {
     if (f >= LAYOUTS[i].at) index = i;
     else break;
   }
-  const current = LAYOUTS[index];
-  const next = LAYOUTS[index + 1];
-  let previous = current;
-  let target = current;
-  let t = 1;
-  if (next) {
-    const move = next.move ?? 26;
-    if (f > next.at - move) {
-      previous = current;
-      target = next;
-      t = glide(f, next.at - move, next.at);
-    }
-  }
-  const previousPositions = positionsOf(previous);
-  const targetPositions = positionsOf(target);
-  const positions: Partial<Record<NodeId, Pt>> = {};
-  const presence: Partial<Record<NodeId, number>> = {};
-  const ids = new Set<NodeId>([...idsOf(previous), ...idsOf(target)]);
-  ids.forEach((id) => {
-    const from = previousPositions[id];
-    const to = targetPositions[id];
-    if (from && to) {
-      positions[id] = lerpPt(from, to, t);
-      presence[id] = 1;
-    } else if (to) {
-      positions[id] = to;
-      presence[id] = t;
-    } else if (from) {
-      positions[id] = from;
-      presence[id] = 1 - t;
-    }
-  });
-  return {positions: positions as Record<NodeId, Pt>, presence: presence as Record<NodeId, number>, current, target, t};
+  return {positions: FIXED_POSITIONS, presence: FIXED_PRESENCE, current: LAYOUTS[index]};
 };
 
-const cameraAt = (f: number): Camera => {
-  const state = layoutAt(f);
-  const wide = state.t < 0.5 ? (state.current.wide ?? false) : (state.target.wide ?? false);
-  const boxes: Box[] = [];
-  let rowMinX = Number.POSITIVE_INFINITY;
-  let rowMaxX = Number.NEGATIVE_INFINITY;
-  for (const id of Object.keys(state.positions) as NodeId[]) {
-    const pos = state.positions[id];
-    const show = state.presence[id] ?? 0;
-    if (!pos || show <= 0.01) continue;
-    const nodeState = stateAt(f, NODES_BY_ID[id].keys);
-    if (nodeState.state === 'hidden') continue;
-    rowMinX = Math.min(rowMinX, pos.x);
-    rowMaxX = Math.max(rowMaxX, pos.x);
-    boxes.push(nodeWorldBox(NODES_BY_ID[id], pos.x, pos.y, wide, true, !wide));
-  }
-  const grow = (box: Box, amount: number): Box => {
-    const cx = (box.x1 + box.x2) / 2;
-    const cy = (box.y1 + box.y2) / 2;
-    return {
-      x1: cx + (box.x1 - cx) * amount,
-      y1: cy + (box.y1 - cy) * amount,
-      x2: cx + (box.x2 - cx) * amount,
-      y2: cy + (box.y2 - cy) * amount,
-    };
-  };
-  if (state.current.extra && state.current.extra === state.target.extra) {
-    boxes.push(...state.current.extra);
-  } else {
-    if (state.current.extra && 1 - state.t > 0.001) {
-      boxes.push(...state.current.extra.map((box) => grow(box, 1 - state.t)));
-    }
-    if (state.target.extra && state.t > 0.001) {
-      boxes.push(...state.target.extra.map((box) => grow(box, state.t)));
-    }
-  }
-  if (wide) boxes.push(WIDE_OUTLINE_BOX, TF_LABEL_BOX);
-  const thumb = thumbStateAt(f);
-  if (thumb.opacity > 0.02 && thumb.box.x2 > thumb.box.x1) boxes.push(thumb.box);
-  if (boxes.length === 0) return camera(0, 0, 1);
-  const rowCenter = Number.isFinite(rowMinX) ? (rowMinX + rowMaxX) / 2 : undefined;
-  return focusBoxes(
-    boxes,
-    {
-      maxScale: Math.min(state.current.maxScale ?? 1.55, state.target.maxScale ?? 1.55),
-      height: Math.min(state.current.height ?? 0.74, state.target.height ?? 0.74),
-    },
-    rowCenter,
-  );
-};
+const focusIdsAt = (f: number): NodeId[] => layoutAt(f).current.ids ?? ALL_NODE_IDS;
 
 const isWide = (f: number) => f >= CUE('7d').start - 4;
 
@@ -556,26 +554,6 @@ const glowOf = (f: number, keys: StateKey[]) => {
   const t = s.prev ? glide(f, s.at, s.at + 10) : 1;
   return from + (value[s.state] - from) * t;
 };
-
-const linkControl = (path: PathSpec): Pt => {
-  if (path.control) return path.control;
-  const dx = path.to.x - path.from.x;
-  const dy = path.to.y - path.from.y;
-  const len = Math.hypot(dx, dy) || 1;
-  const bend = path.bend ?? 0;
-  return {x: (path.from.x + path.to.x) / 2 + (-dy / len) * bend, y: (path.from.y + path.to.y) / 2 + (dx / len) * bend};
-};
-
-const pathPointsOf = (path: PathSpec, count = 24): Pt[] => {
-  const control = linkControl(path);
-  return Array.from({length: count + 1}, (_, index) => bez(path.from, control, path.to, index / count));
-};
-
-const browserStoragePath = (browser: Pt, storage: Pt): PathSpec => ({
-  from: {x: browser.x + 42, y: browser.y - 40},
-  to: {x: storage.x - 42, y: storage.y - 40},
-  bend: -170,
-});
 
 const autoPath = (a: Pt, b: Pt, gap = 88): PathSpec => {
   const dx = b.x - a.x;
@@ -781,12 +759,31 @@ const FFPROBE_STACK = 42;
 
 type CardId = 'readout' | 'refunded' | 'status' | 'clock' | 'credit';
 
-const CARD_SIZE: Record<CardId, {w: number; h: number}> = {
-  readout: {w: 700, h: 112},
-  refunded: {w: 320, h: 96},
-  status: {w: 360, h: 104},
-  clock: {w: 560, h: 130},
-  credit: {w: 560, h: 210},
+const CARD_HEIGHT: Record<CardId, number> = {
+  readout: 112,
+  refunded: 96,
+  status: 104,
+  clock: 130,
+  credit: 210,
+};
+
+const cardSize = (id: CardId): {w: number; h: number} => {
+  let content = 0;
+  if (id === 'readout') {
+    content = textWidth('length 0:44', 48, 400) + 12 + 48 + 30 + textWidth('price', 48, 400) + 12 + 48;
+  } else if (id === 'refunded') {
+    content = 38 + 14 + textWidth('refunded', 44, 400);
+  } else if (id === 'status') {
+    content = 14 + 14 + textWidth('0 running', 48, 600);
+  } else if (id === 'clock') {
+    content = 44 + 16 + textWidth('a few minutes to start', 42, 400);
+  } else {
+    content = Math.max(
+      textWidth('credit balance', 44, 600) + 28 + textWidth('held', 44, 600),
+      34 + 12 + textWidth('hold returned', 40, 400),
+    );
+  }
+  return {w: Math.ceil(content) + 64, h: CARD_HEIGHT[id]};
 };
 
 const CARD_NODE: Record<CardId, NodeId> = {
@@ -815,7 +812,7 @@ const CARD_OPACITY: Record<CardId, (f: number) => number> = {
 
 type CardSpec = {id: CardId; box: Box; opacity: number};
 
-const placeCard = (anchor: Box, w: number, h: number, taken: Box[]): Box => {
+const placeCard = (anchor: Box, w: number, h: number, taken: Box[], belowOnly = false): Box => {
   const cx = (anchor.x1 + anchor.x2) / 2;
   const left = (boxLeft: number) => Math.max(SAFE, Math.min(boxLeft, 1920 - SAFE - w));
   const boxLeft = left(cx - w / 2);
@@ -826,6 +823,7 @@ const placeCard = (anchor: Box, w: number, h: number, taken: Box[]): Box => {
   const belowFits = below.y2 <= 1080 - SAFE;
   const aboveFits = aboveTop >= SAFE;
   if (belowFits && !blocked(below)) return below;
+  if (belowOnly) return below;
   if (aboveFits && !blocked(above)) return above;
   if (aboveFits) return above;
   return below;
@@ -841,7 +839,6 @@ const takenBoxesAt = (f: number, cam: Camera): Box[] => {
 const cardSpecsAt = (f: number): CardSpec[] => {
   const {positions} = layoutAt(f);
   const cam = cameraAt(f);
-  const wide = isWide(f);
   const taken = takenBoxesAt(f, cam);
   const specs: CardSpec[] = [];
   for (const id of CARD_ORDER) {
@@ -852,12 +849,13 @@ const cardSpecsAt = (f: number): CardSpec[] => {
     const pos = positions[nodeId];
     if (!def || !pos) continue;
     const reservePurpose = id !== 'clock';
-    let world = nodeWorldBox(def, pos.x, pos.y, wide, true, reservePurpose);
+    let world = nodeWorldBox(def, pos.x, pos.y, false, true, reservePurpose);
     if (id === 'readout' && ffprobeOpacity(f) > 0.02) {
       world = {...world, y2: world.y2 + FFPROBE_STACK};
     }
-    const size = CARD_SIZE[id];
-    specs.push({id, box: placeCard(screenBox(world, cam), size.w, size.h, taken), opacity});
+    const size = cardSize(id);
+    const belowOnly = id === 'readout' || id === 'credit';
+    specs.push({id, box: placeCard(screenBox(world, cam), size.w, size.h, taken, belowOnly), opacity});
   }
   return specs;
 };
@@ -1167,19 +1165,36 @@ const RingBadge: React.FC<{pos: Pt; kind: 'cross' | 'retry'; opacity: number}> =
 
 const RetryLoop: React.FC<{f: number; gpu: Pt; opacity: number}> = ({f, gpu, opacity}) => {
   if (opacity <= 0.001) return null;
-  const x = gpu.x;
-  const y = gpu.y;
-  const tip = {x: x + 78, y: y + 52};
+  const radius = 78;
+  const at = (degrees: number) => {
+    const radians = (degrees * Math.PI) / 180;
+    return {x: gpu.x + radius * Math.cos(radians), y: gpu.y + radius * Math.sin(radians)};
+  };
+  const start = at(15);
+  const end = at(-75);
+  const endRadians = (-75 * Math.PI) / 180;
+  const arrow = (Math.atan2(Math.cos(endRadians), -Math.sin(endRadians)) * 180) / Math.PI;
+  const size = 16;
+  const a = (arrow * Math.PI) / 180;
+  const p1 = {x: end.x - size * Math.cos(a - 0.42), y: end.y - size * Math.sin(a - 0.42)};
+  const p2 = {x: end.x - size * Math.cos(a + 0.42), y: end.y - size * Math.sin(a + 0.42)};
   return (
     <svg width={1} height={1} style={{position: 'absolute', left: 0, top: 0, overflow: 'visible', opacity}}>
       <path
-        d={`M ${x + 74} ${y - 64} C ${x + 196} ${y - 150}, ${x + 196} ${y + 150}, ${x + 78} ${y + 54}`}
+        d={`M ${start.x} ${start.y} A ${radius} ${radius} 0 1 1 ${end.x} ${end.y}`}
         fill="none"
         stroke={C.hot}
         strokeWidth={5}
         strokeLinecap="round"
       />
-      <path d={`M ${tip.x - 18} ${tip.y - 2} L ${tip.x} ${tip.y} L ${tip.x - 4} ${tip.y - 18}`} fill="none" stroke={C.hot} strokeWidth={5} strokeLinecap="round" strokeLinejoin="round" />
+      <path
+        d={`M ${p1.x} ${p1.y} L ${end.x} ${end.y} L ${p2.x} ${p2.y}`}
+        fill="none"
+        stroke={C.hot}
+        strokeWidth={5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 };
@@ -1303,6 +1318,8 @@ const DuplicateJobs: React.FC<{f: number; gpu: Pt}> = ({f, gpu}) => {
 const GpuPanel: React.FC<{f: number; gpu: Pt}> = ({f, gpu}) => {
   const opacity =
     ease(f, CUE('6').start, CUE('6').start + 24) * (1 - ease(f, CUE('7a').start - 10, CUE('7a').start + 6));
+  const pulseStart = CUE('6', 1).start + 8;
+  const pulse = Math.sin(Math.PI * clamp((f - pulseStart) / 36));
   if (opacity <= 0.001) return null;
   return (
     <div
@@ -1340,8 +1357,42 @@ const GpuPanel: React.FC<{f: number; gpu: Pt}> = ({f, gpu}) => {
           {icon: 'muted' as const, label: 'muted'},
         ].map((copy) => (
           <div key={copy.label} style={{display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12}}>
-            <div style={{width: 210, height: 373, borderRadius: 16, overflow: 'hidden', border: '1.5px solid rgba(255,255,255,.24)', boxSizing: 'border-box'}}>
-              <Img src={staticFile(CLIP_SRC)} style={{width: '100%', height: '100%', objectFit: 'cover', display: 'block'}} />
+            <div
+              style={{
+                position: 'relative',
+                width: 210,
+                height: 373,
+                borderRadius: 16,
+                overflow: 'hidden',
+                border: '1.5px solid rgba(255,255,255,.24)',
+                boxSizing: 'border-box',
+                background: '#000',
+              }}
+            >
+              <Sequence from={CUE('6').start} layout="none">
+                <OffthreadVideo
+                  src={staticFile(CLIP_VIDEO_SRC)}
+                  muted
+                  style={{width: '100%', height: '100%', objectFit: 'cover', display: 'block'}}
+                />
+              </Sequence>
+              {copy.icon === 'muted' && pulse > 0.01 ? (
+                <div
+                  style={{
+                    position: 'absolute',
+                    inset: 0,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    background: 'rgba(0,0,0,.28)',
+                    opacity: pulse,
+                  }}
+                >
+                  <span style={{color: C.hot, display: 'inline-flex', transform: `scale(${1 + 0.18 * pulse})`}}>
+                    <Icon name="muted" size={96} />
+                  </span>
+                </div>
+              ) : null}
             </div>
             <div style={{display: 'flex', alignItems: 'center', gap: 10, fontSize: 32, fontWeight: 500, color: '#C6CCD4'}}>
               <span style={{color: C.hot, display: 'inline-flex'}}><Icon name={copy.icon} size={32} /></span>
@@ -1357,7 +1408,7 @@ const GpuPanel: React.FC<{f: number; gpu: Pt}> = ({f, gpu}) => {
 const ProgressRing: React.FC<{f: number; gpu: Pt}> = ({f, gpu}) => {
   const opacity = ease(f, CUE('5b').start + 2, CUE('5b').start + 14) * (1 - ease(f, CUE('5c').start - 8, CUE('5c').start + 4));
   if (opacity <= 0.001) return null;
-  const progress = ease(f, CUE('5b').start + 10, CUE('5b').start + 80);
+  const progress = glide(f, CUE('5b').start + 10, CUE('5c').start - 12);
   const r = 70;
   const circumference = 2 * Math.PI * r;
   return (
@@ -1446,18 +1497,21 @@ export const STILLS = [
 const labelItemsAt = (f: number, textOnly: boolean) => {
   const {positions, presence} = layoutAt(f);
   const cam = cameraAt(f);
-  const wide = isWide(f);
+  const focus = new Set(focusIdsAt(f));
   const labels: {label: string; box: Box}[] = [];
   for (const def of NODES) {
+    if (!focus.has(def.id)) continue;
     const pos = positions[def.id];
     const show = presence[def.id] ?? 0;
     if (!pos || show <= 0.02) continue;
     const state = stateAt(f, def.keys);
     if (state.state === 'hidden') continue;
     const purpose = state.state === 'lit';
+    const full = screenBox(nodeWorldBox(def, pos.x, pos.y, false, true, purpose), cam);
+    if (crossesSafeArea(full)) continue;
     const worldBox = textOnly
-      ? nodeLabelBox(def, pos.x, pos.y, wide, true, purpose)
-      : nodeWorldBox(def, pos.x, pos.y, wide, true, purpose);
+      ? nodeLabelBox(def, pos.x, pos.y, false, true, purpose)
+      : nodeWorldBox(def, pos.x, pos.y, false, true, purpose);
     labels.push({label: def.label, box: screenBox(worldBox, cam)});
   }
   return labels;
@@ -1518,8 +1572,9 @@ export const runSafeAreaCheck = () => {
     }
 
     const thumb = thumbStateAt(f);
-    if (thumb.opacity > 0.02) {
-      const box = screenBox(thumb.box, cam);
+    const thumbScreen = thumb.opacity > 0.02 ? screenBox(thumb.box, cam) : null;
+    if (thumbScreen) {
+      const box = thumbScreen;
       if (crossesSafeArea(box)) fail('thumbnail crosses the safe area');
       const worldBox = {x1: thumb.box.x1 - 6, y1: thumb.box.y1 - 6, x2: thumb.box.x2 + 6, y2: thumb.box.y2 + 6};
       for (const link of linksAt(f)) {
@@ -1540,8 +1595,18 @@ export const runSafeAreaCheck = () => {
 
     for (const card of cardSpecsAt(f)) {
       if (card.opacity <= 0.02) continue;
-      if (crossesSafeArea(card.box)) fail(`${card.id} card crosses the safe area`);
+      if (crossesSafeArea(card.box)) {
+        fail(
+          `${card.id} card ${Math.round(card.box.x1)},${Math.round(card.box.y1)} - ${Math.round(card.box.x2)},${Math.round(card.box.y2)} crosses the safe area (cam ${cam.cx.toFixed(1)}, ${cam.cy.toFixed(1)}, ${cam.scale.toFixed(2)})`,
+        );
+      }
+      if (thumbScreen && overlaps(card.box, thumbScreen)) fail(`${card.id} card overlaps the thumbnail`);
       for (const label of labelText) if (overlaps(card.box, label.box)) fail(`${card.id} card overlaps ${label.label} label`);
+    }
+
+    if (presignedOpacity(f) > 0.02) {
+      const gap = (PRESIGN.top.y - (PRESIGN.y + PRESIGN_H / 2)) * cam.scale;
+      if (gap < 16) fail(`presigned URL sits ${gap.toFixed(1)}px above the arc (need 16px)`);
     }
 
     if (isWide(f)) {
@@ -1555,11 +1620,32 @@ export const runSafeAreaCheck = () => {
   else console.info(`[v6 safe-area] ${SAFE_SAMPLES.length}/${SAFE_SAMPLES.length} samples OK`);
 };
 
+export const runNodeStabilityCheck = () => {
+  let failed = 0;
+  for (let f = 0; f < DURATION; f += 1) {
+    const positions = layoutAt(f).positions;
+    for (const id of ALL_NODE_IDS) {
+      const here = positions[id];
+      const fixed = FIXED_POSITIONS[id];
+      if (!here || Math.abs(here.x - fixed.x) > 0.001 || Math.abs(here.y - fixed.y) > 0.001) {
+        failed += 1;
+        console.warn(`[v6 node-stability] ${id} moved at frame ${f}`);
+        break;
+      }
+    }
+  }
+  if (failed > 0) console.warn(`[v6 node-stability] ${failed}/${DURATION} frames failed`);
+  else console.info(`[v6 node-stability] ${DURATION}/${DURATION} frames OK`);
+};
+
 let checkQueued = false;
 const queueSafeAreaCheck = () => {
   if (checkQueued || typeof window === 'undefined') return;
   checkQueued = true;
-  const run = () => runSafeAreaCheck();
+  const run = () => {
+    runSafeAreaCheck();
+    runNodeStabilityCheck();
+  };
   if (document.fonts?.ready) document.fonts.ready.then(run).catch(run);
   else run();
 };
@@ -1569,7 +1655,6 @@ export const WalkthroughV6Diagram: React.FC = () => {
   queueSafeAreaCheck();
   const {positions, presence} = layoutAt(f);
   const cam = cameraAt(f);
-  const wide = isWide(f);
   const links = linksAt(f);
   const thumb = thumbStateAt(f);
   const badge4r = badge4rOpacity(f);
@@ -1580,16 +1665,9 @@ export const WalkthroughV6Diagram: React.FC = () => {
   const dead = positions.dead;
   const cards = cardSpecsAt(f);
   const checkBottom = check
-    ? nodeWorldBox(NODES_BY_ID.check, check.x, check.y, wide, true, true).y2
+    ? nodeWorldBox(NODES_BY_ID.check, check.x, check.y, false, true, true).y2
     : 0;
   const ffprobe = ffprobeOpacity(f);
-  const browser = positions.browser;
-  const storage = positions.storage;
-  let presign: Pt | null = null;
-  if (browser && storage) {
-    const path = browserStoragePath(browser, storage);
-    presign = bez(path.from, linkControl(path), path.to, 0.5);
-  }
 
   return (
     <AbsoluteFill style={{background: '#0B0C0F'}}>
@@ -1634,7 +1712,7 @@ export const WalkthroughV6Diagram: React.FC = () => {
           const state = stateAt(f, def.keys);
           if (state.state === 'hidden') return null;
           const purposeOn = state.state === 'lit' ? clamp((glowOf(f, def.keys) - 0.45) / 0.55) : 0;
-          const worldBox = nodeWorldBox(def, pos.x, pos.y, wide, true, purposeOn > 0.01);
+          const worldBox = nodeWorldBox(def, pos.x, pos.y, false, true, purposeOn > 0.01);
           const screen = screenBox(worldBox, cam);
           const safe = show * clamp(Math.min(screen.x1 - SAFE, 1920 - SAFE - screen.x2, screen.y1 - SAFE, 1080 - SAFE - screen.y2) / 40);
           return (
@@ -1650,7 +1728,7 @@ export const WalkthroughV6Diagram: React.FC = () => {
               stateAt={state.at}
               prev={state.prev}
               appear={def.appear}
-              wide={wide}
+              wide={false}
               serviceOpacity={1}
               purposeOpacity={purposeOn}
               safe={safe}
@@ -1661,15 +1739,7 @@ export const WalkthroughV6Diagram: React.FC = () => {
         {check && ffprobe > 0.001 ? (
           <MonoCaption text="ffprobe" x={check.x} y={checkBottom + 22} opacity={ffprobe} />
         ) : null}
-        {presign ? (
-          <MonoCaption
-            text="presigned URL"
-            x={presign.x}
-            y={presign.y - 16}
-            opacity={presignedOpacity(f)}
-            pill
-          />
-        ) : null}
+        <MonoCaption text="presigned URL" x={PRESIGN.x} y={PRESIGN.y} opacity={presignedOpacity(f)} pill />
         {check ? <BadFile f={f} check={check} /> : null}
         {check && gpu ? <JobArrival f={f} check={check} gpu={gpu} /> : null}
         {gpu && dead ? <FailureJob f={f} gpu={gpu} dead={dead} /> : null}

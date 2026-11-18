@@ -194,8 +194,8 @@ const IconArt: Record<IconName, React.ReactNode> = {
   cross: <path d="M18 18l28 28M46 18L18 46" />,
   retry: (
     <>
-      <path d="M52 30a20 20 0 1 1-6-14" />
-      <path d="M52 12v18H34" />
+      <path d="M54.64 40a24 24 0 1 1-5.65-24.96L61.33 26.67" />
+      <path d="M61.33 10.67v16h-16" />
     </>
   ),
 };
@@ -298,7 +298,6 @@ export const Node: React.FC<NodeProps> = ({
         alignItems: 'center',
         fontFamily,
         opacity,
-        transform: `translateY(${(1 - rise) * 20}px)`,
       }}
     >
       <div style={{position: 'relative', width: 128, height: 128}}>

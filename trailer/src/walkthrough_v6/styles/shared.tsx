@@ -3,7 +3,8 @@ import {Easing, Img, interpolate, staticFile} from 'remotion';
 
 export type Pt = {x: number; y: number};
 
-export const CLIP_SRC = 'walkthrough/swee/frames/f15.jpg';
+export const CLIP_SRC = 'walkthrough/swee/frames/f0.jpg';
+export const CLIP_VIDEO_SRC = 'walkthrough/swee/tiktok_ZSg5soxrR.mp4';
 
 export const ClipArt: React.FC<{
   width: number;
