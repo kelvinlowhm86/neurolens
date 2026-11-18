@@ -122,16 +122,15 @@ const focus = (boxes: Box[], options: FocusOptions = {}): Camera => {
 const COUNTER = {x: P.gpu.x + 150, y: P.gpu.y - 118};
 const READOUT = {left: 1180, top: 920, width: 760, height: 108};
 const CLOCK = {left: 1560, top: 460, width: 660, height: 220};
-const JOBS = {left: 1740, top: 995, width: 1020, height: 140};
+const JOB_LANE_Y = 1025;
+const FIRST_JOB_X = 1850;
+const SECOND_JOB_START = 3120;
+const SECOND_JOB_HIT = 2360;
+const SECOND_JOB_BOUNCE = 2520;
+const STAMP = {x: 2110, y: JOB_LANE_Y, width: 280, height: 120};
+const JOBS = {left: 1710, top: 945, width: 600, height: 150};
 const CREDIT = {left: 1220, top: 300, width: 620, height: 248};
 const CREDIT_BAR = 552;
-
-const JOB_LANE_Y = 1055;
-const FIRST_JOB_X = 1840;
-const SECOND_JOB_START = 3200;
-const SECOND_JOB_HIT = 2560;
-const SECOND_JOB_BOUNCE = 2720;
-const STAMP = {x: 2320, y: 1055, width: 280, height: 120};
 
 const makeShot = (at: number, boxes: Box[], options: FocusOptions = {}, move?: number): Shot => ({
   at,
@@ -166,7 +165,14 @@ const CAMS: Shot[] = [
     [nodeBox(P.queue), nodeBox(P.check), nodeBox(P.gpu), propBox(COUNTER.x - 170, COUNTER.y - 60, 340, 120)],
     {primary: P.gpu},
   ),
-  makeShot(CUE('5c').start, [nodeBox(P.website), nodeBox(P.database)], {primary: {x: P.website.x, y: 905}}),
+  makeShot(
+    CUE('5c').start,
+    [
+      {x1: P.website.x - 190, y1: P.website.y - 64, x2: P.website.x + 190, y2: P.website.y + 192},
+      {x1: P.database.x - 190, y1: P.database.y - 64, x2: P.database.x + 190, y2: P.database.y + 236},
+    ],
+    {primary: P.database, bias: 0.7},
+  ),
   makeShot(
     CUE('5d').start,
     [nodeBox(P.queue), nodeBox(P.check), nodeBox(P.gpu), propBox(CLOCK.left, CLOCK.top, CLOCK.width, CLOCK.height)],
@@ -181,14 +187,14 @@ const CAMS: Shot[] = [
       propBox(JOBS.left, JOBS.top, JOBS.width, JOBS.height),
       propBox(STAMP.x - STAMP.width / 2, STAMP.y - STAMP.height / 2, STAMP.width, STAMP.height),
     ],
-    {primary: {x: 2050, y: 900}},
+    {primary: {x: P.gpu.x, y: 900}, maxScale: 1.14},
     36,
   ),
   makeShot(
     CUE('7c').start,
     [nodeBox(P.check), nodeBox(P.gpu), nodeBox(P.watchdog), nodeBox(P.dead)],
     {primary: P.gpu, bias: 0.4},
-    36,
+    56,
   ),
   makeShot(CUE('7d').start, Object.values(P).map(nodeBox), WIDE, 40),
   makeShot(CUE('7e').start, Object.values(P).map(nodeBox), WIDE),
@@ -258,8 +264,7 @@ const WEBSITE: StateKey[] = [
   {at: CUE('3c').start + 74, state: 'dim'},
   {at: CUE('5c').start + 6, state: 'lit'},
   {at: CUE('5c').start + 66, state: 'idle'},
-  {at: CUE('5c', 1).start + 4, state: 'lit'},
-  {at: CUE('5c', 1).start + 62, state: 'dim'},
+  {at: CUE('5c', 1).start + 4, state: 'dim'},
 ];
 
 const STORAGE: StateKey[] = [
@@ -289,16 +294,15 @@ const GPU: StateKey[] = [
   {at: CUE('5d').start, state: 'idle'},
   {at: CUE('6').start, state: 'lit'},
   {at: CUE('7a', 1).start, state: 'off'},
+  {at: CUE('7b').start, state: 'idle'},
   {at: CUE('7c').start, state: 'lit'},
   {at: CUE('7c').start + 54, state: 'off'},
 ];
 
 const DATABASE: StateKey[] = [
   {at: CUE('5c').start, state: 'idle'},
-  {at: CUE('5c').start + 38, state: 'lit'},
-  {at: CUE('5c').start + 108, state: 'idle'},
-  {at: CUE('5c', 1).start + 4, state: 'lit'},
-  {at: CUE('5c', 1).start + 64, state: 'dim'},
+  {at: CUE('5c').start + 34, state: 'lit'},
+  {at: CUE('5d').start, state: 'idle'},
 ];
 
 const WATCHDOG: StateKey[] = [
@@ -315,6 +319,20 @@ const DEAD: StateKey[] = [
 
 const KEY_BASE = CUE('7f').start;
 const WIDE_LEAD = 40;
+
+const PURPOSE_SPANS: {from: number; to: number; id: string}[] = [
+  {from: CUE('4').start, to: CUE('5a').start, id: 'check'},
+  {from: CUE('5a').start, to: CUE('5c').start, id: 'gpu'},
+  {from: CUE('5c').start, to: CUE('5d').start, id: 'database'},
+  {from: CUE('5d').start, to: CUE('6').start, id: 'gpu'},
+];
+
+const purposeOpacityAt = (f: number, id: string, serviceOpacity: number) => {
+  const span = PURPOSE_SPANS.find((s) => f >= s.from && f < s.to);
+  if (!span) return serviceOpacity;
+  if (span.id !== id) return 0;
+  return ease(f, span.from + 4, span.from + 16) * (1 - ease(f, span.to - 10, span.to));
+};
 
 type NodeDef = {
   id: string;
@@ -358,12 +376,13 @@ const nodeWorldBox = (
   x: number,
   wide: boolean,
   serviceShown: boolean,
+  purposeShown: boolean,
   keyShown: boolean,
 ): Box => {
   const labelSize = wide ? 64 : 58;
   const labelW = textWidth(def.label, labelSize, wide ? 700 : 600);
   const serviceW = serviceShown ? textWidth(def.service, 42, 400, 0.04) : 0;
-  const purposeW = serviceShown ? textWidth(def.purpose, 34, 400) : 0;
+  const purposeW = purposeShown ? textWidth(def.purpose, 34, 400) : 0;
   const half = Math.max(64, labelW / 2, serviceW / 2, purposeW / 2, keyShown ? 83 : 0);
   return {
     x1: x - half,
@@ -372,7 +391,7 @@ const nodeWorldBox = (
     y2:
       def.y - 64 + 128 + 16 + labelSize +
       (serviceShown && def.service ? 12 + 42 : 0) +
-      (serviceShown && def.purpose ? 10 + 34 : 0),
+      (purposeShown && def.purpose ? 10 + 34 : 0),
   };
 };
 
@@ -428,10 +447,27 @@ export const STILLS = [
   {row: '7f', frame: 3269},
 ];
 
+const SAFE_SAMPLES = (() => {
+  const frames = new Map<number, string>();
+  for (const still of STILLS) frames.set(still.frame, still.row);
+  for (let i = 1; i < CAMS.length; i += 1) {
+    const at = CAMS[i].at;
+    const move = CAMS[i].move ?? 26;
+    for (let k = 0; k <= 4; k += 1) {
+      const f = Math.round(at - move + (move * k) / 4);
+      if (f >= 0 && f < DURATION && !frames.has(f)) frames.set(f, `move ${Math.round((k * 100) / 4)}%`);
+    }
+  }
+  return [...frames.entries()].sort((a, b) => a[0] - b[0]).map(([frame, row]) => ({frame, row}));
+})();
+
+const crossesSafeArea = (box: Box) =>
+  box.x1 < SAFE || box.x2 > 1920 - SAFE || box.y1 < SAFE || box.y2 > 1080 - SAFE;
+
 export const runSafeAreaCheck = () => {
   let failed = 0;
-  for (const still of STILLS) {
-    const f = still.frame;
+  for (const sample of SAFE_SAMPLES) {
+    const f = sample.frame;
     const {cameraState, cam, wide, serviceOpacity, dx} = frameGeometry(f);
     let count = 0;
     let bad = 0;
@@ -440,31 +476,31 @@ export const runSafeAreaCheck = () => {
       const state = wide ? 'idle' : stateAt(f, def.keys).state;
       if (state === 'hidden' || f < def.appear) continue;
       const x = nodeX(def, dx);
+      const purposeOpacity = purposeOpacityAt(f, def.id, serviceOpacity);
       const box = screenBox(
-        nodeWorldBox(def, x, wide, serviceOpacity > 0.01, f >= def.keyAt),
+        nodeWorldBox(def, x, wide, serviceOpacity > 0.01, purposeOpacity > 0.01, f >= def.keyAt),
         cam,
       );
-      if (shotOpacity(cameraState, {x, y: def.y}) <= 0.02) continue;
+      const opacity = shotOpacity(cameraState, {x, y: def.y}) * safeOpacity(box);
+      if (opacity <= 0.02) continue;
       count += 1;
       labels.push({label: def.label, box});
-      if (box.x1 < SAFE || box.x2 > 1920 - SAFE || box.y1 < SAFE || box.y2 > 1080 - SAFE) {
+      if (crossesSafeArea(box)) {
         bad += 1;
         console.warn(
-          `[v6 safe-area] ${still.row} frame ${f}: ${def.label} box ${Math.round(box.x1)},${Math.round(box.y1)} - ${Math.round(box.x2)},${Math.round(box.y2)} crosses the ${SAFE}px safe area`,
+          `[v6 safe-area] ${sample.row} frame ${f}: ${def.label} box ${Math.round(box.x1)},${Math.round(box.y1)} - ${Math.round(box.x2)},${Math.round(box.y2)} crosses the ${SAFE}px safe area`,
         );
       }
     }
-    if (thumbOpacityAt(f) > 0.02) {
-      const box = screenBox(thumbBoxAt(f), cam);
-      const onScreen = box.x2 > 0 && box.x1 < 1920 && box.y2 > 0 && box.y1 < 1080;
-      if (onScreen) {
-        count += 1;
-        if (box.x1 < SAFE || box.x2 > 1920 - SAFE || box.y1 < SAFE || box.y2 > 1080 - SAFE) {
-          bad += 1;
-          console.warn(
-            `[v6 safe-area] ${still.row} frame ${f}: thumbnail box ${Math.round(box.x1)},${Math.round(box.y1)} - ${Math.round(box.x2)},${Math.round(box.y2)} crosses the ${SAFE}px safe area`,
-          );
-        }
+    const thumbBox = screenBox(thumbBoxAt(f), cam);
+    const thumbOpacity = thumbOpacityAt(f) * safeOpacity(thumbBox);
+    if (thumbOpacity > 0.02) {
+      count += 1;
+      if (crossesSafeArea(thumbBox)) {
+        bad += 1;
+        console.warn(
+          `[v6 safe-area] ${sample.row} frame ${f}: thumbnail box ${Math.round(thumbBox.x1)},${Math.round(thumbBox.y1)} - ${Math.round(thumbBox.x2)},${Math.round(thumbBox.y2)} crosses the ${SAFE}px safe area`,
+        );
       }
     }
     if (creditOpacityAt(f) > 0.02) {
@@ -473,16 +509,16 @@ export const runSafeAreaCheck = () => {
         if (item.box.x1 < card.x2 && item.box.x2 > card.x1 && item.box.y1 < card.y2 && item.box.y2 > card.y1) {
           bad += 1;
           console.warn(
-            `[v6 safe-area] ${still.row} frame ${f}: credit card overlaps ${item.label} (${Math.round(item.box.x1)},${Math.round(item.box.y1)} - ${Math.round(item.box.x2)},${Math.round(item.box.y2)})`,
+            `[v6 safe-area] ${sample.row} frame ${f}: credit card overlaps ${item.label} (${Math.round(item.box.x1)},${Math.round(item.box.y1)} - ${Math.round(item.box.x2)},${Math.round(item.box.y2)})`,
           );
         }
       }
     }
     if (bad > 0) failed += 1;
-    else console.info(`[v6 safe-area] ${still.row} frame ${f}: OK (${count} visible elements)`);
+    else console.info(`[v6 safe-area] ${sample.row} frame ${f}: OK (${count} visible elements)`);
   }
-  if (failed > 0) console.warn(`[v6 safe-area] ${failed}/${STILLS.length} stills failed`);
-  else console.info(`[v6 safe-area] ${STILLS.length}/${STILLS.length} stills OK`);
+  if (failed > 0) console.warn(`[v6 safe-area] ${failed}/${SAFE_SAMPLES.length} samples failed`);
+  else console.info(`[v6 safe-area] ${SAFE_SAMPLES.length}/${SAFE_SAMPLES.length} samples OK`);
 };
 
 let checkQueued = false;
@@ -830,8 +866,8 @@ const THUMB_STOPS = {
     control: {x: 700, y: 480},
   },
   queue: {
-    from: CUE('3c').start + 18,
-    to: CUE('3c').start + 66,
+    from: CUE('3c').start - 54,
+    to: CUE('3c').start + 6,
     at: {x: P.queue.x - 150, y: P.queue.y - 100},
     control: {x: 1050, y: 420},
   },
@@ -886,9 +922,9 @@ const thumbBoxAt = (f: number): Box => {
 const thumbOpacityAt = (f: number) =>
   glide(f, 10, 22) * (1 - ease(f, CUE('7b').start - 26, CUE('7b').start - 2));
 
-const JobThumb: React.FC<{f: number}> = ({f}) => {
+const JobThumb: React.FC<{f: number; cam: Camera}> = ({f, cam}) => {
   const at = thumbAt(f);
-  const opacity = thumbOpacityAt(f);
+  const opacity = thumbOpacityAt(f) * safeOpacity(screenBox(thumbBoxAt(f), cam));
   if (opacity <= 0.001) return null;
   const failed = ease(f, CUE('7a').start + 6, CUE('7a').start + 20);
   const accepted =
@@ -1067,7 +1103,7 @@ export const WalkthroughV6Diagram: React.FC = () => {
   const sceneOpacity = interpolate(
     f,
     [CUE('7e').start, CUE('7e').start + 34, CUE('7e').start + 60, CUE('7e').start + 122],
-    [1, 0.06, 0.06, 1],
+    [1, 0.6, 0.6, 1],
     {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'},
   );
 
@@ -1202,12 +1238,13 @@ export const WalkthroughV6Diagram: React.FC = () => {
             ) : null}
           </svg>
 
-          <JobThumb f={f} />
+          <JobThumb f={f} cam={cam} />
 
           {NODES.map((def) => {
             const x = nodeX(def, dx);
             const serviceShown = serviceOpacity > 0.01;
-            const box = nodeWorldBox(def, x, wide, serviceShown, f >= def.keyAt);
+            const purposeOpacity = purposeOpacityAt(f, def.id, serviceOpacity);
+            const box = nodeWorldBox(def, x, wide, serviceShown, purposeOpacity > 0.01, f >= def.keyAt);
             const visible =
               shotOpacity(cameraState, {x, y: def.y}) * safeOpacity(screenBox(box, cam));
             const state = nodeState(f, def.keys);
@@ -1229,6 +1266,7 @@ export const WalkthroughV6Diagram: React.FC = () => {
                 keySide={def.keySide}
                 wide={wide}
                 serviceOpacity={serviceOpacity}
+                purposeOpacity={purposeOpacity}
                 safe={visible}
               />
             );

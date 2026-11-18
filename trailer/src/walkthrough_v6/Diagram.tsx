@@ -239,6 +239,7 @@ type NodeProps = {
   wide?: boolean;
   showService?: boolean;
   serviceOpacity?: number;
+  purposeOpacity?: number;
   safe?: number;
 };
 
@@ -259,6 +260,7 @@ export const Node: React.FC<NodeProps> = ({
   wide = false,
   showService = true,
   serviceOpacity = 1,
+  purposeOpacity,
   safe = 1,
 }) => {
   const f = useCurrentFrame();
@@ -391,7 +393,7 @@ export const Node: React.FC<NodeProps> = ({
           {service}
         </div>
       ) : null}
-      {purpose && serviceOpacity > 0.01 ? (
+      {purpose && (purposeOpacity ?? serviceOpacity) > 0.01 ? (
         <div
           style={{
             marginTop: 10,
@@ -400,7 +402,7 @@ export const Node: React.FC<NodeProps> = ({
             lineHeight: 1,
             color: mix('#7E8894', '#BFA58E', glow * 0.7),
             whiteSpace: 'nowrap',
-            opacity: serviceOpacity,
+            opacity: purposeOpacity ?? serviceOpacity,
           }}
         >
           {purpose}
