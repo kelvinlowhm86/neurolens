@@ -1,5 +1,5 @@
 import React from 'react';
-import {AbsoluteFill, Easing, Img, OffthreadVideo, Sequence, interpolate, staticFile, useCurrentFrame} from 'remotion';
+import {AbsoluteFill, Easing, Img, interpolate, staticFile, useCurrentFrame} from 'remotion';
 import {C, fontFamily} from '../edit/ui';
 import {clamp, ease} from '../edit/anim';
 import {
@@ -15,12 +15,18 @@ import {
   StateKey,
   stateAt,
 } from './Diagram';
-import {bez, CLIP_SRC, CLIP_VIDEO_SRC, MONO} from './styles/shared';
+import {bez, CLIP_SRC, MONO} from './styles/shared';
+import envelope from './sound_envelope.json';
 
 const RATE = 2.6;
 const HOLD = 0.5;
 const FPS = 30;
 const SAFE = 80;
+
+const WAVE: number[] = (envelope as {samples: number[]}).samples;
+const CLIP_FRAMES = ['f0', 'f5', 'f15', 'f25', 'f35'].map(
+  (name) => `walkthrough/swee/frames/${name}.jpg`,
+);
 
 const LINES: [string, string][] = [
   [
@@ -106,6 +112,8 @@ const WEBSITE: StateKey[] = [
   {at: 0, state: 'dim'},
   {at: CUE('3c').start, state: 'lit'},
   {at: CUE('3d').start, state: 'dim'},
+  {at: beat('3d', 0.36), state: 'lit'},
+  {at: beat('3d', 0.52), state: 'dim'},
   {at: CUE('5c').start, state: 'lit'},
   {at: beat('5c', 0.55), state: 'idle'},
 ];
@@ -120,6 +128,8 @@ const QUEUE: StateKey[] = [
   {at: CUE('3c').start, state: 'idle'},
   {at: beat('3c', 0.22), state: 'lit'},
   {at: beat('3c', 0.62), state: 'idle'},
+  {at: beat('3d', 0.62), state: 'lit'},
+  {at: beat('3d', 0.78), state: 'idle'},
   {at: CUE('4').start, state: 'lit'},
   {at: beat('4', 0.3), state: 'idle'},
   {at: CUE('5a').start, state: 'lit'},
@@ -274,16 +284,6 @@ const thumbParkTop = (pos: Pt): Pt => ({
   y: pos.y - 64 - THUMB_GAP - THUMB_H,
 });
 
-const THUMB_BELOW_LABEL: NodeId[] = ['storage'];
-
-const thumbDockTop = (id: NodeId, pos: Pt): Pt => {
-  if (THUMB_BELOW_LABEL.includes(id)) {
-    const stack = nodeWorldBox(NODES_BY_ID[id], pos.x, pos.y, false, true, true);
-    return {x: pos.x - THUMB_W / 2, y: stack.y2 + THUMB_GAP};
-  }
-  return thumbParkTop(pos);
-};
-
 const thumbBoxFrom = (left: number, top: number): Box => ({
   x1: left,
   y1: top,
@@ -294,6 +294,7 @@ const thumbBoxFrom = (left: number, top: number): Box => ({
 const ROW_Y = 0;
 const ROW_GAP = 360;
 const OFF_ROW = 540;
+const STORAGE_ROW = 380;
 
 const MAIN_ROW: NodeId[] = ['browser', 'website', 'queue', 'check', 'gpu', 'dead'];
 const ALL_NODE_IDS: NodeId[] = [...MAIN_ROW, 'storage', 'database', 'watchdog'];
@@ -303,7 +304,7 @@ const FIXED_POSITIONS: Record<NodeId, Pt> = (() => {
   MAIN_ROW.forEach((id, index) => {
     positions[id] = {x: (index - (MAIN_ROW.length - 1) / 2) * ROW_GAP, y: ROW_Y};
   });
-  positions.storage = {x: (positions.browser.x + positions.website.x) / 2, y: -OFF_ROW};
+  positions.storage = {x: (positions.browser.x + positions.website.x) / 2, y: -STORAGE_ROW};
   positions.database = {x: positions.website.x, y: OFF_ROW};
   positions.watchdog = {x: positions.gpu.x, y: -OFF_ROW};
   return positions;
@@ -318,19 +319,6 @@ const radiusBox = (x: number, y: number, rx: number, ry: number): Box => ({
   y2: y + ry,
 });
 
-const thumbTravelExtra = (a: Pt, b: Pt): Box => {
-  const control = {x: (a.x + b.x) / 2, y: Math.min(a.y, b.y) - 60};
-  const points = Array.from({length: 65}, (_, index) => bez(a, control, b, index / 64));
-  const xs = points.map((point) => point.x);
-  const ys = points.map((point) => point.y);
-  return {
-    x1: Math.min(...xs),
-    y1: Math.min(...ys),
-    x2: Math.max(...xs) + THUMB_W,
-    y2: Math.max(...ys) + THUMB_H,
-  };
-};
-
 type Layout = {
   at: number;
   ids?: NodeId[];
@@ -338,7 +326,9 @@ type Layout = {
   extra?: Box[];
   thumbNodes?: NodeId[];
   maxScale?: number;
+  width?: number;
   height?: number;
+  centre?: boolean;
 };
 
 const linkControl = (path: PathSpec): Pt => {
@@ -355,10 +345,20 @@ const pathPointsOf = (path: PathSpec, count = 24): Pt[] => {
   return Array.from({length: count + 1}, (_, index) => bez(path.from, control, path.to, index / count));
 };
 
+const pathExtra = (path: PathSpec): Box => {
+  const points = pathPointsOf(path, 64);
+  return {
+    x1: Math.min(...points.map((point) => point.x)),
+    y1: Math.min(...points.map((point) => point.y)),
+    x2: Math.max(...points.map((point) => point.x)),
+    y2: Math.max(...points.map((point) => point.y)),
+  };
+};
+
 const browserStoragePath = (browser: Pt, storage: Pt): PathSpec => ({
-  from: {x: browser.x - 70, y: browser.y - 30},
-  to: {x: storage.x - 64, y: storage.y - 40},
-  control: {x: browser.x - 220, y: browser.y - 240},
+  from: {x: browser.x + 48, y: browser.y - 42},
+  to: {x: storage.x + 56, y: storage.y + 64},
+  control: {x: storage.x + 150, y: (browser.y + storage.y) / 2},
 });
 
 const rowOffRowPath = (row: Pt, off: Pt): PathSpec => {
@@ -368,33 +368,27 @@ const rowOffRowPath = (row: Pt, off: Pt): PathSpec => {
     : {from: {x: row.x, y: row.y + 252}, to: {x: off.x, y: off.y - 80}};
 };
 
-const PRESIGN_GAP = 24;
 const PRESIGN_H = 38;
+const PRESIGN_T = 0.22;
 
 const presignGeometry = (browser: Pt, storage: Pt) => {
   const path = browserStoragePath(browser, storage);
-  const points = pathPointsOf(path, 96);
-  const top = points.reduce((best, point) => (point.y < best.y ? point : best), points[0]);
-  const xs = points.map((point) => point.x);
+  const point = bez(path.from, linkControl(path), path.to, PRESIGN_T);
   const width = textWidth('presigned URL', 26, 400) + 24;
-  const iconTop = storage.y - 64;
-  const bottom = Math.min(top.y - PRESIGN_GAP, iconTop - PRESIGN_GAP);
-  const cx = (Math.min(...xs) + Math.max(...xs)) / 2;
-  const cy = bottom - PRESIGN_H / 2;
   return {
-    x: cx,
-    y: cy,
+    x: point.x,
+    y: point.y,
     box: {
-      x1: cx - width / 2 - 8,
-      y1: cy - PRESIGN_H / 2 - 8,
-      x2: cx + width / 2 + 8,
-      y2: cy + PRESIGN_H / 2 + 8,
+      x1: point.x - width / 2 - 8,
+      y1: point.y - PRESIGN_H / 2 - 8,
+      x2: point.x + width / 2 + 8,
+      y2: point.y + PRESIGN_H / 2 + 8,
     } as Box,
-    top,
   };
 };
 
 const PRESIGN = presignGeometry(FIXED_POSITIONS.browser, FIXED_POSITIONS.storage);
+const UPLOAD_ARC_EXTRA = pathExtra(browserStoragePath(FIXED_POSITIONS.browser, FIXED_POSITIONS.storage));
 
 const WIDE_BOUNDS = (() => {
   const boxes = ALL_NODE_IDS.map((id) =>
@@ -421,40 +415,30 @@ const QUEUE_RACK_EXTRA = [radiusBox(FIXED_POSITIONS.queue.x, -260, 150, 190)];
 const CHECK_BOX = nodeWorldBox(NODES_BY_ID.check, FIXED_POSITIONS.check.x, FIXED_POSITIONS.check.y, false, true, true);
 const FFPROBE_EXTRA = [{x1: CHECK_BOX.x1 - 40, y1: CHECK_BOX.y2, x2: CHECK_BOX.x2 + 40, y2: CHECK_BOX.y2 + 70}];
 const READOUT_SPACE: Box = {
-  x1: CHECK_BOX.x1 - 300,
+  x1: CHECK_BOX.x1 - 430,
   y1: CHECK_BOX.y2,
-  x2: CHECK_BOX.x2 + 300,
-  y2: CHECK_BOX.y2 + 220,
-};
-const DEAD_BOX = nodeWorldBox(NODES_BY_ID.dead, FIXED_POSITIONS.dead.x, FIXED_POSITIONS.dead.y, false, true, true);
-const CREDIT_SPACE: Box = {
-  x1: DEAD_BOX.x1 - 300,
-  y1: DEAD_BOX.y2,
-  x2: DEAD_BOX.x2 + 300,
-  y2: DEAD_BOX.y2 + 220,
+  x2: CHECK_BOX.x2 + 430,
+  y2: CHECK_BOX.y2 + 300,
 };
 const BAD_FILE_EXTRA = radiusBox(FIXED_POSITIONS.check.x - 190, 0, 300, 90);
 const RING_EXTRA = radiusBox(FIXED_POSITIONS.gpu.x, FIXED_POSITIONS.gpu.y, 135, 135);
 const PANEL_EXTRA: Box = {
-  x1: FIXED_POSITIONS.gpu.x - 390,
+  x1: FIXED_POSITIONS.gpu.x - 500,
   y1: FIXED_POSITIONS.gpu.y - 300,
-  x2: FIXED_POSITIONS.gpu.x + 390,
+  x2: FIXED_POSITIONS.gpu.x + 500,
   y2: FIXED_POSITIONS.gpu.y + 300,
 };
 const DUPLICATE_EXTRA = radiusBox(FIXED_POSITIONS.gpu.x, FIXED_POSITIONS.gpu.y + 390, 330, 150);
-const THUMB_TRAVEL_EXTRA = thumbTravelExtra(
-  thumbParkTop(FIXED_POSITIONS.browser),
-  thumbDockTop('storage', FIXED_POSITIONS.storage),
-);
 
 const LAYOUTS: Layout[] = [
   {
     at: CUE('3b').start,
     ids: ['browser', 'website', 'storage'],
-    thumbNodes: ['browser', 'storage'],
-    extra: [PRESIGN.box, THUMB_TRAVEL_EXTRA],
-    maxScale: 1.35,
-    height: 0.77,
+    extra: [PRESIGN.box, UPLOAD_ARC_EXTRA],
+    maxScale: 1.4,
+    width: 0.84,
+    height: 0.84,
+    centre: true,
   },
   {at: CUE('3c').start, ids: ['website', 'queue'], extra: QUEUE_RACK_EXTRA, maxScale: 1.35},
   {at: CUE('3d').start, ids: ['website', 'queue'], extra: QUEUE_RACK_EXTRA, maxScale: 1.35},
@@ -469,12 +453,11 @@ const LAYOUTS: Layout[] = [
   {at: CUE('5a').start, ids: ['queue', 'check', 'gpu'], maxScale: 1.15},
   {at: CUE('5b').start, ids: ['gpu'], extra: [RING_EXTRA], maxScale: 1.55},
   {at: CUE('5c').start, ids: ['website', 'database'], maxScale: 1.55, height: 0.77},
-  {at: CUE('6').start, ids: ['gpu'], extra: [PANEL_EXTRA], maxScale: 1.5},
+  {at: CUE('6').start, ids: ['gpu'], extra: [PANEL_EXTRA], maxScale: 1.5, height: 0.85},
   {
     at: CUE('7a').start,
     ids: ['check', 'gpu', 'dead'],
     thumbNodes: ['gpu'],
-    extra: [CREDIT_SPACE],
     maxScale: 1.05,
   },
   {at: CUE('7b').start, ids: ['gpu'], extra: [DUPLICATE_EXTRA], maxScale: 1.4},
@@ -516,14 +499,15 @@ const cameraForLayout = (layout: Layout): Camera => {
   if (layout.thumbNodes) {
     boxes.push(
       ...layout.thumbNodes.map((id) => {
-        const park = thumbDockTop(id, FIXED_POSITIONS[id]);
+        const park = thumbParkTop(FIXED_POSITIONS[id]);
         return thumbBoxFrom(park.x, park.y);
       }),
     );
   }
   const xs = ids.map((id) => FIXED_POSITIONS[id].x);
   const rowCenter = (Math.min(...xs) + Math.max(...xs)) / 2;
-  return focusBoxes(boxes, {maxScale: layout.maxScale, height: layout.height}, rowCenter);
+  const centerX = layout.centre ? undefined : rowCenter;
+  return focusBoxes(boxes, {width: layout.width, maxScale: layout.maxScale, height: layout.height}, centerX);
 };
 
 const CAMS = LAYOUTS.map((layout) => ({at: layout.at, cam: cameraForLayout(layout), move: layout.move ?? 30}));
@@ -598,8 +582,6 @@ type LinkDraw = {
   colour?: string;
   width?: number;
   hot?: number;
-  dashed?: boolean;
-  dashedAt?: number;
   gap?: number;
   opacity: number;
 };
@@ -622,7 +604,7 @@ const linksAt = (f: number): LinkDraw[] => {
       draw: 18,
       width: 1.8,
       colour: 'rgba(150,166,188,.42)',
-      opacity: pair('browser', 'website', CUE('3b').start, CUE('3c').start),
+      opacity: pair('browser', 'website', CUE('3b').start, CUE('4').start),
     });
   }
   if (pos('browser') && pos('storage')) {
@@ -645,8 +627,6 @@ const linksAt = (f: number): LinkDraw[] => {
       appear: CUE('3c').start + 10,
       draw: 16,
       arrow: true,
-      dashed: inWindow(CUE('3d').start, CUE('4').start),
-      dashedAt: CUE('3d').start + 4,
       opacity: pair('website', 'queue', CUE('3c').start, CUE('4').start),
     });
   }
@@ -706,14 +686,13 @@ const linksAt = (f: number): LinkDraw[] => {
 };
 
 const thumbOpacityAt = (f: number) => {
-  const in3 = ease(f, 2, 14) * (1 - ease(f, CUE('3c').start - 40, CUE('3c').start - 28));
   const in4 =
     ease(f, CUE('4').start + 8, CUE('4').start + 20) *
     (1 - ease(f, CUE('4r').start - 40, CUE('4r').start - 28));
   const in7 =
     ease(f, CUE('7a').start + 6, CUE('7a').start + 18) *
     (1 - ease(f, CUE('7b').start - 40, CUE('7b').start - 28));
-  return Math.max(in3, in4, in7);
+  return Math.max(in4, in7);
 };
 
 const thumbGreyAt = (f: number) => ease(f, beat('7a', 0.28), beat('7a', 0.42));
@@ -722,19 +701,7 @@ const thumbStateAt = (f: number) => {
   const {positions} = layoutAt(f);
   let left = 0;
   let top = 0;
-  if (f < CUE('3c').start + 4) {
-    const fromNode = positions.browser;
-    const toNode = positions.storage;
-    if (fromNode && toNode) {
-      const from = thumbParkTop(fromNode);
-      const to = thumbDockTop('storage', toNode);
-      const t = glide(f, CUE('3b').start + 8, beat('3b', 0.55));
-      const control = {x: (from.x + to.x) / 2, y: Math.min(from.y, to.y) - 60};
-      const point = bez(from, control, to, t);
-      left = point.x;
-      top = point.y;
-    }
-  } else if (f >= CUE('4').start && f < CUE('4r').start + 8) {
+  if (f >= CUE('4').start && f < CUE('4r').start + 8) {
     const check = positions.check;
     if (check) {
       const park = thumbParkTop(check);
@@ -755,17 +722,11 @@ const thumbStateAt = (f: number) => {
 const readoutOpacity = (f: number) =>
   ease(f, CUE('4').start + 8, CUE('4').start + 20) * (1 - ease(f, CUE('4r').start - 10, CUE('4r').start + 4));
 
-const refundOpacity = (f: number) =>
-  ease(f, CUE('4r').start + 14, CUE('4r').start + 28) * (1 - ease(f, CUE('5a').start - 10, CUE('5a').start + 4));
-
 const statusOpacity = (f: number) =>
   ease(f, CUE('5a').start - 4, CUE('5a').start + 8) * (1 - ease(f, CUE('5b').start - 8, CUE('5b').start + 4));
 
 const clockOpacity = (f: number) =>
   ease(f, CUE('5b').start - 2, CUE('5b').start + 10) * (1 - ease(f, CUE('5c').start - 10, CUE('5c').start + 4));
-
-const creditOpacity = (f: number) =>
-  ease(f, CUE('7a').start - 2, CUE('7a').start + 18) * (1 - ease(f, CUE('7b').start - 40, CUE('7b').start - 26));
 
 const runningAt = (f: number) => {
   const up = beat('5a', 0.2);
@@ -778,58 +739,72 @@ const runningAt = (f: number) => {
 const CARD_GAP = 28;
 const FFPROBE_STACK = 42;
 
-type CardId = 'readout' | 'refunded' | 'status' | 'clock' | 'credit';
+type CardId = 'readout' | 'status' | 'clock';
 
 const CARD_HEIGHT: Record<CardId, number> = {
-  readout: 112,
-  refunded: 96,
+  readout: 156,
   status: 104,
   clock: 130,
-  credit: 210,
 };
 
 const cardSize = (id: CardId): {w: number; h: number} => {
   let content = 0;
   if (id === 'readout') {
-    content = textWidth('length 0:44', 48, 400) + 12 + 48 + 30 + textWidth('price', 48, 400) + 12 + 48;
-  } else if (id === 'refunded') {
-    content = 38 + 14 + textWidth('refunded', 44, 400);
+    content = Math.max(
+      textWidth('browser said', 42, 400) + 18 + textWidth('0:05', 42, 600) + 26 + textWidth('file says', 42, 400) + 10 + textWidth('0:44', 42, 600),
+      textWidth('price', 42, 400) + 18 + textWidth('$1.00', 42, 600) + 26 + textWidth('$2.00', 42, 600),
+    );
   } else if (id === 'status') {
     content = 14 + 14 + textWidth('0 running', 48, 600);
-  } else if (id === 'clock') {
-    content = 44 + 16 + textWidth('a few minutes to start', 42, 400);
   } else {
-    content = Math.max(
-      textWidth('credit balance', 44, 600) + 28 + textWidth('held', 44, 600),
-      34 + 12 + textWidth('hold returned', 40, 400),
-    );
+    content = 44 + 16 + textWidth('a few minutes to start', 42, 400);
   }
   return {w: Math.ceil(content) + 64, h: CARD_HEIGHT[id]};
 };
 
 const CARD_NODE: Record<CardId, NodeId> = {
   readout: 'check',
-  refunded: 'check',
   status: 'gpu',
   clock: 'gpu',
-  credit: 'dead',
 };
 
-const CARD_ORDER: CardId[] = ['readout', 'refunded', 'status', 'clock', 'credit'];
+const CARD_ORDER: CardId[] = ['readout', 'status', 'clock'];
 
 const ffprobeOpacity = (f: number) =>
   ease(f, beat('4', 0.22), beat('4', 0.34)) * (1 - ease(f, CUE('4r').start - 8, CUE('4r').start + 4));
 
 const presignedOpacity = (f: number) =>
-  ease(f, CUE('3b').start + 18, CUE('3b').start + 32) * (1 - ease(f, CUE('3c').start - 14, CUE('3c').start));
+  ease(f, beat('3b', 0.42), beat('3b', 0.54)) * (1 - ease(f, CUE('3c').start - 14, CUE('3c').start));
 
 const CARD_OPACITY: Record<CardId, (f: number) => number> = {
   readout: readoutOpacity,
-  refunded: refundOpacity,
   status: statusOpacity,
   clock: clockOpacity,
-  credit: creditOpacity,
 };
+
+const CREDIT_W = 340;
+const CREDIT_H = 142;
+const CREDIT_X = 1920 - SAFE - CREDIT_W;
+const CREDIT_Y = SAFE + 14;
+const CREDIT_BOX: Box = {x1: CREDIT_X, y1: CREDIT_Y, x2: CREDIT_X + CREDIT_W, y2: CREDIT_Y + CREDIT_H};
+const CREDIT_HOLD = 0.32;
+
+const creditWidgetOpacity = (f: number) =>
+  ease(f, CUE('3b').start + 6, CUE('3b').start + 20) * (1 - ease(f, CUE('7b').end - 14, CUE('7b').end + 2));
+
+const creditReturnedAt = (f: number) => ease(f, beat('7a', 0.68), beat('7a', 0.9));
+const creditChargedAt = (f: number) => ease(f, beat('7b', 0.28), beat('7b', 0.4));
+const badRefundAt = (f: number) => ease(f, beat('4r', 0.5), beat('4r', 0.68));
+const badFileVisibleAt = (f: number) =>
+  ease(f, beat('4r', 0.18), beat('4r', 0.3)) * (1 - ease(f, CUE('5a').start - 8, CUE('5a').start + 4));
+const creditGlowAt = (f: number) =>
+  Math.max(
+    ease(f, beat('4r', 0.46), beat('4r', 0.56)) * (1 - ease(f, CUE('5a').start - 10, CUE('5a').start + 2)),
+    ease(f, beat('7a', 0.64), beat('7a', 0.74)) * (1 - ease(f, beat('7a', 0.9), beat('7a', 1))),
+    ease(f, beat('7b', 0.26), beat('7b', 0.36)) * (1 - ease(f, beat('7b', 0.46), beat('7b', 0.58))),
+  );
+
+const creditWidgetBoxAt = (f: number): Box | null => (creditWidgetOpacity(f) > 0.02 ? CREDIT_BOX : null);
 
 type CardSpec = {id: CardId; box: Box; opacity: number};
 
@@ -854,6 +829,8 @@ const takenBoxesAt = (f: number, cam: Camera): Box[] => {
   const boxes = labelTextBoxesAt(f).map((item) => item.box);
   const thumb = thumbStateAt(f);
   if (thumb.opacity > 0.02) boxes.push(screenBox(thumb.box, cam));
+  const credit = creditWidgetBoxAt(f);
+  if (credit) boxes.push(credit);
   return boxes;
 };
 
@@ -871,11 +848,11 @@ const cardSpecsAt = (f: number): CardSpec[] => {
     if (!def || !pos) continue;
     const reservePurpose = id !== 'clock';
     let world = nodeWorldBox(def, pos.x, pos.y, false, true, reservePurpose);
-    if (id === 'readout' && ffprobeOpacity(f) > 0.02) {
+    if (id === 'readout') {
       world = {...world, y2: world.y2 + FFPROBE_STACK};
     }
     const size = cardSize(id);
-    const belowOnly = id === 'readout' || id === 'credit';
+    const belowOnly = id === 'readout';
     specs.push({id, box: placeCard(screenBox(world, cam), size.w, size.h, taken, belowOnly), opacity});
   }
   return specs;
@@ -907,31 +884,56 @@ const CardShell: React.FC<{box: Box; opacity: number; children: React.ReactNode}
   );
 };
 
+const Strike: React.FC<{progress: number; children: React.ReactNode}> = ({progress, children}) => (
+  <span style={{position: 'relative', display: 'inline-block', fontVariantNumeric: 'tabular-nums'}}>
+    {children}
+    <span
+      style={{
+        position: 'absolute',
+        left: -2,
+        right: -2,
+        top: '50%',
+        height: 3,
+        borderRadius: 2,
+        background: C.hot,
+        transform: `scaleX(${progress})`,
+        transformOrigin: 'left center',
+      }}
+    />
+  </span>
+);
+
 const ReadoutCard: React.FC<{f: number; box: Box; opacity: number}> = ({f, box, opacity}) => {
-  const lengthOn = ease(f, beat('4', 0.26), beat('4', 0.36));
-  const priceOn = ease(f, beat('4', 0.56), beat('4', 0.68));
+  const claimedOn = ease(f, beat('4', 0.1), beat('4', 0.22));
+  const struck = ease(f, beat('4', 0.34), beat('4', 0.46));
+  const realOn = ease(f, beat('4', 0.36), beat('4', 0.48));
+  const priceOn = ease(f, beat('4', 0.2), beat('4', 0.32));
+  const priceStruck = ease(f, beat('4', 0.56), beat('4', 0.68));
+  const newPriceOn = ease(f, beat('4', 0.62), beat('4', 0.74));
   return (
     <CardShell box={box} opacity={opacity}>
-      <div style={{display: 'flex', alignItems: 'center', gap: 30, height: '100%', fontSize: 48, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap'}}>
-        <span style={{display: 'flex', alignItems: 'center', gap: 12, opacity: lengthOn}}>
-          length 0:44 <span style={{color: C.hot, display: 'inline-flex'}}><Icon name="tick" size={48} /></span>
-        </span>
-        <span style={{display: 'flex', alignItems: 'center', gap: 12, opacity: priceOn}}>
-          price <span style={{color: C.hot, display: 'inline-flex'}}><Icon name="tick" size={48} /></span>
-        </span>
+      <div style={{display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 12, height: '100%', fontSize: 42, whiteSpace: 'nowrap'}}>
+        <div style={{display: 'flex', alignItems: 'baseline', gap: 18}}>
+          <span style={{color: '#8E98A5', opacity: claimedOn}}>browser said</span>
+          <Strike progress={struck}>
+            <span style={{color: struck > 0.5 ? '#7D8794' : C.text, opacity: claimedOn}}>0:05</span>
+          </Strike>
+          <span style={{display: 'flex', alignItems: 'baseline', gap: 10, opacity: realOn}}>
+            <span style={{color: '#8E98A5'}}>file says</span>
+            <span style={{color: C.hot, fontWeight: 600}}>0:44</span>
+          </span>
+        </div>
+        <div style={{display: 'flex', alignItems: 'baseline', gap: 18}}>
+          <span style={{color: '#8E98A5', opacity: priceOn}}>price</span>
+          <Strike progress={priceStruck}>
+            <span style={{color: priceStruck > 0.5 ? '#7D8794' : C.text, opacity: priceOn}}>$1.00</span>
+          </Strike>
+          <span style={{color: C.hot, fontWeight: 600, opacity: newPriceOn}}>$2.00</span>
+        </div>
       </div>
     </CardShell>
   );
 };
-
-const RefundCard: React.FC<{box: Box; opacity: number}> = ({box, opacity}) => (
-  <CardShell box={box} opacity={opacity}>
-    <div style={{display: 'flex', alignItems: 'center', gap: 14, height: '100%', fontSize: 44, color: '#C6CCD4'}}>
-      <span style={{color: C.hot, display: 'inline-flex'}}><Icon name="tick" size={38} /></span>
-      refunded
-    </div>
-  </CardShell>
-);
 
 const StatusCard: React.FC<{f: number; box: Box; opacity: number}> = ({f, box, opacity}) => {
   const running = runningAt(f);
@@ -953,24 +955,6 @@ const ClockCard: React.FC<{box: Box; opacity: number}> = ({box, opacity}) => (
     </div>
   </CardShell>
 );
-
-const CreditCard: React.FC<{f: number; box: Box; opacity: number}> = ({f, box, opacity}) => {
-  const returned = ease(f, beat('7a', 0.68), beat('7a', 0.9));
-  return (
-    <CardShell box={box} opacity={opacity}>
-      <div style={{display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 44, fontWeight: 600}}>
-        <span>credit balance</span>
-        <span style={{color: C.hot, opacity: 1 - returned}}>held</span>
-      </div>
-      <div style={{marginTop: 24, height: 22, borderRadius: 11, background: '#232830', overflow: 'hidden'}}>
-        <div style={{width: `${100 - 34 * returned}%`, height: '100%', background: C.hot, opacity: 0.82}} />
-      </div>
-      <div style={{marginTop: 16, height: 40, display: 'flex', alignItems: 'center', gap: 12, fontSize: 40, color: '#FFC08A', opacity: returned}}>
-        <Icon name="tick" size={34} /> hold returned
-      </div>
-    </CardShell>
-  );
-};
 
 const MonoCaption: React.FC<{text: string; x: number; y: number; opacity: number; pill?: boolean}> = ({
   text,
@@ -1003,55 +987,141 @@ const MonoCaption: React.FC<{text: string; x: number; y: number; opacity: number
   );
 };
 
+const CreditWidget: React.FC<{f: number}> = ({f}) => {
+  const opacity = creditWidgetOpacity(f);
+  if (opacity <= 0.001) return null;
+  const returned = creditReturnedAt(f);
+  const charged = creditChargedAt(f);
+  const badVisible = badFileVisibleAt(f);
+  const badReturned = badRefundAt(f);
+  const glow = creditGlowAt(f);
+  const holdWidth = CREDIT_HOLD * (1 - charged);
+  const solidWidth = 1 - CREDIT_HOLD + holdWidth * returned;
+  const hatchWidth = holdWidth * (1 - returned);
+  const status = charged > 0.5 ? 'charged once' : returned > 0.5 ? 'hold returned' : 'held';
+  const lit = charged > 0.02 || returned > 0.02 || glow > 0.02;
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        left: CREDIT_X,
+        top: CREDIT_Y,
+        width: CREDIT_W,
+        height: CREDIT_H,
+        boxSizing: 'border-box',
+        padding: '14px 16px',
+        borderRadius: 20,
+        background: 'rgba(13,15,18,.94)',
+        border: `1.5px solid ${lit ? 'rgba(255,158,84,.5)' : C.rule}`,
+        boxShadow: lit ? '0 0 30px rgba(255,138,42,.2), 0 14px 34px rgba(0,0,0,.55)' : '0 14px 34px rgba(0,0,0,.45)',
+        fontFamily,
+        opacity: opacity * (0.62 + 0.38 * glow),
+      }}
+    >
+      <div style={{display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8}}>
+        <span style={{fontSize: 26, fontWeight: 600, letterSpacing: '-.01em', color: '#D6DCE4'}}>your credit</span>
+        <span style={{fontSize: 22, fontWeight: 500, color: lit ? '#FFC08A' : '#8E98A5', whiteSpace: 'nowrap'}}>{status}</span>
+      </div>
+      <div style={{position: 'relative', marginTop: 10, height: 16, borderRadius: 8, background: '#232830', overflow: 'hidden'}}>
+        <div style={{position: 'absolute', left: 0, top: 0, bottom: 0, width: `${solidWidth * 100}%`, background: C.hot, opacity: 0.82}} />
+        {hatchWidth > 0.001 ? (
+          <div
+            style={{
+              position: 'absolute',
+              right: 0,
+              top: 0,
+              bottom: 0,
+              width: `${hatchWidth * 100}%`,
+              background: 'repeating-linear-gradient(135deg, rgba(255,158,84,.5) 0 4px, rgba(255,158,84,.08) 4px 9px)',
+              borderLeft: '1.5px solid rgba(255,158,84,.6)',
+              boxSizing: 'border-box',
+            }}
+          />
+        ) : null}
+      </div>
+      <div style={{height: 34, display: 'flex', alignItems: 'center', gap: 10, opacity: badVisible, fontSize: 20, whiteSpace: 'nowrap'}}>
+        <span style={{color: '#8E98A5'}}>bad file</span>
+        <div style={{position: 'relative', width: 92, height: 8, borderRadius: 4, background: '#232830', overflow: 'hidden'}}>
+          <div style={{position: 'absolute', left: 0, top: 0, bottom: 0, width: `${38 * badReturned}%`, background: C.hot, opacity: 0.82}} />
+          {badReturned < 0.999 ? (
+            <div
+              style={{
+                position: 'absolute',
+                right: 0,
+                top: 0,
+                bottom: 0,
+                width: `${38 * (1 - badReturned)}%`,
+                background: 'repeating-linear-gradient(135deg, rgba(255,158,84,.5) 0 3px, rgba(255,158,84,.08) 3px 6px)',
+              }}
+            />
+          ) : null}
+        </div>
+        <span style={{color: '#FFC08A', opacity: badReturned}}>refunded</span>
+      </div>
+    </div>
+  );
+};
+
 const QueueRack: React.FC<{f: number; queue: Pt}> = ({f, queue}) => {
   const opacity =
     ease(f, CUE('3c').start + 4, CUE('3c').start + 16) * (1 - ease(f, CUE('4').start - 10, CUE('4').start + 4));
   if (opacity <= 0.001) return null;
-  const slots = [-300, -234, -168];
+  const slots = [-310, -220, -130];
   const drop = glide(f, CUE('3c').start + 12, beat('3c', 0.38));
-  const jobTop = queue.y - 450 + (queue.y - 234 - 36 - (queue.y - 450)) * drop;
+  const jobTop = queue.y - 450 + (queue.y - 220 - 36 - (queue.y - 450)) * drop;
+  const secondStart = CUE('3d').start + 160;
+  const secondDrop = glide(f, secondStart, secondStart + 24);
+  const secondOn = ease(f, secondStart, secondStart + 10);
+  const secondTop = queue.y - 450 + (queue.y - 310 - 36 - (queue.y - 450)) * secondDrop;
+  const jobStyle: React.CSSProperties = {
+    position: 'absolute',
+    left: queue.x - 95,
+    width: 190,
+    height: 72,
+    borderRadius: 14,
+    background: '#1C1E22',
+    border: '1.5px solid rgba(255,158,84,.6)',
+    boxShadow: '0 12px 26px rgba(0,0,0,.55)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    fontFamily,
+    fontSize: 34,
+    fontWeight: 500,
+    color: C.text,
+  };
   return (
     <div style={{position: 'absolute', inset: 0, opacity}}>
-      {slots.map((offset, index) => (
-        <div
-          key={offset}
-          style={{
-            position: 'absolute',
-            left: queue.x - 110,
-            top: queue.y + offset - 28,
-            width: 220,
-            height: 56,
-            borderRadius: 12,
-            border: `1.4px solid rgba(140,156,178,${index === 1 ? 0.32 : 0.18})`,
-            background: index === 1 ? 'rgba(140,156,178,.055)' : 'transparent',
-            boxSizing: 'border-box',
-          }}
-        />
-      ))}
-      <div
-        style={{
-          position: 'absolute',
-          left: queue.x - 95,
-          top: jobTop,
-          width: 190,
-          height: 72,
-          borderRadius: 14,
-          background: '#1C1E22',
-          border: '1.5px solid rgba(255,158,84,.6)',
-          boxShadow: '0 12px 26px rgba(0,0,0,.55)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: 12,
-          fontFamily,
-          fontSize: 34,
-          fontWeight: 500,
-          color: C.text,
-        }}
-      >
+      {slots.map((offset, index) => {
+        const active = index === 1 || (index === 0 && secondOn > 0.01);
+        return (
+          <div
+            key={offset}
+            style={{
+              position: 'absolute',
+              left: queue.x - 110,
+              top: queue.y + offset - 28,
+              width: 220,
+              height: 56,
+              borderRadius: 12,
+              border: `1.4px solid rgba(140,156,178,${active ? 0.32 : 0.18})`,
+              background: active ? 'rgba(140,156,178,.055)' : 'transparent',
+              boxSizing: 'border-box',
+            }}
+          />
+        );
+      })}
+      <div style={{...jobStyle, top: jobTop}}>
         <div style={{width: 11, height: 11, borderRadius: 6, background: C.hot}} />
         job
       </div>
+      {secondOn > 0.001 ? (
+        <div style={{...jobStyle, top: secondTop, opacity: secondOn}}>
+          <div style={{width: 11, height: 11, borderRadius: 6, background: C.hot}} />
+          job
+        </div>
+      ) : null}
     </div>
   );
 };
@@ -1090,6 +1160,70 @@ const BadFile: React.FC<{f: number; check: Pt}> = ({f, check}) => {
     >
       <Icon name="storage" size={38} />
       bad file
+    </div>
+  );
+};
+
+const SecondUpload: React.FC<{f: number; browser: Pt; website: Pt; queue: Pt}> = ({f, browser, website, queue}) => {
+  const start = CUE('3d').start + 40;
+  const through = start + 60;
+  const leave = through + 6;
+  const arrive = leave + 60;
+  const opacity = ease(f, start, start + 10) * (1 - ease(f, arrive - 8, arrive + 8));
+  if (opacity <= 0.001) return null;
+  const a = {x: browser.x + 64, y: browser.y - 18};
+  const b = {x: website.x, y: website.y - 18};
+  const d = {x: queue.x - 70, y: queue.y};
+  const along = (from: Pt, to: Pt, t: number): Pt => ({x: lerp(from.x, to.x, t), y: lerp(from.y, to.y, t)});
+  const point =
+    f < through
+      ? along(a, b, glide(f, start, through))
+      : along(b, d, glide(f, leave, arrive));
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        left: point.x - 29,
+        top: point.y - 17,
+        width: 58,
+        height: 34,
+        borderRadius: 8,
+        overflow: 'hidden',
+        border: '1.5px solid rgba(255,158,84,.65)',
+        boxSizing: 'border-box',
+        opacity,
+        boxShadow: '0 8px 20px rgba(0,0,0,.55), 0 0 18px rgba(255,138,42,.22)',
+      }}
+    >
+      <Img src={staticFile(CLIP_SRC)} style={{width: '100%', height: '100%', objectFit: 'cover', display: 'block'}} />
+    </div>
+  );
+};
+
+const UploadChip: React.FC<{f: number; browser: Pt; storage: Pt}> = ({f, browser, storage}) => {
+  const start = CUE('3b').start + 8;
+  const arrive = beat('3b', 0.4);
+  const opacity = ease(f, start, start + 8) * (1 - ease(f, arrive - 6, arrive + 8));
+  if (opacity <= 0.001) return null;
+  const path = browserStoragePath(browser, storage);
+  const point = bez(path.from, linkControl(path), path.to, glide(f, start, arrive));
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        left: point.x - 37,
+        top: point.y - 21,
+        width: 74,
+        height: 42,
+        borderRadius: 9,
+        overflow: 'hidden',
+        border: '1.5px solid rgba(255,158,84,.7)',
+        boxSizing: 'border-box',
+        opacity,
+        boxShadow: '0 10px 24px rgba(0,0,0,.6), 0 0 20px rgba(255,138,42,.25)',
+      }}
+    >
+      <Img src={staticFile(CLIP_SRC)} style={{width: '100%', height: '100%', objectFit: 'cover', display: 'block'}} />
     </div>
   );
 };
@@ -1259,10 +1393,10 @@ const DuplicateJobs: React.FC<{f: number; gpu: Pt}> = ({f, gpu}) => {
   const opacity =
     ease(f, CUE('7b').start + 4, CUE('7b').start + 16) * (1 - ease(f, CUE('7c').start - 10, CUE('7c').start + 2));
   if (opacity <= 0.001) return null;
-  const firstIn = glide(f, beat('7b', 0.12), beat('7b', 0.32));
-  const secondIn = glide(f, beat('7b', 0.36), beat('7b', 0.56));
-  const charged = ease(f, beat('7b', 0.34), beat('7b', 0.46));
-  const already = ease(f, beat('7b', 0.58), beat('7b', 0.7));
+  const firstIn = glide(f, beat('7b', 0.08), beat('7b', 0.26));
+  const secondIn = glide(f, beat('7b', 0.42), beat('7b', 0.6));
+  const charged = ease(f, beat('7b', 0.28), beat('7b', 0.4));
+  const already = ease(f, beat('7b', 0.62), beat('7b', 0.74));
   const card = (index: number, drop: number) => {
     const x = gpu.x - 240 + index * 260;
     const y = gpu.y + 292 + (1 - drop) * 130;
@@ -1301,31 +1435,39 @@ const DuplicateJobs: React.FC<{f: number; gpu: Pt}> = ({f, gpu}) => {
       <div
         style={{
           position: 'absolute',
-          left: gpu.x - 240,
-          top: gpu.y + 398,
-          width: 220,
-          textAlign: 'center',
-          fontFamily,
-          fontSize: 32,
-          color: '#FFC08A',
-          opacity: charged,
+          left: gpu.x - 260,
+          top: gpu.y + 412,
+          width: 260,
+          height: 52,
+          boxSizing: 'border-box',
+          borderRadius: 10,
+          border: '2px solid rgba(255,158,84,.75)',
+          background: 'rgba(255,138,42,.06)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          gap: 10,
+          gap: 8,
+          fontFamily,
+          fontSize: 26,
+          fontWeight: 600,
+          letterSpacing: '.01em',
+          color: '#FFC08A',
+          opacity: charged,
+          whiteSpace: 'nowrap',
+          transform: 'rotate(-3deg)',
         }}
       >
-        <Icon name="tick" size={30} /> charged
+        <Icon name="tick" size={26} /> charged once
       </div>
       <div
         style={{
           position: 'absolute',
           left: gpu.x + 20,
-          top: gpu.y + 398,
+          top: gpu.y + 420,
           width: 220,
           textAlign: 'center',
           fontFamily,
-          fontSize: 30,
+          fontSize: 26,
           color: '#7D8794',
           opacity: already,
         }}
@@ -1339,19 +1481,30 @@ const DuplicateJobs: React.FC<{f: number; gpu: Pt}> = ({f, gpu}) => {
 const GpuPanel: React.FC<{f: number; gpu: Pt}> = ({f, gpu}) => {
   const opacity =
     ease(f, CUE('6').start, CUE('6').start + 24) * (1 - ease(f, CUE('7a').start - 10, CUE('7a').start + 6));
-  const pulseStart = CUE('6', 1).start + 8;
-  const pulse = Math.sin(Math.PI * clamp((f - pulseStart) / 36));
   if (opacity <= 0.001) return null;
+  const pass = CUE('6', 1);
+  const cut = pass.start + Math.round(pass.frames * 0.55);
+  const passOn = ease(f, pass.start + 4, pass.start + 18);
+  const inputBrightness = 0.45 + 0.55 * passOn;
+  const cutOn = ease(f, cut, cut + 6);
+  const fallen = ease(f, cut + 2, cut + 34);
+  const pass1Caption = ease(f, pass.start + 6, pass.start + 18) * (1 - ease(f, cut, cut + 10));
+  const pass2Caption = ease(f, cut + 10, cut + 24);
+  const playhead = glide(f, pass.start + 4, cut);
+  const coreGlow = passOn;
+  const cellW = 106;
+  const phase = ((f - CUE('6').start) / FPS) * 0.55 % 5;
+  const cells = Array.from({length: 10}, (_, index) => CLIP_FRAMES[index % CLIP_FRAMES.length]);
+  const barHeight = (value: number) => 10 + value * 64;
   return (
     <div
       style={{
         position: 'absolute',
-        left: gpu.x - 390,
+        left: gpu.x - 500,
         top: gpu.y - 300,
-        width: 780,
+        width: 1000,
         height: 600,
         boxSizing: 'border-box',
-        padding: '22px 36px 24px',
         borderRadius: 44,
         background: '#0B0D10',
         border: '2px solid rgba(255,138,42,.58)',
@@ -1359,69 +1512,127 @@ const GpuPanel: React.FC<{f: number; gpu: Pt}> = ({f, gpu}) => {
         fontFamily,
         opacity,
         transform: `scale(${0.96 + 0.04 * opacity})`,
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
       }}
     >
-      <div style={{display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 16, color: '#FFC08A'}}>
-        <Icon name="model" size={48} />
+      <div style={{position: 'absolute', left: 0, right: 0, top: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 16, color: '#FFC08A'}}>
+        <Icon name="model" size={44} />
         <div style={{fontSize: 50, fontWeight: 600, letterSpacing: '-.03em', color: C.text}}>TRIBE (Meta)</div>
       </div>
-      <div style={{marginTop: 8, fontSize: 30, color: '#8F99A6', letterSpacing: '.005em'}}>
+      <div style={{position: 'absolute', left: 0, right: 0, top: 80, textAlign: 'center', fontSize: 30, color: '#8F99A6', letterSpacing: '.005em'}}>
         learned from 700+ people's brain scans
       </div>
-      <div style={{display: 'flex', justifyContent: 'center', gap: 40, marginTop: 26}}>
-        {[
-          {icon: 'speaker' as const, label: 'sound on'},
-          {icon: 'muted' as const, label: 'muted'},
-        ].map((copy) => (
-          <div key={copy.label} style={{display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12}}>
+
+      <div style={{position: 'absolute', left: 60, top: 134, fontSize: 24, letterSpacing: '.08em', color: '#8E98A5', textTransform: 'uppercase', opacity: inputBrightness}}>
+        picture
+      </div>
+      <div
+        style={{
+          position: 'absolute',
+          left: 60,
+          top: 164,
+          width: 600,
+          height: 188,
+          borderRadius: 14,
+          overflow: 'hidden',
+          border: '1.5px solid rgba(255,255,255,.24)',
+          boxSizing: 'border-box',
+          background: '#000',
+          opacity: inputBrightness,
+        }}
+      >
+        <div style={{position: 'absolute', left: -136 - phase * cellW, top: 0, display: 'flex', height: '100%'}}>
+          {cells.concat(cells).map((src, index) => (
+            <div key={index} style={{width: cellW, height: '100%', overflow: 'hidden', borderRight: '1px solid rgba(0,0,0,.65)'}}>
+              <Img src={staticFile(src)} style={{width: '100%', height: '100%', objectFit: 'cover', display: 'block'}} />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div style={{position: 'absolute', left: 60, top: 370, fontSize: 24, letterSpacing: '.08em', color: '#8E98A5', textTransform: 'uppercase', opacity: inputBrightness}}>
+        <Strike progress={cutOn}>
+          <span>sound</span>
+        </Strike>
+      </div>
+      <div
+        style={{
+          position: 'absolute',
+          left: 60,
+          top: 400,
+          width: 600,
+          height: 92,
+          borderRadius: 12,
+          overflow: 'hidden',
+          border: '1.5px solid rgba(255,255,255,.2)',
+          boxSizing: 'border-box',
+          background: '#0E1014',
+          opacity: inputBrightness * (1 - fallen),
+          transform: `translateY(${fallen * 170}px) rotate(${fallen * 7}deg) scaleY(${1 - 0.94 * fallen})`,
+          transformOrigin: '50% 40%',
+        }}
+      >
+        <div style={{position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', padding: '0 10px'}}>
+          {WAVE.map((value, index) => (
             <div
+              key={index}
               style={{
-                position: 'relative',
-                width: 210,
-                height: 373,
-                borderRadius: 16,
-                overflow: 'hidden',
-                border: '1.5px solid rgba(255,255,255,.24)',
-                boxSizing: 'border-box',
-                background: '#000',
+                flex: 1,
+                height: barHeight(value),
+                borderRadius: 2,
+                background: index / WAVE.length < playhead ? 'rgba(255,178,122,.88)' : 'rgba(255,158,84,.42)',
               }}
-            >
-              <Sequence from={CUE('6').start} layout="none">
-                <OffthreadVideo
-                  src={staticFile(CLIP_VIDEO_SRC)}
-                  trimBefore={62}
-                  muted
-                  style={{width: '100%', height: '100%', objectFit: 'cover', display: 'block'}}
-                />
-              </Sequence>
-              {copy.icon === 'muted' && pulse > 0.01 ? (
-                <div
-                  style={{
-                    position: 'absolute',
-                    inset: 0,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    background: 'rgba(0,0,0,.28)',
-                    opacity: pulse,
-                  }}
-                >
-                  <span style={{color: C.hot, display: 'inline-flex', transform: `scale(${1 + 0.18 * pulse})`}}>
-                    <Icon name="muted" size={96} />
-                  </span>
-                </div>
-              ) : null}
-            </div>
-            <div style={{display: 'flex', alignItems: 'center', gap: 10, fontSize: 32, fontWeight: 500, color: '#C6CCD4'}}>
-              <span style={{color: C.hot, display: 'inline-flex'}}><Icon name={copy.icon} size={32} /></span>
-              {copy.label}
-            </div>
-          </div>
-        ))}
+            />
+          ))}
+        </div>
+        <div style={{position: 'absolute', top: 0, bottom: 0, left: `${(10 / 600) * 100}%`, width: 2, background: C.hot, opacity: passOn * (1 - cutOn), transform: `translateX(${playhead * 578}px)`}} />
+      </div>
+
+      <div
+        style={{
+          position: 'absolute',
+          left: 656,
+          top: 394,
+          width: 3,
+          height: 104,
+          borderRadius: 2,
+          background: DANGER,
+          opacity: cutOn * (1 - fallen),
+          transform: `rotate(${cutOn * 14}deg)`,
+        }}
+      />
+      <div style={{position: 'absolute', left: 664, top: 256, width: 52, height: 2, background: '#FFB47C', opacity: passOn * 0.8}} />
+      <div style={{position: 'absolute', left: 712, top: 251, width: 0, height: 0, borderTop: '6px solid transparent', borderBottom: '6px solid transparent', borderLeft: `10px solid #FFB47C`, opacity: passOn * 0.8}} />
+      <div style={{position: 'absolute', left: 664, top: 445, width: 52, height: 2, background: '#FFB47C', opacity: passOn * (1 - cutOn) * 0.8}} />
+      <div style={{position: 'absolute', left: 712, top: 440, width: 0, height: 0, borderTop: '6px solid transparent', borderBottom: '6px solid transparent', borderLeft: `10px solid #FFB47C`, opacity: passOn * (1 - cutOn) * 0.8}} />
+
+      <div
+        style={{
+          position: 'absolute',
+          left: 720,
+          top: 166,
+          width: 230,
+          height: 324,
+          borderRadius: 30,
+          border: `2px solid rgba(255,138,42,${0.36 + 0.4 * coreGlow})`,
+          background: 'radial-gradient(circle at 50% 45%, rgba(255,138,42,.16), #0B0D10 70%)',
+          boxShadow: `0 0 ${36 + 44 * coreGlow}px rgba(255,138,42,${0.1 + 0.14 * coreGlow})`,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <span style={{color: '#FFC08A', display: 'inline-flex', transform: `scale(${1 + 0.04 * coreGlow})`}}>
+          <Icon name="model" size={96} />
+        </span>
+      </div>
+
+      <div style={{position: 'absolute', left: 60, top: 514, display: 'flex', alignItems: 'baseline', gap: 8, fontSize: 30, fontWeight: 500, opacity: pass1Caption, whiteSpace: 'nowrap'}}>
+        <span style={{color: '#FFC08A'}}>picture</span>
+        <span style={{color: '#8E98A5'}}>+</span>
+        <span style={{color: '#FFC08A'}}>sound</span>
+      </div>
+      <div style={{position: 'absolute', left: 60, top: 514, fontSize: 30, fontWeight: 500, color: '#FFC08A', opacity: pass2Caption, whiteSpace: 'nowrap'}}>
+        picture only
       </div>
     </div>
   );
@@ -1503,15 +1714,16 @@ const TerraformOutline: React.FC<{f: number}> = ({f}) => {
 export const STILLS = [
   {row: '3b', frame: beat('3b', 0.52)},
   {row: '3c', frame: beat('3c', 0.55)},
-  {row: '3d', frame: beat('3d', 0.5)},
-  {row: '4', frame: beat('4', 0.62)},
+  {row: '3d', frame: beat('3d', 0.6)},
+  {row: '4', frame: beat('4', 0.82)},
   {row: '4r', frame: beat('4r', 0.72)},
   {row: '5a', frame: beat('5a', 0.5)},
   {row: '5b', frame: beat('5b', 0.52)},
   {row: '5c', frame: beat('5c', 0.5)},
-  {row: '6', frame: beat('6', 0.55)},
+  {row: '6 pass 1', frame: CUE('6', 1).start + 50},
+  {row: '6 pass 2', frame: CUE('6', 1).start + 130},
   {row: '7a', frame: beat('7a', 0.86)},
-  {row: '7b', frame: beat('7b', 0.62)},
+  {row: '7b', frame: beat('7b', 0.72)},
   {row: '7c', frame: beat('7c', 0.62)},
   {row: '7d', frame: beat('7d', 0.82)},
 ];
@@ -1626,9 +1838,18 @@ export const runSafeAreaCheck = () => {
       for (const label of labelText) if (overlaps(card.box, label.box)) fail(`${card.id} card overlaps ${label.label} label`);
     }
 
-    if (presignedOpacity(f) > 0.02) {
-      const gap = (PRESIGN.top.y - (PRESIGN.y + PRESIGN_H / 2)) * cam.scale;
-      if (gap < 16) fail(`presigned URL sits ${gap.toFixed(1)}px above the arc (need 16px)`);
+    if (presignedOpacity(f) > 0.02 && crossesSafeArea(screenBox(PRESIGN.box, cam))) {
+      fail('presigned URL crosses the safe area');
+    }
+
+    const credit = creditWidgetBoxAt(f);
+    if (credit) {
+      if (crossesSafeArea(credit)) fail('credit widget crosses the safe area');
+      if (thumbScreen && overlaps(credit, thumbScreen)) fail('credit widget overlaps the thumbnail');
+      for (const label of labelText) if (overlaps(credit, label.box)) fail(`credit widget overlaps ${label.label} label`);
+      for (const card of cardSpecsAt(f)) {
+        if (card.opacity > 0.02 && overlaps(credit, card.box)) fail(`credit widget overlaps ${card.id} card`);
+      }
     }
 
     if (isWide(f)) {
@@ -1681,6 +1902,8 @@ export const WalkthroughV6Diagram: React.FC = () => {
   const thumb = thumbStateAt(f);
   const badge4r = badge4rOpacity(f);
   const badge7a = badge7aAt(f);
+  const browser = positions.browser;
+  const website = positions.website;
   const queue = positions.queue;
   const check = positions.check;
   const gpu = positions.gpu;
@@ -1701,6 +1924,8 @@ export const WalkthroughV6Diagram: React.FC = () => {
         </svg>
 
         {queue && presence.queue > 0.02 ? <QueueRack f={f} queue={queue} /> : null}
+        {browser && website && queue ? <SecondUpload f={f} browser={browser} website={website} queue={queue} /> : null}
+        {browser && positions.storage ? <UploadChip f={f} browser={browser} storage={positions.storage} /> : null}
 
         {thumb.opacity > 0.001 ? (
           <div
@@ -1783,11 +2008,11 @@ export const WalkthroughV6Diagram: React.FC = () => {
 
       {cards.map((card) => {
         if (card.id === 'readout') return <ReadoutCard key={card.id} f={f} box={card.box} opacity={card.opacity} />;
-        if (card.id === 'refunded') return <RefundCard key={card.id} box={card.box} opacity={card.opacity} />;
         if (card.id === 'status') return <StatusCard key={card.id} f={f} box={card.box} opacity={card.opacity} />;
-        if (card.id === 'clock') return <ClockCard key={card.id} box={card.box} opacity={card.opacity} />;
-        return <CreditCard key={card.id} f={f} box={card.box} opacity={card.opacity} />;
+        return <ClockCard key={card.id} box={card.box} opacity={card.opacity} />;
       })}
+
+      <CreditWidget f={f} />
     </AbsoluteFill>
   );
 };

@@ -66,8 +66,6 @@ export type IconName =
   | 'terraform'
   | 'key'
   | 'clock'
-  | 'speaker'
-  | 'muted'
   | 'tick'
   | 'cross'
   | 'retry';
@@ -176,18 +174,6 @@ const IconArt: Record<IconName, React.ReactNode> = {
     <>
       <circle cx="32" cy="32" r="20" />
       <path d="M32 20v13l9 6" />
-    </>
-  ),
-  speaker: (
-    <>
-      <path d="M12 26h8l10-8v28l-10-8h-8z" />
-      <path d="M37 25c3 3 3 11 0 14M42 21c6 6 6 16 0 22" />
-    </>
-  ),
-  muted: (
-    <>
-      <path d="M12 26h8l10-8v28l-10-8h-8z" />
-      <path d="M38 27l12 12M50 27L38 39" />
     </>
   ),
   tick: <path d="M14 34l11 11 25-27" />,
@@ -537,8 +523,6 @@ type LinkProps = {
   path: PathSpec;
   appear: number;
   draw?: number;
-  dashed?: boolean;
-  dashedAt?: number;
   gap?: number;
   hot?: number;
   colour?: string;
@@ -554,8 +538,6 @@ export const Link: React.FC<LinkProps> = ({
   path,
   appear,
   draw = 20,
-  dashed = false,
-  dashedAt,
   gap = 0,
   hot = 0,
   colour = LINK_COLOUR,
@@ -574,7 +556,6 @@ export const Link: React.FC<LinkProps> = ({
     gap > 0.5
       ? [trim(points, fractions, 0, 0.5 - gap / 2 / total), trim(points, fractions, 0.5 + gap / 2 / total, 1)]
       : [points];
-  const dashP = dashed ? (dashedAt === undefined ? 1 : ease(f, dashedAt, dashedAt + 12)) : 0;
   const hotP = clamp(hot);
   const end = pointAt(points, fractions, 1);
   const mid = pointAt(points, fractions, 0.62);
@@ -604,24 +585,9 @@ export const Link: React.FC<LinkProps> = ({
           stroke={mix(colour, '#FFB47C', hotP)}
           strokeWidth={width}
           strokeLinecap="round"
-          opacity={1 - dashP * 0.82}
           {...drawProps}
         />
       ))}
-      {dashP > 0.01
-        ? segments.map((segment, i) => (
-            <path
-              key={`dash${i}`}
-              d={dOf(segment)}
-              fill="none"
-              stroke={mix('#8B9DB4', '#FFB47C', hotP)}
-              strokeWidth={width + 0.2}
-              strokeLinecap="round"
-              strokeDasharray="13 15"
-              opacity={dashP}
-            />
-          ))
-        : null}
       {arrow && p > 0.92 ? (
         <path
           d={arrowD(end, pathAngle(path, 1), 13)}
