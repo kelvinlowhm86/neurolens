@@ -26,8 +26,8 @@ const LOOK: Record<Exclude<NodeState, 'hidden'>, Look> = {
     border: 'rgba(150,168,190,.62)',
     icon: '#ACBCCE',
     label: '#D6DCE4',
-    glow: 0.16,
-    opacity: 0.96,
+    glow: 0.12,
+    opacity: 0.35,
   },
   lit: {
     border: 'rgba(255,138,42,.78)',
@@ -41,14 +41,14 @@ const LOOK: Record<Exclude<NodeState, 'hidden'>, Look> = {
     icon: '#5D6672',
     label: '#6B727C',
     glow: 0.04,
-    opacity: 0.46,
+    opacity: 0.35,
   },
   off: {
     border: 'rgba(52,58,67,.55)',
     icon: '#4B535D',
     label: '#555C65',
     glow: 0,
-    opacity: 0.3,
+    opacity: 0.32,
   },
 };
 
@@ -69,7 +69,8 @@ export type IconName =
   | 'speaker'
   | 'muted'
   | 'tick'
-  | 'cross';
+  | 'cross'
+  | 'retry';
 
 const iconDots = (
   <>
@@ -191,6 +192,12 @@ const IconArt: Record<IconName, React.ReactNode> = {
   ),
   tick: <path d="M14 34l11 11 25-27" />,
   cross: <path d="M18 18l28 28M46 18L18 46" />,
+  retry: (
+    <>
+      <path d="M52 30a20 20 0 1 1-6-14" />
+      <path d="M52 12v18H34" />
+    </>
+  ),
 };
 
 export const Icon: React.FC<{name: IconName; size?: number}> = ({name, size = 64}) => (
