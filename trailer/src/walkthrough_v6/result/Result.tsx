@@ -5,7 +5,10 @@ import {Graph} from '../../edit/Graph';
 import {
   BrainView, Cursor, PhoneClip, Ring, SpeakerIcon, Stage, clamp, easeBack, easeInOut, easeOut, lerp,
 } from '../common';
-import {DURATION, FPS, MUTED, OVERALL, PEAK, PEAK_CLICK, PEAK_SCORE, RANGE, SHOT, TO, TOGGLE_CLICK} from './timeline';
+import {
+  CURSOR_IN, DASHED, DURATION, FPS, MUTED, OVERALL, PEAK, PEAK_CLICK, PEAK_MARK, PEAK_SCORE, RANGE, SHOT, STRONGER, TO,
+  TOGGLE_CLICK, TOGGLE_IN, VOICE_LINE,
+} from './timeline';
 
 // Fixed, centred layout: clip and brain in a band on top, the chart under them. Between
 // shots only brightness changes, except 8e: the chart and brain fade out and the clip moves to the middle, alone.
@@ -48,7 +51,7 @@ export const Result: React.FC = () => {
   const clipBox = {x: lerp(CLIP.x, CLIP_HERO.x, clipLift), y: lerp(CLIP.y, CLIP_HERO.y, clipLift), w: lerp(CLIP.w, CLIP_HERO.w, clipLift)};
   const jumpGlow = frame >= PEAK_CLICK ? 1 - easeOut(frame, PEAK_CLICK, PEAK_CLICK + 24) : 0;
 
-  const rise = easeInOut(frame, SHOT.g.start + 2, SHOT.g.start + 34);
+  const rise = easeInOut(frame, TOGGLE_CLICK + 4, TOGGLE_CLICK + 36);
   const chart = {...CHART, y: lerp(CHART.y, CHART_BIG.y, rise), h: lerp(CHART.h, CHART_BIG.h, rise)};
   const innerW = chart.w - PAD.l - PAD.r;
   const innerH = chart.h - PAD.t - PAD.b;
@@ -74,23 +77,23 @@ export const Result: React.FC = () => {
   };
 
   const lineProgress = easeInOut(frame, SHOT.b.start + 4, SHOT.b.start + 80);
-  const tint = 0.2 * easeOut(frame, SHOT.c.start + 14, SHOT.c.start + 56);
-  const zeroBright = easeOut(frame, SHOT.c.start + 4, SHOT.c.start + 28);
+  const tint = 0.2 * easeOut(frame, STRONGER, STRONGER + 42);
+  const zeroBright = easeOut(frame, DASHED, DASHED + 24);
   const zeroOpacity = 0.3 + 0.7 * zeroBright;
   const zeroLabel = zeroBright * (1 - easeOut(frame, SHOT.g.start, SHOT.g.start + 14));
-  const mutedProgress = easeInOut(frame, SHOT.g.start + 10, SHOT.g.start + 86);
-  const gap = easeOut(frame, SHOT.g.start + 18, SHOT.g.start + 88);
-  const legendOpacity = easeOut(frame, SHOT.g.start + 10, SHOT.g.start + 40);
+  const mutedProgress = easeInOut(frame, TOGGLE_CLICK + 8, TOGGLE_CLICK + 84);
+  const gap = easeOut(frame, VOICE_LINE, VOICE_LINE + 40);
+  const legendOpacity = easeOut(frame, TOGGLE_CLICK + 8, TOGGLE_CLICK + 38);
 
   const clipSecond = frame < PEAK_CLICK ? frame / FPS : PEAK + (frame - PEAK_CLICK) / FPS;
-  const markerPop = easeBack(frame, SHOT.d.start + 24, SHOT.d.start + 46);
+  const markerPop = easeBack(frame, PEAK_MARK, PEAK_MARK + 22);
   const peak = {
     x: CHART.x + xAt(PEAK),
     y: CHART.y + PAD.t + ((RANGE[1] - PEAK_SCORE) / (RANGE[1] - RANGE[0])) * (CHART.h - PAD.t - PAD.b),
   };
 
   const muted = frame >= TOGGLE_CLICK;
-  const toggleIn = easeOut(frame, SHOT.f.start + 14, SHOT.f.start + 34);
+  const toggleIn = easeOut(frame, TOGGLE_IN, TOGGLE_IN + 20);
   const toggleScale = lerp(1, 0.62, easeInOut(frame, TOGGLE_CLICK + 14, TOGGLE_CLICK + 40));
   const toggleOpacity = toggleIn * lerp(1, 0.9, easeOut(frame, TOGGLE_CLICK + 14, TOGGLE_CLICK + 40));
   const togglePulse = muted ? 0 : 0.2 + 0.05 * Math.sin(frame / 8);
@@ -100,14 +103,14 @@ export const Result: React.FC = () => {
   const fromPeak = {x: peak.x + 330, y: peak.y + 190};
   let cursor = rest;
   if (frame < SHOT.f.start) {
-    const p = easeInOut(frame, SHOT.d.start + 40, PEAK_CLICK - 8);
+    const p = easeInOut(frame, CURSOR_IN, PEAK_CLICK - 8);
     cursor = {x: lerp(fromPeak.x, rest.x, p), y: lerp(fromPeak.y, rest.y, p)};
   } else {
     const p = easeInOut(frame, SHOT.f.start + 30, TOGGLE_CLICK - 4);
     cursor = {x: lerp(rest.x, press.x, p), y: lerp(rest.y, press.y, p)};
   }
   const cursorGate = 1 - (easeOut(frame, SHOT.e.start - 4, SHOT.e.start + 8) - easeOut(frame, SHOT.f.start + 26, SHOT.f.start + 38));
-  const cursorOpacity = cursorGate * Math.min(easeOut(frame, SHOT.d.start + 30, SHOT.d.start + 44), 1 - easeOut(frame, TOGGLE_CLICK + 14, TOGGLE_CLICK + 30));
+  const cursorOpacity = cursorGate * Math.min(easeOut(frame, CURSOR_IN - 10, CURSOR_IN + 4), 1 - easeOut(frame, TOGGLE_CLICK + 14, TOGGLE_CLICK + 30));
   const pressed = (frame >= PEAK_CLICK && frame < PEAK_CLICK + 5) || (frame >= TOGGLE_CLICK && frame < TOGGLE_CLICK + 5);
 
   const accent = muted ? C.cool : C.hot;

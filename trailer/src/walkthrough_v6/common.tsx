@@ -11,8 +11,6 @@ import {SWEE} from '../walkthrough/timeline';
 
 export const FPS = 30;
 export const BG = '#0B0C0F';
-export const RATE = 2.6; // scratch voice: words per second
-export const HOLD = 0.5; // seconds of silence after each line
 export const STRIP_H = 110;
 export const STRIP_TOP = 1080 - STRIP_H;
 export const SAFE = 80;
@@ -28,22 +26,6 @@ export const easeInOut = (f: number, a: number, b: number) =>
 
 export const easeBack = (f: number, a: number, b: number) =>
   interpolate(f, [a, b], [0, 1], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.out(Easing.back(1.6))});
-
-export type Line = [shot: string, text: string];
-export type Cue = {shot: string; text: string; words: number; start: number; end: number};
-
-/** Scratch timeline: each line lasts words / RATE seconds, plus HOLD. The real voice replaces this. */
-export const buildTimeline = (lines: Line[]): {cues: Cue[]; duration: number} => {
-  let cursor = 0;
-  const cues = lines.map(([shot, text]) => {
-    const words = text.trim().split(/\s+/).length;
-    const frames = Math.round((words / RATE + HOLD) * FPS);
-    const cue = {shot, text, words, start: cursor, end: cursor + frames};
-    cursor += frames;
-    return cue;
-  });
-  return {cues, duration: cursor};
-};
 
 export const timecode = (second: number) => {
   const whole = Math.max(0, Math.floor(second));

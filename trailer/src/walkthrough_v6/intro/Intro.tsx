@@ -4,7 +4,7 @@ import {C, fontFamily} from '../../edit/ui';
 import {
   BrainView, CreditStrip, Cursor, PhoneClip, Ring, Signpost, Stage, clamp, easeBack, easeInOut, easeOut, lerp,
 } from '../common';
-import {CLIP_SECONDS, CREDIT_SECONDS, FILE_NAME, FPS, SHOT} from './timeline';
+import {BRAIN_IN, CLIP_SECONDS, CREDIT_SECONDS, DROP, FILE_NAME, FPS, HELD, PRICE, SHOT} from './timeline';
 
 const FRAME_ART = 'walkthrough/swee/frames/f0.jpg';
 const minutes = (seconds: number) => (seconds % 60 === 0 ? `${seconds / 60} min` : `${Math.floor(seconds / 60)} min ${seconds % 60} s`);
@@ -52,30 +52,30 @@ export const Intro: React.FC = () => {
   const clipX = lerp(680, 480, shrink);
   const clipY = lerp(36, 540 - clipH / 2, shrink);
   const clipOpacity = 1 - easeOut(frame, SHOT['1c'].start - 4, SHOT['1c'].start + 8);
-  const brainIn = easeOut(frame, SHOT['1b'].start + 14, SHOT['1b'].start + 44) * clipOpacity;
+  const brainIn = easeOut(frame, BRAIN_IN, BRAIN_IN + 30) * clipOpacity;
 
-  // 1c-2a: the upload zone, then the file dropped on it.
+  // 1c-2a: the upload zone, then the file dragged over it and dropped on "Drop it in" (2b).
   const zoneIn = easeOut(frame, SHOT['1c'].start + 2, SHOT['1c'].start + 18);
-  const zoneOut = 1 - easeOut(frame, SHOT['2b'].start, SHOT['2b'].start + 10);
-  const zoneDim = 1 - 0.7 * easeOut(frame, SHOT['2a'].start + 62, SHOT['2a'].start + 82);
+  const zoneOut = 1 - easeOut(frame, DROP + 20, DROP + 30);
+  const zoneDim = 1 - 0.7 * easeOut(frame, DROP - 14, DROP + 6);
   const chipIn = easeOut(frame, SHOT['2a'].start + 8, SHOT['2a'].start + 22);
-  const drag = easeInOut(frame, SHOT['2a'].start + 14, SHOT['2a'].start + 74);
-  const dropped = frame >= SHOT['2a'].start + 76;
+  const drag = easeInOut(frame, SHOT['2a'].start + 14, DROP);
+  const dropped = frame >= DROP;
   const chipPos = {x: lerp(1480, 960, drag), y: lerp(850, 590, drag)};
-  const chipScale = frame < SHOT['2a'].start + 76 ? lerp(1.04, 1, drag) : 1 - 0.04 * Math.sin(clamp((frame - SHOT['2a'].start - 76) / 10) * Math.PI);
-  const chipOut = 1 - easeOut(frame, SHOT['2b'].start, SHOT['2b'].start + 10);
-  const ring = clamp((frame - SHOT['2a'].start - 76) / 18);
+  const chipScale = frame < DROP ? lerp(1.04, 1, drag) : 1 - 0.04 * Math.sin(clamp((frame - DROP) / 10) * Math.PI);
+  const chipOut = 1 - easeOut(frame, DROP + 20, DROP + 30);
+  const ring = clamp((frame - DROP) / 18);
   const cursorX = chipPos.x + 36;
   const cursorY = chipPos.y + 34;
-  const cursorOpacity = easeOut(frame, SHOT['2a'].start + 6, SHOT['2a'].start + 18) * (1 - easeOut(frame, SHOT['2a'].start + 96, SHOT['2a'].start + 112));
+  const cursorOpacity = easeOut(frame, SHOT['2a'].start + 6, SHOT['2a'].start + 18) * (1 - easeOut(frame, DROP + 14, DROP + 30));
 
   // 2b-2c: the file's length and price, then the held slice of credit.
-  const rowIn = easeOut(frame, SHOT['2b'].start + 4, SHOT['2b'].start + 20);
+  const rowIn = easeOut(frame, DROP + 22, DROP + 38);
   const rowDim = 1 - 0.45 * easeOut(frame, SHOT['2c'].start, SHOT['2c'].start + 18);
-  const pricePop = easeBack(frame, SHOT['2b'].start + 36, SHOT['2b'].start + 60);
-  const stripIn = easeOut(frame, SHOT['2c'].start + 4, SHOT['2c'].start + 20);
-  const held = easeInOut(frame, SHOT['2c'].start + 18, SHOT['2c'].start + 60);
-  const heldWord = easeOut(frame, SHOT['2c'].start + 30, SHOT['2c'].start + 46);
+  const pricePop = easeBack(frame, PRICE, PRICE + 24);
+  const stripIn = easeOut(frame, SHOT['2c'].start, SHOT['2c'].start + 16);
+  const held = easeInOut(frame, HELD, HELD + 40);
+  const heldWord = easeOut(frame, HELD + 4, HELD + 20);
 
   return (
     <Stage>

@@ -1,5 +1,5 @@
 import swee from '../../../public/walkthrough/swee/result.json';
-import {Line, buildTimeline} from '../common';
+import {ShotCue, buildShots, wordFrame} from '../voice';
 
 export {FPS} from '../common';
 export const WIDTH = 1920;
@@ -21,25 +21,32 @@ const HIGH = Math.max(...ALL);
 const PAD = (HIGH - LOW) * 0.12 || 0.04;
 export const RANGE: [number, number] = [LOW - PAD, HIGH + PAD];
 
-// Scratch timings (2.6 words per second plus a 0.5 s hold). The real voice replaces these lines' lengths.
-export const LINES: Line[] = [
-  ['8a', "About ten minutes later, here's the result."],
-  ['8b', "The line shows how strong the response is. The brain shows where it's happening."],
-  ['8c', 'Anything above the dashed line is a stronger response than ordinary viewing.'],
-  ['8d', 'It peaks at nine seconds. Click the peak, and the video jumps right to it.'],
-  ['8e', "She's telling the story over old photos."],
-  ['8f', 'But a lot of feeds autoplay on mute.'],
-  ['8g', 'Turn the sound off, and the whole line drops. Most of this response is coming from her voice.'],
-];
-
-const built = buildTimeline(LINES);
-export const CUES = built.cues;
-export const DURATION = built.duration + 15;
+export const SHOTS = buildShots([
+  {shot: '8a', ids: ['8.1']},
+  {shot: '8b', ids: ['8.2']},
+  {shot: '8c', ids: ['8.3']},
+  {shot: '8d', ids: ['8.4']},
+  {shot: '8e', ids: ['8.5']},
+  {shot: '8f', ids: ['8.6']},
+  {shot: '8g', ids: ['8.7', '8.8'], sectionEnd: true},
+]);
+export const CUES = SHOTS.cues;
+export const DURATION = SHOTS.duration;
+export const LINES = CUES.flatMap((cue) => cue.lines);
 
 export const SHOT = Object.fromEntries(CUES.map((cue) => [cue.shot.slice(1), cue])) as Record<
   'a' | 'b' | 'c' | 'd' | 'e' | 'f' | 'g',
-  (typeof CUES)[number]
+  ShotCue
 >;
+const word = (shot: keyof typeof SHOT, line: number, token: string, occurrence = 0, edge: 'start' | 'end' = 'start') =>
+  wordFrame(SHOT[shot].lines[line], token, occurrence, edge);
 
-export const PEAK_CLICK = SHOT.d.start + 112;
-export const TOGGLE_CLICK = SHOT.f.start + 66;
+// Moments keyed to words (frames in the result).
+export const PEAK_MARK = word('d', 0, 'peaks'); // "It peaks at nine seconds"
+export const CURSOR_IN = word('d', 0, 'seconds', 0, 'end'); // the cursor appears as the sentence ends
+export const PEAK_CLICK = word('d', 0, 'peak', 0, 'start'); // "Click the peak"
+export const DASHED = word('c', 0, 'dashed'); // "above the dashed line"
+export const STRONGER = word('c', 0, 'stronger'); // "is a stronger response"
+export const TOGGLE_IN = word('f', 0, 'autoplay'); // "autoplay on mute"
+export const TOGGLE_CLICK = word('g', 0, 'off', 0, 'start'); // "Turn the sound off"
+export const VOICE_LINE = SHOT.g.lines[1].start; // "Most of this response is coming from her voice"

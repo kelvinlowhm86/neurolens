@@ -2,7 +2,7 @@ import React from 'react';
 import {useCurrentFrame} from 'remotion';
 import {C, fontFamily} from '../../edit/ui';
 import {Signpost, Stage, easeInOut, easeOut, lerp} from '../common';
-import {DURATION, REPORT, SHOT} from './timeline';
+import {DURATION, REPORT, ROW_IN, SHOT} from './timeline';
 
 const fmt = (s: number) => `0:${String(s).padStart(2, '0')}`;
 const range = `${fmt(REPORT.moment.start)}–${fmt(REPORT.moment.end)}`;
@@ -33,7 +33,7 @@ export const Outro: React.FC = () => {
   // 9: the report card appears with "Then the report reads the whole thing" (9a), the three rows of one
   // moment follow the voice (9b), then the Do line alone (9d). Only the Do line is written out in full.
   const cardIn = easeOut(frame, SHOT['9a'].start + 2, SHOT['9a'].start + 20);
-  const rowsIn = (n: number) => easeOut(frame, SHOT['9b'].start + 8 + n * 36, SHOT['9b'].start + 28 + n * 36);
+  const rowsIn = (n: number) => easeOut(frame, ROW_IN[n], ROW_IN[n] + 20);
   const rowsQuiet = easeInOut(frame, SHOT['9d'].start + 4, SHOT['9d'].start + 22);
   const cardOut = 1 - easeOut(frame, SHOT['10a'].start - 6, SHOT['10a'].start + 6);
   const bedrock = easeOut(frame, SHOT['9c'].start + 6, SHOT['9c'].start + 20) * (1 - easeOut(frame, SHOT['9d'].start, SHOT['9d'].start + 12));

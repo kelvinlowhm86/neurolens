@@ -17,9 +17,8 @@ import {
 } from './Diagram';
 import {bez, CLIP_SRC, MONO} from './styles/shared';
 import envelope from './sound_envelope.json';
+import {LineCue, buildShots, speechFrame, wordFrame} from './voice';
 
-const RATE = 2.6;
-const HOLD = 0.5;
 const FPS = 30;
 const SAFE = 80;
 
@@ -64,68 +63,40 @@ const CLIP_FRAMES = ['f0', 'f5', 'f15', 'f25', 'f35'].map(
   (name) => `walkthrough/swee/frames/${name}.jpg`,
 );
 
-const LINES: [string, string][] = [
-  [
-    '3b',
-    "The video goes straight into S3, through a short-lived upload link. It never passes through the website, so a big file can't slow it down for anyone else.",
-  ],
-  ['3c', "The website, a Lambda function, just puts a job on an SQS queue, and it's done."],
-  ['3d', "It's asynchronous. Nothing waits on the GPU, so each side can scale, or fail, on its own."],
-  [
-    '4',
-    'Before any money is spent on a GPU, another Lambda opens the file and reads its real length, rather than trusting what the browser said. It works the price out again from that.',
-  ],
-  [
-    '4r',
-    "If the file won't open, runs too long, or there isn't enough credit, you're refunded right there, and no GPU ever wakes up.",
-  ],
-  [
-    '5a',
-    'GPUs are expensive, so none is left running. The model runs on SageMaker, which starts a GPU when a job arrives, and scales back to zero when things go quiet.',
-  ],
-  [
-    '5b',
-    "The catch is that starting one takes a few minutes. For a chatbot, that would be a problem. But you're not waiting for a reply here; you're getting an analysis to study. So a few minutes is a fair price for paying nothing while nobody's using it.",
-  ],
-  [
-    '5c',
-    "The website and the database work the same way. Lambda and Aurora Serverless cost almost nothing when idle, and there's no server to look after.",
-  ],
-  [
-    '6',
-    "Once it's up, it runs TRIBE, a research model from Meta. It learned from the brain scans of over seven hundred people as they watched films and listened to podcasts, so it can predict how a brain responds to a video it's never seen.",
-  ],
-  ['6', "It watches yours twice. Once with sound, once on mute. You'll see why."],
-  [
-    '7a',
-    "And if something breaks halfway? It tries once more. If it fails again, the job goes to a dead-letter queue, and your hold goes straight back. You're only charged once the result is saved.",
-  ],
-  ['7b', 'SQS can occasionally deliver the same job twice, so billing is idempotent: one job, one charge.'],
-  ['7c', "And a watchdog Lambda makes sure a stuck job can't leave a GPU quietly running up a bill."],
-  [
-    '7d',
-    'All of it is written as code, in Terraform, so the whole system can be reviewed, rebuilt, or torn down in one go.',
-  ],
+// Each shot is one script line (ids from walkthrough_script.md). The real voice sets every length.
+const SHOT_LINES: {row: string; id: string; sectionEnd?: boolean}[] = [
+  {row: '3b', id: '3.1'},
+  {row: '3c', id: '3.2'},
+  {row: '3d', id: '3.3', sectionEnd: true},
+  {row: '4', id: '4.1'},
+  {row: '4r', id: '4.2', sectionEnd: true},
+  {row: '5a', id: '5.1'},
+  {row: '5b', id: '5.2'},
+  {row: '5c', id: '5.3', sectionEnd: true},
+  {row: '6', id: '6.1'},
+  {row: '6', id: '6.2', sectionEnd: true},
+  {row: '7a', id: '7.1'},
+  {row: '7b', id: '7.2'},
+  {row: '7c', id: '7.3', sectionEnd: true},
+  {row: '7d', id: '7b.1', sectionEnd: true},
 ];
 
-let cursor = 0;
-export const TIMING = LINES.map(([row, text]) => {
-  const frames = Math.round((text.trim().split(/\s+/).length / RATE + HOLD) * FPS);
-  const start = cursor;
-  cursor += frames;
-  return {row, text, start, end: cursor, frames};
-});
-export const DURATION = cursor;
+const built = buildShots(SHOT_LINES.map(({row, id, sectionEnd}) => ({shot: row, ids: [id], sectionEnd})));
+export const TIMING = built.cues.map((cue) => ({row: cue.shot, line: cue.lines[0], start: cue.start, end: cue.end}));
+export const DURATION = built.duration;
+export const LINE_CUES: LineCue[] = TIMING.map((cue) => cue.line);
 
 const CUE = (row: string, occurrence = 0) => {
   const matches = TIMING.filter((line) => line.row === row);
   return matches[occurrence] ?? matches[0];
 };
 
-const beat = (row: string, progress = 0, occurrence = 0) => {
-  const cue = CUE(row, occurrence);
-  return Math.round(cue.start + (cue.end - cue.start) * progress);
-};
+// A fraction of the way through the shot's speech (the hold after the last word is not counted).
+const beat = (row: string, progress = 0, occurrence = 0) => speechFrame(CUE(row, occurrence).line, progress);
+
+// The frame a word of the shot's line starts (or ends), estimated from the line's length.
+const word = (row: string, token: string, occurrence = 0, edge: 'start' | 'end' = 'start', pass = 0) =>
+  wordFrame(CUE(row, pass).line, token, occurrence, edge);
 
 type NodeId = 'browser' | 'website' | 'storage' | 'queue' | 'check' | 'gpu' | 'database' | 'watchdog' | 'dead';
 
@@ -148,44 +119,44 @@ const WEBSITE: StateKey[] = [
   {at: 0, state: 'dim'},
   {at: CUE('3c').start, state: 'lit'},
   {at: CUE('3d').start, state: 'dim'},
-  {at: beat('3d', 0.36), state: 'lit'},
-  {at: beat('3d', 0.52), state: 'dim'},
+  {at: CUE('3d').start + 76, state: 'lit'},
+  {at: CUE('3d').start + 109, state: 'dim'},
   {at: CUE('5c').start, state: 'lit'},
   {at: beat('5c', 0.55), state: 'idle'},
 ];
 
 const STORAGE: StateKey[] = [
   {at: 0, state: 'idle'},
-  {at: beat('3b', 0.4), state: 'lit'},
+  {at: word('3b', 'S3'), state: 'lit'},
   {at: CUE('3c').start, state: 'idle'},
 ];
 
 const QUEUE: StateKey[] = [
   {at: CUE('3c').start, state: 'idle'},
-  {at: beat('3c', 0.22), state: 'lit'},
-  {at: beat('3c', 0.62), state: 'idle'},
-  {at: beat('3d', 0.62), state: 'lit'},
+  {at: word('3c', 'job'), state: 'lit'},
+  {at: word('3c', 'done'), state: 'idle'},
+  {at: CUE('3d').start + 130, state: 'lit'},
   {at: CUE('4').start, state: 'lit'},
   {at: beat('4', 0.3), state: 'idle'},
   {at: CUE('5a').start, state: 'lit'},
-  {at: beat('5a', 0.28), state: 'idle'},
+  {at: word('5a', 'when'), state: 'idle'},
 ];
 
 const CHECK: StateKey[] = [
   {at: CUE('4').start, state: 'lit'},
-  {at: beat('5a', 0.25), state: 'idle'},
+  {at: word('5a', 'when', 0, 'end'), state: 'idle'},
 ];
 
 const GPU: StateKey[] = [
   {at: CUE('4r').start, state: 'off'},
-  {at: beat('5a', 0.2), state: 'lit'},
-  {at: beat('5a', 0.72), state: 'off'},
+  {at: word('5a', 'GPU'), state: 'lit'}, // "starts a GPU when a job arrives"
+  {at: word('5a', 'zero'), state: 'off'},
   {at: CUE('5b').start, state: 'off'},
   {at: CUE('6').start, state: 'lit'},
   {at: CUE('7a').start, state: 'lit'},
-  {at: beat('7a', 0.3), state: 'off'},
+  {at: word('7a', 'fails'), state: 'off'},
   {at: CUE('7b').start, state: 'lit'},
-  {at: beat('7b', 0.72), state: 'idle'},
+  {at: word('7b', 'one', 1), state: 'idle'},
   {at: CUE('7c').start, state: 'lit'},
   {at: beat('7c', 0.55), state: 'off'},
   {at: CUE('7d').start, state: 'idle'},
@@ -193,20 +164,20 @@ const GPU: StateKey[] = [
 
 const DATABASE: StateKey[] = [
   {at: CUE('5c').start, state: 'idle'},
-  {at: beat('5c', 0.12), state: 'lit'},
-  {at: beat('5c', 0.58), state: 'idle'},
+  {at: word('5c', 'database'), state: 'lit'},
+  {at: word('5c', 'nothing'), state: 'idle'},
 ];
 
 const WATCHDOG: StateKey[] = [
   {at: CUE('7c').start, state: 'idle'},
-  {at: beat('7c', 0.15), state: 'lit'},
+  {at: word('7c', 'watchdog'), state: 'lit'},
   {at: beat('7c', 0.72), state: 'idle'},
 ];
 
 const DEAD: StateKey[] = [
   {at: CUE('7a').start, state: 'idle'},
-  {at: beat('7a', 0.64), state: 'lit'},
-  {at: beat('7a', 0.94), state: 'idle'},
+  {at: word('7a', 'dead-letter'), state: 'lit'},
+  {at: word('7a', 'back', 0, 'end'), state: 'idle'},
 ];
 
 const NODES: NodeDef[] = [
@@ -510,16 +481,16 @@ const DUPLICATE_EXTRA: Box = {
 // The frame each shot is judged at: its subject is fully lit and its camera is at rest.
 export const STILLS = [
   {row: '3b', frame: beat('3b', 0.52)},
-  {row: '3c', frame: beat('3c', 0.55)},
-  {row: '3d', frame: beat('3d', 0.88)},
-  {row: '4', frame: beat('4', 0.82)},
+  {row: '3c', frame: word('3c', 'and')},
+  {row: '3d', frame: CUE('3d').start + 185},
+  {row: '4', frame: word('4', 'price') + 16},
   {row: '4r', frame: beat('4r', 0.72)},
-  {row: '5a', frame: beat('5a', 0.68)},
+  {row: '5a', frame: word('5a', 'scales') + 20},
   {row: '5b', frame: beat('5b', 0.52)},
   {row: '5c', frame: beat('5c', 0.5)},
   {row: '6 pass 1', frame: CUE('6', 1).start + 50},
-  {row: '6 pass 2', frame: CUE('6', 1).start + 130},
-  {row: '7a', frame: beat('7a', 0.86)},
+  {row: '6 pass 2', frame: CUE('6', 1).start + 126},
+  {row: '7a', frame: word('7a', 'back') + 6},
   {row: '7b', frame: beat('7b', 0.72)},
   {row: '7c', frame: beat('7c', 0.42)},
   {row: '7d', frame: beat('7d', 0.82)},
@@ -827,7 +798,7 @@ const thumbOpacityAt = (f: number) => {
   return Math.max(in4, in7);
 };
 
-const thumbGreyAt = (f: number) => ease(f, beat('7a', 0.28), beat('7a', 0.42));
+const thumbGreyAt = (f: number) => ease(f, word('7a', 'fails'), word('7a', 'fails') + 14);
 
 const thumbStateAt = (f: number) => {
   const {positions} = layoutAt(f);
@@ -864,8 +835,8 @@ const gpuPanelOpacity = (f: number) =>
   ease(f, CUE('6').start, CUE('6').start + 24) * (1 - ease(f, CUE('7a').start - 34, CUE('7a').start - 26));
 
 const runningAt = (f: number) => {
-  const up = beat('5a', 0.2);
-  const down = beat('5a', 0.7);
+  const up = word('5a', 'GPU');
+  const down = word('5a', 'zero');
   if (f < up) return 0;
   if (f < down) return ease(f, up, up + 14);
   return 1 - ease(f, down, down + 26);
@@ -906,10 +877,10 @@ const CARD_NODE: Record<CardId, NodeId> = {
 const CARD_ORDER: CardId[] = ['readout', 'status', 'clock'];
 
 const ffprobeOpacity = (f: number) =>
-  ease(f, beat('4', 0.22), beat('4', 0.34)) * (1 - ease(f, CUE('4r').start - 8, CUE('4r').start + 4));
+  ease(f, word('4', 'opens'), word('4', 'opens') + 12) * (1 - ease(f, CUE('4r').start - 8, CUE('4r').start + 4));
 
 const presignedOpacity = (f: number) =>
-  ease(f, beat('3b', 0.42), beat('3b', 0.54)) * (1 - ease(f, CUE('3c').start - 14, CUE('3c').start));
+  ease(f, word('3b', 'short-lived'), word('3b', 'short-lived') + 12) * (1 - ease(f, CUE('3c').start - 14, CUE('3c').start));
 
 const CARD_OPACITY: Record<CardId, (f: number) => number> = {
   readout: readoutOpacity,
@@ -917,16 +888,16 @@ const CARD_OPACITY: Record<CardId, (f: number) => number> = {
   clock: clockOpacity,
 };
 
-const creditReturnedAt = (f: number) => ease(f, beat('7a', 0.68), beat('7a', 0.9));
-const creditChargedAt = (f: number) => ease(f, beat('7b', 0.28), beat('7b', 0.4));
-const badRefundAt = (f: number) => ease(f, beat('4r', 0.5), beat('4r', 0.68));
+const creditReturnedAt = (f: number) => ease(f, word('7a', 'hold'), word('7a', 'back', 0, 'end'));
+const creditChargedAt = (f: number) => ease(f, word('7b', 'same'), word('7b', 'same') + 12);
+const badRefundAt = (f: number) => ease(f, word('4r', "you're"), word('4r', 'refunded', 0, 'end'));
 const badFileVisibleAt = (f: number) =>
   ease(f, beat('4r', 0.18), beat('4r', 0.3)) * (1 - ease(f, CUE('5a').start - 8, CUE('5a').start + 4));
 const creditGlowAt = (f: number) =>
   Math.max(
-    ease(f, beat('4r', 0.46), beat('4r', 0.56)) * (1 - ease(f, CUE('5a').start - 10, CUE('5a').start + 2)),
-    ease(f, beat('7a', 0.64), beat('7a', 0.74)) * (1 - ease(f, beat('7a', 0.9), beat('7a', 1))),
-    ease(f, beat('7b', 0.26), beat('7b', 0.36)) * (1 - ease(f, beat('7b', 0.46), beat('7b', 0.58))),
+    ease(f, word('4r', "you're") - 4, word('4r', "you're") + 8) * (1 - ease(f, CUE('5a').start - 10, CUE('5a').start + 2)),
+    ease(f, word('7a', 'hold') - 4, word('7a', 'hold') + 8) * (1 - ease(f, word('7a', 'back', 0, 'end'), word('7a', 'back', 0, 'end') + 8)),
+    ease(f, word('7b', 'same') - 2, word('7b', 'same') + 10) * (1 - ease(f, word('7b', 'same') + 22, word('7b', 'same') + 34)),
   );
 
 export const creditWidgetOpacity = (f: number) =>
@@ -1028,12 +999,13 @@ const Strike: React.FC<{progress: number; colour?: string; children: React.React
 );
 
 const ReadoutCard: React.FC<{f: number; box: Box; opacity: number}> = ({f, box, opacity}) => {
-  const claimedOn = ease(f, beat('4', 0.1), beat('4', 0.22));
-  const struck = ease(f, beat('4', 0.34), beat('4', 0.46));
-  const realOn = ease(f, beat('4', 0.36), beat('4', 0.48));
-  const priceOn = ease(f, beat('4', 0.2), beat('4', 0.32));
-  const priceStruck = ease(f, beat('4', 0.56), beat('4', 0.68));
-  const newPriceOn = ease(f, beat('4', 0.62), beat('4', 0.74));
+  // "opens the file", "its real length" (replaces what the browser said), "works the price out again".
+  const claimedOn = ease(f, word('4', 'opens') - 4, word('4', 'opens') + 8);
+  const struck = ease(f, word('4', 'real'), word('4', 'real') + 12);
+  const realOn = ease(f, word('4', 'real') + 2, word('4', 'real') + 14);
+  const priceOn = ease(f, word('4', 'opens') + 6, word('4', 'opens') + 18);
+  const priceStruck = ease(f, word('4', 'works'), word('4', 'works') + 12);
+  const newPriceOn = ease(f, word('4', 'price'), word('4', 'price') + 12);
   return (
     <CardShell box={box} opacity={opacity}>
       <div style={{display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 12, height: '100%', fontSize: 42, whiteSpace: 'nowrap'}}>
@@ -1211,9 +1183,9 @@ const CreditStrip: React.FC<{f: number}> = ({f}) => {
 
 const QueueRack: React.FC<{f: number; queue: Pt}> = ({f, queue}) => {
   const opacity =
-    ease(f, CUE('3c').start + 4, CUE('3c').start + 16) * (1 - ease(f, CUE('4').start - 10, CUE('4').start + 4));
+    ease(f, word('3c', 'puts') - 12, word('3c', 'puts')) * (1 - ease(f, CUE('4').start - 10, CUE('4').start + 4));
   if (opacity <= 0.001) return null;
-  const drop = glide(f, CUE('3c').start + 12, beat('3c', 0.38));
+  const drop = glide(f, word('3c', 'puts'), word('3c', 'queue', 0, 'end'));
   const jobTop = lerp(queue.y - 330, queueJobTop(queue, 0), drop);
   const secondStart = CUE('3d').start + 160;
   const secondDrop = glide(f, secondStart, secondStart + 24);
@@ -1329,7 +1301,7 @@ const SecondUpload: React.FC<{f: number; browser: Pt; website: Pt; queue: Pt}> =
 
 const UploadChip: React.FC<{f: number; browser: Pt; storage: Pt}> = ({f, browser, storage}) => {
   const start = CUE('3b').start + 8;
-  const arrive = beat('3b', 0.4);
+  const arrive = word('3b', 'S3', 0, 'end');
   const opacity = ease(f, start, start + 8) * (1 - ease(f, arrive - 6, arrive + 8));
   if (opacity <= 0.001) return null;
   const path = browserStoragePath(browser, storage);
@@ -1356,10 +1328,9 @@ const UploadChip: React.FC<{f: number; browser: Pt; storage: Pt}> = ({f, browser
 };
 
 const JobArrival: React.FC<{f: number; check: Pt; gpu: Pt}> = ({f, check, gpu}) => {
-  const start = beat('5a', 0.1);
-  const end = beat('5a', 0.3);
-  const opacity =
-    ease(f, start, start + 6) * (1 - ease(f, beat('5a', 0.36), beat('5a', 0.44)));
+  const start = word('5a', 'when'); // "when a job arrives"
+  const end = word('5a', 'arrives', 0, 'end');
+  const opacity = ease(f, start, start + 6) * (1 - ease(f, end + 6, end + 14));
   if (opacity <= 0.001) return null;
   const t = glide(f, start, end);
   const from = check.x + 124;
@@ -1409,11 +1380,14 @@ const badge4rOpacity = (f: number) =>
   ease(f, beat('4r', 0.34), beat('4r', 0.46)) * (1 - ease(f, CUE('5a').start - 8, CUE('5a').start + 4));
 
 const badge7aAt = (f: number) => {
-  const first = ease(f, beat('7a', 0.16), beat('7a', 0.24)) * (1 - ease(f, beat('7a', 0.32), beat('7a', 0.38)));
-  const retry = ease(f, beat('7a', 0.34), beat('7a', 0.42)) * (1 - ease(f, beat('7a', 0.5), beat('7a', 0.56)));
-  const second = ease(f, beat('7a', 0.52), beat('7a', 0.6));
+  const broke = word('7a', 'breaks');
+  const retried = word('7a', 'tries');
+  const failed = word('7a', 'fails');
+  const first = ease(f, broke, broke + 10) * (1 - ease(f, retried - 6, retried + 2));
+  const retry = ease(f, retried, retried + 10) * (1 - ease(f, failed - 8, failed));
+  const second = ease(f, failed, failed + 10);
   const out = 1 - ease(f, CUE('7b').start - 40, CUE('7b').start - 26);
-  const kind: 'cross' | 'retry' = f >= beat('7a', 0.45) && f < beat('7a', 0.58) ? 'retry' : 'cross';
+  const kind: 'cross' | 'retry' = f >= word('7a', 'tries') + 4 && f < word('7a', 'fails') ? 'retry' : 'cross';
   return {opacity: Math.max(first, retry, second) * out, kind, retry: retry * out};
 };
 
@@ -1482,8 +1456,8 @@ const RetryLoop: React.FC<{f: number; gpu: Pt; opacity: number}> = ({f, gpu, opa
 };
 
 const FailureJob: React.FC<{f: number; gpu: Pt; dead: Pt}> = ({f, gpu, dead}) => {
-  const start = beat('7a', 0.6);
-  const end = beat('7a', 0.86);
+  const start = word('7a', 'goes'); // "the job goes to a dead-letter queue"
+  const end = word('7a', 'queue', 0, 'end');
   const opacity = ease(f, start, start + 8) * (1 - ease(f, CUE('7b').start - 8, CUE('7b').start + 2));
   if (opacity <= 0.001) return null;
   const t = glide(f, start, end);
@@ -1520,10 +1494,10 @@ const DuplicateJobs: React.FC<{f: number; gpu: Pt}> = ({f, gpu}) => {
   const opacity =
     ease(f, CUE('7b').start + 4, CUE('7b').start + 16) * (1 - ease(f, CUE('7c').start - 10, CUE('7c').start + 2));
   if (opacity <= 0.001) return null;
-  const firstIn = glide(f, beat('7b', 0.08), beat('7b', 0.26));
-  const secondIn = glide(f, beat('7b', 0.42), beat('7b', 0.6));
-  const charged = ease(f, beat('7b', 0.28), beat('7b', 0.4));
-  const already = ease(f, beat('7b', 0.62), beat('7b', 0.74));
+  const firstIn = glide(f, word('7b', 'deliver'), word('7b', 'deliver') + 18);
+  const secondIn = glide(f, word('7b', 'twice') - 4, word('7b', 'twice') + 14);
+  const charged = ease(f, word('7b', 'same'), word('7b', 'same') + 12);
+  const already = ease(f, word('7b', 'idempotent'), word('7b', 'idempotent') + 12); // the word lands as it shows
   const card = (index: number, drop: number) => {
     const x = gpu.x - 240 + index * 260;
     const y = gpu.y + 292 + (1 - drop) * 130;
@@ -1609,7 +1583,7 @@ const GpuPanel: React.FC<{f: number; gpu: Pt}> = ({f, gpu}) => {
   const opacity = gpuPanelOpacity(f);
   if (opacity <= 0.001) return null;
   const pass = CUE('6', 1);
-  const cut = pass.start + Math.round(pass.frames * 0.55);
+  const cut = word('6', 'once', 1, 'start', 1); // "once on mute"
   const passOn = ease(f, pass.start + 4, pass.start + 18);
   const inputBrightness = 0.45 + 0.55 * passOn;
   const cutOn = ease(f, cut, cut + 6);
@@ -1793,7 +1767,7 @@ const ProgressRing: React.FC<{f: number; gpu: Pt}> = ({f, gpu}) => {
 
 const TerraformOutline: React.FC<{f: number}> = ({f}) => {
   const draw = ease(f, CUE('7d').start + 4, CUE('7d').start + 44);
-  const label = ease(f, CUE('7d').start + 28, CUE('7d').start + 44);
+  const label = ease(f, word('7d', 'Terraform'), word('7d', 'Terraform') + 16);
   if (draw <= 0.001) return null;
   return (
     <>
@@ -2194,9 +2168,9 @@ export const WalkthroughV6Diagram: React.FC = () => {
       </AbsoluteFill>
 
       <Caption y={CAPTION_Y} text="asynchronous" from={CUE('3d').start + 8} to={CUE('4').start - 10} hot="asynchronous" />
-      <Caption y={CAPTION_Y} text="scale to zero" from={beat('5a', 0.62)} to={CUE('5b').start - 8} hot="zero" />
-      <Caption y={CAPTION_MIDDLE_Y} text="serverless" from={CUE('5c').start + 6} to={CUE('6').start - 10} hot="serverless" />
-      <Caption y={CAPTION_Y} text="idempotent" from={CUE('7b').start + 6} to={CUE('7c').start - 10} hot="idempotent" />
+      <Caption y={CAPTION_Y} text="scale to zero" from={word('5a', 'scales')} to={CUE('5b').start - 8} hot="zero" />
+      <Caption y={CAPTION_MIDDLE_Y} text="serverless" from={word('5c', 'Lambda')} to={CUE('6').start - 10} hot="serverless" />
+      <Caption y={CAPTION_Y} text="idempotent" from={word('7b', 'idempotent')} to={CUE('7c').start - 10} hot="idempotent" />
       <Caption y={CAPTION_Y} text="infrastructure as code" from={CUE('7d').start + 8} to={DURATION - 4} hot="code" />
 
       {cards.map((card) => {
