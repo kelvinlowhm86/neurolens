@@ -274,6 +274,16 @@ const thumbParkTop = (pos: Pt): Pt => ({
   y: pos.y - 64 - THUMB_GAP - THUMB_H,
 });
 
+const THUMB_BELOW_LABEL: NodeId[] = ['storage'];
+
+const thumbDockTop = (id: NodeId, pos: Pt): Pt => {
+  if (THUMB_BELOW_LABEL.includes(id)) {
+    const stack = nodeWorldBox(NODES_BY_ID[id], pos.x, pos.y, false, true, true);
+    return {x: pos.x - THUMB_W / 2, y: stack.y2 + THUMB_GAP};
+  }
+  return thumbParkTop(pos);
+};
+
 const thumbBoxFrom = (left: number, top: number): Box => ({
   x1: left,
   y1: top,
@@ -283,6 +293,7 @@ const thumbBoxFrom = (left: number, top: number): Box => ({
 
 const ROW_Y = 0;
 const ROW_GAP = 360;
+const OFF_ROW = 540;
 
 const MAIN_ROW: NodeId[] = ['browser', 'website', 'queue', 'check', 'gpu', 'dead'];
 const ALL_NODE_IDS: NodeId[] = [...MAIN_ROW, 'storage', 'database', 'watchdog'];
@@ -292,9 +303,9 @@ const FIXED_POSITIONS: Record<NodeId, Pt> = (() => {
   MAIN_ROW.forEach((id, index) => {
     positions[id] = {x: (index - (MAIN_ROW.length - 1) / 2) * ROW_GAP, y: ROW_Y};
   });
-  positions.storage = {x: (positions.browser.x + positions.website.x) / 2, y: -340};
-  positions.database = {x: positions.website.x, y: 340};
-  positions.watchdog = {x: positions.gpu.x, y: -340};
+  positions.storage = {x: (positions.browser.x + positions.website.x) / 2, y: -OFF_ROW};
+  positions.database = {x: positions.website.x, y: OFF_ROW};
+  positions.watchdog = {x: positions.gpu.x, y: -OFF_ROW};
   return positions;
 })();
 
@@ -307,10 +318,8 @@ const radiusBox = (x: number, y: number, rx: number, ry: number): Box => ({
   y2: y + ry,
 });
 
-const thumbTravelExtra = (from: Pt, to: Pt): Box => {
-  const a = thumbParkTop(from);
-  const b = thumbParkTop(to);
-  const control = {x: (a.x + b.x) / 2, y: Math.min(a.y, b.y) - 150};
+const thumbTravelExtra = (a: Pt, b: Pt): Box => {
+  const control = {x: (a.x + b.x) / 2, y: Math.min(a.y, b.y) - 60};
   const points = Array.from({length: 65}, (_, index) => bez(a, control, b, index / 64));
   const xs = points.map((point) => point.x);
   const ys = points.map((point) => point.y);
@@ -347,9 +356,17 @@ const pathPointsOf = (path: PathSpec, count = 24): Pt[] => {
 };
 
 const browserStoragePath = (browser: Pt, storage: Pt): PathSpec => ({
-  from: {x: browser.x + 42, y: browser.y - 20},
-  to: {x: storage.x - 42, y: storage.y - 40},
+  from: {x: browser.x - 70, y: browser.y - 30},
+  to: {x: storage.x - 64, y: storage.y - 40},
+  control: {x: browser.x - 220, y: browser.y - 240},
 });
+
+const rowOffRowPath = (row: Pt, off: Pt): PathSpec => {
+  const above = off.y < row.y;
+  return above
+    ? {from: {x: off.x, y: off.y + 252}, to: {x: row.x, y: row.y - 80}}
+    : {from: {x: row.x, y: row.y + 252}, to: {x: off.x, y: off.y - 80}};
+};
 
 const PRESIGN_GAP = 24;
 const PRESIGN_H = 38;
@@ -425,7 +442,10 @@ const PANEL_EXTRA: Box = {
   y2: FIXED_POSITIONS.gpu.y + 300,
 };
 const DUPLICATE_EXTRA = radiusBox(FIXED_POSITIONS.gpu.x, FIXED_POSITIONS.gpu.y + 390, 330, 150);
-const THUMB_TRAVEL_EXTRA = thumbTravelExtra(FIXED_POSITIONS.browser, FIXED_POSITIONS.storage);
+const THUMB_TRAVEL_EXTRA = thumbTravelExtra(
+  thumbParkTop(FIXED_POSITIONS.browser),
+  thumbDockTop('storage', FIXED_POSITIONS.storage),
+);
 
 const LAYOUTS: Layout[] = [
   {
@@ -434,6 +454,7 @@ const LAYOUTS: Layout[] = [
     thumbNodes: ['browser', 'storage'],
     extra: [PRESIGN.box, THUMB_TRAVEL_EXTRA],
     maxScale: 1.35,
+    height: 0.77,
   },
   {at: CUE('3c').start, ids: ['website', 'queue'], extra: QUEUE_RACK_EXTRA, maxScale: 1.35},
   {at: CUE('3d').start, ids: ['website', 'queue'], extra: QUEUE_RACK_EXTRA, maxScale: 1.35},
@@ -447,7 +468,7 @@ const LAYOUTS: Layout[] = [
   {at: CUE('4r').start, ids: ['check', 'gpu'], extra: [BAD_FILE_EXTRA], maxScale: 1.45},
   {at: CUE('5a').start, ids: ['queue', 'check', 'gpu'], maxScale: 1.15},
   {at: CUE('5b').start, ids: ['gpu'], extra: [RING_EXTRA], maxScale: 1.55},
-  {at: CUE('5c').start, ids: ['website', 'database'], maxScale: 1.55},
+  {at: CUE('5c').start, ids: ['website', 'database'], maxScale: 1.55, height: 0.77},
   {at: CUE('6').start, ids: ['gpu'], extra: [PANEL_EXTRA], maxScale: 1.5},
   {
     at: CUE('7a').start,
@@ -457,7 +478,7 @@ const LAYOUTS: Layout[] = [
     maxScale: 1.05,
   },
   {at: CUE('7b').start, ids: ['gpu'], extra: [DUPLICATE_EXTRA], maxScale: 1.4},
-  {at: CUE('7c').start, ids: ['watchdog', 'gpu'], maxScale: 1.55},
+  {at: CUE('7c').start, ids: ['watchdog', 'gpu'], maxScale: 1.55, height: 0.77},
   {
     at: CUE('7d').start,
     ids: ALL_NODE_IDS,
@@ -495,7 +516,7 @@ const cameraForLayout = (layout: Layout): Camera => {
   if (layout.thumbNodes) {
     boxes.push(
       ...layout.thumbNodes.map((id) => {
-        const park = thumbParkTop(FIXED_POSITIONS[id]);
+        const park = thumbDockTop(id, FIXED_POSITIONS[id]);
         return thumbBoxFrom(park.x, park.y);
       }),
     );
@@ -652,7 +673,7 @@ const linksAt = (f: number): LinkDraw[] => {
   if (pos('website') && pos('database')) {
     links.push({
       id: 'website-database',
-      path: autoPath(pos('website'), pos('database'), 84),
+      path: rowOffRowPath(pos('website'), pos('database')),
       appear: CUE('5c').start + 10,
       draw: 16,
       arrow: true,
@@ -672,7 +693,7 @@ const linksAt = (f: number): LinkDraw[] => {
   if (pos('watchdog') && pos('gpu')) {
     links.push({
       id: 'watchdog-gpu',
-      path: autoPath(pos('watchdog'), pos('gpu'), 84),
+      path: rowOffRowPath(pos('gpu'), pos('watchdog')),
       appear: CUE('7c').start + 10,
       draw: 16,
       arrow: true,
@@ -706,9 +727,9 @@ const thumbStateAt = (f: number) => {
     const toNode = positions.storage;
     if (fromNode && toNode) {
       const from = thumbParkTop(fromNode);
-      const to = thumbParkTop(toNode);
+      const to = thumbDockTop('storage', toNode);
       const t = glide(f, CUE('3b').start + 8, beat('3b', 0.55));
-      const control = {x: (from.x + to.x) / 2, y: Math.min(from.y, to.y) - 150};
+      const control = {x: (from.x + to.x) / 2, y: Math.min(from.y, to.y) - 60};
       const point = bez(from, control, to, t);
       left = point.x;
       top = point.y;
@@ -1372,6 +1393,7 @@ const GpuPanel: React.FC<{f: number; gpu: Pt}> = ({f, gpu}) => {
               <Sequence from={CUE('6').start} layout="none">
                 <OffthreadVideo
                   src={staticFile(CLIP_VIDEO_SRC)}
+                  trimBefore={62}
                   muted
                   style={{width: '100%', height: '100%', objectFit: 'cover', display: 'block'}}
                 />
