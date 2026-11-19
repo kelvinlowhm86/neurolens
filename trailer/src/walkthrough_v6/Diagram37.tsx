@@ -96,15 +96,17 @@ const beat = (row: string, progress = 0) => speechFrame(CUE(row).line, progress)
 const word = (row: string, token: string, occurrence = 0, edge: 'start' | 'end' = 'start') =>
   wordFrame(CUE(row).line, token, occurrence, edge);
 
-// The 7d tail is only ~1.2s after the voice, so the result-return beat uses the last ~1.5s of
-// 7b instead. The camera is already pulling back to the wide 7d view, which reveals the map.
-const RETURN_START = CUE('7b').end - 46;
+// The 7d tail is only ~1.2s after the voice, so the result-return beat uses the last ~1.1s of
+// 7b instead. The 7d camera settles this many frames before its line starts, so the beat begins
+// only once the wide view is at rest and both ends of every return link are on screen.
+const RETURN_SETTLE = 36;
+const RETURN_START = CUE('7d').start - RETURN_SETTLE + 2;
 const RETURN_END = CUE('7b').end - 1;
-const RETURN_STORAGE_END = RETURN_START + 19;
-const RETURN_DATABASE_END = RETURN_START + 21;
-const RETURN_BROWSER_START = RETURN_START + 25;
-const RETURN_BROWSER_ARRIVE = RETURN_START + 43;
-const RETURN_BROWSER_LIT = RETURN_START + 41;
+const RETURN_STORAGE_END = RETURN_START + 11;
+const RETURN_DATABASE_END = RETURN_START + 13;
+const RETURN_BROWSER_START = RETURN_START + 15;
+const RETURN_BROWSER_LIT = RETURN_START + 28;
+const RETURN_BROWSER_ARRIVE = RETURN_START + 31;
 
 type NodeId = 'browser' | 'website' | 'storage' | 'queue' | 'check' | 'gpu' | 'watchdog' | 'dead' | 'database';
 
@@ -271,11 +273,6 @@ const screenBox = (box: Box, cam: Camera): Box => ({
   y2: AREA_CY + (box.y2 - cam.cy) * cam.scale,
 });
 
-const screenPoint = (point: Pt, cam: Camera): Pt => ({
-  x: AREA_CX + (point.x - cam.cx) * cam.scale,
-  y: AREA_CY + (point.y - cam.cy) * cam.scale,
-});
-
 const crossesSafeArea = (box: Box) =>
   box.x1 < SAFE || box.x2 > 1920 - SAFE || box.y1 < SAFE || box.y2 > STRIP_TOP;
 
@@ -316,7 +313,6 @@ const ROW_GAP = 360;
 // framing check must keep pass 10's camera scales. The rows themselves keep their spacing.
 const OFF_ROW = 500;
 const STORAGE_ROW = 348;
-const DATABASE_ROW = 520;
 
 const MAIN_ROW: NodeId[] = ['browser', 'website', 'queue', 'check', 'gpu', 'dead'];
 const ALL_NODE_IDS: NodeId[] = [...MAIN_ROW, 'storage', 'watchdog', 'database'];
@@ -327,8 +323,9 @@ const FIXED_POSITIONS: Record<NodeId, Pt> = (() => {
     positions[id] = {x: (index - (MAIN_ROW.length - 1) / 2) * ROW_GAP, y: ROW_Y};
   });
   positions.storage = {x: (positions.browser.x + positions.website.x) / 2, y: -STORAGE_ROW};
+  // Watchdog mirrors the Database either side of GPU, so the wide view stays balanced.
   positions.watchdog = {x: positions.gpu.x, y: -OFF_ROW};
-  positions.database = {x: (positions.check.x + positions.gpu.x) / 2, y: DATABASE_ROW};
+  positions.database = {x: positions.gpu.x, y: OFF_ROW};
   return positions;
 })();
 
@@ -356,6 +353,9 @@ type Layout = {
   maxScale?: number;
   width?: number;
   height?: number;
+  // Frames before this shot's start at which the camera reaches its view (the 7d wide shot settles
+  // early so the result-return beat is never shown mid-pull).
+  settle?: number;
 };
 
 const linkControl = (path: PathSpec): Pt => {
@@ -383,9 +383,10 @@ const pathExtra = (path: PathSpec): Box => {
 };
 
 const browserStoragePath = (browser: Pt, storage: Pt): PathSpec => ({
-  from: {x: browser.x + 48, y: browser.y - 42},
-  to: {x: storage.x + 56, y: storage.y + 32},
-  control: {x: storage.x + 420, y: (browser.y + storage.y) / 2},
+  // Leaves and enters each icon sideways on the open left, so the arc never crosses a label.
+  from: {x: browser.x - 60, y: browser.y},
+  to: {x: storage.x - 60, y: storage.y},
+  control: {x: storage.x - 520, y: (browser.y + storage.y) / 2},
 });
 
 const nodeServiceBottom = () =>
@@ -406,11 +407,15 @@ const rowOffRowPath = (row: Pt, off: Pt): PathSpec => {
 };
 
 const PRESIGN_H = 38;
-const PRESIGN_T = 0.22;
+const PRESIGN_T = 0.5;
+// The caption sits just outside the upload arc's apex, on the open left.
+const PRESIGN_DX = -130;
+const PRESIGN_DY = 0;
 
 const presignGeometry = (browser: Pt, storage: Pt) => {
   const path = browserStoragePath(browser, storage);
-  const point = bez(path.from, linkControl(path), path.to, PRESIGN_T);
+  const onArc = bez(path.from, linkControl(path), path.to, PRESIGN_T);
+  const point = {x: onArc.x + PRESIGN_DX, y: onArc.y + PRESIGN_DY};
   const width = textWidth('presigned URL', 26, 400) + 24;
   return {
     x: point.x,
@@ -559,6 +564,7 @@ const LAYOUTS: Layout[] = [
     ids: ALL_NODE_IDS,
     extra: [WIDE_OUTLINE_BOX, TF_LABEL_BOX],
     move: 50,
+    settle: RETURN_SETTLE,
     maxScale: 1.4,
   },
 ];
@@ -618,7 +624,12 @@ const cameraForLayout = (layout: Layout): Camera => {
   return camera(cx, subject.y1 - (top - AREA_CY) / scale, scale);
 };
 
-const CAMS = LAYOUTS.map((layout) => ({at: layout.at, cam: cameraForLayout(layout), move: layout.move ?? 30}));
+const CAMS = LAYOUTS.map((layout) => ({
+  at: layout.at,
+  cam: cameraForLayout(layout),
+  move: layout.move ?? 30,
+  settle: layout.settle ?? 0,
+}));
 
 const lerpCamera = (a: Camera, b: Camera, t: number): Camera => ({
   cx: lerp(a.cx, b.cx, t),
@@ -635,10 +646,11 @@ const cameraAt = (f: number): Camera => {
   const from = CAMS[index];
   const to = CAMS[index + 1];
   if (!to) return from.cam;
-  const span = Math.max(1, to.at - from.at);
+  const end = to.at - to.settle;
+  const span = Math.max(1, end - from.at);
   const move = Math.min(to.move, span);
-  const start = to.at - move;
-  if (f > start) return lerpCamera(from.cam, to.cam, glide(f, start, to.at));
+  const start = end - move;
+  if (f > start) return lerpCamera(from.cam, to.cam, glide(f, start, end));
   return from.cam;
 };
 
@@ -796,13 +808,13 @@ const linksAt = (f: number): LinkDraw[] => {
       opacity: pair('watchdog', 'gpu', CUE('7b').start, CUE('7d').start),
     });
   }
-  const returnOn = inWindow(RETURN_START - 2, RETURN_END + 8);
+  const returnOn = inWindow(RETURN_START - 8, RETURN_END + 8);
   if (returnOn && pos('gpu') && pos('storage')) {
     links.push({
       id: 'gpu-storage',
       path: autoPath(pos('gpu'), pos('storage'), 84),
-      appear: RETURN_START - 2,
-      draw: 12,
+      appear: RETURN_START - 8,
+      draw: 8,
       arrow: true,
       width: 2.2,
       colour: 'rgba(150,166,188,.42)',
@@ -813,8 +825,8 @@ const linksAt = (f: number): LinkDraw[] => {
     links.push({
       id: 'gpu-database',
       path: autoPath(pos('gpu'), pos('database'), 84),
-      appear: RETURN_START - 2,
-      draw: 12,
+      appear: RETURN_START - 8,
+      draw: 8,
       arrow: true,
       width: 2.2,
       colour: 'rgba(150,166,188,.42)',
@@ -825,8 +837,8 @@ const linksAt = (f: number): LinkDraw[] => {
     links.push({
       id: 'website-browser',
       path: autoPath(pos('website'), pos('browser'), 84),
-      appear: RETURN_START - 2,
-      draw: 12,
+      appear: RETURN_START - 8,
+      draw: 8,
       arrow: true,
       width: 2.2,
       colour: 'rgba(150,166,188,.42)',
@@ -837,10 +849,10 @@ const linksAt = (f: number): LinkDraw[] => {
   return links.filter((link) => link.opacity > 0.001);
 };
 
-type PulseHop = {id: string; path: PathSpec; start: number; end: number};
+type PulseHop = {id: string; path: PathSpec; start: number; end: number; from: NodeId; to: NodeId};
 
 // One pulse per hop, over the same path and at the same frames as the clip/job that already
-// moves. The result-return hops in the last 1.5s of 7b are the last three.
+// moves. The result-return hops in the last ~1.1s of 7b are the last three.
 const pulsesAt = (): PulseHop[] => {
   const positions = FIXED_POSITIONS;
   const pos = (id: NodeId) => positions[id];
@@ -851,6 +863,8 @@ const pulsesAt = (): PulseHop[] => {
       path: browserStoragePath(pos('browser'), pos('storage')),
       start: CUE('3b').start + 8,
       end: word('3b', 'S3', 0, 'end'),
+      from: 'browser',
+      to: 'storage',
     });
   }
   if (pos('browser') && pos('website')) {
@@ -859,6 +873,8 @@ const pulsesAt = (): PulseHop[] => {
       path: autoPath(pos('browser'), pos('website'), 84),
       start: CUE('3d').start + 40,
       end: CUE('3d').start + 100,
+      from: 'browser',
+      to: 'website',
     });
   }
   if (pos('website') && pos('queue')) {
@@ -867,6 +883,8 @@ const pulsesAt = (): PulseHop[] => {
       path: autoPath(pos('website'), pos('queue'), 84),
       start: CUE('3d').start + 106,
       end: CUE('3d').start + 166,
+      from: 'website',
+      to: 'queue',
     });
   }
   if (pos('check') && pos('gpu')) {
@@ -875,6 +893,8 @@ const pulsesAt = (): PulseHop[] => {
       path: autoPath(pos('check'), pos('gpu'), 84),
       start: word('5a', 'job'),
       end: word('5a', 'GPU', 0, 'end'),
+      from: 'check',
+      to: 'gpu',
     });
   }
   if (pos('gpu') && pos('dead')) {
@@ -883,6 +903,8 @@ const pulsesAt = (): PulseHop[] => {
       path: autoPath(pos('gpu'), pos('dead'), 84),
       start: word('7a', 'goes'),
       end: word('7a', 'queue', 0, 'end'),
+      from: 'gpu',
+      to: 'dead',
     });
   }
   if (pos('gpu') && pos('storage')) {
@@ -891,6 +913,8 @@ const pulsesAt = (): PulseHop[] => {
       path: autoPath(pos('gpu'), pos('storage'), 84),
       start: RETURN_START,
       end: RETURN_STORAGE_END,
+      from: 'gpu',
+      to: 'storage',
     });
   }
   if (pos('gpu') && pos('database')) {
@@ -899,6 +923,8 @@ const pulsesAt = (): PulseHop[] => {
       path: autoPath(pos('gpu'), pos('database'), 84),
       start: RETURN_START + 2,
       end: RETURN_DATABASE_END,
+      from: 'gpu',
+      to: 'database',
     });
   }
   if (pos('website') && pos('browser')) {
@@ -907,6 +933,8 @@ const pulsesAt = (): PulseHop[] => {
       path: autoPath(pos('website'), pos('browser'), 84),
       start: RETURN_BROWSER_START,
       end: RETURN_BROWSER_ARRIVE,
+      from: 'website',
+      to: 'browser',
     });
   }
   return hops;
@@ -914,14 +942,27 @@ const pulsesAt = (): PulseHop[] => {
 
 const PULSES = pulsesAt();
 
-const LinkPulse: React.FC<{path: PathSpec; start: number; end: number; opacity?: number}> = ({
-  path,
-  start,
-  end,
-  opacity = 1,
-}) => {
+const LinkPulse: React.FC<{
+  path: PathSpec;
+  start: number;
+  end: number;
+  from: NodeId;
+  to: NodeId;
+  opacity?: number;
+}> = ({path, start, end, from, to, opacity = 1}) => {
   const f = useCurrentFrame();
-  const opacityNow = ease(f, start, start + 4) * (1 - ease(f, end, end + 8)) * opacity;
+  const cam = cameraAt(f);
+  // A pulse only makes sense while the whole link it rides is in shot: both nodes must be drawn
+  // and fully on screen, otherwise the dot floats with no line under it.
+  const endOnScreen = (id: NodeId) => {
+    const def = NODES_BY_ID[id];
+    const pos = FIXED_POSITIONS[id];
+    if (stateAt(f, def.keys).state === 'hidden' || nodeOpacityAt(def, f, cam) < 0.9) return false;
+    const box = screenBox(nodeWorldBox(def, pos.x, pos.y, false, true, false), cam);
+    return box.x1 >= 0 && box.x2 <= 1920 && box.y1 >= 0 && box.y2 <= STRIP_TOP;
+  };
+  const opacityNow =
+    ease(f, start, start + 4) * (1 - ease(f, end, end + 8)) * opacity * (endOnScreen(from) && endOnScreen(to) ? 1 : 0);
   if (opacityNow <= 0.001) return null;
   const t = glide(f, start, end);
   const points = pathPointsOf(path, 64);
@@ -994,18 +1035,6 @@ const statusOpacity = (f: number) =>
 const clockOpacity = (f: number) =>
   ease(f, CUE('5c').start - 2, CUE('5c').start + 10) * (1 - ease(f, CUE('7a').start - 10, CUE('7a').start + 4));
 
-const instancesOpacity = (f: number) =>
-  ease(f, CUE('5b').start + 6, CUE('5b').start + 18) * (1 - ease(f, CUE('7a').start + 4, CUE('7a').start + 18));
-
-const GPU_READOUT_WAKE = CUE('7a').start - 10;
-
-// 1 while the GPU has been running, 0 from "scales to zero" until the cold start completes.
-const instancesAt = (f: number) => {
-  if (f < word('5b', 'zero')) return 1;
-  if (f < GPU_READOUT_WAKE) return 0;
-  return 1;
-};
-
 const coldStartOpacity = (f: number) =>
   ease(f, CUE('5c').start + 4, CUE('5c').start + 16) * (1 - ease(f, CUE('7a').start - 8, CUE('7a').start + 4));
 
@@ -1013,12 +1042,8 @@ const coldStartOpacity = (f: number) =>
 const coldStartTime = (f: number) => {
   const progress = glide(f, CUE('5c').start + 10, CUE('7a').start - 12);
   const seconds = Math.round(progress * 200);
-  const clock = `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
-  return seconds === 0 ? clock : `~${clock}`;
+  return `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
 };
-
-const chargedReadoutOpacity = (f: number) =>
-  ease(f, word('7a', 'once', 1), word('7a', 'once', 1) + 10) * (1 - ease(f, CUE('7b').start - 14, CUE('7b').start));
 
 const gpuPanelOpacity = (f: number) =>
   ease(f, word('5a', 'wakes'), word('5a', 'wakes') + 24) * (1 - ease(f, CUE('5b').start, CUE('5b').start + 14));
@@ -1074,7 +1099,8 @@ const ffprobeOpacity = (f: number) =>
   ease(f, word('4', 'reads'), word('4', 'reads') + 12) * (1 - ease(f, CUE('4r').start - 8, CUE('4r').start + 4));
 
 const presignedOpacity = (f: number) =>
-  ease(f, word('3b', 'presigned'), word('3b', 'presigned') + 12) * (1 - ease(f, CUE('3c').start - 14, CUE('3c').start));
+  ease(f, word('3b', 'presigned'), word('3b', 'presigned') + 12) *
+  (1 - ease(f, CUE('3c').start - 32, CUE('3c').start - 18));
 
 const CARD_OPACITY: Record<CardId, (f: number) => number> = {
   readout: readoutOpacity,
@@ -1297,8 +1323,9 @@ const ScreenReadout: React.FC<{
   y: number;
   opacity: number;
   anchor?: ReadoutAnchor;
+  size?: number;
   children: React.ReactNode;
-}> = ({x, y, opacity, anchor = 'left', children}) => {
+}> = ({x, y, opacity, anchor = 'left', size = 23, children}) => {
   if (opacity <= 0.001) return null;
   return (
     <div
@@ -1311,7 +1338,7 @@ const ScreenReadout: React.FC<{
         borderRadius: 7,
         background: 'rgba(11,12,15,.72)',
         fontFamily: MONO,
-        fontSize: 23,
+        fontSize: size,
         letterSpacing: '.02em',
         color: '#98A2AE',
         opacity,
@@ -2186,8 +2213,12 @@ export const runSafeAreaCheck = () => {
       for (const label of labelText) if (overlaps(card.box, label.box)) fail(`${card.id} card overlaps ${label.label} label`);
     }
 
-    if (presignedOpacity(f) > 0.02 && crossesSafeArea(screenBox(PRESIGN.box, cam))) {
-      fail('presigned URL crosses the safe area');
+    if (presignedOpacity(f) > 0.02) {
+      const presignBox = screenBox(PRESIGN.box, cam);
+      if (crossesSafeArea(presignBox)) fail('presigned URL crosses the safe area');
+      for (const label of labelText) {
+        if (overlaps(presignBox, label.box)) fail(`presigned URL overlaps ${label.label} label`);
+      }
     }
 
     const arc = linksAt(f).find((link) => link.id === 'browser-storage');
@@ -2344,11 +2375,8 @@ export const WalkthroughV6Diagram: React.FC = () => {
     ? nodeWorldBox(NODES_BY_ID.check, check.x, check.y, false, true, true).y2
     : 0;
   const ffprobe = ffprobeOpacity(f);
-  const instances = instancesOpacity(f);
   const coldStart = coldStartOpacity(f);
-  const chargedReadout = chargedReadoutOpacity(f);
-  const gpuScreen = gpu ? screenPoint(gpu, cam) : null;
-  const chargedJob = gpu ? screenPoint({x: gpu.x - 240, y: gpu.y + 292}, cam) : null;
+  const clockCard = cards.find((card) => card.id === 'clock');
 
   return (
     <AbsoluteFill style={{background: '#0B0C0F'}}>
@@ -2360,7 +2388,7 @@ export const WalkthroughV6Diagram: React.FC = () => {
             <Link key={id} {...link} />
           ))}
           {PULSES.map((hop) => (
-            <LinkPulse key={hop.id} path={hop.path} start={hop.start} end={hop.end} />
+            <LinkPulse key={hop.id} path={hop.path} start={hop.start} end={hop.end} from={hop.from} to={hop.to} />
           ))}
         </svg>
 
@@ -2439,33 +2467,15 @@ export const WalkthroughV6Diagram: React.FC = () => {
         <TerraformOutline f={f} />
       </AbsoluteFill>
 
-      {gpuScreen && instances > 0.001 ? (
+      {clockCard && coldStart > 0.001 ? (
         <ScreenReadout
-          x={gpuScreen.x + NODE_GEOMETRY.iconHalf * cam.scale + 22}
-          y={gpuScreen.y - 30}
-          opacity={instances}
-        >
-          instances {instancesAt(f)}
-        </ScreenReadout>
-      ) : null}
-      {gpuScreen && coldStart > 0.001 ? (
-        <ScreenReadout
-          x={gpuScreen.x + NODE_GEOMETRY.iconHalf * cam.scale + 22}
-          y={gpuScreen.y + 6}
+          x={(clockCard.box.x1 + clockCard.box.x2) / 2}
+          y={clockCard.box.y2 + 34}
           opacity={coldStart}
-          anchor="left"
+          anchor="centre"
+          size={28}
         >
           cold start {coldStartTime(f)}
-        </ScreenReadout>
-      ) : null}
-      {chargedJob && chargedReadout > 0.001 ? (
-        <ScreenReadout
-          x={chargedJob.x + 6}
-          y={chargedJob.y - 10}
-          opacity={chargedReadout}
-          anchor="above-left"
-        >
-          charged ×1
         </ScreenReadout>
       ) : null}
 
