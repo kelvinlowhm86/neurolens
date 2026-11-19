@@ -20,8 +20,8 @@ export const DURATION = INTRO + DIAGRAM + RESULT + OUTRO;
 
 // Voice: one wav per script line, placed at its line's first word. Music (bed file at -14 LUFS) is
 // ducked: it sits ~15 dB under the voice (-19.9 LUFS) while someone speaks and rises in the pauses.
-const MUSIC_UNDER_VOICE = 0.11; // -19 dB
-const MUSIC_IN_GAPS = 0.16; // -16 dB: a gentle 3 dB lift, not a swell
+const MUSIC_UNDER_VOICE = 0.13; // -18 dB
+const MUSIC_IN_GAPS = 0.19; // -14 dB: a gentle 3 dB lift, not a swell
 const DUCK_DOWN = 15; // frames to dip before a line
 const DUCK_UP = 36; // frames to recover after it (slow, so the rise is felt, not heard)
 const MIN_GAP = 2 * FPS; // shorter pauses stay ducked, so the music doesn't pump between sentences
