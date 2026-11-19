@@ -30,11 +30,11 @@ export const ROW_IN = [nameWord('up') - 14, nameWord('moment') - 14, nameWord('c
 export const BEDROCK_IN = nameWord('Claude') - 6;
 // 9.2 names the sound-off finding: the card's caption appears as the voice says "dashed line".
 export const SOUND_OFF_IN = wordFrame(SHOT['9b'].lines[0], 'dashed') - 6;
-// 10: the counter's number is unknowable, so its "?" lands on "views"; on 10.2 the clip jumps to the
-// weak sound-off stretch (the real report's 8-13 s moment).
+// 10: the counter's number is unknowable, so its "?" lands on "views". The clip plays on from a few
+// seconds before the report's moment (8-13 s), so the playhead glides into it with no jump.
 export const VIEW_QUESTION_IN = wordFrame(SHOT['10a'].lines[0], 'views');
 export const CURSOR_FROM = REPORT.moment.start;
 export const CURSOR_TO = REPORT.moment.end;
-export const CLIP_JUMP = SHOT['10b'].start;
+export const CLIP_START_SECOND = REPORT.moment.start - 3;
 export const CLOSE_START = SHOT['11'].start;
 export const HOLD_FRAMES = Object.fromEntries(CUES.map((cue) => [cue.shot, cue.end - 8]));

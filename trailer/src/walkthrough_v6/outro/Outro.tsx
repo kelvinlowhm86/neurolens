@@ -6,7 +6,7 @@ import {BrainView, PhoneClip, Signpost, Stage, clamp, easeInOut, easeOut, lerp} 
 import {MUTED, OVERALL, RANGE, TO} from '../result/timeline';
 import {
   BEDROCK_IN,
-  CLIP_JUMP,
+  CLIP_START_SECOND,
   CLOSE_START,
   CURSOR_FROM,
   CURSOR_TO,
@@ -71,12 +71,12 @@ const linePath = (values: number[], from: number, to: number) => {
   return points.map(([x, y], i) => `${i ? 'L' : 'M'}${x.toFixed(2)},${y.toFixed(2)}`).join(' ');
 };
 
-const LiveLine: React.FC<{second: number; weak: number}> = ({second, weak}) => {
+const LiveLine: React.FC<{second: number; weak: number; x?: number; y?: number}> = ({second, weak, x = LINE.x, y = LINE.y}) => {
   const end = clamp(second, 0, TO);
   const playX = xAt(end);
   const playY = yAt(at(OVERALL, end));
   return (
-    <svg width={LINE.w} height={LINE.h} style={{position: 'absolute', left: LINE.x, top: LINE.y, overflow: 'visible'}} aria-hidden>
+    <svg width={LINE.w} height={LINE.h} style={{position: 'absolute', left: x, top: y, overflow: 'visible'}} aria-hidden>
       <path d={linePath(OVERALL, 0, TO)} fill="none" stroke={C.hot} strokeOpacity={0.16} strokeWidth={3} />
       <path d={linePath(MUTED, 0, TO)} fill="none" stroke="#6F7E99" strokeOpacity={0.22} strokeWidth={2.5} strokeDasharray="10 9" />
       {weak > 0.001 ? (
@@ -85,6 +85,12 @@ const LiveLine: React.FC<{second: number; weak: number}> = ({second, weak}) => {
             x={xAt(CURSOR_FROM)} y={PAD_Y} width={xAt(CURSOR_TO) - xAt(CURSOR_FROM)} height={LINE_H}
             rx={14} fill={C.hot} opacity={0.07 * weak}
           />
+          {/* The box is the report's moment: labelled with the same range as the report card. */}
+          <text
+            x={(xAt(CURSOR_FROM) + xAt(CURSOR_TO)) / 2} y={PAD_Y - 12} textAnchor="middle"
+            fontFamily={fontFamily} fontSize={24} fontWeight={600} fill={C.muted} opacity={weak}
+            style={{fontVariantNumeric: 'tabular-nums'}}
+          >{range}</text>
           <path
             d={linePath(MUTED, CURSOR_FROM, CURSOR_TO)} fill="none" stroke={C.hot}
             strokeOpacity={0.22 * weak} strokeWidth={13} strokeLinecap="round"
@@ -99,8 +105,12 @@ const LiveLine: React.FC<{second: number; weak: number}> = ({second, weak}) => {
         <>
           <path d={linePath(OVERALL, 0, end)} fill="none" stroke={C.hot} strokeWidth={5} strokeLinecap="round" strokeLinejoin="round" />
           <path d={linePath(MUTED, 0, end)} fill="none" stroke="#6F7E99" strokeWidth={3} strokeDasharray="10 9" strokeLinecap="round" strokeLinejoin="round" />
-          <line x1={playX} x2={playX} y1={PAD_Y} y2={LINE.h - PAD_Y} stroke={C.text} strokeOpacity={0.28} strokeWidth={2} />
-          <circle cx={playX} cy={playY} r={7} fill={C.hot} stroke="#0B0C0F" strokeWidth={3} />
+          {end < TO ? (
+            <>
+              <line x1={playX} x2={playX} y1={PAD_Y} y2={LINE.h - PAD_Y} stroke={C.text} strokeOpacity={0.28} strokeWidth={2} />
+              <circle cx={playX} cy={playY} r={7} fill={C.hot} stroke="#0B0C0F" strokeWidth={3} />
+            </>
+          ) : null}
         </>
       ) : null}
     </svg>
@@ -134,26 +144,27 @@ export const Outro: React.FC = () => {
   // voice, then the Do line alone (9b). Only the Do line is written out in full.
   const cardIn = easeOut(frame, SHOT['9a'].start + 2, SHOT['9a'].start + 20);
   const rowsIn = (n: number) => easeOut(frame, ROW_IN[n], ROW_IN[n] + 20);
-  const rowsQuiet = easeInOut(frame, SHOT['9b'].start + 4, SHOT['9b'].start + 22);
+  const rowsQuiet = easeInOut(frame, SHOT['9b'].start + 4, SHOT['9b'].start + 16);
+  // The Do line comes in only once the rows have gone, so the two texts never overlap mid-fade.
+  const doIn = easeInOut(frame, SHOT['9b'].start + 16, SHOT['9b'].start + 30);
   const cardOut = 1 - easeOut(frame, SHOT['10a'].start - 6, SHOT['10a'].start + 6);
   const bedrock = easeOut(frame, BEDROCK_IN, BEDROCK_IN + 14) * (1 - easeOut(frame, SHOT['9b'].start, SHOT['9b'].start + 12));
   const push = 1 + 0.04 * easeInOut(frame, SHOT['9b'].start + 10, SHOT['9b'].end);
   // 9.2 names the sound-off finding, so the card says it plainly under the Do line.
   const soundOff = easeOut(frame, SOUND_OFF_IN, SOUND_OFF_IN + 14);
 
-  // 10: the clip plays beside the brain; on 10.2 it jumps to 0:08, where the sound-off response is weak.
+  // 10: the clip plays on beside the brain and the playhead glides into the report's weak sound-off moment.
   const limitIn = easeOut(frame, SHOT['10a'].start + 2, SHOT['10a'].start + 22);
   const limitOut = 1 - easeOut(frame, SHOT['11'].start - 8, SHOT['11'].start + 4);
-  const clipSecond = frame < CLIP_JUMP
-    ? (frame - SHOT['10a'].start) / 30
-    : CURSOR_FROM + (frame - CLIP_JUMP) / 30;
-  const weak = easeOut(frame, CLIP_JUMP, CLIP_JUMP + 18) * (0.85 + 0.15 * Math.sin(frame / 14));
+  const clipSecond = CLIP_START_SECOND + (frame - SHOT['10a'].start) / 30;
+  const enterMoment = SHOT['10a'].start + (CURSOR_FROM - CLIP_START_SECOND) * 30;
+  const weak = easeOut(frame, enterMoment - 12, enterMoment + 6) * (0.85 + 0.15 * Math.sin(frame / 14));
   const question = easeOut(frame, VIEW_QUESTION_IN, VIEW_QUESTION_IN + 14);
 
   // 11: a calm wide product shot, a slow push-in, then the existing fade to black.
   const homeIn = easeOut(frame, CLOSE_START + 2, CLOSE_START + 22);
   // The close carries the clip on from where shot 10 left it, so it never restarts.
-  const closeFrom = CURSOR_FROM + (CLOSE_START - CLIP_JUMP) / 30;
+  const closeFrom = CLIP_START_SECOND + (CLOSE_START - SHOT['10a'].start) / 30;
   const closeSecond = closeFrom + (frame - CLOSE_START) / 30;
   const closePush = lerp(1, 1.045, easeInOut(frame, CLOSE_START, DURATION));
   const fadeBlack = easeInOut(frame, DURATION - 30, DURATION);
@@ -173,20 +184,21 @@ export const Outro: React.FC = () => {
               <Row label="Brain" text={GIST.brain} top={300} dim opacity={rowsIn(1) * (1 - rowsQuiet)} />
               <Row label="Do" text={REPORT.moment.suggestion ?? ''} hot top={440} opacity={rowsIn(2) * (1 - rowsQuiet)} />
             </div>
-            <div style={{
-              position: 'absolute', left: 0, right: 0, bottom: 46, margin: '0 auto', maxWidth: 1190, textAlign: 'center',
-              fontFamily, fontSize: 38, lineHeight: 1.35, fontWeight: 500, letterSpacing: '-.005em', color: C.muted, opacity: soundOff,
-            }}>
-              with the sound off, the old photos barely register
-            </div>
           </div>
           <Signpost text="Claude · Amazon Bedrock" y={CARD.y + CARD.h + 36} opacity={bedrock} />
           <div style={{
             position: 'absolute', left: 200, right: 200, top: 0, bottom: 0, display: 'flex', flexDirection: 'column', alignItems: 'center',
-            justifyContent: 'center', gap: 36, textAlign: 'center', opacity: rowsQuiet, transform: `scale(${push})`,
+            justifyContent: 'center', gap: 36, textAlign: 'center', opacity: doIn, transform: `scale(${push})`,
           }}>
             <div style={{fontFamily, fontSize: 56, fontWeight: 600, color: C.hot, letterSpacing: '-.01em'}}>Do</div>
             <div style={{fontFamily, fontSize: 72, lineHeight: 1.2, fontWeight: 600, letterSpacing: '-.025em', color: C.text}}>{SUGGESTION_HEADLINE}</div>
+            {/* The evidence beside the advice: the report's moment on the chart, the dashed sound-off line sinking. */}
+            <div style={{position: 'relative', width: LINE.w, height: LINE.h, marginTop: 24, opacity: soundOff}}>
+              <LiveLine second={TO} weak={soundOff} x={0} y={0} />
+            </div>
+            <div style={{fontFamily, fontSize: 32, fontWeight: 500, color: C.muted, opacity: soundOff}}>
+              with the sound off, the old photos barely register
+            </div>
           </div>
         </div>
       ) : null}
@@ -197,11 +209,8 @@ export const Outro: React.FC = () => {
             position: 'absolute', left: 0, right: 0, top: TITLE_Y, textAlign: 'center', fontFamily, fontSize: 36,
             fontWeight: 600, letterSpacing: '.01em', color: C.muted,
           }}>Perception, not views</div>
-          <Sequence from={SHOT['10a'].start} durationInFrames={CLIP_JUMP - SHOT['10a'].start} layout="none">
-            <PhoneClip {...PHONE} from={0} time={clamp(clipSecond, 0, TO)} />
-          </Sequence>
-          <Sequence from={CLIP_JUMP} durationInFrames={SHOT['11'].start + 8 - CLIP_JUMP} layout="none">
-            <PhoneClip {...PHONE} from={CURSOR_FROM} time={clamp(clipSecond, 0, TO)} />
+          <Sequence from={SHOT['10a'].start} durationInFrames={SHOT['11'].start + 8 - SHOT['10a'].start} layout="none">
+            <PhoneClip {...PHONE} from={CLIP_START_SECOND} time={clamp(clipSecond, 0, TO)} />
           </Sequence>
           <ViewCounter opacity={1} question={question} />
           <BrainView x={BRAIN.x} y={BRAIN.y} size={BRAIN.size} second={clamp(clipSecond, 0, TO)} />

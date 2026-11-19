@@ -14,7 +14,7 @@ checked against the code or infra/terraform/README.md. The viewer's question for
 in brackets; it is not spoken.
 
 ## 1. Hook (real page)
-You made a video.
+You… made a video.
 NeuroLens predicts how a brain will respond to it, second by second.
 Let's put one through.
 
