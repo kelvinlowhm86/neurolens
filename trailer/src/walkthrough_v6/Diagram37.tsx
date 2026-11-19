@@ -178,7 +178,7 @@ const QUEUE: StateKey[] = [
 
 const CHECK: StateKey[] = [
   {at: CUE('4').start, state: 'lit'},
-  {at: word('5a', 'wakes', 0, 'end'), state: 'idle'},
+  {at: CUE('5a').start, state: 'idle'}, // its work is done once it hands the job on
 ];
 
 const GPU: StateKey[] = [
