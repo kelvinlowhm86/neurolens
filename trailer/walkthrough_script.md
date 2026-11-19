@@ -20,8 +20,8 @@ Let's put one through.
 
 ## 2. Upload (real page, cursor)
 This is a TikTok from Swee Choon, a dim sum restaurant.
-Drop it in, and you see the price before anything runs.
-That amount is held from your credit, not spent.
+Drop it in, and you see what it'll use before anything runs.
+That's held from your credit, not spent.
 
 ## 3. Where the video goes (diagram: S3, Lambda, SQS; small caption "presigned URL" on the upload arc)
 [So where does the video go?]
@@ -33,28 +33,22 @@ It's asynchronous. Nothing waits on the GPU, so each side can scale, or fail, on
 ## 4. A check first (diagram: dispatcher Lambda; small on-screen caption "ffprobe")
 [Do you just trust whatever the browser sends?]
 Before any money is spent on a GPU, another Lambda opens the file and reads its real length,
-rather than trusting what the browser said. It works the price out again from that.
+rather than trusting what the browser said. It works out the credit again from that.
 If the file won't open, runs too long, or there isn't enough credit, you're refunded right there,
 and no GPU ever wakes up.
 
-## 5. Scale to zero (diagram: SageMaker; GPU greys out when idle)
-[So is a GPU running all day?]
-Left on all month, this GPU would cost about thirteen hundred dollars, so none is left running. The model runs on SageMaker, which starts a GPU when
-a job arrives, and scales back to zero when things go quiet.
-The catch is that starting one takes a few minutes. For a chatbot, that would be a problem. But
-you're not waiting for a reply here; you're getting an analysis to study. So a few minutes is a
-fair price for paying nothing while nobody's using it.
-
-## 6. The model (diagram)
-[What actually runs on the GPU?]
-Once it's up, it runs TRIBE, a research model from Meta, trained on brain scans from over seven
-hundred people, so it can predict how a brain responds to a video it's never seen.
+## 5. The GPU (diagram: SageMaker runs TRIBE; GPU greys out when idle)
+[What runs on the GPU, and is it on all day?]
+The job then wakes a GPU on SageMaker, which runs TRIBE, a research model from Meta trained on
+brain scans from over seven hundred people.
+A GPU left on all month would cost about thirteen hundred dollars, so it scales to zero when idle.
+Starting one takes a few minutes, but you're waiting for an analysis, not a chat reply.
 
 ## 7. When things go wrong (diagram: retry, dead-letter queue, watchdog Lambda)
 [What if it breaks? Do I lose my money?]
 And if something breaks halfway? It tries once more. If it fails again, the job goes to a
-dead-letter queue, and your hold goes straight back. You're only charged once the result is saved.
-SQS can occasionally deliver the same job twice, so billing is idempotent: one job, one charge.
+dead-letter queue, and your hold goes straight back. You're only charged once the result is saved, and billing is idempotent, so a job is never
+charged twice.
 And a watchdog Lambda makes sure a stuck job can't leave a GPU quietly running up a bill.
 
 ## 7b. Infrastructure as code (diagram: Terraform wraps the whole diagram)
@@ -70,7 +64,8 @@ Click the peak, and the video jumps right to it.
 ## 9. The report (report card; caption "Claude · Amazon Bedrock", then the 0:08-0:13 "Do" line)
 [Do I have to read the chart myself?]
 Then Claude, on Amazon Bedrock, writes it up moment by moment, with what to change.
-For the old photos, it suggests cutting in a second of her face.
+Over the old photos, the response nearly vanishes with the sound off, so it suggests cutting in a
+second of her face.
 
 ## 10. Honest limit
 [So will this get me views?]
