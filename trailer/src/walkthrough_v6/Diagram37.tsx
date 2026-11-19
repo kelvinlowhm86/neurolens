@@ -102,11 +102,14 @@ const word = (row: string, token: string, occurrence = 0, edge: 'start' | 'end' 
 const RETURN_SETTLE = 36;
 const RETURN_START = CUE('7d').start - RETURN_SETTLE + 2;
 const RETURN_END = CUE('7b').end - 1;
-const RETURN_STORAGE_END = RETURN_START + 11;
-const RETURN_DATABASE_END = RETURN_START + 13;
-const RETURN_BROWSER_START = RETURN_START + 15;
-const RETURN_BROWSER_LIT = RETURN_START + 28;
-const RETURN_BROWSER_ARRIVE = RETURN_START + 31;
+// Each return hop takes half a second (15 frames), eased. The two GPU hops leave together, then the
+// browser hop follows; the whole beat still ends before the 7d speech starts.
+const RETURN_HOP = 15;
+const RETURN_STORAGE_END = RETURN_START + RETURN_HOP;
+const RETURN_DATABASE_END = RETURN_START + RETURN_HOP;
+const RETURN_BROWSER_START = RETURN_START + RETURN_HOP;
+const RETURN_BROWSER_LIT = RETURN_BROWSER_START + 11;
+const RETURN_BROWSER_ARRIVE = RETURN_BROWSER_START + RETURN_HOP;
 
 type NodeId = 'browser' | 'website' | 'storage' | 'queue' | 'check' | 'gpu' | 'watchdog' | 'dead' | 'database';
 
@@ -308,10 +311,11 @@ const thumbBoxFrom = (left: number, top: number): Box => ({
 });
 
 const ROW_Y = 0;
-const ROW_GAP = 360;
-// The off-row nodes moved in a little in pass 19: the larger labels are ~40px taller, and the
-// framing check must keep pass 10's camera scales. The rows themselves keep their spacing.
-const OFF_ROW = 500;
+// Pass 22: the row is wider so every pair of full labels keeps >= 40px of clearance with the
+// pass-19 type sizes. The off-row nodes sit a little closer to the row so the watchdog shot keeps
+// its pass-10 scale.
+const ROW_GAP = 490;
+const OFF_ROW = 480;
 const STORAGE_ROW = 348;
 
 const MAIN_ROW: NodeId[] = ['browser', 'website', 'queue', 'check', 'gpu', 'dead'];
@@ -480,7 +484,13 @@ const READOUT_SPACE: Box = {
   x2: CHECK_BOX.x2 + 430,
   y2: CHECK_BOX.y2 + 174,
 };
-const BAD_FILE_EXTRA = radiusBox(FIXED_POSITIONS.check.x - 190, 0, 300, 90);
+// The bad-file card rests just left of Check at the 4r hold; framing centres on where it is then.
+const BAD_FILE_EXTRA: Box = {
+  x1: FIXED_POSITIONS.check.x - 288,
+  y1: FIXED_POSITIONS.check.y - 55,
+  x2: FIXED_POSITIONS.check.x - 288 + 180,
+  y2: FIXED_POSITIONS.check.y + 55,
+};
 // The 'a few minutes to start' card under the GPU while it boots.
 const CLOCK_EXTRA: Box = {
   x1: FIXED_POSITIONS.gpu.x - 178,
@@ -534,7 +544,16 @@ const LAYOUTS: Layout[] = [
     width: 0.84,
   },
   {row: '3c', at: CUE('3c').start, ids: ['website', 'queue'], extra: [QUEUE_JOB_BOX], maxScale: 1.35},
-  {row: '3d', at: CUE('3d').start, ids: ['queue'], named: ['website'], extra: [QUEUE_JOBS_BOX], maxScale: 1.6, caption: 'below'},
+  {
+    row: '3d',
+    at: CUE('3d').start,
+    ids: ['queue'],
+    named: ['website'],
+    extra: [QUEUE_JOBS_BOX],
+    maxScale: 1.6,
+    width: 0.88,
+    caption: 'below',
+  },
   {
     row: '4',
     at: CUE('4').start,
@@ -544,7 +563,16 @@ const LAYOUTS: Layout[] = [
     maxScale: 1.3,
     caption: 'below',
   },
-  {row: '4r', at: CUE('4r').start, ids: ['check', 'gpu'], extra: [BAD_FILE_EXTRA], maxScale: 1.45, move: 18},
+  {
+    row: '4r',
+    at: CUE('4r').start,
+    ids: ['check'],
+    named: ['gpu'],
+    extra: [BAD_FILE_EXTRA],
+    maxScale: 1.45,
+    width: 0.84,
+    move: 18,
+  },
   {row: '5a', at: CUE('5a').start, ids: ['gpu'], extra: [PANEL_EXTRA], maxScale: 1.5},
   {row: '5b', at: CUE('5b').start, ids: ['gpu'], extra: [STATUS_EXTRA], maxScale: 1.55, caption: 'below'},
   {row: '5c', at: CUE('5c').start, ids: ['gpu'], extra: [CLOCK_EXTRA, RING_EXTRA], maxScale: 1.55},
@@ -808,6 +836,19 @@ const linksAt = (f: number): LinkDraw[] => {
       opacity: pair('watchdog', 'gpu', CUE('7b').start, CUE('7d').start),
     });
   }
+  // The worker writes the result and the charge to the database. It is drawn with the same dim,
+  // arrowed style as the watchdog link and stays in the map from the watchdog shot onward.
+  if (pos('gpu') && pos('database')) {
+    links.push({
+      id: 'gpu-database',
+      path: rowOffRowPath(pos('gpu'), pos('database')),
+      appear: CUE('7b').start + 10,
+      draw: 16,
+      arrow: true,
+      hot: ease(f, RETURN_START, RETURN_START + 4) * (1 - ease(f, RETURN_DATABASE_END, RETURN_DATABASE_END + 8)),
+      opacity: pair('gpu', 'database', CUE('7b').start, CUE('7d').start),
+    });
+  }
   const returnOn = inWindow(RETURN_START - 8, RETURN_END + 8);
   if (returnOn && pos('gpu') && pos('storage')) {
     links.push({
@@ -819,18 +860,6 @@ const linksAt = (f: number): LinkDraw[] => {
       width: 2.2,
       colour: 'rgba(150,166,188,.42)',
       opacity: Math.min(visible('gpu'), visible('storage')),
-    });
-  }
-  if (returnOn && pos('gpu') && pos('database')) {
-    links.push({
-      id: 'gpu-database',
-      path: autoPath(pos('gpu'), pos('database'), 84),
-      appear: RETURN_START - 8,
-      draw: 8,
-      arrow: true,
-      width: 2.2,
-      colour: 'rgba(150,166,188,.42)',
-      opacity: Math.min(visible('gpu'), visible('database')),
     });
   }
   if (returnOn && pos('website') && pos('browser')) {
@@ -920,8 +949,8 @@ const pulsesAt = (): PulseHop[] => {
   if (pos('gpu') && pos('database')) {
     hops.push({
       id: 'return-gpu-database',
-      path: autoPath(pos('gpu'), pos('database'), 84),
-      start: RETURN_START + 2,
+      path: rowOffRowPath(pos('gpu'), pos('database')),
+      start: RETURN_START,
       end: RETURN_DATABASE_END,
       from: 'gpu',
       to: 'database',
@@ -1867,7 +1896,6 @@ const DuplicateJobs: React.FC<{f: number; gpu: Pt}> = ({f, gpu}) => {
           color: '#FFC08A',
           opacity: charged,
           whiteSpace: 'nowrap',
-          transform: 'rotate(-3deg)',
         }}
       >
         <Icon name="tick" size={26} /> charged once
@@ -2286,6 +2314,33 @@ export const runNodeStabilityCheck = () => {
   else console.info(`[v6 node-stability] ${DURATION}/${DURATION} frames OK`);
 };
 
+// World-space clearance check: nodes never move, so this runs once. Every pair of full label
+// boxes (name + service + purpose at their largest size) must keep at least 40px between them.
+// The still-frame checks missed the purpose lines that collide only mid-pan; this one cannot.
+const LABEL_CLEARANCE = 40;
+
+export const runLabelClearanceCheck = (): string[] => {
+  const failures: string[] = [];
+  const boxes = ALL_NODE_IDS.map((id) => ({
+    id,
+    box: nodeLabelBox(NODES_BY_ID[id], FIXED_POSITIONS[id].x, FIXED_POSITIONS[id].y, false, true, true),
+  }));
+  for (let i = 0; i < boxes.length; i += 1) {
+    for (let j = i + 1; j < boxes.length; j += 1) {
+      if (overlaps(boxes[i].box, boxes[j].box, LABEL_CLEARANCE)) {
+        const a = boxes[i].box;
+        const b = boxes[j].box;
+        failures.push(
+          `${NODES_BY_ID[boxes[i].id].label} and ${NODES_BY_ID[boxes[j].id].label} labels are closer than ${LABEL_CLEARANCE}px ` +
+            `(A ${Math.round(a.x1)},${Math.round(a.y1)}-${Math.round(a.x2)},${Math.round(a.y2)}; ` +
+            `B ${Math.round(b.x1)},${Math.round(b.y1)}-${Math.round(b.x2)},${Math.round(b.y2)})`,
+        );
+      }
+    }
+  }
+  return failures;
+};
+
 // Framing check: at every still's hold the lit subject (plus the caption, when one is showing)
 // must sit centred in the area above the credit strip, clear of the strip, no smaller than in
 // pass 10, and every node the voice line names must be visible. The rendered stills are
@@ -2354,6 +2409,14 @@ export const WalkthroughV6Diagram: React.FC = () => {
     cancelRender(
       new Error(
         `[v6 framing] ${framingFailures.length} framing failure(s) at the shots' holds:\n${framingFailures.join('\n')}`,
+      ),
+    );
+  }
+  const clearanceFailures = useMemo(runLabelClearanceCheck, []);
+  if (clearanceFailures.length > 0) {
+    cancelRender(
+      new Error(
+        `[v6 label clearance] ${clearanceFailures.length} node label pair(s) closer than ${LABEL_CLEARANCE}px:\n${clearanceFailures.join('\n')}`,
       ),
     );
   }
