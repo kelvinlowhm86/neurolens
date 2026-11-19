@@ -61,7 +61,7 @@ const SFX_ON = STEM === 'bed' ? 0 : 1;
 
 // Effects sit under the voice: bright, short sounds that cut through without competing.
 // Each file peaks at -3 dBFS; these gains set the mix.
-const SFX_GAIN: Record<SfxName, number> = {click: 1.4, tick: 0.8, scribble: 0.68, denied: 0.38, stamp: 1.4, skipped: 0.82, chime: 0.39}; // every sound at about -22 LUFS (momentary max); click and stamp files are limited +7 dB, so 1.4 keeps their peaks just under 0 dBFS
+const SFX_GAIN: Record<SfxName, number> = {click: 0.99, tick: 0.54, scribble: 0.46, denied: 0.26, stamp: 0.97, skipped: 0.55, chime: 0.3}; // chime unchanged (Josh: right level, about -24 LUFS momentary max); the rest about 1 dB under it. click and stamp files are limited +7 dB so they reach it
 
 const SoundEffects: React.FC<{cues: Sfx[]}> = ({cues}) => (
   <>
