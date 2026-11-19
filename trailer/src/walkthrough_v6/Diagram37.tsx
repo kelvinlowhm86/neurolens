@@ -178,7 +178,7 @@ const QUEUE: StateKey[] = [
 
 const CHECK: StateKey[] = [
   {at: CUE('4').start, state: 'lit'},
-  {at: CUE('5a').start, state: 'idle'}, // its work is done once it hands the job on
+  {at: CUE('5a').start - 30, state: 'idle'}, // done once it hands the job on; quiet before the camera moves (lit, its purpose line won't fit the frame)
 ];
 
 const GPU: StateKey[] = [
@@ -1486,7 +1486,7 @@ const FloorGrid: React.FC = () => (
   />
 );
 
-const FloorGlows: React.FC<{f: number; positions: Record<NodeId, Pt>}> = ({f, positions}) => (
+const FloorGlows: React.FC<{f: number; positions: Record<NodeId, Pt>; cam: Camera}> = ({f, positions, cam}) => (
   <>
     {NODES.map((def) => {
       const pos = positions[def.id];
@@ -1494,7 +1494,8 @@ const FloorGlows: React.FC<{f: number; positions: Record<NodeId, Pt>}> = ({f, po
       const glow = glowOf(f, def.keys);
       // Only the active (lit) node casts a floor glow. Dim and idle nodes keep the floor clear,
       // so no soft ellipse sits behind their labels.
-      const active = clamp((glow - 0.3) / 0.5);
+      // ...and only as much as the node itself is shown, so a hidden node never leaves a stray glow.
+      const active = clamp((glow - 0.3) / 0.5) * nodeOpacityAt(def, f, cam);
       if (active <= 0.01) return null;
       return (
         <div
@@ -2531,7 +2532,7 @@ export const WalkthroughV6Diagram: React.FC = () => {
     <AbsoluteFill style={{background: '#0B0C0F'}}>
       <AbsoluteFill style={worldStyle(cam)}>
         <FloorGrid />
-        <FloorGlows f={f} positions={positions} />
+        <FloorGlows f={f} positions={positions} cam={cam} />
         <svg width={1} height={1} style={{position: 'absolute', left: 0, top: 0, overflow: 'visible'}}>
           {links.map(({id, ...link}) => (
             <Link key={id} {...link} />

@@ -7,7 +7,8 @@ export const LINE_GAP = 0.4; // seconds of silence between two lines of the same
 export const SHOT_HOLD = 0.8; // seconds a shot holds after its last word
 export const SECTION_HOLD = 1.6; // the longer pause after the last shot of a section
 
-type VoiceLine = {id: string; text: string; duration: number};
+// `pause` (optional, seconds): extra breathing room after a line the voice reads fast.
+type VoiceLine = {id: string; text: string; duration: number; pause?: number};
 const VOICE = new Map((lines as VoiceLine[]).map((line) => [line.id, line]));
 
 const voiceLine = (id: string): VoiceLine => {
@@ -27,10 +28,10 @@ export const buildShots = (specs: ShotSpec[]): {cues: ShotCue[]; duration: numbe
   const cues = specs.map(({shot, ids, sectionEnd, hold}) => {
     const start = cursor;
     const cueLines = ids.map((id, i) => {
-      const {text, duration} = voiceLine(id);
+      const {text, duration, pause = 0} = voiceLine(id);
       if (i > 0) cursor += Math.round(LINE_GAP * FPS);
       const cue = {id, text, start: cursor, frames: Math.round(duration * FPS)};
-      cursor += cue.frames;
+      cursor += cue.frames + Math.round(pause * FPS);
       return cue;
     });
     cursor += Math.round((hold ?? (sectionEnd ? SECTION_HOLD : SHOT_HOLD)) * FPS);
