@@ -279,6 +279,10 @@ export const Node: React.FC<NodeProps> = ({
   const from = prev && prev !== 'hidden' ? LOOK[prev] : target;
   const t = prev === undefined && state !== 'hidden' ? 1 : smooth(f, stateFrame, stateFrame + 10);
   const glow = from.glow + (target.glow - from.glow) * t;
+  // Only an active (lit) node gets a floor shadow, a contact ring or a glowing disc. A dim,
+  // idle or off node is drawn as its glyph and text only, so no backdrop or shadow shape can
+  // show through behind its label.
+  const active = clamp((glow - 0.3) / 0.5);
   const opacity =
     (from.opacity + (target.opacity - from.opacity) * t) * (state === 'hidden' ? 1 - t : 1) * rise * clamp(safe);
   const border = mix(from.border, target.border, t);
@@ -303,30 +307,34 @@ export const Node: React.FC<NodeProps> = ({
       }}
     >
       <div style={{position: 'relative', width: NODE_GEOMETRY.iconBox, height: NODE_GEOMETRY.iconBox}}>
-        <div
-          style={{
-            position: 'absolute',
-            left: 4,
-            top: 108,
-            width: 120,
-            height: 28,
-            borderRadius: '50%',
-            background: `radial-gradient(ellipse at center, rgba(255,138,42,${0.2 * glow}), rgba(120,138,160,${0.07 * (1 - glow)}) 52%, transparent 72%)`,
-            filter: 'blur(9px)',
-          }}
-        />
-        <div
-          style={{
-            position: 'absolute',
-            left: 16,
-            top: 122,
-            width: 96,
-            height: 12,
-            borderRadius: '50%',
-            border: `1px solid rgba(${glow > 0.4 ? '255,158,84' : '150,168,190'},${0.18 + 0.12 * glow})`,
-            background: glow > 0.3 ? 'rgba(255,138,42,.06)' : 'transparent',
-          }}
-        />
+        {active > 0.01 ? (
+          <div
+            style={{
+              position: 'absolute',
+              left: 4,
+              top: 108,
+              width: 120,
+              height: 28,
+              borderRadius: '50%',
+              background: `radial-gradient(ellipse at center, rgba(255,138,42,${0.2 * glow}), rgba(120,138,160,${0.07 * (1 - glow)}) 52%, transparent 72%)`,
+              filter: 'blur(9px)',
+            }}
+          />
+        ) : null}
+        {active > 0.01 ? (
+          <div
+            style={{
+              position: 'absolute',
+              left: 16,
+              top: 122,
+              width: 96,
+              height: 12,
+              borderRadius: '50%',
+              border: '1px solid rgba(255,158,84,.3)',
+              background: 'rgba(255,138,42,.06)',
+            }}
+          />
+        ) : null}
         <div
           style={{
             position: 'absolute',
@@ -337,14 +345,14 @@ export const Node: React.FC<NodeProps> = ({
             justifyContent: 'center',
             color: iconColour,
             background:
-              glow > 0.06
+              active > 0.01
                 ? `radial-gradient(circle at 50% 42%, rgba(255,138,42,${0.22 * glow}) 0%, rgba(255,138,42,${0.06 * glow}) 54%, transparent 72%)`
-                : 'radial-gradient(circle at 50% 42%, rgba(120,138,160,.13) 0%, rgba(120,138,160,.035) 54%, transparent 72%)',
+                : 'transparent',
             border: `2px solid ${border}`,
             boxShadow:
-              glow > 0.06
+              active > 0.01
                 ? `0 0 ${48 * glow}px rgba(255,138,42,${0.2 * glow}), inset 0 0 26px rgba(255,138,42,${0.09 * glow})`
-                : '0 0 30px rgba(120,138,160,.07), inset 0 0 22px rgba(120,138,160,.04)',
+                : 'none',
           }}
         >
           <Icon name={icon} size={NODE_GEOMETRY.iconArt} />

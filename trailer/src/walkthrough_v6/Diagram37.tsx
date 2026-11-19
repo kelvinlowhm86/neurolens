@@ -73,7 +73,7 @@ const SHOT_LINES: {row: string; id: string; sectionEnd?: boolean; hold?: number}
   {row: '5a', id: '5.1'},
   {row: '5b', id: '5.2'},
   {row: '5c', id: '5.3', sectionEnd: true},
-  {row: '7a', id: '7.1'},
+  {row: '7a', id: '7.1', hold: 1.8}, // keep "already charged · skipped" on screen long enough to read
   {row: '7b', id: '7.2', sectionEnd: true, hold: 2.8}, // longer tail for the wordless result-return beat
   {row: '7d', id: '7b.1', sectionEnd: true},
 ];
@@ -720,7 +720,12 @@ const nodeOpacityAt = (def: NodeDef, f: number, cam: Camera): number => {
   const screen = screenBox(nodeWorldBox(def, pos.x, pos.y, false, true, purposeOn > 0.01), cam);
   const margin = Math.min(screen.x1 - SAFE, 1920 - SAFE - screen.x2, screen.y1 - SAFE, STRIP_TOP - screen.y2);
   const show = FIXED_PRESENCE[def.id];
-  return show * (new Set(focusIdsAt(f)).has(def.id) ? (margin >= 0 ? 1 : clamp(1 + margin / 40)) : clamp(margin / 40));
+  const base = show * (new Set(focusIdsAt(f)).has(def.id) ? (margin >= 0 ? 1 : clamp(1 + margin / 40)) : clamp(margin / 40));
+  if (base <= 0) return 0;
+  // A card or panel that covers part of this node's label either hides the node completely or
+  // leaves it completely clear. A half-covered label is never drawn.
+  const label = {...screen, y1: screen.y1 + (NODE_GEOMETRY.iconBox + NODE_GEOMETRY.labelGap) * cam.scale};
+  return coveredByOverlayAt(f, def.id, label) ? 0 : base;
 };
 
 const autoPath = (a: Pt, b: Pt, gap = 88): PathSpec => {
@@ -1205,6 +1210,67 @@ const cardSpecsAt = (f: number): CardSpec[] => {
   return specs;
 };
 
+type CoverBox = {label: string; box: Box; opacity: number; owner?: NodeId};
+
+// Every opaque surface that can sit over the map (the TRIBE panel, the live cards, the duplicate
+// jobs, the bad-file card and the Terraform pill). A node is hidden whenever one of these would
+// cut its label, so nothing peeks out from under a card's edge.
+const coverBoxesAt = (() => {
+  const cache = new Map<number, CoverBox[]>();
+  return (f: number): CoverBox[] => {
+    const hit = cache.get(f);
+    if (hit) return hit;
+    const cam = cameraAt(f);
+    const covers: CoverBox[] = [];
+    const panel = gpuPanelOpacity(f);
+    if (panel > 0.02) {
+      covers.push({label: 'TRIBE panel', box: screenBox(PANEL_EXTRA, cam), opacity: panel, owner: 'gpu'});
+    }
+    for (const card of cardSpecsAt(f)) {
+      covers.push({label: `${card.id} card`, box: card.box, opacity: card.opacity, owner: CARD_NODE[card.id]});
+    }
+    const duplicates = duplicateJobsOpacity(f);
+    const gpuPos = FIXED_POSITIONS.gpu;
+    const checkPos = FIXED_POSITIONS.check;
+    if (duplicates > 0.02) {
+      covers.push({
+        label: 'duplicate jobs',
+        box: {
+          x1: gpuPos.x - 260,
+          y1: gpuPos.y + 280,
+          x2: gpuPos.x + 320,
+          y2: gpuPos.y + 476,
+        },
+        opacity: duplicates,
+        owner: 'gpu',
+      });
+    }
+    const badFile = badFileVisibleAt(f);
+    if (badFile > 0.02) {
+      covers.push({
+        label: 'bad file card',
+        box: {x1: checkPos.x - 470, y1: checkPos.y - 55, x2: checkPos.x - 108, y2: checkPos.y + 55},
+        opacity: badFile,
+        owner: 'check',
+      });
+    }
+    const terraform = ease(f, word('7d', 'Terraform'), word('7d', 'Terraform') + 16);
+    if (terraform > 0.02) {
+      covers.push({label: 'Terraform label', box: screenBox(TF_LABEL_BOX, cam), opacity: terraform});
+    }
+    cache.set(f, covers);
+    return covers;
+  };
+})();
+
+const coveredByOverlayAt = (f: number, id: NodeId, label: Box): boolean => {
+  for (const cover of coverBoxesAt(f)) {
+    if (cover.opacity <= 0.02 || cover.owner === id) continue;
+    if (overlaps(cover.box, label)) return true;
+  }
+  return false;
+};
+
 const CardShell: React.FC<{box: Box; opacity: number; children: React.ReactNode}> = ({box, opacity, children}) => {
   if (opacity <= 0.001) return null;
   return (
@@ -1402,7 +1468,10 @@ const FloorGlows: React.FC<{f: number; positions: Record<NodeId, Pt>}> = ({f, po
       const pos = positions[def.id];
       if (!pos) return null;
       const glow = glowOf(f, def.keys);
-      if (glow <= 0.06) return null;
+      // Only the active (lit) node casts a floor glow. Dim and idle nodes keep the floor clear,
+      // so no soft ellipse sits behind their labels.
+      const active = clamp((glow - 0.3) / 0.5);
+      if (active <= 0.01) return null;
       return (
         <div
           key={def.id}
@@ -1413,7 +1482,7 @@ const FloorGlows: React.FC<{f: number; positions: Record<NodeId, Pt>}> = ({f, po
             width: 460,
             height: 180,
             borderRadius: '50%',
-            background: `radial-gradient(ellipse at center, rgba(255,138,42,${0.1 * glow}), transparent 68%)`,
+            background: `radial-gradient(ellipse at center, rgba(255,138,42,${0.1 * active}), transparent 68%)`,
             filter: 'blur(28px)',
             pointerEvents: 'none',
           }}
@@ -1831,9 +1900,11 @@ const FailureJob: React.FC<{f: number; gpu: Pt; dead: Pt}> = ({f, gpu, dead}) =>
   );
 };
 
+const duplicateJobsOpacity = (f: number) =>
+  ease(f, word('7a', 'charged') - 10, word('7a', 'charged') + 4) * (1 - ease(f, CUE('7b').start - 10, CUE('7b').start + 2));
+
 const DuplicateJobs: React.FC<{f: number; gpu: Pt}> = ({f, gpu}) => {
-  const opacity =
-    ease(f, word('7a', 'charged') - 10, word('7a', 'charged') + 4) * (1 - ease(f, CUE('7b').start - 10, CUE('7b').start + 2));
+  const opacity = duplicateJobsOpacity(f);
   if (opacity <= 0.001) return null;
   const firstIn = glide(f, word('7a', 'charged') - 6, word('7a', 'charged') + 18);
   // The duplicate is the same job #42, and arrives on "a job is never charged twice".
@@ -2353,6 +2424,41 @@ export const runLabelClearanceCheck = (): string[] => {
   return failures;
 };
 
+// Card/panel overlap check: on every frame a card or panel is showing, every other node's label
+// is either completely clear of it or completely hidden (never half under its edge). Runs once.
+export const runCardOverlapCheck = (): string[] => {
+  const failures: string[] = [];
+  for (let f = 0; f < DURATION; f += 1) {
+    const cam = cameraAt(f);
+    const covers = coverBoxesAt(f);
+    if (covers.length === 0) continue;
+    for (const cover of covers) {
+      if (cover.opacity <= 0.02) continue;
+      for (const def of NODES) {
+        if (cover.owner === def.id) continue;
+        const pos = FIXED_POSITIONS[def.id];
+        if (!pos) continue;
+        const state = stateAt(f, def.keys);
+        if (state.state === 'hidden') continue;
+        const label = screenBox(nodeLabelBox(def, pos.x, pos.y, false, true, state.state === 'lit'), cam);
+        if (!overlaps(cover.box, label)) continue;
+        const fullyInside =
+          label.x1 >= cover.box.x1 && label.x2 <= cover.box.x2 && label.y1 >= cover.box.y1 && label.y2 <= cover.box.y2;
+        if (fullyInside) continue;
+        if (nodeOpacityAt(def, f, cam) > 0.02) {
+          failures.push(
+            `frame ${f}: ${cover.label} cuts the ${def.label} label ` +
+              `(${Math.round(label.x1)},${Math.round(label.y1)}-${Math.round(label.x2)},${Math.round(label.y2)} ` +
+              `vs ${Math.round(cover.box.x1)},${Math.round(cover.box.y1)}-${Math.round(cover.box.x2)},${Math.round(cover.box.y2)})`,
+          );
+          if (failures.length >= 20) return failures;
+        }
+      }
+    }
+  }
+  return failures;
+};
+
 // Framing check: at every still's hold the lit subject (plus the caption, when one is showing)
 // must sit centred in the area above the credit strip, clear of the strip, no smaller than in
 // pass 10, and every node the voice line names must be visible. The rendered stills are
@@ -2444,6 +2550,14 @@ export const WalkthroughV6Diagram: React.FC = () => {
       ),
     );
   }
+  const overlapFailures = useMemo(runCardOverlapCheck, []);
+  if (overlapFailures.length > 0) {
+    cancelRender(
+      new Error(
+        `[v6 card overlap] ${overlapFailures.length} label(s) half-covered by a card or panel:\n${overlapFailures.join('\n')}`,
+      ),
+    );
+  }
   queueSafeAreaCheck();
   const {positions, presence} = layoutAt(f);
   const cam = cameraAt(f);
@@ -2515,7 +2629,10 @@ export const WalkthroughV6Diagram: React.FC = () => {
           const state = stateAt(f, def.keys);
           if (state.state === 'hidden') return null;
           const purposeOn = state.state === 'lit' ? clamp((glowOf(f, def.keys) - 0.45) / 0.55) : 0;
-          const safe = nodeOpacityAt(def, f, cam);
+          // The TRIBE panel sits right over the GPU: the GPU fades out ahead of it and back in after it,
+          // so its label never shows through the panel while the panel fades.
+          const underPanel = def.id === 'gpu' ? clamp((0.12 - gpuPanelOpacity(f)) / 0.12) : 1;
+          const safe = nodeOpacityAt(def, f, cam) * underPanel;
           return (
             <Node
               key={def.id}
