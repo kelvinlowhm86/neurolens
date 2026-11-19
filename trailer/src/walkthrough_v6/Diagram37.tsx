@@ -64,7 +64,7 @@ const CLIP_FRAMES = ['f0', 'f5', 'f15', 'f25', 'f35'].map(
 );
 
 // Each shot is one script line (ids from walkthrough_script.md). The real voice sets every length.
-const SHOT_LINES: {row: string; id: string; sectionEnd?: boolean}[] = [
+const SHOT_LINES: {row: string; id: string; sectionEnd?: boolean; hold?: number}[] = [
   {row: '3b', id: '3.1'},
   {row: '3c', id: '3.2'},
   {row: '3d', id: '3.3', sectionEnd: true},
@@ -74,11 +74,11 @@ const SHOT_LINES: {row: string; id: string; sectionEnd?: boolean}[] = [
   {row: '5b', id: '5.2'},
   {row: '5c', id: '5.3', sectionEnd: true},
   {row: '7a', id: '7.1'},
-  {row: '7b', id: '7.2', sectionEnd: true},
+  {row: '7b', id: '7.2', sectionEnd: true, hold: 2.8}, // longer tail for the wordless result-return beat
   {row: '7d', id: '7b.1', sectionEnd: true},
 ];
 
-const built = buildShots(SHOT_LINES.map(({row, id, sectionEnd}) => ({shot: row, ids: [id], sectionEnd})));
+const built = buildShots(SHOT_LINES.map(({row, id, sectionEnd, hold}) => ({shot: row, ids: [id], sectionEnd, hold})));
 export const TIMING = built.cues.map((cue) => ({row: cue.shot, line: cue.lines[0], start: cue.start, end: cue.end}));
 export const DURATION = built.duration;
 export const LINE_CUES: LineCue[] = TIMING.map((cue) => cue.line);
@@ -96,19 +96,19 @@ const beat = (row: string, progress = 0) => speechFrame(CUE(row).line, progress)
 const word = (row: string, token: string, occurrence = 0, edge: 'start' | 'end' = 'start') =>
   wordFrame(CUE(row).line, token, occurrence, edge);
 
-// The 7d tail is only ~1.2s after the voice, so the result-return beat uses the last ~1.1s of
-// 7b instead. The 7d camera settles this many frames before its line starts, so the beat begins
-// only once the wide view is at rest and both ends of every return link are on screen.
-const RETURN_SETTLE = 36;
+// The result-return beat lives in the 2.8s hold after 7b's last word (84 frames). The 7d camera
+// pulls back on "running up a bill" and is at rest 12 frames into the hold; the beat then starts 2
+// frames after it settles. Each hop takes about a second: GPU -> Storage and GPU -> Database leave
+// together, then Website -> Browser, whose node lights as the pulse arrives. The last ~10 frames
+// of the hold are a short rest before 7d's line starts.
+const RETURN_SETTLE = 72;
 const RETURN_START = CUE('7d').start - RETURN_SETTLE + 2;
 const RETURN_END = CUE('7b').end - 1;
-// Each return hop takes half a second (15 frames), eased. The two GPU hops leave together, then the
-// browser hop follows; the whole beat still ends before the 7d speech starts.
-const RETURN_HOP = 15;
+const RETURN_HOP = 30;
 const RETURN_STORAGE_END = RETURN_START + RETURN_HOP;
 const RETURN_DATABASE_END = RETURN_START + RETURN_HOP;
 const RETURN_BROWSER_START = RETURN_START + RETURN_HOP;
-const RETURN_BROWSER_LIT = RETURN_BROWSER_START + 11;
+const RETURN_BROWSER_LIT = RETURN_BROWSER_START + 22;
 const RETURN_BROWSER_ARRIVE = RETURN_BROWSER_START + RETURN_HOP;
 
 type NodeId = 'browser' | 'website' | 'storage' | 'queue' | 'check' | 'gpu' | 'watchdog' | 'dead' | 'database';
@@ -1836,12 +1836,14 @@ const DuplicateJobs: React.FC<{f: number; gpu: Pt}> = ({f, gpu}) => {
     ease(f, word('7a', 'charged') - 10, word('7a', 'charged') + 4) * (1 - ease(f, CUE('7b').start - 10, CUE('7b').start + 2));
   if (opacity <= 0.001) return null;
   const firstIn = glide(f, word('7a', 'charged') - 6, word('7a', 'charged') + 18);
-  const secondIn = glide(f, word('7a', 'idempotent') - 2, word('7a', 'idempotent') + 16);
+  // The duplicate is the same job #42, and arrives on "a job is never charged twice".
+  const secondIn = glide(f, word('7a', 'never'), word('7a', 'twice'));
   const charged = ease(f, word('7a', 'once', 1), word('7a', 'once', 1) + 12);
-  const already = ease(f, word('7a', 'twice') - 6, word('7a', 'twice') + 4); // the word lands as it shows
+  const already = ease(f, word('7a', 'twice'), word('7a', 'twice') + 10); // the word lands as it shows
   const card = (index: number, drop: number) => {
     const x = gpu.x - 240 + index * 260;
     const y = gpu.y + 292 + (1 - drop) * 130;
+    const dimmed = index === 1 ? already : 0;
     return (
       <div
         key={index}
@@ -1852,8 +1854,8 @@ const DuplicateJobs: React.FC<{f: number; gpu: Pt}> = ({f, gpu}) => {
           width: 220,
           height: 96,
           borderRadius: 18,
-          background: index === 1 ? '#181A1E' : '#1C1E22',
-          border: `1.5px solid ${index === 1 ? 'rgba(120,132,148,.32)' : 'rgba(255,158,84,.55)'}`,
+          background: '#1C1E22',
+          border: '1.5px solid rgba(255,158,84,.55)',
           boxShadow: '0 12px 28px rgba(0,0,0,.5)',
           display: 'flex',
           alignItems: 'center',
@@ -1861,12 +1863,13 @@ const DuplicateJobs: React.FC<{f: number; gpu: Pt}> = ({f, gpu}) => {
           gap: 12,
           fontFamily,
           fontSize: 34,
-          color: index === 1 ? '#8E98A5' : C.text,
-          opacity: index === 1 ? secondIn : firstIn,
+          color: C.text,
+          opacity: drop * (1 - 0.5 * dimmed),
+          filter: dimmed > 0.001 ? `brightness(${1 - 0.3 * dimmed}) saturate(${1 - 0.5 * dimmed})` : undefined,
         }}
       >
-        <div style={{width: 11, height: 11, borderRadius: 6, background: index === 1 ? '#68727F' : C.hot}} />
-        job
+        <div style={{width: 11, height: 11, borderRadius: 6, background: C.hot}} />
+        job #42
       </div>
     );
   };
@@ -1898,22 +1901,31 @@ const DuplicateJobs: React.FC<{f: number; gpu: Pt}> = ({f, gpu}) => {
           whiteSpace: 'nowrap',
         }}
       >
-        <Icon name="tick" size={26} /> charged once
+        <Icon name="tick" size={26} /> charged
       </div>
       <div
         style={{
           position: 'absolute',
           left: gpu.x + 20,
-          top: gpu.y + 420,
-          width: 220,
-          textAlign: 'center',
+          top: gpu.y + 412,
+          boxSizing: 'border-box',
+          borderRadius: 10,
+          border: '1.5px solid rgba(120,132,148,.32)',
+          background: 'rgba(120,132,148,.12)',
+          padding: '8px 16px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
           fontFamily,
-          fontSize: 26,
-          color: '#7D8794',
+          fontSize: 22,
+          fontWeight: 500,
+          letterSpacing: '.01em',
+          color: '#9AA3AE',
+          whiteSpace: 'nowrap',
           opacity: already,
         }}
       >
-        already charged
+        already charged · skipped
       </div>
     </div>
   );
@@ -2409,7 +2421,9 @@ export const DIAGRAM_SFX: Sfx[] = [
   {frame: word('4', 'trusting'), sound: 'scribble'}, // 0:25 struck out
   {frame: word('4', 'credit'), sound: 'scribble'}, // 0.5 min struck out
   {frame: beat('4r', 0.34), sound: 'denied'}, // the bad file's cross
-  {frame: word('7a', 'once', 1), sound: 'stamp'}, // "charged once"
+  {frame: word('7a', 'once', 1), sound: 'stamp'}, // the "charged" stamp
+  {frame: word('7a', 'twice'), sound: 'skipped'}, // the duplicate job #42: "already charged · skipped"
+  {frame: RETURN_BROWSER_LIT, sound: 'chime'}, // the result reaches the Browser
 ];
 
 export const WalkthroughV6Diagram: React.FC = () => {
