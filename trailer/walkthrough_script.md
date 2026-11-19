@@ -27,7 +27,7 @@ That's held from your credit, not spent.
 [So where does the video go?]
 The video goes straight into S3 through a presigned URL, so it never passes through the website,
 and a big file can't slow it down for anyone else.
-The website, a Lambda function, just puts a job on an SQS queue, and it's done.
+S3 then puts the new upload on an SQS queue as a job, and the website, a Lambda function, is done.
 It's asynchronous. Nothing waits on the GPU, so each side can scale, or fail, on its own.
 
 ## 4. A check first (diagram: dispatcher Lambda; small on-screen caption "ffprobe")
@@ -41,20 +41,20 @@ and no GPU ever wakes up.
 [What runs on the GPU, and is it on all day?]
 The job then wakes a GPU on SageMaker, which runs TRIBE v2, a research model from Meta trained on
 brain scans from over seven hundred people.
-A GPU left on all month would cost about thirteen hundred dollars, so it scales to zero when idle.
+A GPU left on all month would cost about nineteen hundred dollars, so it scales to zero when idle.
 The trade-off is a cold start: the first job waits while the GPU wakes up, which is fine for a result you come back to later.
 
-## 7. When things go wrong (diagram: retry, dead-letter queue, watchdog Lambda)
+## 7. When things go wrong (diagram: failure refund, watchdog Lambda)
 [What if it breaks? Do I lose my money?]
-And if something breaks halfway? It tries once more. If it fails again, the job goes to a
-dead-letter queue, and your hold goes straight back. You're only charged once the result is saved, and billing is idempotent, so a job is never
+And if something breaks halfway? If the GPU fails, the error is caught and your hold goes
+straight back. You're only charged once the result is saved, and billing is idempotent, so a job is never
 charged twice.
 And a watchdog Lambda makes sure a stuck job can't leave a GPU quietly running up a bill.
 
 ## 7b. Infrastructure as code (diagram: Terraform wraps the whole diagram)
 [Could you rebuild this?]
-All of it is infrastructure as code, in Terraform, so the whole system can be rebuilt or torn
-down in one go.
+All of it is infrastructure as code, in Terraform, so it can all be rebuilt or torn down in
+one go.
 
 ## 8. The result (real page, large and calm)
 About ten minutes later, here's the result.
