@@ -202,6 +202,22 @@ export const Icon: React.FC<{name: IconName; size?: number}> = ({name, size = 64
   </svg>
 );
 
+// One source of truth for a node's size: the component below draws to it and the diagram's
+// layout/overlap checks measure from it. The icon art and every label are ~30% larger than
+// pass 18; the icon's halo stays 128px so the rows keep their spacing.
+export const NODE_GEOMETRY = {
+  iconBox: 128,
+  iconHalf: 64,
+  iconArt: 100,
+  keyArt: 46,
+  label: 75,
+  service: 55,
+  purpose: 44,
+  labelGap: 16,
+  serviceGap: 12,
+  purposeGap: 10,
+} as const;
+
 export type StateKey = {at: number; state: NodeState};
 
 export const stateAt = (f: number, keys: StateKey[]) => {
@@ -277,7 +293,7 @@ export const Node: React.FC<NodeProps> = ({
       style={{
         position: 'absolute',
         left: x + dx - 190,
-        top: y - 64,
+        top: y - NODE_GEOMETRY.iconHalf,
         width: 380,
         display: 'flex',
         flexDirection: 'column',
@@ -286,7 +302,7 @@ export const Node: React.FC<NodeProps> = ({
         opacity,
       }}
     >
-      <div style={{position: 'relative', width: 128, height: 128}}>
+      <div style={{position: 'relative', width: NODE_GEOMETRY.iconBox, height: NODE_GEOMETRY.iconBox}}>
         <div
           style={{
             position: 'absolute',
@@ -331,7 +347,7 @@ export const Node: React.FC<NodeProps> = ({
                 : '0 0 30px rgba(120,138,160,.07), inset 0 0 22px rgba(120,138,160,.04)',
           }}
         >
-          <Icon name={icon} size={78} />
+          <Icon name={icon} size={NODE_GEOMETRY.iconArt} />
         </div>
         {keyP > 0.01 ? (
           <div
@@ -353,14 +369,14 @@ export const Node: React.FC<NodeProps> = ({
               transform: `scale(${0.8 + 0.2 * keyP})`,
             }}
           >
-            <Icon name="key" size={36} />
+            <Icon name="key" size={NODE_GEOMETRY.keyArt} />
           </div>
         ) : null}
       </div>
       <div
         style={{
-          marginTop: 16,
-          fontSize: wide ? 64 : 58,
+          marginTop: NODE_GEOMETRY.labelGap,
+          fontSize: wide ? 64 : NODE_GEOMETRY.label,
           fontWeight: wide ? 700 : 600,
           letterSpacing: '-.025em',
           lineHeight: 1,
@@ -373,8 +389,8 @@ export const Node: React.FC<NodeProps> = ({
       {showService && serviceOpacity > 0.01 && service ? (
         <div
           style={{
-            marginTop: 12,
-            fontSize: 42,
+            marginTop: NODE_GEOMETRY.serviceGap,
+            fontSize: NODE_GEOMETRY.service,
             letterSpacing: '.04em',
             lineHeight: 1,
             color: mix('#9AA3AE', '#C9A17F', glow),
@@ -388,8 +404,8 @@ export const Node: React.FC<NodeProps> = ({
       {purpose && (purposeOpacity ?? serviceOpacity) > 0.01 ? (
         <div
           style={{
-            marginTop: 10,
-            fontSize: 34,
+            marginTop: NODE_GEOMETRY.purposeGap,
+            fontSize: NODE_GEOMETRY.purpose,
             letterSpacing: '.005em',
             lineHeight: 1,
             color: mix('#7E8894', '#BFA58E', glow * 0.7),
