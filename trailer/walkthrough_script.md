@@ -69,7 +69,7 @@ quick shot of her reacting to the photos, to give sound-off viewers something to
 
 ## 10. Honest limit
 [So will this get me views?]
-None of this predicts your views.
+Now, none of this predicts your views.
 It shows how a brain is likely to respond, second by second, so you can fix things before you post.
 
 ## 11. Close (real page)
