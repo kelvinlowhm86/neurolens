@@ -18,12 +18,13 @@ const voiceLine = (id: string): VoiceLine => {
 
 export type LineCue = {id: string; text: string; start: number; frames: number};
 export type ShotCue = {shot: string; start: number; end: number; lines: LineCue[]};
-export type ShotSpec = {shot: string; ids: string[]; sectionEnd?: boolean};
+// `hold` (seconds) overrides the pause after the shot's last word, e.g. a wordless music moment.
+export type ShotSpec = {shot: string; ids: string[]; sectionEnd?: boolean; hold?: number};
 
 /** Back-to-back shots from the real line lengths. A shot starts on its first word and holds after its last. */
 export const buildShots = (specs: ShotSpec[]): {cues: ShotCue[]; duration: number} => {
   let cursor = 0;
-  const cues = specs.map(({shot, ids, sectionEnd}) => {
+  const cues = specs.map(({shot, ids, sectionEnd, hold}) => {
     const start = cursor;
     const cueLines = ids.map((id, i) => {
       const {text, duration} = voiceLine(id);
@@ -32,7 +33,7 @@ export const buildShots = (specs: ShotSpec[]): {cues: ShotCue[]; duration: numbe
       cursor += cue.frames;
       return cue;
     });
-    cursor += Math.round((sectionEnd ? SECTION_HOLD : SHOT_HOLD) * FPS);
+    cursor += Math.round((hold ?? (sectionEnd ? SECTION_HOLD : SHOT_HOLD)) * FPS);
     return {shot, start, end: cursor, lines: cueLines};
   });
   return {cues, duration: cursor};

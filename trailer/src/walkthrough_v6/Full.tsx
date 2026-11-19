@@ -6,7 +6,7 @@ import {Intro} from './intro/Intro';
 import {DURATION as INTRO, LINES as INTRO_LINES, BROWSER_HOLD_SHARE, INTRO_SFX} from './intro/timeline';
 import {WalkthroughV6Diagram, DURATION as DIAGRAM, LINE_CUES as DIAGRAM_LINES, DIAGRAM_SFX, creditWidgetOpacity} from './Diagram37';
 import {Result} from './result/Result';
-import {DURATION as RESULT, LINES as RESULT_LINES, RESULT_SFX} from './result/timeline';
+import {DURATION as RESULT, LINES as RESULT_LINES, MUSIC_MOMENT, RESULT_SFX} from './result/timeline';
 import {Outro} from './outro/Outro';
 import {DURATION as OUTRO, LINES as OUTRO_LINES} from './outro/timeline';
 import {FPS, LineCue, Sfx, SfxName} from './voice';
@@ -73,11 +73,21 @@ const SoundEffects: React.FC<{cues: Sfx[]}> = ({cues}) => (
   </>
 );
 
+// Two swells: the wordless moment after "here's the result" (the track's own build lands there),
+// and a smaller lift on the closing shot after the last line.
+const LAST_LINE_END = INTRO + DIAGRAM + RESULT + OUTRO_LINES[OUTRO_LINES.length - 1].start + OUTRO_LINES[OUTRO_LINES.length - 1].frames;
+const SWELLS: {start: number; end: number; gain: number}[] = [
+  {start: INTRO + DIAGRAM + MUSIC_MOMENT.start, end: INTRO + DIAGRAM + MUSIC_MOMENT.end - 6, gain: 2}, // about +6 dB
+  {start: LAST_LINE_END, end: DURATION, gain: 1.4}, // about +3 dB, under the fade to black
+];
+const swell = (f: number) => Math.max(1, ...SWELLS.map(({start, end, gain}) =>
+  interpolate(f, [start, start + FPS, end - 15, end], [1, gain, gain, 1], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'})));
+
 // bed.mp3 is the track followed by a crossfaded repeat of its calm section, longer than the video.
 const MusicBed: React.FC = () => (
   <Audio
     src={staticFile('walkthrough/v6voice/bed.mp3')}
-    volume={(f) => BED_ON * (MUSIC_IN_GAPS + (MUSIC_UNDER_VOICE - MUSIC_IN_GAPS) * speaking(f)) * interpolate(f, [0, MUSIC_FADE_IN, DURATION - MUSIC_FADE_OUT, DURATION], [0, 1, 1, 0], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'})}
+    volume={(f) => BED_ON * swell(f) * (MUSIC_IN_GAPS + (MUSIC_UNDER_VOICE - MUSIC_IN_GAPS) * speaking(f)) * interpolate(f, [0, MUSIC_FADE_IN, DURATION - MUSIC_FADE_OUT, DURATION], [0, 1, 1, 0], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'})}
   />
 );
 

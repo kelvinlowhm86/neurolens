@@ -2,7 +2,7 @@ import React from 'react';
 import {Sequence, useCurrentFrame} from 'remotion';
 import {C, fontFamily} from '../../edit/ui';
 import {BrainView, Cursor, PhoneClip, Ring, Stage, clamp, easeBack, easeInOut, easeOut, lerp} from '../common';
-import {CURSOR_IN, DASHED_IN, DURATION, FPS, MUTED, OVERALL, PEAK, PEAK_CLICK, PEAK_MARK, PEAK_SCORE, RANGE, SHOT, TO} from './timeline';
+import {CURSOR_IN, DASHED_IN, DURATION, MUSIC_MOMENT, FPS, MUTED, OVERALL, PEAK, PEAK_CLICK, PEAK_MARK, PEAK_SCORE, RANGE, SHOT, TO} from './timeline';
 import {Chart} from './Chart';
 
 // Fixed, centred layout: clip and brain in a band on top, the chart under them. Between
@@ -30,7 +30,8 @@ const level = (f: number, values: Record<Shot, number>) => {
 export const Result: React.FC = () => {
   const frame = useCurrentFrame();
 
-  const brainOpacity = level(frame, {a: 0.5, b: 1, c: 0.45});
+  // The brain is dim under the first words, then lights up for the music moment.
+  const brainOpacity = level(frame, {a: 1, b: 1, c: 0.45}) * lerp(0.5, 1, easeOut(frame, MUSIC_MOMENT.start, MUSIC_MOMENT.start + 20));
   const jumpGlow = frame >= PEAK_CLICK ? 1 - easeOut(frame, PEAK_CLICK, PEAK_CLICK + 24) : 0;
 
   const innerW = CHART.w - PAD.l - PAD.r;
@@ -39,7 +40,8 @@ export const Result: React.FC = () => {
   const yAt = (value: number) => PAD.t + ((RANGE[1] - value) / (RANGE[1] - RANGE[0])) * innerH;
 
   const zeroLabel = easeOut(frame, SHOT.b.start + 60, SHOT.b.start + 84);
-  const lineProgress = easeInOut(frame, SHOT.b.start + 4, SHOT.b.start + 80);
+  // The line draws itself during the music moment, as the clip plays and the brain responds.
+  const lineProgress = easeInOut(frame, MUSIC_MOMENT.start + 6, MUSIC_MOMENT.end - 10);
   // The muted series draws in as the voice says "dashed line", and stays for the peak click in 8.3.
   const mutedProgress = easeInOut(frame, DASHED_IN - 4, DASHED_IN + 70);
   const legendOpacity = easeOut(frame, DASHED_IN - 4, DASHED_IN + 16);

@@ -18,8 +18,11 @@ const HIGH = Math.max(...OVERALL);
 const PAD = (HIGH - LOW) * 0.12 || 0.04;
 export const RANGE: [number, number] = [LOW - PAD, HIGH + PAD];
 
+// After "here's the result", the voice stops and the result plays to the music for a few seconds.
+const MUSIC_MOMENT_SECONDS = 4.5;
+
 export const SHOTS = buildShots([
-  {shot: '8a', ids: ['8.1']},
+  {shot: '8a', ids: ['8.1'], hold: MUSIC_MOMENT_SECONDS},
   {shot: '8b', ids: ['8.2']},
   {shot: '8c', ids: ['8.3'], sectionEnd: true},
 ]);
@@ -33,6 +36,9 @@ export const SHOT = Object.fromEntries(CUES.map((cue) => [cue.shot.slice(1), cue
 >;
 const word = (shot: keyof typeof SHOT, line: number, token: string, occurrence = 0, edge: 'start' | 'end' = 'start') =>
   wordFrame(SHOT[shot].lines[line], token, occurrence, edge);
+
+// The wordless music moment: from the end of 8.1 to the next line (frames in the result).
+export const MUSIC_MOMENT = {start: SHOT.a.lines[0].start + SHOT.a.lines[0].frames, end: SHOT.b.start};
 
 // Moments keyed to words (frames in the result).
 export const DASHED_IN = word('b', 0, 'dashed', 0, 'start'); // "The dashed line is the same video with the sound off"
