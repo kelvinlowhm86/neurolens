@@ -1,5 +1,5 @@
 import React from 'react';
-import {AbsoluteFill, Audio, Sequence, Series, interpolate, staticFile, useCurrentFrame} from 'remotion';
+import {AbsoluteFill, Audio, Sequence, Series, getInputProps, interpolate, staticFile, useCurrentFrame} from 'remotion';
 import {C, fontFamily} from '../edit/ui';
 import {BG, CreditStrip, easeOut} from './common';
 import {Intro} from './intro/Intro';
@@ -48,11 +48,16 @@ const VoiceLines: React.FC<{lines: LineCue[]}> = ({lines}) => (
   <>
     {lines.map((line) => (
       <Sequence key={line.id} from={line.start} durationInFrames={line.frames + 1} layout="none">
-        <Audio src={staticFile(`walkthrough/v6voice/${line.id}.wav`)} />
+        <Audio src={staticFile(`walkthrough/v6voice/${line.id}.wav`)} volume={BED_ON} />
       </Sequence>
     ))}
   </>
 );
+
+// Mix check: render with --props='{"stem":"sfx"}' for the effects alone, or '{"stem":"bed"}' for voice + music only.
+const STEM = (getInputProps() as {stem?: 'sfx' | 'bed'}).stem;
+const BED_ON = STEM === 'sfx' ? 0 : 1;
+const SFX_ON = STEM === 'bed' ? 0 : 1;
 
 // Effects sit under the voice: bright, short sounds that cut through without competing.
 // Each file peaks at -3 dBFS; these gains set the mix.
@@ -62,7 +67,7 @@ const SoundEffects: React.FC<{cues: Sfx[]}> = ({cues}) => (
   <>
     {cues.map((cue, i) => (
       <Sequence key={`${cue.sound}-${i}`} from={Math.round(cue.frame)} durationInFrames={FPS} layout="none">
-        <Audio src={staticFile(`walkthrough/v6voice/sfx/${cue.sound}.wav`)} volume={SFX_GAIN[cue.sound]} />
+        <Audio src={staticFile(`walkthrough/v6voice/sfx/${cue.sound}.wav`)} volume={SFX_GAIN[cue.sound] * SFX_ON} />
       </Sequence>
     ))}
   </>
@@ -72,7 +77,7 @@ const SoundEffects: React.FC<{cues: Sfx[]}> = ({cues}) => (
 const MusicBed: React.FC = () => (
   <Audio
     src={staticFile('walkthrough/v6voice/bed.mp3')}
-    volume={(f) => (MUSIC_IN_GAPS + (MUSIC_UNDER_VOICE - MUSIC_IN_GAPS) * speaking(f)) * interpolate(f, [0, MUSIC_FADE_IN, DURATION - MUSIC_FADE_OUT, DURATION], [0, 1, 1, 0], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'})}
+    volume={(f) => BED_ON * (MUSIC_IN_GAPS + (MUSIC_UNDER_VOICE - MUSIC_IN_GAPS) * speaking(f)) * interpolate(f, [0, MUSIC_FADE_IN, DURATION - MUSIC_FADE_OUT, DURATION], [0, 1, 1, 0], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'})}
   />
 );
 
