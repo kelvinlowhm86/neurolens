@@ -18,10 +18,22 @@ const DIP = 8; // frames per side of a dip
 
 export const DURATION = INTRO + DIAGRAM + RESULT + OUTRO;
 
-// Voice: one wav per script line, placed at its line's first word. Music: a low bed under the whole video.
-const MUSIC_GAIN = 0.032; // about -24 dB under the voice (voice -19.9 LUFS, bed file -14 LUFS)
+// Voice: one wav per script line, placed at its line's first word. Music (bed file at -14 LUFS) is
+// ducked: it sits ~15 dB under the voice (-19.9 LUFS) while someone speaks and rises in the pauses.
+const MUSIC_UNDER_VOICE = 0.1; // -20 dB
+const MUSIC_IN_GAPS = 0.22; // -13 dB
+const DUCK_RAMP = 8; // frames to dip before a line and to recover after it
 const MUSIC_FADE_IN = 2 * FPS;
 const MUSIC_FADE_OUT = 4 * FPS;
+
+// Every voice line as [start, end] frames in the full video.
+const SPEECH: [number, number][] = (
+  [[0, INTRO_LINES], [INTRO, DIAGRAM_LINES], [INTRO + DIAGRAM, RESULT_LINES], [INTRO + DIAGRAM + RESULT, OUTRO_LINES]] as [number, LineCue[]][]
+).flatMap(([offset, lines]) => lines.map((l): [number, number] => [offset + l.start, offset + l.start + l.frames]));
+
+// 1 while speaking, 0 in a pause, with short ramps either side of each line.
+const speaking = (f: number) => Math.max(0, ...SPEECH.map(([s, e]) =>
+  interpolate(f, [s - DUCK_RAMP, s, e, e + DUCK_RAMP], [0, 1, 1, 0], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'})));
 
 const VoiceLines: React.FC<{lines: LineCue[]}> = ({lines}) => (
   <>
@@ -37,7 +49,7 @@ const VoiceLines: React.FC<{lines: LineCue[]}> = ({lines}) => (
 const MusicBed: React.FC = () => (
   <Audio
     src={staticFile('walkthrough/v6voice/bed.mp3')}
-    volume={(f) => MUSIC_GAIN * interpolate(f, [0, MUSIC_FADE_IN, DURATION - MUSIC_FADE_OUT, DURATION], [0, 1, 1, 0], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'})}
+    volume={(f) => (MUSIC_IN_GAPS + (MUSIC_UNDER_VOICE - MUSIC_IN_GAPS) * speaking(f)) * interpolate(f, [0, MUSIC_FADE_IN, DURATION - MUSIC_FADE_OUT, DURATION], [0, 1, 1, 0], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'})}
   />
 );
 
