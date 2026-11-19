@@ -63,6 +63,9 @@ const CLIP_FRAMES = ['f0', 'f5', 'f15', 'f25', 'f35'].map(
   (name) => `walkthrough/swee/frames/${name}.jpg`,
 );
 
+// The wordless result-return tail after 7b's last word: three legs plus a short rest, derived below.
+const RETURN_HOLD = 3.8;
+
 // Each shot is one script line (ids from walkthrough_script.md). The real voice sets every length.
 const SHOT_LINES: {row: string; id: string; sectionEnd?: boolean; hold?: number}[] = [
   {row: '3b', id: '3.1'},
@@ -74,7 +77,7 @@ const SHOT_LINES: {row: string; id: string; sectionEnd?: boolean; hold?: number}
   {row: '5b', id: '5.2'},
   {row: '5c', id: '5.3', sectionEnd: true},
   {row: '7a', id: '7.1', hold: 1.8}, // keep "already charged · skipped" on screen long enough to read
-  {row: '7b', id: '7.2', sectionEnd: true, hold: 2.8}, // longer tail for the wordless result-return beat
+  {row: '7b', id: '7.2', sectionEnd: true, hold: RETURN_HOLD}, // tail for the wordless result-return beat
   {row: '7d', id: '7b.1', sectionEnd: true},
 ];
 
@@ -96,20 +99,28 @@ const beat = (row: string, progress = 0) => speechFrame(CUE(row).line, progress)
 const word = (row: string, token: string, occurrence = 0, edge: 'start' | 'end' = 'start') =>
   wordFrame(CUE(row).line, token, occurrence, edge);
 
-// The result-return beat lives in the 2.8s hold after 7b's last word (84 frames). The 7d camera
-// pulls back on "running up a bill" and is at rest 12 frames into the hold; the beat then starts 2
-// frames after it settles. Each hop takes about a second: GPU -> Storage and GPU -> Database leave
-// together, then Website -> Browser, whose node lights as the pulse arrives. The last ~10 frames
-// of the hold are a short rest before 7d's line starts.
-const RETURN_SETTLE = 72;
+// The result-return beat lives in the hold after 7b's last word. The 7d camera pulls back on
+// "running up a bill" and is at rest 12 frames into the hold; the beat starts 2 frames after it
+// settles, so the whole beat is shown on the 7d wide camera at rest. Three legs: the GPU writes to
+// Storage and Database together, both then feed the Website, and the Website returns the result to
+// the Browser. The Browser lights as that last pulse nears and "results ready" appears beside it.
+// The rest of the hold is a short beat of quiet before 7d's line starts.
+const RETURN_HOLD_FRAMES = Math.round(RETURN_HOLD * FPS);
+const RETURN_CAMERA_REST = 12;
+const RETURN_SETTLE = RETURN_HOLD_FRAMES - RETURN_CAMERA_REST;
 const RETURN_START = CUE('7d').start - RETURN_SETTLE + 2;
 const RETURN_END = CUE('7b').end - 1;
 const RETURN_HOP = 30;
+const RETURN_BACK_HOP = 26;
 const RETURN_STORAGE_END = RETURN_START + RETURN_HOP;
-const RETURN_DATABASE_END = RETURN_START + RETURN_HOP;
-const RETURN_BROWSER_START = RETURN_START + RETURN_HOP;
+const RETURN_DATABASE_END = RETURN_STORAGE_END;
+const RETURN_BACK_START = RETURN_STORAGE_END;
+const RETURN_BACK_END = RETURN_BACK_START + RETURN_BACK_HOP;
+const RETURN_BROWSER_START = RETURN_BACK_END;
 const RETURN_BROWSER_LIT = RETURN_BROWSER_START + 22;
 const RETURN_BROWSER_ARRIVE = RETURN_BROWSER_START + RETURN_HOP;
+const RETURN_LABEL_FADE = 10;
+const RETURN_LABEL_OUT = RETURN_END - 8;
 
 type NodeId = 'browser' | 'website' | 'storage' | 'queue' | 'check' | 'gpu' | 'watchdog' | 'dead' | 'database';
 
@@ -136,6 +147,8 @@ const WEBSITE: StateKey[] = [
   {at: CUE('3d').start, state: 'dim'},
   {at: CUE('3d').start + 76, state: 'lit'},
   {at: CUE('3d').start + 109, state: 'dim'},
+  {at: RETURN_BACK_END, state: 'lit'},
+  {at: RETURN_END + 8, state: 'dim'},
 ];
 
 const STORAGE: StateKey[] = [
@@ -143,13 +156,13 @@ const STORAGE: StateKey[] = [
   {at: word('3b', 'S3'), state: 'lit'},
   {at: CUE('3c').start, state: 'idle'},
   {at: RETURN_STORAGE_END, state: 'lit'},
-  {at: RETURN_STORAGE_END + 18, state: 'idle'},
+  {at: RETURN_BACK_END, state: 'idle'},
 ];
 
 const DATABASE: StateKey[] = [
   {at: 0, state: 'dim'},
   {at: RETURN_DATABASE_END, state: 'lit'},
-  {at: RETURN_DATABASE_END + 18, state: 'dim'},
+  {at: RETURN_BACK_END, state: 'dim'},
 ];
 
 const QUEUE: StateKey[] = [
@@ -409,6 +422,21 @@ const rowOffRowPath = (row: Pt, off: Pt): PathSpec => {
     ? {from: {x: off.x, y: off.y + nodeServiceBottom() + gap}, to: {x: row.x, y: row.y - end}}
     : {from: {x: row.x, y: row.y + nodeServiceBottom() + gap}, to: {x: off.x, y: off.y - end}};
 };
+
+// The result-return read paths enter the Website from open space: Storage (above the row) curves
+// across from its right side and drops onto the Website's top; Database (below the GPU) runs left at
+// its own height and rises into the Website from below its purpose line, never crossing a label.
+const storageWebsitePath = (storage: Pt, website: Pt): PathSpec => ({
+  from: {x: storage.x + NODE_GEOMETRY.iconHalf + 16, y: storage.y},
+  to: {x: website.x, y: website.y - NODE_GEOMETRY.iconHalf - 16},
+  control: {x: website.x, y: storage.y},
+});
+
+const databaseWebsitePath = (database: Pt, website: Pt): PathSpec => ({
+  from: {x: database.x - NODE_GEOMETRY.iconHalf - 16, y: database.y},
+  to: {x: website.x, y: website.y + nodeServiceBottom() + NODE_GEOMETRY.purposeGap + NODE_GEOMETRY.purpose + 24},
+  control: {x: website.x, y: database.y},
+});
 
 const PRESIGN_H = 38;
 const PRESIGN_T = 0.5;
@@ -880,6 +908,30 @@ const linksAt = (f: number): LinkDraw[] => {
       opacity: Math.min(visible('gpu'), visible('storage')),
     });
   }
+  if (returnOn && pos('storage') && pos('website')) {
+    links.push({
+      id: 'storage-website',
+      path: storageWebsitePath(pos('storage'), pos('website')),
+      appear: RETURN_BACK_START - 8,
+      draw: 8,
+      arrow: true,
+      width: 2.2,
+      colour: 'rgba(150,166,188,.42)',
+      opacity: Math.min(visible('storage'), visible('website')),
+    });
+  }
+  if (returnOn && pos('database') && pos('website')) {
+    links.push({
+      id: 'database-website',
+      path: databaseWebsitePath(pos('database'), pos('website')),
+      appear: RETURN_BACK_START - 8,
+      draw: 8,
+      arrow: true,
+      width: 2.2,
+      colour: 'rgba(150,166,188,.42)',
+      opacity: Math.min(visible('database'), visible('website')),
+    });
+  }
   if (returnOn && pos('website') && pos('browser')) {
     links.push({
       id: 'website-browser',
@@ -899,7 +951,7 @@ const linksAt = (f: number): LinkDraw[] => {
 type PulseHop = {id: string; path: PathSpec; start: number; end: number; from: NodeId; to: NodeId};
 
 // One pulse per hop, over the same path and at the same frames as the clip/job that already
-// moves. The result-return hops in the last ~1.1s of 7b are the last three.
+// moves. The result-return hops in 7b's tail are the last five.
 const pulsesAt = (): PulseHop[] => {
   const positions = FIXED_POSITIONS;
   const pos = (id: NodeId) => positions[id];
@@ -972,6 +1024,26 @@ const pulsesAt = (): PulseHop[] => {
       end: RETURN_DATABASE_END,
       from: 'gpu',
       to: 'database',
+    });
+  }
+  if (pos('storage') && pos('website')) {
+    hops.push({
+      id: 'return-storage-website',
+      path: storageWebsitePath(pos('storage'), pos('website')),
+      start: RETURN_BACK_START,
+      end: RETURN_BACK_END,
+      from: 'storage',
+      to: 'website',
+    });
+  }
+  if (pos('database') && pos('website')) {
+    hops.push({
+      id: 'return-database-website',
+      path: databaseWebsitePath(pos('database'), pos('website')),
+      start: RETURN_BACK_START,
+      end: RETURN_BACK_END,
+      from: 'database',
+      to: 'website',
     });
   }
   if (pos('website') && pos('browser')) {
@@ -2539,6 +2611,13 @@ export const WalkthroughV6Diagram: React.FC = () => {
     ? nodeWorldBox(NODES_BY_ID.check, check.x, check.y, false, true, true).y2
     : 0;
   const ffprobe = ffprobeOpacity(f);
+  // The result is ready in the Browser: a small mono note fades in under its purpose line and
+  // leaves with the beat. It is measured in screen space so it stays ~24px on the wide camera.
+  const resultsReady =
+    ease(f, RETURN_BROWSER_LIT, RETURN_BROWSER_LIT + RETURN_LABEL_FADE) * (1 - ease(f, RETURN_LABEL_OUT, RETURN_END));
+  const browserBox = browser
+    ? screenBox(nodeWorldBox(NODES_BY_ID.browser, browser.x, browser.y, false, true, true), cam)
+    : null;
 
   return (
     <AbsoluteFill style={{background: '#0B0C0F'}}>
@@ -2632,6 +2711,25 @@ export const WalkthroughV6Diagram: React.FC = () => {
         <TerraformOutline f={f} />
       </AbsoluteFill>
 
+      {resultsReady > 0.001 && browserBox ? (
+        <div
+          style={{
+            position: 'absolute',
+            left: (browserBox.x1 + browserBox.x2) / 2,
+            top: browserBox.y2 + 18,
+            transform: 'translateX(-50%)',
+            fontFamily: MONO,
+            fontSize: 24,
+            fontWeight: 500,
+            letterSpacing: '.06em',
+            color: C.hot,
+            opacity: resultsReady,
+            whiteSpace: 'nowrap',
+          }}
+        >
+          results ready
+        </div>
+      ) : null}
 
       <Caption y={CAPTION_Y} text="asynchronous" from={CUE('3d').start + 8} to={CUE('4').start - 10} hot="asynchronous" />
       <Caption y={CAPTION_Y} text="server-side validation" from={word('4', 'server-side') - 8} to={CUE('4r').start} hot="validation" />

@@ -36,6 +36,18 @@ const PHONE = {x: 330, y: 170, w: 330};
 const PHONE_H = (PHONE.w * 16) / 9;
 const BRAIN = {x: 980, y: 120, size: 480};
 const LINE = {x: 890, y: 614, w: 780, h: 190};
+
+// 9b: the Do row becomes the Do card's title. The "Do" label travels from the row to the title while
+// the long report text fades out where it stands; the short headline then fades in under the label,
+// so the two texts are never on screen together.
+const DO_LABEL_START = {x: CARD.x + 60 + 30, y: CARD.y + 440 + 2 + (44 * 1.2) / 2};
+const DO_LABEL_END = {x: 1920 / 2, y: 330};
+const DO_TEXT_START = {x: CARD.x + 60 + 250 + 40, y: CARD.y + 440, w: CARD.w - 120 - 250 - 40};
+const DO_TEXT_END = {x: 200, y: 388, w: 1520};
+const DO_HEADLINE_SIZE = 72;
+const DO_HEADLINE_LINE = 1.2;
+const DO_CHART_TOP = DO_TEXT_END.y + DO_HEADLINE_SIZE * DO_HEADLINE_LINE + 60;
+const DO_CAPTION_TOP = DO_CHART_TOP + LINE.h + 36;
 const TITLE_Y = 78;
 
 // 11: the calm wide product shot, with the small wordmark under it.
@@ -144,11 +156,17 @@ export const Outro: React.FC = () => {
   // voice, then the Do line alone (9b). Only the Do line is written out in full.
   const cardIn = easeOut(frame, SHOT['9a'].start + 2, SHOT['9a'].start + 20);
   const rowsIn = (n: number) => easeOut(frame, ROW_IN[n], ROW_IN[n] + 20);
-  const rowsQuiet = easeInOut(frame, SHOT['9b'].start + 4, SHOT['9b'].start + 16);
-  // The Do line comes in only once the rows have gone, so the two texts never overlap mid-fade.
-  const doIn = easeInOut(frame, SHOT['9b'].start + 16, SHOT['9b'].start + 30);
+  // The other rows and the card background leave first, so the Do row never crosses live text.
+  const rowsQuiet = easeInOut(frame, SHOT['9b'].start + 2, SHOT['9b'].start + 12);
+  // The label travels over 20 frames; the long text is gone 10 frames in, before the label crosses it,
+  // and the headline fades in under the label as it lands.
+  const moveStart = SHOT['9b'].start + 2;
+  const moveEnd = moveStart + 20;
+  const move = easeInOut(frame, moveStart, moveEnd);
+  const longOut = easeInOut(frame, moveStart, moveStart + 10);
+  const swap = easeInOut(frame, moveStart + 12, moveEnd + 4);
   const cardOut = 1 - easeOut(frame, SHOT['10a'].start - 6, SHOT['10a'].start + 6);
-  const bedrock = easeOut(frame, BEDROCK_IN, BEDROCK_IN + 14) * (1 - easeOut(frame, SHOT['9b'].start, SHOT['9b'].start + 12));
+  const bedrock = easeOut(frame, BEDROCK_IN, BEDROCK_IN + 14) * (1 - rowsQuiet);
   const push = 1 + 0.04 * easeInOut(frame, SHOT['9b'].start + 10, SHOT['9b'].end);
   // 9.2 names the sound-off finding, so the card says it plainly under the Do line.
   const soundOff = easeOut(frame, SOUND_OFF_IN, SOUND_OFF_IN + 14);
@@ -182,21 +200,35 @@ export const Outro: React.FC = () => {
             <div style={{position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, opacity: 1}}>
               <Row label="On screen" text={GIST.onScreen} top={170} dim opacity={rowsIn(0) * (1 - rowsQuiet)} />
               <Row label="Brain" text={GIST.brain} top={300} dim opacity={rowsIn(1) * (1 - rowsQuiet)} />
-              <Row label="Do" text={REPORT.moment.suggestion ?? ''} hot top={440} opacity={rowsIn(2) * (1 - rowsQuiet)} />
             </div>
           </div>
           <Signpost text="Claude · Amazon Bedrock" y={CARD.y + CARD.h + 36} opacity={bedrock} />
-          <div style={{
-            position: 'absolute', left: 200, right: 200, top: 0, bottom: 0, display: 'flex', flexDirection: 'column', alignItems: 'center',
-            justifyContent: 'center', gap: 36, textAlign: 'center', opacity: doIn, transform: `scale(${push})`,
-          }}>
-            <div style={{fontFamily, fontSize: 56, fontWeight: 600, color: C.hot, letterSpacing: '-.01em'}}>Do</div>
-            <div style={{fontFamily, fontSize: 72, lineHeight: 1.2, fontWeight: 600, letterSpacing: '-.025em', color: C.text}}>{SUGGESTION_HEADLINE}</div>
+          <div style={{position: 'absolute', inset: 0, transform: `scale(${push})`}}>
+            <div style={{
+              position: 'absolute',
+              left: lerp(DO_LABEL_START.x, DO_LABEL_END.x, move),
+              top: lerp(DO_LABEL_START.y, DO_LABEL_END.y, move),
+              transform: 'translate(-50%, -50%)',
+              fontFamily, fontSize: lerp(44, 56, move), lineHeight: 1.2, fontWeight: 600,
+              letterSpacing: '-.01em', color: C.hot, whiteSpace: 'nowrap', opacity: rowsIn(2),
+            }}>Do</div>
+            <div style={{
+              position: 'absolute',
+              left: DO_TEXT_START.x, top: DO_TEXT_START.y, width: DO_TEXT_START.w,
+              fontFamily, fontSize: 40, lineHeight: 1.3, fontWeight: 500,
+              letterSpacing: '-0.44px', color: C.text,
+              opacity: rowsIn(2) * (1 - longOut),
+            }}>{REPORT.moment.suggestion ?? ''}</div>
+            <div style={{
+              position: 'absolute', left: DO_TEXT_END.x, top: DO_TEXT_END.y, width: DO_TEXT_END.w,
+              textAlign: 'center', fontFamily, fontSize: DO_HEADLINE_SIZE, lineHeight: DO_HEADLINE_LINE,
+              fontWeight: 600, letterSpacing: '-.025em', color: C.text, opacity: swap,
+            }}>{SUGGESTION_HEADLINE}</div>
             {/* The evidence beside the advice: the report's moment on the chart, the dashed sound-off line sinking. */}
-            <div style={{position: 'relative', width: LINE.w, height: LINE.h, marginTop: 24, opacity: soundOff}}>
+            <div style={{position: 'absolute', left: (1920 - LINE.w) / 2, top: DO_CHART_TOP, width: LINE.w, height: LINE.h, opacity: soundOff}}>
               <LiveLine second={TO} weak={soundOff} x={0} y={0} />
             </div>
-            <div style={{fontFamily, fontSize: 32, fontWeight: 500, color: C.muted, opacity: soundOff}}>
+            <div style={{position: 'absolute', left: 0, right: 0, top: DO_CAPTION_TOP, textAlign: 'center', fontFamily, fontSize: 32, fontWeight: 500, color: C.muted, opacity: soundOff}}>
               with the sound off, the old photos barely register
             </div>
           </div>
