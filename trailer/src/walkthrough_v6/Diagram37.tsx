@@ -69,7 +69,7 @@ const RETURN_HOLD = 3.8;
 // Each shot is one script line (ids from walkthrough_script.md). The real voice sets every length.
 const SHOT_LINES: {row: string; id: string; sectionEnd?: boolean; hold?: number}[] = [
   {row: '3b', id: '3.1'},
-  {row: '3c', id: '3.2'},
+  {row: '3c', id: '3.2', hold: 1.2}, // short line: let the job land and the shot settle before the pan
   {row: '3d', id: '3.3', sectionEnd: true},
   {row: '4', id: '4.1'},
   {row: '4r', id: '4.2', sectionEnd: true},
@@ -144,7 +144,7 @@ const BROWSER: StateKey[] = [
 const WEBSITE: StateKey[] = [
   {at: 0, state: 'dim'},
   {at: CUE('3c').start, state: 'lit'},
-  {at: word('3c', 'done'), state: 'idle'},
+  {at: word('3c', 'lands'), state: 'idle'},
   {at: CUE('3d').start + 76, state: 'lit'},
   {at: CUE('3d').start + 109, state: 'dim'},
   {at: RETURN_BACK_END, state: 'lit'},
@@ -168,7 +168,7 @@ const DATABASE: StateKey[] = [
 const QUEUE: StateKey[] = [
   {at: CUE('3c').start, state: 'idle'},
   {at: word('3c', 'queue'), state: 'lit'},
-  {at: word('3c', 'done'), state: 'idle'},
+  {at: CUE('3d').start, state: 'idle'},
   {at: CUE('3d').start + 130, state: 'lit'},
   {at: CUE('4').start, state: 'lit'},
   {at: beat('4', 0.3), state: 'idle'},
@@ -549,7 +549,7 @@ const DUPLICATE_EXTRA: Box = {
 // The frame each shot is judged at: its subject is fully lit and its camera is at rest.
 export const STILLS = [
   {row: '3b', frame: beat('3b', 0.52)},
-  {row: '3c', frame: word('3c', 'and')},
+  {row: '3c', frame: word('3c', 'queue', 0, 'end') + 12},
   {row: '3d', frame: CUE('3d').start + 185},
   {row: '4', frame: word('4', 'again') + 8},
   {row: '4r', frame: beat('4r', 0.72)},
@@ -842,7 +842,7 @@ const linksAt = (f: number): LinkDraw[] => {
     links.push({
       id: 'storage-queue',
       path: storageQueuePath(pos('storage'), pos('queue')),
-      appear: word('3c', 'puts'),
+      appear: word('3c', 'adds'),
       draw: 16,
       arrow: true,
       opacity: pair('storage', 'queue', CUE('3c').start, CUE('4').start),
@@ -977,7 +977,7 @@ const pulsesAt = (): PulseHop[] => {
     hops.push({
       id: 'storage-queue',
       path: storageQueuePath(pos('storage'), pos('queue')),
-      start: word('3c', 'puts'),
+      start: word('3c', 'adds'),
       end: word('3c', 'queue', 0, 'end'),
       from: 'storage',
       to: 'queue',
@@ -1615,9 +1615,9 @@ const CreditStrip: React.FC<{f: number}> = ({f}) => {
 
 const QueueRack: React.FC<{f: number; queue: Pt}> = ({f, queue}) => {
   const opacity =
-    ease(f, word('3c', 'puts') - 12, word('3c', 'puts')) * (1 - ease(f, CUE('4').start - 10, CUE('4').start + 4));
+    ease(f, word('3c', 'adds') - 12, word('3c', 'adds')) * (1 - ease(f, CUE('4').start - 10, CUE('4').start + 4));
   if (opacity <= 0.001) return null;
-  const drop = glide(f, word('3c', 'puts'), word('3c', 'queue', 0, 'end'));
+  const drop = glide(f, word('3c', 'adds'), word('3c', 'queue', 0, 'end'));
   const jobTop = lerp(queue.y - 330, queueJobTop(queue, 0), drop);
   const secondStart = CUE('3d').start + 160;
   const secondDrop = glide(f, secondStart, secondStart + 24);
@@ -1810,7 +1810,7 @@ const badge4rOpacity = (f: number) =>
   ease(f, beat('4r', 0.34), beat('4r', 0.46)) * (1 - ease(f, CUE('5a').start - 8, CUE('5a').start + 4));
 
 const badge7aAt = (f: number) => {
-  const broke = word('7a', 'breaks');
+  const broke = word('7a', 'fails');
   const back = word('7a', 'back', 0, 'end'); // the failure ends with the refund
   return ease(f, broke, broke + 10) * (1 - ease(f, back, back + 12));
 };

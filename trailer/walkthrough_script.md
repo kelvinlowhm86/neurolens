@@ -27,7 +27,7 @@ That's held from your credit, not spent.
 [So where does the video go?]
 The video goes straight into S3 through a presigned URL, so it never passes through the website,
 and a big file can't slow it down for anyone else.
-S3 then puts the new upload on an SQS queue as a job, and the website, a Lambda function, is done.
+Once it lands, S3 itself adds a job to an SQS queue.
 It's asynchronous. Nothing waits on the GPU, so each side can scale, or fail, on its own.
 
 ## 4. A check first (diagram: dispatcher Lambda; small on-screen caption "ffprobe")
@@ -46,14 +46,14 @@ The trade-off is a cold start: the first job waits while the GPU wakes up, which
 
 ## 7. When things go wrong (diagram: failure refund, watchdog Lambda)
 [What if it breaks? Do I lose my money?]
-And if something breaks halfway? If the GPU fails, the error is caught and your hold goes
+And if the GPU fails halfway? The error is caught, and your hold goes
 straight back. You're only charged once the result is saved, and billing is idempotent, so a job is never
 charged twice.
 And a watchdog Lambda makes sure a stuck job can't leave a GPU quietly running up a bill.
 
 ## 7b. Infrastructure as code (diagram: Terraform wraps the whole diagram)
 [Could you rebuild this?]
-All of it is infrastructure as code, in Terraform, so it can all be rebuilt or torn down in
+All of it is infrastructure as code, in Terraform, so it can be rebuilt or torn down in
 one go.
 
 ## 8. The result (real page, large and calm)
