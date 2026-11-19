@@ -1219,12 +1219,13 @@ window.brainMap = {
 };
 
 const params = new URLSearchParams(window.location.search);
-// Credit is shown as video time in words ("1 min 30 s"), so it never reads as a video length
-// (m:ss) or as money; converted at the served price, null until /api/limits has loaded (M3f §2c).
+// minSec writes a length limit in words ("1 min 30 s"). Credit is an amount, so creditWords writes
+// it in decimal minutes ("1.5 min"), never as a video length (m:ss) or money; converted at the
+// served price, null until /api/limits has loaded (M3f §2c).
 function minSec(seconds) {
   const n = Math.max(0, Math.floor(seconds));
   const m = Math.floor(n / 60), s = n % 60;
-  return { m, s, text: m && s ? `${m} min ${s} s` : m ? `${m} min` : `${s} s` };
+  return m && s ? `${m} min ${s} s` : m ? `${m} min` : `${s} s`;
 }
 function creditSeconds(cents) {
   const p = limits && limits.price;
@@ -1233,7 +1234,9 @@ function creditSeconds(cents) {
 }
 function creditWords(cents) {
   const seconds = creditSeconds(cents);
-  return seconds == null ? null : minSec(seconds).text;
+  if (seconds == null) return null;
+  const tenths = Math.floor(Math.max(0, seconds) / 6 + 1e-9); // rounded down, never overstates
+  return `${tenths % 10 ? (tenths / 10).toFixed(1) : tenths / 10} min`;
 }
 
 function applyChooser() {
@@ -1740,9 +1743,7 @@ function renderBalance(available) {
   const b = me.balance;
   const seconds = creditSeconds(available);
   if (seconds == null) { $('balance').innerHTML = ''; return; }
-  // A phone shows whole minutes only ("13 min credit"), rounded down so it never overstates.
-  const { m, s, text } = minSec(seconds);
-  const amount = m && s ? `${m} min<span class="bar-hide-sm"> ${s} s</span>` : text;
+  const amount = creditWords(available);
   const held = b.reserved_cents ? `<span class="credit-held"> · ${creditWords(b.reserved_cents)} held</span>` : '';
   $('balance').innerHTML = `<span class="credit-amt">${amount} credit</span>${held}`;
 }
@@ -2484,8 +2485,8 @@ async function loadLimits() {
     const res = await fetch('/api/limits');
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     limits = await res.json();
-    const block = limits.price && limits.price.block_seconds > 0 ? ` · credit used in ${minSec(limits.price.block_seconds).text} steps` : '';
-    $('limitsText').textContent = `MP4, MOV or WebM · up to ${minSec(limits.max_video_duration_seconds).text}${block}`;
+    const block = limits.price && limits.price.block_seconds > 0 ? ` · credit used in ${minSec(limits.price.block_seconds)} steps` : '';
+    $('limitsText').textContent = `MP4, MOV or WebM · up to ${minSec(limits.max_video_duration_seconds)}${block}`;
     if (creditWords(0) == null) console.error('No usable price in /api/limits: credit is hidden', limits.price);
     if (signedIn && me) showBalance();
     return limits;
@@ -2701,7 +2702,7 @@ function batchRow(item) {
   name.title = item.name;
   const meta = document.createElement('div'); meta.className = 'batch-meta';
   if (item.state === 'valid') {
-    meta.textContent = `${fmt(item.duration)} · uses ${creditWords(item.price)}`;
+    meta.textContent = `${fmt(item.duration)} · uses ${creditWords(item.price)} credit`;
   } else if (item.state === 'checking') {
     meta.textContent = 'Checking…';
   } else {

@@ -38,7 +38,7 @@ place in line among other users, waking the database from the landing page.
   queued. The page shows it on the row like any presign refusal.
 - Below the rows: one total, "Uses 4 min of credit · only videos that finish · cancel within 15 s", the
   consent box (§5a, one for the whole batch), and Upload.
-- If the total is more than the available credit: "Needs 5 min of credit; you have 3 min 30 s" and Upload stays
+- If the total is more than the available credit: "Needs 5 min of credit; you have 3.5 min" and Upload stays
   disabled until rows are removed. With no valid row Upload is disabled.
 - Upload closes the dialog and any open result (the player stops, the brain stops drawing) and shows
   History. The upload box is free at once: a new dialog can add more files, which queue behind.
@@ -68,19 +68,19 @@ place in line among other users, waking the database from the landing page.
 ### 2c. Credit notes
 - **Credit is shown as video time in words, never money** (the service is free, M3c). The server
   keeps cents (balances, ledger, charges, rewards); the page converts with `/api/limits` `price`:
-  seconds = cents / `cents_per_block` × `block_seconds`, rounded down, written "1 min 30 s"
-  ("2 min", "30 s"), so the page holds no price of its own. `m:ss` always means a video's length
-  and "min/s" with "uses"/"used" always means credit, so the two never read alike. Top bar "13 min
-  15 s credit" ("· 2 min held" while held; on a phone whole minutes only, "13 min credit"); the
+  seconds = cents / `cents_per_block` × `block_seconds`, written in decimal minutes rounded down
+  to 0.1 ("1.5 min", "2 min", "0.5 min"), so the page holds no price of its own. `m:ss` always means a video's length
+  and decimal minutes always mean credit, so the two never read alike. Top bar "13.2 min
+  credit" ("· 2 min held" while held); the
   upload box line "MP4, MOV or WebM · up to 2 min · credit used in 30 s steps"; upload row
-  "1:01 · uses 1 min 30 s". Until the price has loaded (or if it fails, logged to the console) the
+  "1:01 · uses 1.5 min credit". Until the price has loaded (or if it fails, logged to the console) the
   credit is hidden rather than shown in another unit, and amounts drop out of messages; History
   loads after the price. Grants stay typed in dollars ($1 = 30 s, M3b §7a).
 - The no-credit panel shows the current access state instead: the "Get free minutes" request form,
   the waiting note, the declined note, or the funded note (M3k §9). It shows whenever the available
   credit is below the price of the shortest allowed video, not only at none.
 - Delete account names the credit that will be lost: "…every video, analysis and login, and your
-  4 min 30 s of credit." (no credit part at none).
+  4.5 min of credit." (no credit part at none).
 
 ## 3. Waiting, progress and the tab title
 - **Migration 006** adds `jobs.claimed_at TIMESTAMPTZ`; `billing.claim` sets it to `now()` on every
@@ -277,7 +277,7 @@ rules that still apply.
   (30), `curve_length_tolerance_s` (2, M3j §2), `no_curve_days` (90).
   These are anti-abuse product limits, not budget limits.
 - Replies on the form (`curveResultMessage`/`curveQualityMessage` in `static/app.html`): when
-  rewarded, "Thanks! This analysis is now free: 1 min 30 s of credit is back." (the amount comes
+  rewarded, "Thanks! This analysis is now free: 1.5 min of credit is back." (the amount comes
   from the reply's `rewarded_cents`, as credit time, §2c); when the report is saved but fails a
   quality check, "Thanks for adding it. The report was saved, but no credit was refunded because
   <reasons>." with the reasons: too little viewing data (fewer than 20 points), the retention barely
