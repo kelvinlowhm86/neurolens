@@ -36,6 +36,6 @@ const word = (shot: keyof typeof SHOT, line: number, token: string, occurrence =
 
 // Moments keyed to words (frames in the result).
 export const DASHED_IN = word('b', 0, 'dashed', 0, 'start'); // "The dashed line is the same video with the sound off"
-export const PEAK_CLICK = word('c', 0, 'peak', 0, 'start'); // "Click anywhere on the line, like the peak"
+export const PEAK_CLICK = word('c', 0, 'moment', 0, 'start'); // "Click any moment on the line" (it clicks 0:09, inside the report's 0:08-0:13 moment)
 export const PEAK_MARK = PEAK_CLICK - 20; // the peak marker pops just before the click
 export const CURSOR_IN = PEAK_CLICK - 34; // the cursor arrives, then clicks

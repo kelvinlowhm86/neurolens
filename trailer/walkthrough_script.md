@@ -42,7 +42,7 @@ and no GPU ever wakes up.
 The job then wakes a GPU on SageMaker, which runs TRIBE v2, a research model from Meta trained on
 brain scans from over seven hundred people.
 A GPU left on all month would cost about thirteen hundred dollars, so it scales to zero when idle.
-The trade-off is a cold start of a few minutes, which is fine for a report you come back to.
+The trade-off is a cold start of a few minutes, which is fine for a result you come back to later.
 
 ## 7. When things go wrong (diagram: retry, dead-letter queue, watchdog Lambda)
 [What if it breaks? Do I lose my money?]
@@ -59,7 +59,7 @@ down in one go.
 ## 8. The result (real page, large and calm)
 About ten minutes later, here's the result.
 The line shows how strong the response is, and the brain shows where. The dashed line is the same video with the sound off.
-Click anywhere on the line, like the peak, and the video jumps right to that moment.
+Click any moment on the line, and the video jumps right to it.
 
 ## 9. The report (report card; caption "Claude · Amazon Bedrock", then the 0:08-0:13 "Do" line)
 [Do I have to read the chart myself?]

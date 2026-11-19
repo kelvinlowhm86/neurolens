@@ -74,7 +74,7 @@ export const Result: React.FC = () => {
         comparison={MUTED} comparisonDashed comparisonColour={MUTED_INK} comparisonProgress={mutedProgress}
         label="swee-overall-response" strokeWidth={7}
         zeroLabelOpacity={zeroLabel}
-        marker={markerPop > 0 ? {second: PEAK, value: PEAK_SCORE, pop: markerPop, label: `Peak ${mmss(PEAK)}`} : undefined}
+        marker={markerPop > 0 ? {second: PEAK, value: PEAK_SCORE, pop: markerPop, label: mmss(PEAK)} : undefined}
         highlightSecond={frame >= PEAK_CLICK ? clamp(clipSecond, 0, TO) : undefined}
       />
 
