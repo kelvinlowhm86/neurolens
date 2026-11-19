@@ -2,7 +2,7 @@ import React from 'react';
 import {Sequence, useCurrentFrame} from 'remotion';
 import {C, fontFamily} from '../../edit/ui';
 import {BrainView, Cursor, PhoneClip, Ring, Stage, clamp, easeBack, easeInOut, easeOut, lerp} from '../common';
-import {CURSOR_IN, DURATION, FPS, MUTED, OVERALL, PEAK, PEAK_CLICK, PEAK_MARK, PEAK_SCORE, RANGE, SHOT, TO} from './timeline';
+import {CURSOR_IN, DASHED_IN, DURATION, FPS, MUTED, OVERALL, PEAK, PEAK_CLICK, PEAK_MARK, PEAK_SCORE, RANGE, SHOT, TO} from './timeline';
 import {Chart} from './Chart';
 
 // Fixed, centred layout: clip and brain in a band on top, the chart under them. Between
@@ -40,9 +40,9 @@ export const Result: React.FC = () => {
 
   const zeroLabel = easeOut(frame, SHOT.b.start + 60, SHOT.b.start + 84);
   const lineProgress = easeInOut(frame, SHOT.b.start + 4, SHOT.b.start + 80);
-  // The muted series draws in during 8.2, after the main line, and stays for the peak click in 8.3.
-  const mutedProgress = easeInOut(frame, SHOT.b.start + 18, SHOT.b.start + 100);
-  const legendOpacity = easeOut(frame, SHOT.b.start + 24, SHOT.b.start + 44);
+  // The muted series draws in as the voice says "dashed line", and stays for the peak click in 8.3.
+  const mutedProgress = easeInOut(frame, DASHED_IN - 4, DASHED_IN + 70);
+  const legendOpacity = easeOut(frame, DASHED_IN - 4, DASHED_IN + 16);
 
   const clipSecond = frame < PEAK_CLICK ? frame / FPS : PEAK + (frame - PEAK_CLICK) / FPS;
   const markerPop = easeBack(frame, PEAK_MARK, PEAK_MARK + 22);

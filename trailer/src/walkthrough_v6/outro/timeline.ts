@@ -28,8 +28,8 @@ const nameWord = (token: string) => wordFrame(SHOT['9a'].lines[0], token);
 export const ROW_IN = [nameWord('up') - 14, nameWord('moment') - 14, nameWord('change') - 14];
 // "Claude, on Amazon Bedrock": the label appears as the voice says Claude.
 export const BEDROCK_IN = nameWord('Claude') - 6;
-// 9.2 names the sound-off finding: the card's caption appears as the voice says "sound off".
-export const SOUND_OFF_IN = wordFrame(SHOT['9b'].lines[0], 'sound') - 6;
+// 9.2 names the sound-off finding: the card's caption appears as the voice says "dashed line".
+export const SOUND_OFF_IN = wordFrame(SHOT['9b'].lines[0], 'dashed') - 6;
 // 10: the counter's number is unknowable, so its "?" lands on "views"; on 10.2 the clip jumps to the
 // weak sound-off stretch (the real report's 8-13 s moment).
 export const VIEW_QUESTION_IN = wordFrame(SHOT['10a'].lines[0], 'views');

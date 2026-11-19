@@ -58,13 +58,13 @@ down in one go.
 
 ## 8. The result (real page, large and calm)
 About ten minutes later, here's the result.
-The line shows how strong the response is, and the brain shows where.
+The line shows how strong the response is, and the brain shows where. The dashed line is the same video with the sound off.
 Click the peak, and the video jumps right to it.
 
 ## 9. The report (report card; caption "Claude · Amazon Bedrock", then the 0:08-0:13 "Do" line)
 [Do I have to read the chart myself?]
 Then Claude, on Amazon Bedrock, writes it up moment by moment, with what to change.
-Over the old photos, the response nearly vanishes with the sound off, so it suggests adding a
+Over the old photos, that dashed line nearly drops to nothing, so it suggests adding a
 one-second shot of her face.
 
 ## 10. Honest limit

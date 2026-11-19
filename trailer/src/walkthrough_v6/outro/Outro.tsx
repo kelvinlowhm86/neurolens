@@ -119,7 +119,11 @@ const ViewCounter: React.FC<{opacity: number; question: number}> = ({opacity, qu
     display: 'flex', alignItems: 'center', gap: 12, opacity, fontFamily, whiteSpace: 'nowrap',
   }}>
     <PlayIcon />
-    <span style={{fontSize: 42, fontWeight: 700, color: C.hot, lineHeight: 1, opacity: question}}>?</span>
+    <span style={{position: 'relative', fontSize: 42, fontWeight: 600, color: C.text, fontVariantNumeric: 'tabular-nums', lineHeight: 1}}>
+      <span style={{filter: 'blur(7px)', opacity: 0.45}}>1.2M</span>
+      <span style={{position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.hot, fontWeight: 700, opacity: question}}>?</span>
+    </span>
+    <span style={{fontSize: 36, fontWeight: 500, color: C.muted, lineHeight: 1}}>views</span>
   </div>
 );
 
@@ -173,7 +177,7 @@ export const Outro: React.FC = () => {
               position: 'absolute', left: 0, right: 0, bottom: 46, margin: '0 auto', maxWidth: 1190, textAlign: 'center',
               fontFamily, fontSize: 38, lineHeight: 1.35, fontWeight: 500, letterSpacing: '-.005em', color: C.muted, opacity: soundOff,
             }}>
-              the response nearly vanishes with sound off over the old photos
+              with the sound off, the old photos barely register
             </div>
           </div>
           <Signpost text="Claude · Amazon Bedrock" y={CARD.y + CARD.h + 36} opacity={bedrock} />
