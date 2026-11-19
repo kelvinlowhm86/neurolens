@@ -64,8 +64,8 @@ Click the peak, and the video jumps right to it.
 ## 9. The report (report card; caption "Claude · Amazon Bedrock", then the 0:08-0:13 "Do" line)
 [Do I have to read the chart myself?]
 Then Claude, on Amazon Bedrock, writes it up moment by moment, with what to change.
-Over the old photos, the response nearly vanishes with the sound off, so it suggests cutting in a
-second of her face.
+Over the old photos, the response nearly vanishes with the sound off, so it suggests adding a
+one-second shot of her face.
 
 ## 10. Honest limit
 [So will this get me views?]
