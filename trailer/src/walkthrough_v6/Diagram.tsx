@@ -62,13 +62,11 @@ export type IconName =
   | 'database'
   | 'model'
   | 'watchdog'
-  | 'deadLetter'
   | 'terraform'
   | 'key'
   | 'clock'
   | 'tick'
-  | 'cross'
-  | 'retry';
+  | 'cross';
 
 const iconDots = (
   <>
@@ -150,13 +148,6 @@ const IconArt: Record<IconName, React.ReactNode> = {
       <circle cx="32" cy="32" r="2.6" fill="currentColor" stroke="none" />
     </>
   ),
-  deadLetter: (
-    <>
-      <path d="M14 34l4-18h28l4 18" />
-      <path d="M14 34h11l2 5h10l2-5h11v10c0 3-2 5-5 5H19c-3 0-5-2-5-5z" />
-      <path d="M32 12v14M27 21l5 5 5-5" />
-    </>
-  ),
   terraform: (
     <>
       <path d="M22 18L12 32l10 14" />
@@ -178,12 +169,6 @@ const IconArt: Record<IconName, React.ReactNode> = {
   ),
   tick: <path d="M14 34l11 11 25-27" />,
   cross: <path d="M18 18l28 28M46 18L18 46" />,
-  retry: (
-    <>
-      <path d="M54.64 40a24 24 0 1 1-5.65-24.96L61.33 26.67" />
-      <path d="M61.33 10.67v16h-16" />
-    </>
-  ),
 };
 
 export const Icon: React.FC<{name: IconName; size?: number}> = ({name, size = 64}) => (

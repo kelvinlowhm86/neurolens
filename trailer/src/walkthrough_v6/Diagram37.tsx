@@ -46,14 +46,14 @@ const CENTRE_TOLERANCE = 0.04;
 // Camera scale per shot in pass 10 (measured); the framing check refuses to go below these.
 const PASS10_SCALE: Record<string, number> = {
   '3b': 1.25, // lowered from 1.3341: Storage must be on screen at the same time as the Browser
-  '3c': 1.35,
+  '3c': 1.15, // lowered from 1.35: Storage + Queue with their purpose lines are a taller subject than Website + Queue
   '3d': 1.35,
   '4': 0.988,
   '4r': 1.1463,
   '5a': 1.28, // the TRIBE panel (was row 6)
   '5b': 1.15, // the idle cost and scale-to-zero
   '5c': 1.5, // the cold-start clock and ring
-  '7a': 0.95, // the retry, dead-letter and idempotent beats share the shot
+  '7a': 0.95, // the GPU-failure cross, refund and idempotent beats share the shot
   '7b': 0.96, // the watchdog (was row 7c)
   '7d': 0.48, // lowered from 0.5069: the Terraform outline must keep clear of the safe margins
 };
@@ -122,7 +122,7 @@ const RETURN_BROWSER_ARRIVE = RETURN_BROWSER_START + RETURN_HOP;
 const RETURN_LABEL_FADE = 10;
 const RETURN_LABEL_OUT = RETURN_END - 8;
 
-type NodeId = 'browser' | 'website' | 'storage' | 'queue' | 'check' | 'gpu' | 'watchdog' | 'dead' | 'database';
+type NodeId = 'browser' | 'website' | 'storage' | 'queue' | 'check' | 'gpu' | 'watchdog' | 'database';
 
 type NodeDef = {
   id: NodeId;
@@ -144,7 +144,7 @@ const BROWSER: StateKey[] = [
 const WEBSITE: StateKey[] = [
   {at: 0, state: 'dim'},
   {at: CUE('3c').start, state: 'lit'},
-  {at: CUE('3d').start, state: 'dim'},
+  {at: word('3c', 'done'), state: 'idle'},
   {at: CUE('3d').start + 76, state: 'lit'},
   {at: CUE('3d').start + 109, state: 'dim'},
   {at: RETURN_BACK_END, state: 'lit'},
@@ -154,7 +154,7 @@ const WEBSITE: StateKey[] = [
 const STORAGE: StateKey[] = [
   {at: 0, state: 'idle'},
   {at: word('3b', 'S3'), state: 'lit'},
-  {at: CUE('3c').start, state: 'idle'},
+  {at: CUE('3d').start, state: 'idle'},
   {at: RETURN_STORAGE_END, state: 'lit'},
   {at: RETURN_BACK_END, state: 'idle'},
 ];
@@ -167,7 +167,7 @@ const DATABASE: StateKey[] = [
 
 const QUEUE: StateKey[] = [
   {at: CUE('3c').start, state: 'idle'},
-  {at: word('3c', 'job'), state: 'lit'},
+  {at: word('3c', 'queue'), state: 'lit'},
   {at: word('3c', 'done'), state: 'idle'},
   {at: CUE('3d').start + 130, state: 'lit'},
   {at: CUE('4').start, state: 'lit'},
@@ -188,6 +188,7 @@ const GPU: StateKey[] = [
   {at: CUE('5c').start, state: 'idle'}, // starting one takes a few minutes
   {at: CUE('7a').start, state: 'lit'},
   {at: word('7a', 'fails'), state: 'off'},
+  {at: word('7a', 'charged'), state: 'lit'}, // a later, successful run is the one that gets charged
   {at: CUE('7b').start, state: 'lit'}, // a stuck job's GPU, before the watchdog
   {at: word('7b', 'running'), state: 'off'},
   {at: CUE('7d').start, state: 'idle'},
@@ -199,12 +200,6 @@ const WATCHDOG: StateKey[] = [
   {at: beat('7b', 0.72), state: 'idle'},
 ];
 
-const DEAD: StateKey[] = [
-  {at: CUE('7a').start, state: 'idle'},
-  {at: word('7a', 'dead-letter'), state: 'lit'},
-  {at: CUE('7b').start, state: 'idle'},
-];
-
 const NODES: NodeDef[] = [
   {id: 'browser', label: 'Browser', service: '', purpose: 'your video', icon: 'browser', keys: BROWSER, appear: 0},
   {id: 'website', label: 'Website', service: 'Lambda', purpose: 'sign-in & upload', icon: 'website', keys: WEBSITE, appear: 0},
@@ -213,7 +208,6 @@ const NODES: NodeDef[] = [
   {id: 'check', label: 'Check', service: 'Lambda', purpose: 'checks length & credit', icon: 'check', keys: CHECK, appear: CUE('4').start},
   {id: 'gpu', label: 'GPU', service: 'SageMaker', purpose: 'runs the brain model', icon: 'gpu', keys: GPU, appear: CUE('4r').start},
   {id: 'watchdog', label: 'Watchdog', service: 'Lambda', purpose: 'stops stuck jobs', icon: 'watchdog', keys: WATCHDOG, appear: CUE('7b').start},
-  {id: 'dead', label: 'Dead-letter', service: 'SQS', purpose: 'failed jobs, refunded', icon: 'deadLetter', keys: DEAD, appear: CUE('7a').start},
   {id: 'database', label: 'Database', service: 'Aurora', purpose: 'credits, job status', icon: 'database', keys: DATABASE, appear: CUE('7b').start},
 ];
 
@@ -331,7 +325,7 @@ const ROW_GAP = 490;
 const OFF_ROW = 480;
 const STORAGE_ROW = 348;
 
-const MAIN_ROW: NodeId[] = ['browser', 'website', 'queue', 'check', 'gpu', 'dead'];
+const MAIN_ROW: NodeId[] = ['browser', 'website', 'queue', 'check', 'gpu'];
 const ALL_NODE_IDS: NodeId[] = [...MAIN_ROW, 'storage', 'watchdog', 'database'];
 
 const FIXED_POSITIONS: Record<NodeId, Pt> = (() => {
@@ -404,6 +398,12 @@ const browserStoragePath = (browser: Pt, storage: Pt): PathSpec => ({
   from: {x: browser.x - 60, y: browser.y},
   to: {x: storage.x - 60, y: storage.y},
   control: {x: storage.x - 520, y: (browser.y + storage.y) / 2},
+});
+
+const storageQueuePath = (storage: Pt, queue: Pt): PathSpec => ({
+  // S3 hands the job to SQS: leaves Storage on the open right and enters the queue from the left.
+  from: {x: storage.x + 60, y: storage.y},
+  to: {x: queue.x - 60, y: queue.y},
 });
 
 const nodeServiceBottom = () =>
@@ -571,7 +571,14 @@ const LAYOUTS: Layout[] = [
     maxScale: 1.4,
     width: 0.84,
   },
-  {row: '3c', at: CUE('3c').start, ids: ['website', 'queue'], extra: [QUEUE_JOB_BOX], maxScale: 1.35},
+  {
+    row: '3c',
+    at: CUE('3c').start,
+    ids: ['storage', 'queue'],
+    named: ['website'],
+    extra: [QUEUE_JOB_BOX],
+    maxScale: 1.35,
+  },
   {
     row: '3d',
     at: CUE('3d').start,
@@ -607,7 +614,7 @@ const LAYOUTS: Layout[] = [
   {
     row: '7a',
     at: CUE('7a').start,
-    ids: ['dead', 'gpu'],
+    ids: ['gpu'],
     thumbNodes: ['gpu'],
     extra: [DUPLICATE_EXTRA],
     maxScale: 1.5,
@@ -831,14 +838,14 @@ const linksAt = (f: number): LinkDraw[] => {
       opacity: pair('browser', 'storage', CUE('3b').start, CUE('3c').start),
     });
   }
-  if (pos('website') && pos('queue')) {
+  if (pos('storage') && pos('queue')) {
     links.push({
-      id: 'website-queue',
-      path: autoPath(pos('website'), pos('queue'), 84),
-      appear: CUE('3c').start + 10,
+      id: 'storage-queue',
+      path: storageQueuePath(pos('storage'), pos('queue')),
+      appear: word('3c', 'puts'),
       draw: 16,
       arrow: true,
-      opacity: pair('website', 'queue', CUE('3c').start, CUE('4').start),
+      opacity: pair('storage', 'queue', CUE('3c').start, CUE('4').start),
     });
   }
   if (pos('queue') && pos('check')) {
@@ -859,16 +866,6 @@ const linksAt = (f: number): LinkDraw[] => {
       draw: 16,
       arrow: true,
       opacity: pair('check', 'gpu', CUE('5a').start, CUE('5b').start),
-    });
-  }
-  if (pos('gpu') && pos('dead')) {
-    links.push({
-      id: 'gpu-dead',
-      path: autoPath(pos('gpu'), pos('dead'), 84),
-      appear: CUE('7a').start + 10,
-      draw: 16,
-      arrow: true,
-      opacity: pair('gpu', 'dead', CUE('7a').start, CUE('7b').start),
     });
   }
   if (pos('watchdog') && pos('gpu')) {
@@ -966,23 +963,23 @@ const pulsesAt = (): PulseHop[] => {
       to: 'storage',
     });
   }
-  if (pos('browser') && pos('website')) {
+  if (pos('browser') && pos('storage')) {
     hops.push({
-      id: 'browser-website',
-      path: autoPath(pos('browser'), pos('website'), 84),
+      id: 'second-browser-storage',
+      path: browserStoragePath(pos('browser'), pos('storage')),
       start: CUE('3d').start + 40,
       end: CUE('3d').start + 100,
       from: 'browser',
-      to: 'website',
+      to: 'storage',
     });
   }
-  if (pos('website') && pos('queue')) {
+  if (pos('storage') && pos('queue')) {
     hops.push({
-      id: 'website-queue',
-      path: autoPath(pos('website'), pos('queue'), 84),
-      start: CUE('3d').start + 106,
-      end: CUE('3d').start + 166,
-      from: 'website',
+      id: 'storage-queue',
+      path: storageQueuePath(pos('storage'), pos('queue')),
+      start: word('3c', 'puts'),
+      end: word('3c', 'queue', 0, 'end'),
+      from: 'storage',
       to: 'queue',
     });
   }
@@ -994,16 +991,6 @@ const pulsesAt = (): PulseHop[] => {
       end: word('5a', 'GPU', 0, 'end'),
       from: 'check',
       to: 'gpu',
-    });
-  }
-  if (pos('gpu') && pos('dead')) {
-    hops.push({
-      id: 'gpu-dead',
-      path: autoPath(pos('gpu'), pos('dead'), 84),
-      start: word('7a', 'goes'),
-      end: word('7a', 'queue', 0, 'end'),
-      from: 'gpu',
-      to: 'dead',
     });
   }
   if (pos('gpu') && pos('storage')) {
@@ -1187,7 +1174,7 @@ const cardSize = (id: CardId): {w: number; h: number} => {
     );
   } else if (id === 'status') {
     content = Math.max(
-      textWidth('$1,300 / month', 44, 600),
+      textWidth('$1,900 / month', 44, 600),
       textWidth('$0 when idle', 44, 600),
       28 + textWidth('0 running', 42, 600),
     );
@@ -1219,7 +1206,7 @@ const CARD_OPACITY: Record<CardId, (f: number) => number> = {
 };
 
 const creditReturnedAt = (f: number) => ease(f, word('7a', 'hold'), word('7a', 'back', 0, 'end'));
-const creditChargedAt = (f: number) => ease(f, word('7a', 'once', 1), word('7a', 'once', 1) + 12);
+const creditChargedAt = (f: number) => ease(f, word('7a', 'once'), word('7a', 'once') + 12);
 const badRefundAt = (f: number) => ease(f, word('4r', "you're"), word('4r', 'refunded', 0, 'end'));
 const badFileVisibleAt = (f: number) =>
   ease(f, beat('4r', 0.18), beat('4r', 0.3)) * (1 - ease(f, CUE('5a').start - 8, CUE('5a').start + 4));
@@ -1227,7 +1214,7 @@ const creditGlowAt = (f: number) =>
   Math.max(
     ease(f, word('4r', "you're") - 4, word('4r', "you're") + 8) * (1 - ease(f, CUE('5a').start - 10, CUE('5a').start + 2)),
     ease(f, word('7a', 'hold') - 4, word('7a', 'hold') + 8) * (1 - ease(f, word('7a', 'back', 0, 'end'), word('7a', 'back', 0, 'end') + 8)),
-    ease(f, word('7a', 'once', 1) - 2, word('7a', 'once', 1) + 10) * (1 - ease(f, word('7a', 'once', 1) + 22, word('7a', 'once', 1) + 34)),
+    ease(f, word('7a', 'once') - 2, word('7a', 'once') + 10) * (1 - ease(f, word('7a', 'once') + 22, word('7a', 'once') + 34)),
   );
 // Shot 4 re-prices the hold from the browser's 0.5 min to the file's 1 min.
 const creditHoldShare = (f: number) =>
@@ -1422,7 +1409,7 @@ const StatusCard: React.FC<{f: number; box: Box; opacity: number}> = ({f, box, o
   const idleAt = word('5b', 'zero');
   const idle = ease(f, idleAt, idleAt + 18);
   const month = filled * (1 - idle);
-  const dollars = Math.round(1300 * month);
+  const dollars = Math.round(1900 * month);
   return (
     <CardShell box={box} opacity={opacity}>
       <div style={{display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 8, height: '100%', fontVariantNumeric: 'tabular-nums'}}>
@@ -1708,21 +1695,19 @@ const BadFile: React.FC<{f: number; check: Pt}> = ({f, check}) => {
   );
 };
 
-const SecondUpload: React.FC<{f: number; browser: Pt; website: Pt; queue: Pt}> = ({f, browser, website, queue}) => {
+const SecondUpload: React.FC<{f: number; browser: Pt; storage: Pt; queue: Pt}> = ({f, browser, storage, queue}) => {
   const start = CUE('3d').start + 40;
   const through = start + 60;
   const leave = through + 6;
   const arrive = leave + 60;
   const opacity = ease(f, start, start + 10) * (1 - ease(f, arrive - 8, arrive + 8));
   if (opacity <= 0.001) return null;
-  const a = {x: browser.x + 64, y: browser.y - 18};
-  const b = {x: website.x, y: website.y - 18};
-  const d = {x: queue.x - 70, y: queue.y};
-  const along = (from: Pt, to: Pt, t: number): Pt => ({x: lerp(from.x, to.x, t), y: lerp(from.y, to.y, t)});
+  const toStorage = browserStoragePath(browser, storage);
+  const toQueue = storageQueuePath(storage, queue);
   const point =
     f < through
-      ? along(a, b, glide(f, start, through))
-      : along(b, d, glide(f, leave, arrive));
+      ? bez(toStorage.from, linkControl(toStorage), toStorage.to, glide(f, start, through))
+      : bez(toQueue.from, linkControl(toQueue), toQueue.to, glide(f, leave, arrive));
   return (
     <div
       style={{
@@ -1826,17 +1811,11 @@ const badge4rOpacity = (f: number) =>
 
 const badge7aAt = (f: number) => {
   const broke = word('7a', 'breaks');
-  const retried = word('7a', 'tries');
-  const failed = word('7a', 'fails');
-  const first = ease(f, broke, broke + 10) * (1 - ease(f, retried - 6, retried + 2));
-  const retry = ease(f, retried, retried + 10) * (1 - ease(f, failed - 8, failed));
-  const second = ease(f, failed, failed + 10);
-  const out = 1 - ease(f, CUE('7b').start - 40, CUE('7b').start - 26);
-  const kind: 'cross' | 'retry' = f >= word('7a', 'tries') + 4 && f < word('7a', 'fails') ? 'retry' : 'cross';
-  return {opacity: Math.max(first, retry, second) * out, kind, retry: retry * out};
+  const back = word('7a', 'back', 0, 'end'); // the failure ends with the refund
+  return ease(f, broke, broke + 10) * (1 - ease(f, back, back + 12));
 };
 
-const RingBadge: React.FC<{pos: Pt; kind: 'cross' | 'retry'; opacity: number}> = ({pos, kind, opacity}) => {
+const RingBadge: React.FC<{pos: Pt; opacity: number}> = ({pos, opacity}) => {
   if (opacity <= 0.001) return null;
   const center = badgeCenter(pos);
   return (
@@ -1852,85 +1831,14 @@ const RingBadge: React.FC<{pos: Pt; kind: 'cross' | 'retry'; opacity: number}> =
         alignItems: 'center',
         justifyContent: 'center',
         background: 'rgba(11,12,15,.96)',
-        border: `2px solid ${kind === 'retry' ? 'rgba(255,158,84,.85)' : 'rgba(224,90,79,.9)'}`,
-        color: kind === 'retry' ? C.hot : DANGER,
-        boxShadow: kind === 'retry' ? '0 0 22px rgba(255,138,42,.3)' : '0 0 22px rgba(224,90,79,.28)',
+        border: '2px solid rgba(224,90,79,.9)',
+        color: DANGER,
+        boxShadow: '0 0 22px rgba(224,90,79,.28)',
         opacity,
         transform: `scale(${0.8 + 0.2 * opacity})`,
       }}
     >
-      <Icon name={kind} size={38} />
-    </div>
-  );
-};
-
-const RetryLoop: React.FC<{f: number; gpu: Pt; opacity: number}> = ({f, gpu, opacity}) => {
-  if (opacity <= 0.001) return null;
-  const radius = 78;
-  const at = (degrees: number) => {
-    const radians = (degrees * Math.PI) / 180;
-    return {x: gpu.x + radius * Math.cos(radians), y: gpu.y + radius * Math.sin(radians)};
-  };
-  const start = at(15);
-  const end = at(-75);
-  const endRadians = (-75 * Math.PI) / 180;
-  const arrow = (Math.atan2(Math.cos(endRadians), -Math.sin(endRadians)) * 180) / Math.PI;
-  const size = 16;
-  const a = (arrow * Math.PI) / 180;
-  const p1 = {x: end.x - size * Math.cos(a - 0.42), y: end.y - size * Math.sin(a - 0.42)};
-  const p2 = {x: end.x - size * Math.cos(a + 0.42), y: end.y - size * Math.sin(a + 0.42)};
-  return (
-    <svg width={1} height={1} style={{position: 'absolute', left: 0, top: 0, overflow: 'visible', opacity}}>
-      <path
-        d={`M ${start.x} ${start.y} A ${radius} ${radius} 0 1 1 ${end.x} ${end.y}`}
-        fill="none"
-        stroke={C.hot}
-        strokeWidth={5}
-        strokeLinecap="round"
-      />
-      <path
-        d={`M ${p1.x} ${p1.y} L ${end.x} ${end.y} L ${p2.x} ${p2.y}`}
-        fill="none"
-        stroke={C.hot}
-        strokeWidth={5}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-};
-
-const FailureJob: React.FC<{f: number; gpu: Pt; dead: Pt}> = ({f, gpu, dead}) => {
-  const start = word('7a', 'goes'); // "the job goes to a dead-letter queue"
-  const end = word('7a', 'queue', 0, 'end');
-  const opacity = ease(f, start, start + 8) * (1 - ease(f, CUE('7b').start - 8, CUE('7b').start + 2));
-  if (opacity <= 0.001) return null;
-  const t = glide(f, start, end);
-  const left = gpu.x + (dead.x - gpu.x) * t - 88;
-  return (
-    <div
-      style={{
-        position: 'absolute',
-        left,
-        top: gpu.y - 40,
-        width: 176,
-        height: 80,
-        borderRadius: 18,
-        background: '#1C1E22',
-        border: '1.5px solid rgba(224,90,79,.6)',
-        boxShadow: '0 12px 26px rgba(0,0,0,.55)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 12,
-        fontFamily,
-        fontSize: 34,
-        color: C.text,
-        opacity,
-      }}
-    >
-      <div style={{width: 11, height: 11, borderRadius: 6, background: DANGER}} />
-      job
+      <Icon name="cross" size={38} />
     </div>
   );
 };
@@ -1944,7 +1852,7 @@ const DuplicateJobs: React.FC<{f: number; gpu: Pt}> = ({f, gpu}) => {
   const firstIn = glide(f, word('7a', 'charged') - 6, word('7a', 'charged') + 18);
   // The duplicate is the same job #42, and arrives on "a job is never charged twice".
   const secondIn = glide(f, word('7a', 'never'), word('7a', 'twice'));
-  const charged = ease(f, word('7a', 'once', 1), word('7a', 'once', 1) + 12);
+  const charged = ease(f, word('7a', 'once'), word('7a', 'once') + 12);
   const already = ease(f, word('7a', 'twice'), word('7a', 'twice') + 10); // the word lands as it shows
   const card = (index: number, drop: number) => {
     const x = gpu.x - 240 + index * 260;
@@ -2285,7 +2193,7 @@ const badgeBoxesAt = (f: number) => {
   }
   const gpu = positions.gpu;
   const seven = badge7aAt(f);
-  if (gpu && (presence.gpu ?? 0) > 0.1 && seven.opacity > 0.02) {
+  if (gpu && (presence.gpu ?? 0) > 0.1 && seven > 0.02) {
     boxes.push({label: 'gpu badge', box: screenBox(badgeBoxAt(gpu), cam)});
   }
   return boxes;
@@ -2562,7 +2470,7 @@ export const DIAGRAM_SFX: Sfx[] = [
   {frame: word('4', 'trusting'), sound: 'scribble'}, // 0:25 struck out
   {frame: word('4', 'credit'), sound: 'scribble'}, // 0.5 min struck out
   {frame: beat('4r', 0.34), sound: 'denied'}, // the bad file's cross
-  {frame: word('7a', 'once', 1), sound: 'stamp'}, // the "charged" stamp
+  {frame: word('7a', 'once'), sound: 'stamp'}, // the "charged" stamp
   {frame: word('7a', 'twice'), sound: 'skipped'}, // the duplicate job #42: "already charged · skipped"
   {frame: RETURN_BROWSER_LIT, sound: 'chime'}, // the result reaches the Browser
 ];
@@ -2601,11 +2509,9 @@ export const WalkthroughV6Diagram: React.FC = () => {
   const badge4r = badge4rOpacity(f);
   const badge7a = badge7aAt(f);
   const browser = positions.browser;
-  const website = positions.website;
   const queue = positions.queue;
   const check = positions.check;
   const gpu = positions.gpu;
-  const dead = positions.dead;
   const cards = cardSpecsAt(f);
   const checkBottom = check
     ? nodeWorldBox(NODES_BY_ID.check, check.x, check.y, false, true, true).y2
@@ -2634,7 +2540,9 @@ export const WalkthroughV6Diagram: React.FC = () => {
         </svg>
 
         {queue && presence.queue > 0.02 ? <QueueRack f={f} queue={queue} /> : null}
-        {browser && website && queue ? <SecondUpload f={f} browser={browser} website={website} queue={queue} /> : null}
+        {browser && positions.storage && queue ? (
+          <SecondUpload f={f} browser={browser} storage={positions.storage} queue={queue} />
+        ) : null}
         {browser && positions.storage ? <UploadChip f={f} browser={browser} storage={positions.storage} /> : null}
 
         {thumb.opacity > 0.001 ? (
@@ -2700,11 +2608,9 @@ export const WalkthroughV6Diagram: React.FC = () => {
         <MonoCaption text="presigned URL" x={PRESIGN.x} y={PRESIGN.y} opacity={presignedOpacity(f)} pill />
         {check ? <BadFile f={f} check={check} /> : null}
         {check && gpu ? <JobArrival f={f} check={check} gpu={gpu} /> : null}
-        {gpu && dead ? <FailureJob f={f} gpu={gpu} dead={dead} /> : null}
         {gpu ? <DuplicateJobs f={f} gpu={gpu} /> : null}
-        {check ? <RingBadge pos={check} kind="cross" opacity={badge4r} /> : null}
-        {gpu ? <RingBadge pos={gpu} kind={badge7a.kind} opacity={badge7a.opacity} /> : null}
-        {gpu ? <RetryLoop f={f} gpu={gpu} opacity={badge7a.retry} /> : null}
+        {check ? <RingBadge pos={check} opacity={badge4r} /> : null}
+        {gpu ? <RingBadge pos={gpu} opacity={badge7a} /> : null}
         {gpu ? <ProgressRing f={f} gpu={gpu} /> : null}
         {gpu ? <GpuPanel f={f} gpu={gpu} /> : null}
 
@@ -2735,7 +2641,6 @@ export const WalkthroughV6Diagram: React.FC = () => {
       <Caption y={CAPTION_Y} text="server-side validation" from={word('4', 'server-side') - 8} to={CUE('4r').start} hot="validation" />
       <Caption y={CAPTION_Y} text="scale to zero" from={word('5b', 'scales') - 8} to={CUE('5c').start - 8} hot="zero" />
       <Caption y={CAPTION_Y} text="cold start" from={word('5c', 'cold') - 8} to={word('5c', 'which') - 8} hot="start" />
-      <Caption y={CAPTION_Y} text="dead-letter queue" from={word('7a', 'dead-letter') - 8} to={word('7a', 'hold') - 10} hot="dead-letter" />
       <Caption y={CAPTION_Y} text="idempotent" from={word('7a', 'idempotent') - 8} to={word('7a', 'twice') - 6} hot="idempotent" />
       <Caption y={CAPTION_Y} text="infrastructure as code" from={word('7d', 'infrastructure') - 8} to={DURATION - 4} hot="code" />
 
