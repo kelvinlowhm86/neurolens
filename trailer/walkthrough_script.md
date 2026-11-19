@@ -73,4 +73,4 @@ None of this predicts your views.
 It shows how a brain is likely to respond, second by second, so you can fix things before you post.
 
 ## 11. Close (real page)
-The samples are live. Explore them at the link below.
+Want to try it? The samples are live at the link below.
