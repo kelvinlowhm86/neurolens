@@ -792,13 +792,13 @@ const readoutOpacity = (f: number) =>
   ease(f, CUE('4').start + 8, CUE('4').start + 20) * (1 - ease(f, CUE('4r').start - 10, CUE('4r').start + 4));
 
 const statusOpacity = (f: number) =>
-  ease(f, CUE('5b').start - 2, CUE('5b').start + 10) * (1 - ease(f, CUE('5c').start - 10, CUE('5c').start + 2));
+  ease(f, word('5b', 'month') - 2, word('5b', 'month') + 12) * (1 - ease(f, CUE('5c').start - 10, CUE('5c').start + 2));
 
 const clockOpacity = (f: number) =>
   ease(f, CUE('5c').start - 2, CUE('5c').start + 10) * (1 - ease(f, CUE('7a').start - 10, CUE('7a').start + 4));
 
 const gpuPanelOpacity = (f: number) =>
-  ease(f, word('5a', 'wakes'), word('5a', 'wakes') + 24) * (1 - ease(f, CUE('5b').start - 20, CUE('5b').start - 2));
+  ease(f, word('5a', 'wakes'), word('5a', 'wakes') + 24) * (1 - ease(f, CUE('5b').start, CUE('5b').start + 14));
 
 const runningAt = (f: number) => {
   const up = CUE('5b').start;
@@ -815,7 +815,7 @@ type CardId = 'readout' | 'status' | 'clock';
 
 const CARD_HEIGHT: Record<CardId, number> = {
   readout: 156,
-  status: 150,
+  status: 176,
   clock: 130,
 };
 
@@ -827,7 +827,11 @@ const cardSize = (id: CardId): {w: number; h: number} => {
       textWidth('credit', 42, 400) + 18 + textWidth('1 min', 42, 600) + 26 + textWidth('2 min', 42, 600),
     );
   } else if (id === 'status') {
-    content = Math.max(textWidth('$1,300 / month', 44, 600), 28 + textWidth('0 running', 42, 600));
+    content = Math.max(
+      textWidth('$1,300 / month', 44, 600),
+      textWidth('$0 when idle', 44, 600),
+      28 + textWidth('0 running', 42, 600),
+    );
   } else {
     content = 44 + 16 + textWidth('a few minutes to start', 42, 400);
   }
@@ -1000,10 +1004,21 @@ const ReadoutCard: React.FC<{f: number; box: Box; opacity: number}> = ({f, box, 
 const StatusCard: React.FC<{f: number; box: Box; opacity: number}> = ({f, box, opacity}) => {
   const running = runningAt(f);
   const live = running > 0.5;
+  // The card lands on "month"; the month cost then counts up to land on "dollars" and drains on "zero".
+  const filled = ease(f, word('5b', 'month'), word('5b', 'dollars'));
+  const idleAt = word('5b', 'zero');
+  const idle = ease(f, idleAt, idleAt + 18);
+  const month = filled * (1 - idle);
+  const dollars = Math.round(1300 * month);
   return (
     <CardShell box={box} opacity={opacity}>
-      <div style={{display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 10, height: '100%', fontVariantNumeric: 'tabular-nums'}}>
-        <div style={{fontSize: 44, fontWeight: 600, color: live ? '#FFC08A' : '#8E9AAB', whiteSpace: 'nowrap'}}>$1,300 / month</div>
+      <div style={{display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 8, height: '100%', fontVariantNumeric: 'tabular-nums'}}>
+        <div style={{fontSize: 44, fontWeight: 600, color: live ? '#FFC08A' : '#8E9AAB', whiteSpace: 'nowrap'}}>
+          ${dollars.toLocaleString('en-US')} {dollars > 0 ? '/ month' : 'when idle'}
+        </div>
+        <div style={{width: '100%', height: 5, borderRadius: 3, background: 'rgba(120,132,148,.22)', overflow: 'hidden'}}>
+          <div style={{width: `${month * 100}%`, height: '100%', borderRadius: 3, background: live ? C.hot : '#5C6775'}} />
+        </div>
         <div style={{display: 'flex', alignItems: 'center', gap: 14, fontSize: 42, fontWeight: 600}}>
           <span style={{width: 14, height: 14, borderRadius: 7, background: live ? C.hot : '#5C6775'}} />
           <span style={{color: live ? '#FFC08A' : '#8E9AAB'}}>{Math.round(running)} running</span>
@@ -1555,7 +1570,7 @@ const GpuPanel: React.FC<{f: number; gpu: Pt}> = ({f, gpu}) => {
   const passOn = ease(f, start + 4, start + 18);
   const inputBrightness = 0.45 + 0.55 * passOn;
   const captionOn = ease(f, start + 6, start + 18);
-  const playhead = glide(f, start + 4, CUE('5b').start - 10);
+  const playhead = glide(f, start + 4, CUE('5b').start);
   const coreGlow = passOn;
   const cellW = 106;
   const phase = ((f - start) / FPS) * 0.55 % 5;

@@ -84,8 +84,8 @@ export const Outro: React.FC = () => {
               <Row label="Do" text={REPORT.moment.suggestion ?? ''} hot top={440} opacity={rowsIn(2) * (1 - rowsQuiet)} />
             </div>
             <div style={{
-              position: 'absolute', left: 60, right: 60, bottom: 52, textAlign: 'center', fontFamily, fontSize: 32,
-              fontWeight: 500, letterSpacing: '-.005em', color: C.muted, opacity: soundOff,
+              position: 'absolute', left: 0, right: 0, bottom: 46, margin: '0 auto', maxWidth: 1190, textAlign: 'center',
+              fontFamily, fontSize: 38, lineHeight: 1.35, fontWeight: 500, letterSpacing: '-.005em', color: C.muted, opacity: soundOff,
             }}>
               the response nearly vanishes with sound off over the old photos
             </div>
