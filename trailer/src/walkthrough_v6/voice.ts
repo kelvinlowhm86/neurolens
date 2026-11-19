@@ -70,3 +70,7 @@ export const wordFrame = (line: LineCue, word: string, occurrence = 0, edge: 'st
 
 /** A fraction of the way through a line's speech. */
 export const speechFrame = (line: LineCue, progress: number) => line.start + Math.round(line.frames * progress);
+
+// A sound effect at a comp-local frame; Full.tsx places and mixes them.
+export type SfxName = 'click' | 'tick' | 'scribble' | 'denied' | 'stamp';
+export type Sfx = {frame: number; sound: SfxName};

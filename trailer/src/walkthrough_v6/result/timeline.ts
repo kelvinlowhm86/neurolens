@@ -1,5 +1,5 @@
 import swee from '../../../public/walkthrough/swee/result.json';
-import {ShotCue, buildShots, wordFrame} from '../voice';
+import {Sfx, ShotCue, buildShots, wordFrame} from '../voice';
 
 export {FPS} from '../common';
 export const WIDTH = 1920;
@@ -39,3 +39,5 @@ export const DASHED_IN = word('b', 0, 'dashed', 0, 'start'); // "The dashed line
 export const PEAK_CLICK = word('c', 0, 'moment', 0, 'start'); // "Click any moment on the line" (it clicks 0:09, inside the report's 0:08-0:13 moment)
 export const PEAK_MARK = PEAK_CLICK - 20; // the peak marker pops just before the click
 export const CURSOR_IN = PEAK_CLICK - 34; // the cursor arrives, then clicks
+
+export const RESULT_SFX: Sfx[] = [{frame: PEAK_CLICK, sound: 'click'}]; // the chart click

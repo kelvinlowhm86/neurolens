@@ -18,7 +18,7 @@ import {
 } from './Diagram';
 import {bez, CLIP_SRC, MONO} from './styles/shared';
 import envelope from './sound_envelope.json';
-import {LineCue, buildShots, speechFrame, wordFrame} from './voice';
+import {LineCue, Sfx, buildShots, speechFrame, wordFrame} from './voice';
 
 const FPS = 30;
 const SAFE = 80;
@@ -2401,6 +2401,16 @@ const queueSafeAreaCheck = () => {
   if (document.fonts?.ready) document.fonts.ready.then(run).catch(run);
   else run();
 };
+
+// Sound effects, each on the frame its visual lands (placed and mixed in Full.tsx).
+export const DIAGRAM_SFX: Sfx[] = [
+  {frame: word('3c', 'queue', 0, 'end'), sound: 'tick'}, // the first job lands in the queue
+  {frame: CUE('3d').start + 160 + 24, sound: 'tick'}, // the second job lands
+  {frame: word('4', 'trusting'), sound: 'scribble'}, // 0:25 struck out
+  {frame: word('4', 'credit'), sound: 'scribble'}, // 0.5 min struck out
+  {frame: beat('4r', 0.34), sound: 'denied'}, // the bad file's cross
+  {frame: word('7a', 'once', 1), sound: 'stamp'}, // "charged once"
+];
 
 export const WalkthroughV6Diagram: React.FC = () => {
   const f = useCurrentFrame();

@@ -1,5 +1,5 @@
 import swee from '../../../public/walkthrough/swee/result.json';
-import {ShotCue, buildShots, wordFrame} from '../voice';
+import {Sfx, ShotCue, buildShots, wordFrame} from '../voice';
 
 export {FPS} from '../common';
 export const WIDTH = 1920;
@@ -46,3 +46,5 @@ export const BRAIN_IN = word('1b', 'brain') - 10; // "how a brain will respond"
 export const DROP = word('2b', 'in', 0, 'end'); // "Drop it in": the file lands
 export const CREDIT_POP = word('2b', 'use') - 6; // "you see what it'll use"
 export const HELD = word('2c', 'held'); // "held from your credit"
+
+export const INTRO_SFX: Sfx[] = [{frame: DROP, sound: 'click'}]; // the file is dropped in

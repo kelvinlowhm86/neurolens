@@ -3,13 +3,13 @@ import {AbsoluteFill, Audio, Sequence, Series, interpolate, staticFile, useCurre
 import {C, fontFamily} from '../edit/ui';
 import {BG, CreditStrip, easeOut} from './common';
 import {Intro} from './intro/Intro';
-import {DURATION as INTRO, LINES as INTRO_LINES, BROWSER_HOLD_SHARE} from './intro/timeline';
-import {WalkthroughV6Diagram, DURATION as DIAGRAM, LINE_CUES as DIAGRAM_LINES, creditWidgetOpacity} from './Diagram37';
+import {DURATION as INTRO, LINES as INTRO_LINES, BROWSER_HOLD_SHARE, INTRO_SFX} from './intro/timeline';
+import {WalkthroughV6Diagram, DURATION as DIAGRAM, LINE_CUES as DIAGRAM_LINES, DIAGRAM_SFX, creditWidgetOpacity} from './Diagram37';
 import {Result} from './result/Result';
-import {DURATION as RESULT, LINES as RESULT_LINES} from './result/timeline';
+import {DURATION as RESULT, LINES as RESULT_LINES, RESULT_SFX} from './result/timeline';
 import {Outro} from './outro/Outro';
 import {DURATION as OUTRO, LINES as OUTRO_LINES} from './outro/timeline';
-import {FPS, LineCue} from './voice';
+import {FPS, LineCue, Sfx, SfxName} from './voice';
 
 // Intro, Diagram, Result and Outro back to back. The cuts are short dips through the page colour,
 // except Intro -> Diagram: the intro ends on the "your credit" strip (held) and the diagram brings
@@ -54,6 +54,20 @@ const VoiceLines: React.FC<{lines: LineCue[]}> = ({lines}) => (
   </>
 );
 
+// Effects sit under the voice: bright, short sounds that cut through without competing.
+// Each file peaks at -3 dBFS; these gains set the mix.
+const SFX_GAIN: Record<SfxName, number> = {click: 0.35, tick: 0.22, scribble: 0.3, denied: 0.28, stamp: 0.4};
+
+const SoundEffects: React.FC<{cues: Sfx[]}> = ({cues}) => (
+  <>
+    {cues.map((cue, i) => (
+      <Sequence key={`${cue.sound}-${i}`} from={Math.round(cue.frame)} durationInFrames={FPS} layout="none">
+        <Audio src={staticFile(`walkthrough/v6voice/sfx/${cue.sound}.wav`)} volume={SFX_GAIN[cue.sound]} />
+      </Sequence>
+    ))}
+  </>
+);
+
 // bed.mp3 is the track followed by a crossfaded repeat of its calm section, longer than the video.
 const MusicBed: React.FC = () => (
   <Audio
@@ -91,13 +105,14 @@ export const WalkthroughV6Full: React.FC = () => (
   <AbsoluteFill style={{background: BG}}>
     <MusicBed />
     <Series>
-      <Series.Sequence durationInFrames={INTRO}><Intro /><VoiceLines lines={INTRO_LINES} /></Series.Sequence>
+      <Series.Sequence durationInFrames={INTRO}><Intro /><VoiceLines lines={INTRO_LINES} /><SoundEffects cues={INTRO_SFX} /></Series.Sequence>
       <Series.Sequence durationInFrames={DIAGRAM}>
         <Part length={DIAGRAM} dipOut><WalkthroughV6Diagram /></Part>
         <Sequence durationInFrames={DIAGRAM_STRIP_IN} layout="none"><CarriedStrip /></Sequence>
         <VoiceLines lines={DIAGRAM_LINES} />
+        <SoundEffects cues={DIAGRAM_SFX} />
       </Series.Sequence>
-      <Series.Sequence durationInFrames={RESULT}><Part length={RESULT} dipOut><Result /></Part><VoiceLines lines={RESULT_LINES} /></Series.Sequence>
+      <Series.Sequence durationInFrames={RESULT}><Part length={RESULT} dipOut><Result /></Part><VoiceLines lines={RESULT_LINES} /><SoundEffects cues={RESULT_SFX} /></Series.Sequence>
       <Series.Sequence durationInFrames={OUTRO}><Part length={OUTRO} dipIn><Outro /></Part><VoiceLines lines={OUTRO_LINES} /></Series.Sequence>
     </Series>
   </AbsoluteFill>
