@@ -491,12 +491,12 @@ const BAD_FILE_EXTRA: Box = {
   x2: FIXED_POSITIONS.check.x - 288 + 180,
   y2: FIXED_POSITIONS.check.y + 55,
 };
-// The 'a few minutes to start' card under the GPU while it boots.
+// The 'waking up' card under the GPU while it boots.
 const CLOCK_EXTRA: Box = {
   x1: FIXED_POSITIONS.gpu.x - 178,
   y1: FIXED_POSITIONS.gpu.y + 230,
   x2: FIXED_POSITIONS.gpu.x + 178,
-  y2: FIXED_POSITIONS.gpu.y + 392,
+  y2: FIXED_POSITIONS.gpu.y + 330,
 };
 const RING_EXTRA = radiusBox(FIXED_POSITIONS.gpu.x, FIXED_POSITIONS.gpu.y, 135, 135);
 const PANEL_EXTRA: Box = {
@@ -527,7 +527,7 @@ export const STILLS = [
   {row: '4r', frame: beat('4r', 0.72)},
   {row: '5a', frame: beat('5a', 0.55)},
   {row: '5b', frame: word('5b', 'scales') + 10},
-  {row: '5c', frame: beat('5c', 0.5)},
+  {row: '5c', frame: beat('5c', 0.95)}, // the hold, after the 'cold start' caption has gone
   {row: '7a', frame: word('7a', 'idempotent') + 10},
   {row: '7b', frame: beat('7b', 0.42)},
   {row: '7d', frame: beat('7d', 0.82)},
@@ -574,7 +574,7 @@ const LAYOUTS: Layout[] = [
     move: 18,
   },
   {row: '5a', at: CUE('5a').start, ids: ['gpu'], extra: [PANEL_EXTRA], maxScale: 1.5},
-  {row: '5b', at: CUE('5b').start, ids: ['gpu'], extra: [STATUS_EXTRA], maxScale: 1.55, caption: 'below'},
+  {row: '5b', at: CUE('5b').start, ids: ['gpu'], extra: [STATUS_EXTRA], maxScale: 1.55},
   {row: '5c', at: CUE('5c').start, ids: ['gpu'], extra: [CLOCK_EXTRA, RING_EXTRA], maxScale: 1.55},
   {
     row: '7a',
@@ -665,7 +665,8 @@ const lerpCamera = (a: Camera, b: Camera, t: number): Camera => ({
   scale: lerp(a.scale, b.scale, t),
 });
 
-const cameraAt = (f: number): Camera => {
+// The settled camera a frame leaves (from), the one it heads to (to), and how far along the move is (t).
+const cameraSpanAt = (f: number): {from: Camera; to: Camera; t: number} => {
   let index = 0;
   for (let i = 0; i < CAMS.length; i += 1) {
     if (f >= CAMS[i].at) index = i;
@@ -673,13 +674,17 @@ const cameraAt = (f: number): Camera => {
   }
   const from = CAMS[index];
   const to = CAMS[index + 1];
-  if (!to) return from.cam;
+  if (!to) return {from: from.cam, to: from.cam, t: 0};
   const end = to.at - to.settle;
   const span = Math.max(1, end - from.at);
   const move = Math.min(to.move, span);
   const start = end - move;
-  if (f > start) return lerpCamera(from.cam, to.cam, glide(f, start, end));
-  return from.cam;
+  return {from: from.cam, to: to.cam, t: f > start ? glide(f, start, end) : 0};
+};
+
+const cameraAt = (f: number): Camera => {
+  const {from, to, t} = cameraSpanAt(f);
+  return t > 0 ? lerpCamera(from, to, t) : from;
 };
 
 const layoutAt = (f: number) => {
@@ -720,7 +725,15 @@ const nodeOpacityAt = (def: NodeDef, f: number, cam: Camera): number => {
   const screen = screenBox(nodeWorldBox(def, pos.x, pos.y, false, true, purposeOn > 0.01), cam);
   const margin = Math.min(screen.x1 - SAFE, 1920 - SAFE - screen.x2, screen.y1 - SAFE, STRIP_TOP - screen.y2);
   const show = FIXED_PRESENCE[def.id];
-  const base = show * (new Set(focusIdsAt(f)).has(def.id) ? (margin >= 0 ? 1 : clamp(1 + margin / 40)) : clamp(margin / 40));
+  // A context (non-focus) node is shown only if it sits inside the settled frame of the shot: judged on
+  // the cameras the move leaves and reaches, never the moving camera, so it can't flash in mid-pan.
+  const settledIn = (c: Camera) => {
+    const b = screenBox(nodeWorldBox(def, pos.x, pos.y, false, true, false), c);
+    return clamp(Math.min(b.x1 - SAFE, 1920 - SAFE - b.x2, b.y1 - SAFE, STRIP_TOP - b.y2) / 40);
+  };
+  const span = cameraSpanAt(f);
+  const context = lerp(settledIn(span.from), settledIn(span.to), span.t) * (margin >= 0 ? 1 : clamp(1 + margin / 40));
+  const base = show * (new Set(focusIdsAt(f)).has(def.id) ? (margin >= 0 ? 1 : clamp(1 + margin / 40)) : context);
   if (base <= 0) return 0;
   // A card or panel that covers part of this node's label either hides the node completely or
   // leaves it completely clear. A half-covered label is never drawn.
@@ -1069,15 +1082,6 @@ const statusOpacity = (f: number) =>
 const clockOpacity = (f: number) =>
   ease(f, CUE('5c').start - 2, CUE('5c').start + 10) * (1 - ease(f, CUE('7a').start - 10, CUE('7a').start + 4));
 
-const coldStartOpacity = (f: number) =>
-  ease(f, CUE('5c').start + 4, CUE('5c').start + 16) * (1 - ease(f, CUE('7a').start - 8, CUE('7a').start + 4));
-
-// Fast-forwarded, not real time: the ring's own progress, mapped to about three and a half minutes.
-const coldStartTime = (f: number) => {
-  const progress = glide(f, CUE('5c').start + 10, CUE('7a').start - 12);
-  const seconds = Math.round(progress * 200);
-  return `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
-};
 
 const gpuPanelOpacity = (f: number) =>
   ease(f, word('5a', 'wakes'), word('5a', 'wakes') + 24) * (1 - ease(f, CUE('5b').start, CUE('5b').start + 14));
@@ -1116,7 +1120,7 @@ const cardSize = (id: CardId): {w: number; h: number} => {
       28 + textWidth('0 running', 42, 600),
     );
   } else {
-    content = 44 + 16 + textWidth('a few minutes to start', 42, 400);
+    content = 44 + 16 + textWidth('waking up', 42, 400);
   }
   return {w: Math.ceil(content) + 64, h: CARD_HEIGHT[id]};
 };
@@ -1368,7 +1372,7 @@ const StatusCard: React.FC<{f: number; box: Box; opacity: number}> = ({f, box, o
 const ClockCard: React.FC<{box: Box; opacity: number}> = ({box, opacity}) => (
   <CardShell box={box} opacity={opacity}>
     <div style={{display: 'flex', alignItems: 'center', gap: 16, height: '100%', fontSize: 42, color: '#FFC08A', whiteSpace: 'nowrap'}}>
-      <Icon name="clock" size={44} /> a few minutes to start
+      <Icon name="clock" size={44} /> waking up
     </div>
   </CardShell>
 );
@@ -1400,47 +1404,6 @@ const MonoCaption: React.FC<{text: string; x: number; y: number; opacity: number
       }}
     >
       {text}
-    </div>
-  );
-};
-
-type ReadoutAnchor = 'left' | 'right' | 'centre' | 'above-left';
-
-const READOUT_TRANSFORM: Record<ReadoutAnchor, string> = {
-  left: 'none',
-  right: 'translate(-100%, -50%)',
-  centre: 'translate(-50%, -50%)',
-  'above-left': 'translate(0, -100%)',
-};
-
-const ScreenReadout: React.FC<{
-  x: number;
-  y: number;
-  opacity: number;
-  anchor?: ReadoutAnchor;
-  size?: number;
-  children: React.ReactNode;
-}> = ({x, y, opacity, anchor = 'left', size = 23, children}) => {
-  if (opacity <= 0.001) return null;
-  return (
-    <div
-      style={{
-        position: 'absolute',
-        left: x,
-        top: y,
-        transform: READOUT_TRANSFORM[anchor],
-        padding: '2px 8px',
-        borderRadius: 7,
-        background: 'rgba(11,12,15,.72)',
-        fontFamily: MONO,
-        fontSize: size,
-        letterSpacing: '.02em',
-        color: '#98A2AE',
-        opacity,
-        whiteSpace: 'nowrap',
-      }}
-    >
-      {children}
     </div>
   );
 };
@@ -2576,8 +2539,6 @@ export const WalkthroughV6Diagram: React.FC = () => {
     ? nodeWorldBox(NODES_BY_ID.check, check.x, check.y, false, true, true).y2
     : 0;
   const ffprobe = ffprobeOpacity(f);
-  const coldStart = coldStartOpacity(f);
-  const clockCard = cards.find((card) => card.id === 'clock');
 
   return (
     <AbsoluteFill style={{background: '#0B0C0F'}}>
@@ -2671,17 +2632,6 @@ export const WalkthroughV6Diagram: React.FC = () => {
         <TerraformOutline f={f} />
       </AbsoluteFill>
 
-      {clockCard && coldStart > 0.001 ? (
-        <ScreenReadout
-          x={(clockCard.box.x1 + clockCard.box.x2) / 2}
-          y={clockCard.box.y2 + 34}
-          opacity={coldStart}
-          anchor="centre"
-          size={28}
-        >
-          cold start {coldStartTime(f)}
-        </ScreenReadout>
-      ) : null}
 
       <Caption y={CAPTION_Y} text="asynchronous" from={CUE('3d').start + 8} to={CUE('4').start - 10} hot="asynchronous" />
       <Caption y={CAPTION_Y} text="server-side validation" from={word('4', 'server-side') - 8} to={CUE('4r').start} hot="validation" />

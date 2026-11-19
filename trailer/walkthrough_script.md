@@ -42,7 +42,7 @@ and no GPU ever wakes up.
 The job then wakes a GPU on SageMaker, which runs TRIBE v2, a research model from Meta trained on
 brain scans from over seven hundred people.
 A GPU left on all month would cost about thirteen hundred dollars, so it scales to zero when idle.
-The trade-off is a cold start of a few minutes, which is fine for a result you come back to later.
+The trade-off is a cold start: the first job waits while the GPU wakes up, which is fine for a result you come back to later.
 
 ## 7. When things go wrong (diagram: retry, dead-letter queue, watchdog Lambda)
 [What if it breaks? Do I lose my money?]
@@ -65,7 +65,7 @@ Click any moment on the line, and the video jumps right to it.
 [Do I have to read the chart myself?]
 Then Claude, on Amazon Bedrock, writes it up moment by moment, with what to change.
 Over the old photos, that dashed line nearly drops to nothing, so it suggests adding a
-one-second shot of her face.
+one-second shot of her face, to give sound-off viewers something to hold on to.
 
 ## 10. Honest limit
 [So will this get me views?]
