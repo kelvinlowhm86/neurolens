@@ -4,8 +4,8 @@ import lines from '../../public/walkthrough/v6voice/v6_lines.json';
 // v6_lines.json ({id, text, duration}). A new voice is a file swap: same ids, new durations.
 export const FPS = 30;
 export const LINE_GAP = 0.4; // seconds of silence between two lines of the same shot
-export const SHOT_HOLD = 0.5; // seconds a shot holds after its last word
-export const SECTION_HOLD = 1.2; // the longer pause after the last shot of a section
+export const SHOT_HOLD = 0.8; // seconds a shot holds after its last word
+export const SECTION_HOLD = 1.6; // the longer pause after the last shot of a section
 
 type VoiceLine = {id: string; text: string; duration: number};
 const VOICE = new Map((lines as VoiceLine[]).map((line) => [line.id, line]));

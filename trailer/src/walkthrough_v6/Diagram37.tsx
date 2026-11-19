@@ -1143,7 +1143,7 @@ const clockOpacity = (f: number) =>
 
 
 // The TRIBE panel opens only once the job card has landed on the GPU ("...wakes a GPU").
-const PANEL_IN = () => word('5a', 'GPU', 0, 'end') + 8;
+const PANEL_IN = () => word('5a', 'GPU', 0, 'end') + 16; // the job card has fully faded (end + 14)
 const gpuPanelOpacity = (f: number) =>
   ease(f, PANEL_IN(), PANEL_IN() + 24) * (1 - ease(f, CUE('5b').start, CUE('5b').start + 14));
 
