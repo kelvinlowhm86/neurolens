@@ -188,7 +188,7 @@ const GPU: StateKey[] = [
   {at: CUE('5c').start, state: 'idle'}, // starting one takes a few minutes
   {at: CUE('7a').start, state: 'lit'},
   {at: word('7a', 'fails'), state: 'off'},
-  {at: word('7a', 'charged'), state: 'lit'}, // a later, successful run is the one that gets charged
+  {at: word('7a', 'charged'), state: 'lit'}, // "only charged once the result is saved": a normal run that succeeds (the failure has ended with the refund)
   {at: CUE('7b').start, state: 'lit'}, // a stuck job's GPU, before the watchdog
   {at: word('7b', 'running'), state: 'off'},
   {at: CUE('7d').start, state: 'idle'},
