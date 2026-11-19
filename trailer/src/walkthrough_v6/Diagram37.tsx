@@ -143,8 +143,7 @@ const BROWSER: StateKey[] = [
 
 const WEBSITE: StateKey[] = [
   {at: 0, state: 'dim'},
-  {at: CUE('3c').start, state: 'lit'},
-  {at: word('3c', 'lands'), state: 'idle'},
+  {at: CUE('3c').start, state: 'idle'}, // context only: S3, not the website, queues the job
   {at: CUE('3d').start, state: 'dim'},
   {at: RETURN_BACK_END, state: 'lit'},
   {at: RETURN_END + 8, state: 'dim'},
