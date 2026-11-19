@@ -505,6 +505,7 @@ const LAYOUTS: Layout[] = [
     thumbNodes: ['gpu'],
     extra: [DUPLICATE_EXTRA],
     maxScale: 1.5,
+    caption: 'below',
   },
   {row: '7b', at: CUE('7b').start, ids: ['watchdog', 'gpu'], maxScale: 1.55},
   {
@@ -822,9 +823,10 @@ const CARD_HEIGHT: Record<CardId, number> = {
 const cardSize = (id: CardId): {w: number; h: number} => {
   let content = 0;
   if (id === 'readout') {
+    const TICK = 40;
     content = Math.max(
-      textWidth('browser said', 42, 400) + 18 + textWidth('0:05', 42, 600) + 26 + textWidth('file says', 42, 400) + 10 + textWidth('0:44', 42, 600),
-      textWidth('credit', 42, 400) + 18 + textWidth('1 min', 42, 600) + 26 + textWidth('2 min', 42, 600),
+      textWidth('browser said', 42, 400) + 18 + textWidth('0:44', 42, 600) + 26 + textWidth('file says', 42, 400) + 10 + textWidth('0:44', 42, 600) + 10 + TICK,
+      textWidth('credit', 42, 400) + 18 + textWidth('1 min', 42, 600) + 10 + TICK,
     );
   } else if (id === 'status') {
     content = Math.max(
@@ -949,52 +951,35 @@ const CardShell: React.FC<{box: Box; opacity: number; children: React.ReactNode}
   );
 };
 
-const Strike: React.FC<{progress: number; children: React.ReactNode}> = ({progress, children}) => (
-  <span style={{position: 'relative', display: 'inline-block', fontVariantNumeric: 'tabular-nums'}}>
-    {children}
-    <span
-      style={{
-        position: 'absolute',
-        left: -2,
-        right: -2,
-        top: '50%',
-        height: 3,
-        borderRadius: 2,
-        background: C.hot,
-        transform: `scaleX(${progress})`,
-        transformOrigin: 'left center',
-      }}
-    />
-  </span>
-);
-
 const ReadoutCard: React.FC<{f: number; box: Box; opacity: number}> = ({f, box, opacity}) => {
-  // "opens the file", "its real length" (replaces what the browser said), "works the credit out again".
+  // "opens the file", "its real length" (confirms what the browser said), "works the credit out again".
   const claimedOn = ease(f, word('4', 'opens') - 4, word('4', 'opens') + 8);
-  const struck = ease(f, word('4', 'real'), word('4', 'real') + 12);
   const realOn = ease(f, word('4', 'real') + 2, word('4', 'real') + 14);
   const creditOn = ease(f, word('4', 'works') - 4, word('4', 'works') + 8);
-  const creditStruck = ease(f, word('4', 'credit'), word('4', 'credit') + 12);
-  const newCreditOn = ease(f, word('4', 'again'), word('4', 'again') + 12);
+  const creditTick = ease(f, word('4', 'again'), word('4', 'again') + 12);
+  const tick = (on: number) => (
+    <span style={{display: 'inline-flex', color: C.hot, opacity: on}}>
+      <Icon name="tick" size={40} />
+    </span>
+  );
   return (
     <CardShell box={box} opacity={opacity}>
       <div style={{display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 12, height: '100%', fontSize: 42, whiteSpace: 'nowrap'}}>
-        <div style={{display: 'flex', alignItems: 'baseline', gap: 18}}>
+        <div style={{display: 'flex', alignItems: 'center', gap: 18}}>
           <span style={{color: '#8E98A5', opacity: claimedOn}}>browser said</span>
-          <Strike progress={struck}>
-            <span style={{color: struck > 0.5 ? '#7D8794' : C.text, opacity: claimedOn}}>0:05</span>
-          </Strike>
-          <span style={{display: 'flex', alignItems: 'baseline', gap: 10, opacity: realOn}}>
+          <span style={{color: C.text, opacity: claimedOn}}>0:44</span>
+          <span style={{display: 'flex', alignItems: 'center', gap: 10, opacity: realOn}}>
             <span style={{color: '#8E98A5'}}>file says</span>
             <span style={{color: C.hot, fontWeight: 600}}>0:44</span>
+            {tick(1)}
           </span>
         </div>
-        <div style={{display: 'flex', alignItems: 'baseline', gap: 18}}>
+        <div style={{display: 'flex', alignItems: 'center', gap: 18}}>
           <span style={{color: '#8E98A5', opacity: creditOn}}>credit</span>
-          <Strike progress={creditStruck}>
-            <span style={{color: creditStruck > 0.5 ? '#7D8794' : C.text, opacity: creditOn}}>1 min</span>
-          </Strike>
-          <span style={{color: C.hot, fontWeight: 600, opacity: newCreditOn}}>2 min</span>
+          <span style={{display: 'flex', alignItems: 'center', gap: 10, opacity: creditOn}}>
+            <span style={{color: C.hot, fontWeight: 600}}>1 min</span>
+            {tick(creditTick)}
+          </span>
         </div>
       </div>
     </CardShell>
@@ -2121,7 +2106,11 @@ export const WalkthroughV6Diagram: React.FC = () => {
       </AbsoluteFill>
 
       <Caption y={CAPTION_Y} text="asynchronous" from={CUE('3d').start + 8} to={CUE('4').start - 10} hot="asynchronous" />
+      <Caption y={CAPTION_Y} text="server-side validation" from={word('4', 'trusting') - 8} to={word('4', 'works') - 10} hot="validation" />
       <Caption y={CAPTION_Y} text="scale to zero" from={word('5b', 'scales') - 8} to={CUE('5c').start - 8} hot="zero" />
+      <Caption y={CAPTION_Y} text="cold start" from={CUE('5c').start - 8} to={word('5c', 'but') - 8} hot="start" />
+      <Caption y={CAPTION_Y} text="dead-letter queue" from={word('7a', 'dead-letter') - 8} to={word('7a', 'hold') - 10} hot="dead-letter" />
+      <Caption y={CAPTION_Y} text="idempotent" from={word('7a', 'idempotent') - 8} to={word('7a', 'twice') - 6} hot="idempotent" />
       <Caption y={CAPTION_Y} text="infrastructure as code" from={CUE('7d').start + 8} to={DURATION - 4} hot="code" />
 
       {cards.map((card) => {

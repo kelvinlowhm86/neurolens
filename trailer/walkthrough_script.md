@@ -25,15 +25,15 @@ That's held from your credit, not spent.
 
 ## 3. Where the video goes (diagram: S3, Lambda, SQS; small caption "presigned URL" on the upload arc)
 [So where does the video go?]
-The video goes straight into S3, through a short-lived upload link. It never passes through the
-website, so a big file can't slow it down for anyone else.
+The video goes straight into S3 through a presigned URL, so it never passes through the website,
+and a big file can't slow it down for anyone else.
 The website, a Lambda function, just puts a job on an SQS queue, and it's done.
 It's asynchronous. Nothing waits on the GPU, so each side can scale, or fail, on its own.
 
 ## 4. A check first (diagram: dispatcher Lambda; small on-screen caption "ffprobe")
 [Do you just trust whatever the browser sends?]
-Before any money is spent on a GPU, another Lambda opens the file and reads its real length,
-rather than trusting what the browser said. It works out the credit again from that.
+Before any money is spent on a GPU, another Lambda does server-side validation: it reads the
+file's real length instead of trusting the browser, and works out the credit again.
 If the file won't open, runs too long, or there isn't enough credit, you're refunded right there,
 and no GPU ever wakes up.
 
@@ -42,7 +42,7 @@ and no GPU ever wakes up.
 The job then wakes a GPU on SageMaker, which runs TRIBE, a research model from Meta trained on
 brain scans from over seven hundred people.
 A GPU left on all month would cost about thirteen hundred dollars, so it scales to zero when idle.
-Starting one takes a few minutes, but you're waiting for an analysis, not a chat reply.
+The trade-off is a cold start of a few minutes, which is fine for an analysis, not a chat reply.
 
 ## 7. When things go wrong (diagram: retry, dead-letter queue, watchdog Lambda)
 [What if it breaks? Do I lose my money?]
@@ -53,7 +53,7 @@ And a watchdog Lambda makes sure a stuck job can't leave a GPU quietly running u
 
 ## 7b. Infrastructure as code (diagram: Terraform wraps the whole diagram)
 [Could you rebuild this?]
-All of it is written as code, in Terraform, so the whole system can be reviewed, rebuilt, or torn
+All of it is infrastructure as code, in Terraform, so the whole system can be rebuilt or torn
 down in one go.
 
 ## 8. The result (real page, large and calm)

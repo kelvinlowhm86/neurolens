@@ -27,6 +27,8 @@ for (const [key, source] of [[GIST.onScreen, REPORT.moment.what_happens], [GIST.
 }
 
 const CARD = {x: 160, y: 100, w: 1600, h: 740};
+// The full report sentence stays in the small three-row card; the big Do card says it in one line.
+const SUGGESTION_HEADLINE = 'Add a one-second shot of her face';
 
 const Row: React.FC<{label: string; text: string; top: number; opacity: number; hot?: boolean; dim?: boolean; size?: number}> = ({
   label, text, top, opacity, hot, dim, size = 40,
@@ -96,7 +98,7 @@ export const Outro: React.FC = () => {
             justifyContent: 'center', gap: 36, textAlign: 'center', opacity: rowsQuiet, transform: `scale(${push})`,
           }}>
             <div style={{fontFamily, fontSize: 56, fontWeight: 600, color: C.hot, letterSpacing: '-.01em'}}>Do</div>
-            <div style={{fontFamily, fontSize: 72, lineHeight: 1.2, fontWeight: 600, letterSpacing: '-.025em', color: C.text}}>{REPORT.moment.suggestion}</div>
+            <div style={{fontFamily, fontSize: 72, lineHeight: 1.2, fontWeight: 600, letterSpacing: '-.025em', color: C.text}}>{SUGGESTION_HEADLINE}</div>
           </div>
         </div>
       ) : null}
