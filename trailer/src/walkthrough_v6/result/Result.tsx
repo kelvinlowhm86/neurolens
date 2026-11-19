@@ -1,9 +1,8 @@
 import React from 'react';
 import {Sequence, useCurrentFrame} from 'remotion';
-import {C, fontFamily} from '../../edit/ui';
-import {Graph} from '../../edit/Graph';
 import {BrainView, Cursor, PhoneClip, Ring, Stage, clamp, easeBack, easeInOut, easeOut, lerp} from '../common';
 import {CURSOR_IN, DURATION, FPS, OVERALL, PEAK, PEAK_CLICK, PEAK_MARK, PEAK_SCORE, RANGE, SHOT, TO} from './timeline';
+import {Chart} from './Chart';
 
 // Fixed, centred layout: clip and brain in a band on top, the chart under them. Between
 // shots only brightness changes.
@@ -36,7 +35,6 @@ export const Result: React.FC = () => {
   const innerH = CHART.h - PAD.t - PAD.b;
   const xAt = (second: number) => PAD.l + (second / TO) * innerW;
   const yAt = (value: number) => PAD.t + ((RANGE[1] - value) / (RANGE[1] - RANGE[0])) * innerH;
-  const zeroY = yAt(0);
 
   const zeroLabel = easeOut(frame, SHOT.b.start + 60, SHOT.b.start + 84);
   const lineProgress = easeInOut(frame, SHOT.b.start + 4, SHOT.b.start + 80);
@@ -65,35 +63,14 @@ export const Result: React.FC = () => {
       </Sequence>
       <BrainView x={BRAIN.x} y={BRAIN.y} size={BRAIN.size} second={clipSecond} opacity={brainOpacity} progress={0.2} />
 
-      <div style={{position: 'absolute', left: CHART.x, top: CHART.y, width: CHART.w, height: CHART.h, zIndex: 0}}>
-        {lineProgress > 0.004 ? <Graph
-          values={OVERALL} from={0} to={TO} range={RANGE} width={CHART.w} height={CHART.h}
-          progress={lineProgress} color={C.hot} axes={false} label="swee-overall-response" strokeWidth={7}
-        /> : null}
-        <svg width={CHART.w} height={CHART.h + 80} style={{position: 'absolute', left: 0, top: 0, overflow: 'visible'}}>
-          <line x1={PAD.l} x2={CHART.w - PAD.r} y1={zeroY} y2={zeroY} stroke={C.text} strokeWidth={2.5}
-            strokeDasharray="16 14" opacity={0.5} />
-          <text x={xAt(41)} y={zeroY - 18} fill={C.text} fontFamily={fontFamily} fontSize={44} fontWeight={500}
-            textAnchor="end" opacity={0.6 * zeroLabel}>typical viewing</text>
-          {[0, 10, 20, 30, 40].map((second) => (
-            <text key={second} x={xAt(second)} y={CHART.h + 54} fill={C.muted} fontFamily={fontFamily} fontSize={44}
-              textAnchor={second === 0 ? 'start' : 'middle'} style={{fontVariantNumeric: 'tabular-nums'}}>{second}s</text>
-          ))}
-          {markerPop > 0 ? (
-            <g transform={`translate(${xAt(PEAK)} ${yAt(PEAK_SCORE)}) scale(${markerPop})`}>
-              <circle r={22} fill={C.hot} opacity={0.2} />
-              <circle r={10} fill={C.hot} stroke={C.text} strokeWidth={3} />
-              <text x={0} y={-34} fill={C.text} fontFamily={fontFamily} fontSize={44} fontWeight={600} textAnchor="start">
-                Peak {mmss(PEAK)}
-              </text>
-            </g>
-          ) : null}
-          {frame >= PEAK_CLICK ? (() => {
-            const hx = xAt(clamp(clipSecond, 0, TO));
-            return <line x1={hx} x2={hx} y1={PAD.t} y2={CHART.h - PAD.b} stroke={C.text} strokeOpacity={0.4} strokeWidth={3} />;
-          })() : null}
-        </svg>
-      </div>
+      <Chart
+        x={CHART.x} y={CHART.y} w={CHART.w} h={CHART.h}
+        values={OVERALL} to={TO} range={RANGE} progress={lineProgress}
+        label="swee-overall-response" strokeWidth={7}
+        zeroLabelOpacity={zeroLabel}
+        marker={markerPop > 0 ? {second: PEAK, value: PEAK_SCORE, pop: markerPop, label: `Peak ${mmss(PEAK)}`} : undefined}
+        highlightSecond={frame >= PEAK_CLICK ? clamp(clipSecond, 0, TO) : undefined}
+      />
 
       <Ring x={peak.x} y={peak.y} p={clamp((frame - PEAK_CLICK) / 18)} />
       {cursorOpacity > 0.01 ? <Cursor x={cursor.x} y={cursor.y} opacity={cursorOpacity} pressed={pressed} /> : null}

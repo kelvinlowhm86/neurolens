@@ -4,10 +4,11 @@ import {C, fontFamily} from '../../edit/ui';
 import {
   BrainView, CreditStrip, Cursor, PhoneClip, Ring, Signpost, Stage, clamp, easeBack, easeInOut, easeOut, lerp,
 } from '../common';
-import {BRAIN_IN, CLIP_SECONDS, CREDIT_SECONDS, DROP, FILE_NAME, FPS, HELD, PRICE, SHOT} from './timeline';
+import {BRAIN_IN, CLIP_SECONDS, CREDIT_POP, CREDIT_SECONDS, DROP, FILE_NAME, FPS, HELD, SHOT} from './timeline';
 
 const FRAME_ART = 'walkthrough/swee/frames/f0.jpg';
-const minutes = (seconds: number) => (seconds % 60 === 0 ? `${seconds / 60} min` : `${Math.floor(seconds / 60)} min ${seconds % 60} s`);
+// Credit is time, never money; decimal minutes when it is not whole ("1.5 min").
+const minutes = (seconds: number) => `${Number((seconds / 60).toFixed(2))} min`;
 const clock = (seconds: number) => `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
 
 const ZONE = {x: 360, y: 280, w: 1200, h: 520};
@@ -69,10 +70,10 @@ export const Intro: React.FC = () => {
   const cursorY = chipPos.y + 34;
   const cursorOpacity = easeOut(frame, SHOT['2a'].start + 6, SHOT['2a'].start + 18) * (1 - easeOut(frame, DROP + 14, DROP + 30));
 
-  // 2b-2c: the file's length and price, then the held slice of credit.
+  // 2b-2c: the file's length and credit, then the held slice.
   const rowIn = easeOut(frame, DROP + 22, DROP + 38);
   const rowDim = 1 - 0.45 * easeOut(frame, SHOT['2c'].start, SHOT['2c'].start + 18);
-  const pricePop = easeBack(frame, PRICE, PRICE + 24);
+  const creditPop = easeBack(frame, CREDIT_POP, CREDIT_POP + 24);
   const stripIn = easeOut(frame, SHOT['2c'].start, SHOT['2c'].start + 16);
   const held = easeInOut(frame, HELD, HELD + 40);
   const heldWord = easeOut(frame, HELD + 4, HELD + 20);
@@ -110,11 +111,12 @@ export const Intro: React.FC = () => {
           <div style={{position: 'absolute', left: 316, top: 56, fontFamily, fontSize: 44, fontWeight: 500, color: C.muted, whiteSpace: 'nowrap'}}>{FILE_NAME}</div>
           <div style={{position: 'absolute', left: 316, top: 128, fontFamily, fontSize: 64, fontWeight: 600, color: C.text, fontVariantNumeric: 'tabular-nums', letterSpacing: '-.02em'}}>{clock(CLIP_SECONDS)}</div>
           <div style={{
-            position: 'absolute', left: 316, top: 232, display: 'flex', alignItems: 'baseline', gap: 28, fontFamily, whiteSpace: 'nowrap',
-            opacity: clamp(pricePop * 2), transform: `scale(${lerp(0.9, 1, pricePop)})`, transformOrigin: 'left center',
+            position: 'absolute', left: 316, top: 232, display: 'flex', alignItems: 'baseline', gap: 18, fontFamily, whiteSpace: 'nowrap',
+            opacity: clamp(creditPop * 2), transform: `scale(${lerp(0.9, 1, creditPop)})`, transformOrigin: 'left center',
           }}>
-            <span style={{fontSize: 52, fontWeight: 500, color: C.muted}}>uses</span>
-            <span style={{fontSize: 148, fontWeight: 600, letterSpacing: '-.04em', color: C.hot, fontVariantNumeric: 'tabular-nums', lineHeight: 1}}>{minutes(CREDIT_SECONDS)}</span>
+            <span style={{fontSize: 46, fontWeight: 500, color: C.muted}}>uses</span>
+            <span style={{fontSize: 120, fontWeight: 600, letterSpacing: '-.04em', color: C.hot, fontVariantNumeric: 'tabular-nums', lineHeight: 1}}>{minutes(CREDIT_SECONDS)}</span>
+            <span style={{fontSize: 46, fontWeight: 500, color: C.muted}}>credit</span>
           </div>
         </Card>
       ) : null}

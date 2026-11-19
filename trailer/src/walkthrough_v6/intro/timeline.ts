@@ -9,7 +9,7 @@ export const HEIGHT = 1080;
 export const CLIP_SECONDS = swee.duration_seconds as number;
 export const FILE_NAME = 'tiktok_ZSg5soxrR.mp4';
 
-// The product prices in 30-second blocks (neurolens/pricing.py, 0.5 s allowance) and shows credit
+// The product charges credit in 30-second blocks (neurolens/pricing.py, 0.5 s allowance) and shows it
 // as time ("uses 1 min"), so a 44 s clip is two blocks = 60 s of credit.
 const BLOCK_S = 30;
 const ALLOWANCE_S = 0.5;
@@ -36,5 +36,5 @@ const word = (shot: keyof typeof SHOT, token: string, occurrence = 0, edge: 'sta
 // Moments keyed to words (frames in the intro).
 export const BRAIN_IN = word('1b', 'brain') - 10; // "how a brain will respond"
 export const DROP = word('2b', 'it', 0, 'end'); // "Drop it in": the file lands
-export const PRICE = word('2b', 'price') - 6; // "you see the price"
+export const CREDIT_POP = word('2b', 'use') - 6; // "you see what it'll use"
 export const HELD = word('2c', 'held'); // "held from your credit"

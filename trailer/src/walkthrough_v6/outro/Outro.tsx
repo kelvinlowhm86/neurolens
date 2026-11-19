@@ -1,8 +1,21 @@
 import React from 'react';
 import {useCurrentFrame} from 'remotion';
 import {C, fontFamily} from '../../edit/ui';
-import {Signpost, Stage, easeInOut, easeOut, lerp} from '../common';
-import {BEDROCK_IN, DURATION, REPORT, ROW_IN, SHOT} from './timeline';
+import {Signpost, Stage, clamp, easeInOut, easeOut, lerp} from '../common';
+import {Chart} from '../result/Chart';
+import {MUTED, OVERALL, RANGE, TO} from '../result/timeline';
+import {
+  BEDROCK_IN,
+  CURSOR_END,
+  CURSOR_FROM,
+  CURSOR_START,
+  CURSOR_TO,
+  DURATION,
+  REPORT,
+  ROW_IN,
+  SHOT,
+  SOUND_OFF_IN,
+} from './timeline';
 
 const fmt = (s: number) => `0:${String(s).padStart(2, '0')}`;
 const range = `${fmt(REPORT.moment.start)}–${fmt(REPORT.moment.end)}`;
@@ -38,12 +51,18 @@ export const Outro: React.FC = () => {
   const cardOut = 1 - easeOut(frame, SHOT['10a'].start - 6, SHOT['10a'].start + 6);
   const bedrock = easeOut(frame, BEDROCK_IN, BEDROCK_IN + 14) * (1 - easeOut(frame, SHOT['9b'].start, SHOT['9b'].start + 12));
   const push = 1 + 0.04 * easeInOut(frame, SHOT['9b'].start + 10, SHOT['9b'].end);
+  // 9.2 names the sound-off finding, so the card says it plainly under the Do line.
+  const soundOff = easeOut(frame, SOUND_OFF_IN, SOUND_OFF_IN + 14);
 
-  // 10: two sentences.
-  const first = easeOut(frame, SHOT['10a'].start + 4, SHOT['10a'].start + 22);
-  const second = easeOut(frame, SHOT['10b'].start + 4, SHOT['10b'].start + 24);
-  const firstDim = lerp(1, 0.38, easeInOut(frame, SHOT['10b'].start, SHOT['10b'].start + 16));
-  const closingOut = 1 - easeOut(frame, SHOT['10b'].end - 8, SHOT['10b'].end + 4);
+  // 10: the same result chart, with the cursor scrubbing across the old photos (8-13 s) where the
+  // sound-off response nearly vanishes. One small title; no text repeating the voice.
+  const chartIn = easeOut(frame, SHOT['10a'].start + 2, SHOT['10a'].start + 22);
+  const chartOut = 1 - easeOut(frame, SHOT['11'].start - 8, SHOT['11'].start + 4);
+  const titleIn = easeOut(frame, SHOT['10a'].start + 2, SHOT['10a'].start + 22);
+  const lineProgress = easeInOut(frame, SHOT['10a'].start + 2, SHOT['10a'].start + 46);
+  const scrub = clamp((frame - CURSOR_START) / (CURSOR_END - CURSOR_START));
+  const cursorSecond = lerp(CURSOR_FROM, CURSOR_TO, scrub);
+  const bandPulse = 0.045 + 0.018 * Math.sin(frame / 16);
 
   // 11: the closing line, then black.
   const homeIn = easeOut(frame, SHOT['11'].start + 2, SHOT['11'].start + 22);
@@ -64,6 +83,12 @@ export const Outro: React.FC = () => {
               <Row label="Brain" text={GIST.brain} top={300} dim opacity={rowsIn(1) * (1 - rowsQuiet)} />
               <Row label="Do" text={REPORT.moment.suggestion ?? ''} hot top={440} opacity={rowsIn(2) * (1 - rowsQuiet)} />
             </div>
+            <div style={{
+              position: 'absolute', left: 60, right: 60, bottom: 52, textAlign: 'center', fontFamily, fontSize: 32,
+              fontWeight: 500, letterSpacing: '-.005em', color: C.muted, opacity: soundOff,
+            }}>
+              the response nearly vanishes with sound off over the old photos
+            </div>
           </div>
           <Signpost text="Claude · Amazon Bedrock" y={CARD.y + CARD.h + 36} opacity={bedrock} />
           <div style={{
@@ -76,15 +101,20 @@ export const Outro: React.FC = () => {
         </div>
       ) : null}
 
-      {first > 0.01 && closingOut > 0.01 ? (
-        <div style={{
-          position: 'absolute', left: 160, right: 160, top: 0, bottom: 0, display: 'flex', flexDirection: 'column',
-          alignItems: 'center', justifyContent: 'center', gap: 64, textAlign: 'center', fontFamily, color: C.text, opacity: closingOut,
-        }}>
-          <div style={{fontSize: 96, fontWeight: 600, letterSpacing: '-.03em', lineHeight: 1.1, opacity: first * firstDim, transform: `translateY(${(1 - second) * 102}px)`}}>None of this predicts your views.</div>
-          <div style={{fontSize: 64, fontWeight: 500, letterSpacing: '-.02em', lineHeight: 1.25, color: '#D6DAE0', opacity: second, maxWidth: 1500}}>
-            It shows how a brain is likely to respond, second by second, so you can fix things before you post.
-          </div>
+      {chartIn * chartOut > 0.01 ? (
+        <div style={{position: 'absolute', inset: 0, opacity: chartIn * chartOut}}>
+          <div style={{
+            position: 'absolute', left: 0, right: 0, top: 84, textAlign: 'center', fontFamily, fontSize: 36,
+            fontWeight: 600, letterSpacing: '.01em', color: C.muted, opacity: titleIn,
+          }}>Perception, not views</div>
+          <Chart
+            x={150} y={300} w={1620} h={430}
+            values={OVERALL} comparison={MUTED} comparisonDashed comparisonColour="#6F7E99"
+            to={TO} range={RANGE} progress={lineProgress} comparisonProgress={lineProgress}
+            label="swee-response-with-sound-off"
+            cursor={{second: cursorSecond, comparison: true}}
+            band={{from: CURSOR_FROM, to: CURSOR_TO, opacity: bandPulse}}
+          />
         </div>
       ) : null}
 

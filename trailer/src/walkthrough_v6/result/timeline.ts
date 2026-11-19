@@ -6,6 +6,7 @@ export const WIDTH = 1920;
 export const HEIGHT = 1080;
 
 export const OVERALL = swee.signals.overall as number[];
+export const MUTED = swee.muted.overall as number[];
 export const TO = OVERALL.length - 1;
 
 // The peak comes from the data, never from the script's wording.

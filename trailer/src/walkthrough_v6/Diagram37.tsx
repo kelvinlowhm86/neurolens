@@ -32,7 +32,7 @@ const AREA_H = STRIP_TOP;
 const BAR_W = 900;
 const BAR_H = 18;
 const STRIP_BOX: Box = {x1: 0, y1: STRIP_TOP, x2: 1920, y2: 1080};
-const CREDIT_HOLD = 0.32;
+const CREDIT_HOLD = 0.2; // 1 of the 5 minutes is held (intro and diagram use the same bar)
 // Captions sit above the strip; the box height is measured from the rendered pill.
 const CAPTION_Y = 836;
 const CAPTION_H = 88;
@@ -47,12 +47,11 @@ const PASS10_SCALE: Record<string, number> = {
   '3d': 1.35,
   '4': 0.988,
   '4r': 1.1463,
-  '5a': 1.15,
-  '5b': 1.55,
-  '6': 1.28,
-  '7a': 1.05,
-  '7b': 1.3232,
-  '7c': 0.96, // lowered from 0.99: the lit subject must keep clear of the safe margins
+  '5a': 1.28, // the TRIBE panel (was row 6)
+  '5b': 1.15, // the idle cost and scale-to-zero
+  '5c': 1.5, // the cold-start clock and ring
+  '7a': 0.95, // the retry, dead-letter and idempotent beats share the shot
+  '7b': 0.96, // the watchdog (was row 7c)
   '7d': 0.48, // lowered from 0.5069: the Terraform outline must keep clear of the safe margins
 };
 
@@ -69,11 +68,10 @@ const SHOT_LINES: {row: string; id: string; sectionEnd?: boolean}[] = [
   {row: '4', id: '4.1'},
   {row: '4r', id: '4.2', sectionEnd: true},
   {row: '5a', id: '5.1'},
-  {row: '5b', id: '5.2', sectionEnd: true},
-  {row: '6', id: '6.1', sectionEnd: true},
+  {row: '5b', id: '5.2'},
+  {row: '5c', id: '5.3', sectionEnd: true},
   {row: '7a', id: '7.1'},
-  {row: '7b', id: '7.2'},
-  {row: '7c', id: '7.3', sectionEnd: true},
+  {row: '7b', id: '7.2', sectionEnd: true},
   {row: '7d', id: '7b.1', sectionEnd: true},
 ];
 
@@ -134,39 +132,36 @@ const QUEUE: StateKey[] = [
   {at: CUE('4').start, state: 'lit'},
   {at: beat('4', 0.3), state: 'idle'},
   {at: CUE('5a').start, state: 'lit'},
-  {at: word('5a', 'when'), state: 'idle'},
+  {at: word('5a', 'wakes'), state: 'idle'},
 ];
 
 const CHECK: StateKey[] = [
   {at: CUE('4').start, state: 'lit'},
-  {at: word('5a', 'when', 0, 'end'), state: 'idle'},
+  {at: word('5a', 'wakes', 0, 'end'), state: 'idle'},
 ];
 
 const GPU: StateKey[] = [
   {at: CUE('4r').start, state: 'off'},
-  {at: word('5a', 'GPU', 1), state: 'lit'}, // "starts a GPU when a job arrives"
-  {at: word('5a', 'zero'), state: 'off'},
-  {at: CUE('5b').start, state: 'off'},
-  {at: CUE('6').start, state: 'lit'},
+  {at: word('5a', 'wakes'), state: 'lit'}, // "wakes a GPU on SageMaker"
+  {at: word('5b', 'zero'), state: 'off'}, // "scales to zero when idle"
+  {at: CUE('5c').start, state: 'idle'}, // starting one takes a few minutes
   {at: CUE('7a').start, state: 'lit'},
   {at: word('7a', 'fails'), state: 'off'},
-  {at: CUE('7b').start, state: 'lit'},
-  {at: word('7b', 'one', 1), state: 'idle'},
-  {at: CUE('7c').start, state: 'lit'},
-  {at: beat('7c', 0.55), state: 'off'},
+  {at: CUE('7b').start, state: 'lit'}, // a stuck job's GPU, before the watchdog
+  {at: word('7b', 'running'), state: 'off'},
   {at: CUE('7d').start, state: 'idle'},
 ];
 
 const WATCHDOG: StateKey[] = [
-  {at: CUE('7c').start, state: 'idle'},
-  {at: word('7c', 'watchdog'), state: 'lit'},
-  {at: beat('7c', 0.72), state: 'idle'},
+  {at: CUE('7b').start, state: 'idle'},
+  {at: word('7b', 'watchdog'), state: 'lit'},
+  {at: beat('7b', 0.72), state: 'idle'},
 ];
 
 const DEAD: StateKey[] = [
   {at: CUE('7a').start, state: 'idle'},
   {at: word('7a', 'dead-letter'), state: 'lit'},
-  {at: word('7a', 'back', 0, 'end'), state: 'idle'},
+  {at: CUE('7b').start, state: 'idle'},
 ];
 
 const NODES: NodeDef[] = [
@@ -174,9 +169,9 @@ const NODES: NodeDef[] = [
   {id: 'website', label: 'Website', service: 'Lambda', purpose: 'sign-in & upload', icon: 'website', keys: WEBSITE, appear: 0},
   {id: 'storage', label: 'Storage', service: 'S3', purpose: 'videos & results', icon: 'storage', keys: STORAGE, appear: 0},
   {id: 'queue', label: 'Queue', service: 'SQS', purpose: 'jobs wait here', icon: 'queue', keys: QUEUE, appear: CUE('3c').start},
-  {id: 'check', label: 'Check', service: 'Lambda', purpose: 'checks length & price', icon: 'check', keys: CHECK, appear: CUE('4').start},
+  {id: 'check', label: 'Check', service: 'Lambda', purpose: 'checks length & credit', icon: 'check', keys: CHECK, appear: CUE('4').start},
   {id: 'gpu', label: 'GPU', service: 'SageMaker', purpose: 'runs the brain model', icon: 'gpu', keys: GPU, appear: CUE('4r').start},
-  {id: 'watchdog', label: 'Watchdog', service: 'Lambda', purpose: 'stops stuck jobs', icon: 'watchdog', keys: WATCHDOG, appear: CUE('7c').start},
+  {id: 'watchdog', label: 'Watchdog', service: 'Lambda', purpose: 'stops stuck jobs', icon: 'watchdog', keys: WATCHDOG, appear: CUE('7b').start},
   {id: 'dead', label: 'Dead-letter', service: 'SQS', purpose: 'failed jobs, refunded', icon: 'deadLetter', keys: DEAD, appear: CUE('7a').start},
 ];
 
@@ -452,10 +447,10 @@ const PANEL_EXTRA: Box = {
   y2: FIXED_POSITIONS.gpu.y + 300,
 };
 const STATUS_EXTRA: Box = {
-  x1: FIXED_POSITIONS.gpu.x - 170,
-  y1: FIXED_POSITIONS.gpu.y + 270,
-  x2: FIXED_POSITIONS.gpu.x + 170,
-  y2: FIXED_POSITIONS.gpu.y + 390,
+  x1: FIXED_POSITIONS.gpu.x - 230,
+  y1: FIXED_POSITIONS.gpu.y + 210,
+  x2: FIXED_POSITIONS.gpu.x + 230,
+  y2: FIXED_POSITIONS.gpu.y + 380,
 };
 const DUPLICATE_EXTRA: Box = {
   x1: FIXED_POSITIONS.gpu.x - 330,
@@ -469,14 +464,13 @@ export const STILLS = [
   {row: '3b', frame: beat('3b', 0.52)},
   {row: '3c', frame: word('3c', 'and')},
   {row: '3d', frame: CUE('3d').start + 185},
-  {row: '4', frame: word('4', 'price') + 16},
+  {row: '4', frame: word('4', 'credit') + 20},
   {row: '4r', frame: beat('4r', 0.72)},
-  {row: '5a', frame: word('5a', 'scales') + 20},
-  {row: '5b', frame: beat('5b', 0.52)},
-  {row: '6', frame: CUE('6').start + 50},
-  {row: '7a', frame: word('7a', 'back') + 6},
-  {row: '7b', frame: beat('7b', 0.72)},
-  {row: '7c', frame: beat('7c', 0.42)},
+  {row: '5a', frame: beat('5a', 0.55)},
+  {row: '5b', frame: word('5b', 'scales') + 10},
+  {row: '5c', frame: beat('5c', 0.5)},
+  {row: '7a', frame: word('7a', 'idempotent') + 10},
+  {row: '7b', frame: beat('7b', 0.42)},
   {row: '7d', frame: beat('7d', 0.82)},
 ];
 
@@ -501,19 +495,18 @@ const LAYOUTS: Layout[] = [
     maxScale: 1.3,
   },
   {row: '4r', at: CUE('4r').start, ids: ['check', 'gpu'], extra: [BAD_FILE_EXTRA], maxScale: 1.45},
-  {row: '5a', at: CUE('5a').start, ids: ['gpu'], extra: [STATUS_EXTRA], maxScale: 1.55, caption: 'below'},
-  {row: '5b', at: CUE('5b').start, ids: [], named: ['gpu'], extra: [RING_EXTRA, CLOCK_EXTRA], maxScale: 1.55},
-  {row: '6', at: CUE('6').start, ids: ['gpu'], extra: [PANEL_EXTRA], maxScale: 1.5},
+  {row: '5a', at: CUE('5a').start, ids: ['gpu'], extra: [PANEL_EXTRA], maxScale: 1.5},
+  {row: '5b', at: CUE('5b').start, ids: ['gpu'], extra: [STATUS_EXTRA], maxScale: 1.55, caption: 'below'},
+  {row: '5c', at: CUE('5c').start, ids: ['gpu'], extra: [CLOCK_EXTRA, RING_EXTRA], maxScale: 1.55},
   {
     row: '7a',
     at: CUE('7a').start,
-    ids: ['dead'],
-    named: ['gpu'],
+    ids: ['dead', 'gpu'],
     thumbNodes: ['gpu'],
-    maxScale: 1.05,
+    extra: [DUPLICATE_EXTRA],
+    maxScale: 1.5,
   },
-  {row: '7b', at: CUE('7b').start, ids: ['gpu'], extra: [DUPLICATE_EXTRA], maxScale: 1.4, caption: 'below'},
-  {row: '7c', at: CUE('7c').start, ids: ['watchdog', 'gpu'], maxScale: 1.55},
+  {row: '7b', at: CUE('7b').start, ids: ['watchdog', 'gpu'], maxScale: 1.55},
   {
     row: '7d',
     at: CUE('7d').start,
@@ -750,11 +743,11 @@ const linksAt = (f: number): LinkDraw[] => {
     links.push({
       id: 'watchdog-gpu',
       path: rowOffRowPath(pos('gpu'), pos('watchdog')),
-      appear: CUE('7c').start + 10,
+      appear: CUE('7b').start + 10,
       draw: 16,
       arrow: true,
-      hot: ease(f, beat('7c', 0.18), beat('7c', 0.3)) * (1 - ease(f, beat('7c', 0.62), beat('7c', 0.78))),
-      opacity: pair('watchdog', 'gpu', CUE('7c').start, CUE('7d').start),
+      hot: ease(f, word('7b', 'stuck'), word('7b', 'stuck') + 12) * (1 - ease(f, word('7b', 'bill'), word('7b', 'bill') + 12)),
+      opacity: pair('watchdog', 'gpu', CUE('7b').start, CUE('7d').start),
     });
   }
 
@@ -771,7 +764,7 @@ const thumbOpacityAt = (f: number) => {
   return Math.max(in4, in7);
 };
 
-const thumbGreyAt = (f: number) => ease(f, word('7a', 'fails'), word('7a', 'fails') + 14);
+const thumbGreyAt = (f: number) => ease(f, word('7a', 'twice') - 10, word('7a', 'twice') + 4);
 
 const thumbStateAt = (f: number) => {
   const {positions} = layoutAt(f);
@@ -799,17 +792,17 @@ const readoutOpacity = (f: number) =>
   ease(f, CUE('4').start + 8, CUE('4').start + 20) * (1 - ease(f, CUE('4r').start - 10, CUE('4r').start + 4));
 
 const statusOpacity = (f: number) =>
-  ease(f, CUE('5a').start - 4, CUE('5a').start + 8) * (1 - ease(f, CUE('5b').start - 8, CUE('5b').start + 4));
+  ease(f, CUE('5b').start - 2, CUE('5b').start + 10) * (1 - ease(f, CUE('5c').start - 10, CUE('5c').start + 2));
 
 const clockOpacity = (f: number) =>
-  ease(f, CUE('5b').start - 2, CUE('5b').start + 10) * (1 - ease(f, CUE('6').start - 10, CUE('6').start + 4));
+  ease(f, CUE('5c').start - 2, CUE('5c').start + 10) * (1 - ease(f, CUE('7a').start - 10, CUE('7a').start + 4));
 
 const gpuPanelOpacity = (f: number) =>
-  ease(f, CUE('6').start, CUE('6').start + 24) * (1 - ease(f, CUE('7a').start - 34, CUE('7a').start - 26));
+  ease(f, word('5a', 'wakes'), word('5a', 'wakes') + 24) * (1 - ease(f, CUE('5b').start - 20, CUE('5b').start - 2));
 
 const runningAt = (f: number) => {
-  const up = word('5a', 'GPU', 1);
-  const down = word('5a', 'zero');
+  const up = CUE('5b').start;
+  const down = word('5b', 'zero');
   if (f < up) return 0;
   if (f < down) return ease(f, up, up + 14);
   return 1 - ease(f, down, down + 26);
@@ -822,7 +815,7 @@ type CardId = 'readout' | 'status' | 'clock';
 
 const CARD_HEIGHT: Record<CardId, number> = {
   readout: 156,
-  status: 104,
+  status: 150,
   clock: 130,
 };
 
@@ -831,10 +824,10 @@ const cardSize = (id: CardId): {w: number; h: number} => {
   if (id === 'readout') {
     content = Math.max(
       textWidth('browser said', 42, 400) + 18 + textWidth('0:05', 42, 600) + 26 + textWidth('file says', 42, 400) + 10 + textWidth('0:44', 42, 600),
-      textWidth('price', 42, 400) + 18 + textWidth('$1.00', 42, 600) + 26 + textWidth('$2.00', 42, 600),
+      textWidth('credit', 42, 400) + 18 + textWidth('1 min', 42, 600) + 26 + textWidth('2 min', 42, 600),
     );
   } else if (id === 'status') {
-    content = 14 + 14 + textWidth('0 running', 48, 600);
+    content = Math.max(textWidth('$1,300 / month', 44, 600), 28 + textWidth('0 running', 42, 600));
   } else {
     content = 44 + 16 + textWidth('a few minutes to start', 42, 400);
   }
@@ -862,7 +855,7 @@ const CARD_OPACITY: Record<CardId, (f: number) => number> = {
 };
 
 const creditReturnedAt = (f: number) => ease(f, word('7a', 'hold'), word('7a', 'back', 0, 'end'));
-const creditChargedAt = (f: number) => ease(f, word('7b', 'same'), word('7b', 'same') + 12);
+const creditChargedAt = (f: number) => ease(f, word('7a', 'once', 1), word('7a', 'once', 1) + 12);
 const badRefundAt = (f: number) => ease(f, word('4r', "you're"), word('4r', 'refunded', 0, 'end'));
 const badFileVisibleAt = (f: number) =>
   ease(f, beat('4r', 0.18), beat('4r', 0.3)) * (1 - ease(f, CUE('5a').start - 8, CUE('5a').start + 4));
@@ -870,11 +863,11 @@ const creditGlowAt = (f: number) =>
   Math.max(
     ease(f, word('4r', "you're") - 4, word('4r', "you're") + 8) * (1 - ease(f, CUE('5a').start - 10, CUE('5a').start + 2)),
     ease(f, word('7a', 'hold') - 4, word('7a', 'hold') + 8) * (1 - ease(f, word('7a', 'back', 0, 'end'), word('7a', 'back', 0, 'end') + 8)),
-    ease(f, word('7b', 'same') - 2, word('7b', 'same') + 10) * (1 - ease(f, word('7b', 'same') + 22, word('7b', 'same') + 34)),
+    ease(f, word('7a', 'once', 1) - 2, word('7a', 'once', 1) + 10) * (1 - ease(f, word('7a', 'once', 1) + 22, word('7a', 'once', 1) + 34)),
   );
 
 export const creditWidgetOpacity = (f: number) =>
-  ease(f, CUE('3b').start + 6, CUE('3b').start + 20) * (1 - ease(f, CUE('7b').end - 14, CUE('7b').end + 2));
+  ease(f, CUE('3b').start + 6, CUE('3b').start + 20) * (1 - ease(f, CUE('7b').start - 14, CUE('7b').start + 2));
 
 type CardSpec = {id: CardId; box: Box; opacity: number};
 
@@ -972,13 +965,13 @@ const Strike: React.FC<{progress: number; children: React.ReactNode}> = ({progre
 );
 
 const ReadoutCard: React.FC<{f: number; box: Box; opacity: number}> = ({f, box, opacity}) => {
-  // "opens the file", "its real length" (replaces what the browser said), "works the price out again".
+  // "opens the file", "its real length" (replaces what the browser said), "works the credit out again".
   const claimedOn = ease(f, word('4', 'opens') - 4, word('4', 'opens') + 8);
   const struck = ease(f, word('4', 'real'), word('4', 'real') + 12);
   const realOn = ease(f, word('4', 'real') + 2, word('4', 'real') + 14);
-  const priceOn = ease(f, word('4', 'opens') + 6, word('4', 'opens') + 18);
-  const priceStruck = ease(f, word('4', 'works'), word('4', 'works') + 12);
-  const newPriceOn = ease(f, word('4', 'price'), word('4', 'price') + 12);
+  const creditOn = ease(f, word('4', 'works') - 4, word('4', 'works') + 8);
+  const creditStruck = ease(f, word('4', 'credit'), word('4', 'credit') + 12);
+  const newCreditOn = ease(f, word('4', 'again'), word('4', 'again') + 12);
   return (
     <CardShell box={box} opacity={opacity}>
       <div style={{display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 12, height: '100%', fontSize: 42, whiteSpace: 'nowrap'}}>
@@ -993,11 +986,11 @@ const ReadoutCard: React.FC<{f: number; box: Box; opacity: number}> = ({f, box, 
           </span>
         </div>
         <div style={{display: 'flex', alignItems: 'baseline', gap: 18}}>
-          <span style={{color: '#8E98A5', opacity: priceOn}}>price</span>
-          <Strike progress={priceStruck}>
-            <span style={{color: priceStruck > 0.5 ? '#7D8794' : C.text, opacity: priceOn}}>$1.00</span>
+          <span style={{color: '#8E98A5', opacity: creditOn}}>credit</span>
+          <Strike progress={creditStruck}>
+            <span style={{color: creditStruck > 0.5 ? '#7D8794' : C.text, opacity: creditOn}}>1 min</span>
           </Strike>
-          <span style={{color: C.hot, fontWeight: 600, opacity: newPriceOn}}>$2.00</span>
+          <span style={{color: C.hot, fontWeight: 600, opacity: newCreditOn}}>2 min</span>
         </div>
       </div>
     </CardShell>
@@ -1009,9 +1002,12 @@ const StatusCard: React.FC<{f: number; box: Box; opacity: number}> = ({f, box, o
   const live = running > 0.5;
   return (
     <CardShell box={box} opacity={opacity}>
-      <div style={{display: 'flex', alignItems: 'center', gap: 14, height: '100%', fontSize: 48, fontWeight: 600, fontVariantNumeric: 'tabular-nums'}}>
-        <span style={{width: 14, height: 14, borderRadius: 7, background: live ? C.hot : '#5C6775'}} />
-        <span style={{color: live ? '#FFC08A' : '#8E9AAB'}}>{Math.round(running)} running</span>
+      <div style={{display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 10, height: '100%', fontVariantNumeric: 'tabular-nums'}}>
+        <div style={{fontSize: 44, fontWeight: 600, color: live ? '#FFC08A' : '#8E9AAB', whiteSpace: 'nowrap'}}>$1,300 / month</div>
+        <div style={{display: 'flex', alignItems: 'center', gap: 14, fontSize: 42, fontWeight: 600}}>
+          <span style={{width: 14, height: 14, borderRadius: 7, background: live ? C.hot : '#5C6775'}} />
+          <span style={{color: live ? '#FFC08A' : '#8E9AAB'}}>{Math.round(running)} running</span>
+        </div>
       </div>
     </CardShell>
   );
@@ -1101,7 +1097,7 @@ const CreditStrip: React.FC<{f: number}> = ({f}) => {
           whiteSpace: 'nowrap',
         }}
       >
-        your credit
+        5 min credit
       </div>
       <div
         style={{
@@ -1301,8 +1297,8 @@ const UploadChip: React.FC<{f: number; browser: Pt; storage: Pt}> = ({f, browser
 };
 
 const JobArrival: React.FC<{f: number; check: Pt; gpu: Pt}> = ({f, check, gpu}) => {
-  const start = word('5a', 'when'); // "when a job arrives"
-  const end = word('5a', 'arrives', 0, 'end');
+  const start = word('5a', 'job'); // "The job then wakes a GPU"
+  const end = word('5a', 'GPU', 0, 'end');
   const opacity = ease(f, start, start + 6) * (1 - ease(f, end + 6, end + 14));
   if (opacity <= 0.001) return null;
   const t = glide(f, start, end);
@@ -1465,12 +1461,12 @@ const FailureJob: React.FC<{f: number; gpu: Pt; dead: Pt}> = ({f, gpu, dead}) =>
 
 const DuplicateJobs: React.FC<{f: number; gpu: Pt}> = ({f, gpu}) => {
   const opacity =
-    ease(f, CUE('7b').start + 4, CUE('7b').start + 16) * (1 - ease(f, CUE('7c').start - 10, CUE('7c').start + 2));
+    ease(f, word('7a', 'charged') - 10, word('7a', 'charged') + 4) * (1 - ease(f, CUE('7b').start - 10, CUE('7b').start + 2));
   if (opacity <= 0.001) return null;
-  const firstIn = glide(f, word('7b', 'deliver'), word('7b', 'deliver') + 18);
-  const secondIn = glide(f, word('7b', 'twice') - 4, word('7b', 'twice') + 14);
-  const charged = ease(f, word('7b', 'same'), word('7b', 'same') + 12);
-  const already = ease(f, word('7b', 'idempotent'), word('7b', 'idempotent') + 12); // the word lands as it shows
+  const firstIn = glide(f, word('7a', 'charged') - 6, word('7a', 'charged') + 18);
+  const secondIn = glide(f, word('7a', 'idempotent') - 2, word('7a', 'idempotent') + 16);
+  const charged = ease(f, word('7a', 'once', 1), word('7a', 'once', 1) + 12);
+  const already = ease(f, word('7a', 'twice') - 6, word('7a', 'twice') + 4); // the word lands as it shows
   const card = (index: number, drop: number) => {
     const x = gpu.x - 240 + index * 260;
     const y = gpu.y + 292 + (1 - drop) * 130;
@@ -1555,14 +1551,14 @@ const DuplicateJobs: React.FC<{f: number; gpu: Pt}> = ({f, gpu}) => {
 const GpuPanel: React.FC<{f: number; gpu: Pt}> = ({f, gpu}) => {
   const opacity = gpuPanelOpacity(f);
   if (opacity <= 0.001) return null;
-  const {line} = CUE('6');
-  const passOn = ease(f, line.start + 4, line.start + 18);
+  const start = word('5a', 'wakes');
+  const passOn = ease(f, start + 4, start + 18);
   const inputBrightness = 0.45 + 0.55 * passOn;
-  const captionOn = ease(f, line.start + 6, line.start + 18);
-  const playhead = glide(f, line.start + 4, line.start + line.frames);
+  const captionOn = ease(f, start + 6, start + 18);
+  const playhead = glide(f, start + 4, CUE('5b').start - 10);
   const coreGlow = passOn;
   const cellW = 106;
-  const phase = ((f - CUE('6').start) / FPS) * 0.55 % 5;
+  const phase = ((f - start) / FPS) * 0.55 % 5;
   const cells = Array.from({length: 10}, (_, index) => CLIP_FRAMES[index % CLIP_FRAMES.length]);
   const barHeight = (value: number) => 10 + value * 64;
   return (
@@ -1691,9 +1687,9 @@ const GpuPanel: React.FC<{f: number; gpu: Pt}> = ({f, gpu}) => {
 };
 
 const ProgressRing: React.FC<{f: number; gpu: Pt}> = ({f, gpu}) => {
-  const opacity = ease(f, CUE('5b').start + 2, CUE('5b').start + 14) * (1 - ease(f, CUE('6').start - 8, CUE('6').start + 4));
+  const opacity = ease(f, CUE('5c').start + 2, CUE('5c').start + 14) * (1 - ease(f, CUE('7a').start - 8, CUE('7a').start + 4));
   if (opacity <= 0.001) return null;
-  const progress = glide(f, CUE('5b').start + 10, CUE('6').start - 12);
+  const progress = glide(f, CUE('5c').start + 10, CUE('7a').start - 12);
   const r = 70;
   const circumference = 2 * Math.PI * r;
   return (
@@ -2110,8 +2106,7 @@ export const WalkthroughV6Diagram: React.FC = () => {
       </AbsoluteFill>
 
       <Caption y={CAPTION_Y} text="asynchronous" from={CUE('3d').start + 8} to={CUE('4').start - 10} hot="asynchronous" />
-      <Caption y={CAPTION_Y} text="scale to zero" from={word('5a', 'scales')} to={CUE('5b').start - 8} hot="zero" />
-      <Caption y={CAPTION_Y} text="idempotent" from={word('7b', 'idempotent')} to={CUE('7c').start - 10} hot="idempotent" />
+      <Caption y={CAPTION_Y} text="scale to zero" from={word('5b', 'scales') - 8} to={CUE('5c').start - 8} hot="zero" />
       <Caption y={CAPTION_Y} text="infrastructure as code" from={CUE('7d').start + 8} to={DURATION - 4} hot="code" />
 
       {cards.map((card) => {

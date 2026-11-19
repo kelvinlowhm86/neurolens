@@ -126,12 +126,19 @@ export const Signpost: React.FC<{text: string; y: number; opacity: number}> = ({
   </div>
 );
 
-/** The "your credit" strip along the bottom, as in the diagram: solid, with a hatched held slice. */
-export const CreditStrip: React.FC<{opacity: number; held: number; status: string; lit?: boolean}> = ({opacity, held, status, lit = false}) => {
+/** The credit strip along the bottom, as in the diagram: solid, with a hatched held slice. */
+export const CreditStrip: React.FC<{opacity: number; held: number; status: string; lit?: boolean; label?: string}> = ({
+  opacity,
+  held,
+  status,
+  lit = false,
+  label = '5 min credit',
+}) => {
   if (opacity <= 0.001) return null;
   const BAR_W = 900;
   const BAR_H = 18;
-  const hold = 0.32 * held;
+  // The held share is 1 of 5 minutes (intro and diagram use the same bar).
+  const hold = 0.2 * held;
   return (
     <div style={{
       position: 'absolute', left: 0, right: 0, top: STRIP_TOP, height: STRIP_H, boxSizing: 'border-box',
@@ -141,7 +148,7 @@ export const CreditStrip: React.FC<{opacity: number; held: number; status: strin
       <div style={{
         position: 'absolute', left: SAFE, top: 0, bottom: 0, display: 'flex', alignItems: 'center',
         fontSize: 34, fontWeight: 600, letterSpacing: '-.01em', color: '#E4E9EF', whiteSpace: 'nowrap',
-      }}>your credit</div>
+      }}>{label}</div>
       <div style={{
         position: 'absolute', left: 960 - BAR_W / 2, top: '50%', marginTop: -BAR_H / 2, width: BAR_W, height: BAR_H,
         borderRadius: BAR_H / 2, background: '#232830', overflow: 'hidden',
