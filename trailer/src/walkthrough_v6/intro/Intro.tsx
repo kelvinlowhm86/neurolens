@@ -121,9 +121,9 @@ export const Intro: React.FC = () => {
             position: 'absolute', left: 316, top: 232, display: 'flex', alignItems: 'baseline', gap: 18, fontFamily, whiteSpace: 'nowrap',
             opacity: clamp(creditPop * 2), transform: `scale(${lerp(0.9, 1, creditPop)})`, transformOrigin: 'left center',
           }}>
-            <span style={{fontSize: 46, fontWeight: 500, color: C.muted}}>uses</span>
-            <span style={{fontSize: 120, fontWeight: 600, letterSpacing: '-.04em', color: C.hot, fontVariantNumeric: 'tabular-nums', lineHeight: 1}}>{minutes(BROWSER_CREDIT_SECONDS)}</span>
-            <span style={{fontSize: 46, fontWeight: 500, color: C.muted}}>credit</span>
+            <span style={{fontSize: 40, fontWeight: 500, color: C.muted}}>uses</span>
+            <span style={{fontSize: 96, fontWeight: 600, letterSpacing: '-.04em', color: C.hot, fontVariantNumeric: 'tabular-nums', lineHeight: 1}}>{minutes(BROWSER_CREDIT_SECONDS)}</span>
+            <span style={{fontSize: 40, fontWeight: 500, color: C.muted}}>credit</span>
           </div>
         </Card>
       ) : null}

@@ -25,7 +25,7 @@ const MUSIC_IN_GAPS = 0.16; // -16 dB: a gentle 3 dB lift, not a swell
 const DUCK_DOWN = 15; // frames to dip before a line
 const DUCK_UP = 36; // frames to recover after it (slow, so the rise is felt, not heard)
 const MIN_GAP = 2 * FPS; // shorter pauses stay ducked, so the music doesn't pump between sentences
-const MUSIC_FADE_IN = 2 * FPS;
+const MUSIC_FADE_IN = 0.5 * FPS;
 const MUSIC_FADE_OUT = 4 * FPS;
 
 // Every voice line as [start, end] frames in the full video.
