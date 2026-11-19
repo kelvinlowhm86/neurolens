@@ -145,8 +145,7 @@ const WEBSITE: StateKey[] = [
   {at: 0, state: 'dim'},
   {at: CUE('3c').start, state: 'lit'},
   {at: word('3c', 'lands'), state: 'idle'},
-  {at: CUE('3d').start + 51, state: 'lit'},
-  {at: CUE('3d').start + 84, state: 'dim'},
+  {at: CUE('3d').start, state: 'dim'},
   {at: RETURN_BACK_END, state: 'lit'},
   {at: RETURN_END + 8, state: 'dim'},
 ];
@@ -155,6 +154,8 @@ const STORAGE: StateKey[] = [
   {at: 0, state: 'idle'},
   {at: word('3b', 'S3'), state: 'lit'},
   {at: CUE('3d').start, state: 'idle'},
+  {at: CUE('3d').start + 51, state: 'lit'}, // the second upload passes through S3 on its way to the queue
+  {at: CUE('3d').start + 84, state: 'idle'},
   {at: RETURN_STORAGE_END, state: 'lit'},
   {at: RETURN_BACK_END, state: 'idle'},
 ];
@@ -610,7 +611,7 @@ const LAYOUTS: Layout[] = [
   },
   {row: '5a', at: CUE('5a').start, ids: ['gpu'], extra: [PANEL_EXTRA], maxScale: 1.5},
   {row: '5b', at: CUE('5b').start, ids: ['gpu'], extra: [STATUS_EXTRA], maxScale: 1.55},
-  {row: '5c', at: CUE('5c').start, ids: ['gpu'], extra: [CLOCK_EXTRA, RING_EXTRA], maxScale: 1.55},
+  {row: '5c', at: CUE('5c').start, ids: ['gpu'], extra: [CLOCK_EXTRA, RING_EXTRA], maxScale: 1.55, caption: 'below'},
   {
     row: '7a',
     at: CUE('7a').start,
@@ -1161,7 +1162,7 @@ const FFPROBE_STACK = 20;
 type CardId = 'readout' | 'status' | 'clock';
 
 const CARD_HEIGHT: Record<CardId, number> = {
-  readout: 156,
+  readout: 144,
   status: 176,
   clock: 130,
 };
@@ -2438,7 +2439,7 @@ export const runFramingCheck = (): string[] => {
     }
     if (layout.caption === 'below') {
       for (const card of cardSpecsAt(f)) {
-        if (card.opacity > 0.02 && overlaps(card.box, caption)) fail(`${card.id} card overlaps the caption`);
+        if (card.opacity > 0.02 && card.box.y2 > CAPTION_Y - CAPTION_GAP / 2) fail(`${card.id} card comes within ${CAPTION_GAP / 2}px of the caption (gap ${Math.round(CAPTION_Y - card.box.y2)})`);
       }
     }
     const pass10 = PASS10_SCALE[layout.row];
