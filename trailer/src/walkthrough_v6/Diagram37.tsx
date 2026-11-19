@@ -122,6 +122,16 @@ const RETURN_BROWSER_ARRIVE = RETURN_BROWSER_START + RETURN_HOP;
 const RETURN_LABEL_FADE = 10;
 const RETURN_LABEL_OUT = RETURN_END - 8;
 
+// Shot 3b: the browser asks the Website for a presigned URL, gets it back, then uploads the clip
+// straight to S3. Each leg is given its own slow window so a first-time viewer can follow it.
+const ASK_START = CUE('3b').start + 10;
+const ASK_END = CUE('3b').start + 40;
+const URL_START = CUE('3b').start + 44;
+const URL_END = CUE('3b').start + 74;
+const UPLOAD_START = CUE('3b').start + 78;
+const UPLOAD_ARRIVE = CUE('3b').start + 112;
+const WEBSITE_OFF = word('3b', 'website', 0, 'end') + 15;
+
 type NodeId = 'browser' | 'website' | 'storage' | 'queue' | 'check' | 'gpu' | 'watchdog' | 'database';
 
 type NodeDef = {
@@ -142,7 +152,9 @@ const BROWSER: StateKey[] = [
 ];
 
 const WEBSITE: StateKey[] = [
-  {at: 0, state: 'dim'},
+  {at: CUE('3b').start - 10, state: 'dim'},
+  {at: CUE('3b').start, state: 'lit'}, // the browser asks for a presigned URL
+  {at: WEBSITE_OFF, state: 'dim'}, // the upload itself never passes through the website
   {at: CUE('3c').start, state: 'idle'}, // context only: S3, not the website, queues the job
   {at: CUE('3d').start, state: 'dim'},
   {at: RETURN_BACK_END, state: 'lit'},
@@ -151,7 +163,7 @@ const WEBSITE: StateKey[] = [
 
 const STORAGE: StateKey[] = [
   {at: 0, state: 'idle'},
-  {at: word('3b', 'S3'), state: 'lit'},
+  {at: UPLOAD_ARRIVE, state: 'lit'}, // the clip lands in S3
   {at: CUE('3d').start, state: 'idle'},
   {at: CUE('3d').start + 51, state: 'lit'}, // the second upload passes through S3 on its way to the queue
   {at: CUE('3d').start + 84, state: 'idle'},
@@ -463,6 +475,16 @@ const presignGeometry = (browser: Pt, storage: Pt) => {
 
 const PRESIGN = presignGeometry(FIXED_POSITIONS.browser, FIXED_POSITIONS.storage);
 const UPLOAD_ARC_EXTRA = pathExtra(browserStoragePath(FIXED_POSITIONS.browser, FIXED_POSITIONS.storage));
+// The Website is lit during the handshake but its purpose line is taller than the row. Frame its
+// label box so the shot keeps pass 10's scale; the purpose line still clears the credit strip.
+const WEBSITE_FRAME_BOX = nodeWorldBox(
+  NODES_BY_ID.website,
+  FIXED_POSITIONS.website.x,
+  FIXED_POSITIONS.website.y,
+  false,
+  true,
+  false,
+);
 
 const WIDE_BOUNDS = (() => {
   const boxes = ALL_NODE_IDS.map((id) =>
@@ -567,8 +589,8 @@ const LAYOUTS: Layout[] = [
     at: CUE('3b').start,
     ids: ['browser', 'storage'],
     named: ['website'],
-    extra: [PRESIGN.box, UPLOAD_ARC_EXTRA],
-    maxScale: 1.4,
+    extra: [PRESIGN.box, UPLOAD_ARC_EXTRA, WEBSITE_FRAME_BOX],
+    maxScale: 1.26,
     width: 0.84,
   },
   {
@@ -639,14 +661,14 @@ const holdOf = (layout: Layout): number => {
 };
 
 // A node's box as it is at the hold: its purpose line only takes space while it is lit.
-const nodeBoxAt = (id: NodeId, f: number): Box =>
+const nodeBoxAt = (id: NodeId, f: number, purpose = true): Box =>
   nodeWorldBox(
     NODES_BY_ID[id],
     FIXED_POSITIONS[id].x,
     FIXED_POSITIONS[id].y,
     false,
     true,
-    stateAt(f, NODES_BY_ID[id].keys).state === 'lit',
+    purpose && stateAt(f, NODES_BY_ID[id].keys).state === 'lit',
   );
 
 // The subject is what is lit at the hold: lit nodes, their cards, thumbnail, panel and arcs.
@@ -670,8 +692,9 @@ const cameraForLayout = (layout: Layout): Camera => {
   const subject = unionBox(...subjectBoxesForLayout(layout));
   const cx = (subject.x1 + subject.x2) / 2;
   const cy = (subject.y1 + subject.y2) / 2;
-  // Named nodes must stay on screen around the lit subject even when they are dim.
-  const fit = unionBox(subject, ...(layout.named ?? []).map((id) => nodeBoxAt(id, holdOf(layout))));
+  // Named nodes must stay on screen around the lit subject even when they are dim. They are framed
+  // by their label box: a purpose line taller than the row must not shrink the shot below pass 10.
+  const fit = unionBox(subject, ...(layout.named ?? []).map((id) => nodeBoxAt(id, holdOf(layout), false)));
   const halfW = Math.max(1, cx - fit.x1, fit.x2 - cx);
   const halfH = Math.max(1, cy - fit.y1, fit.y2 - cy);
   let scale = Math.min(
@@ -811,6 +834,9 @@ const linksAt = (f: number): LinkDraw[] => {
   const inWindow = (from: number, to: number) => f >= from && f < to;
   const pair = (a: NodeId, b: NodeId, from: number, to: number) =>
     Math.min(visible(a), visible(b)) * (inWindow(from, to) || wideOn ? 1 : 0);
+  // 3b's handshake rides this link, so it is drawn bright for the shot and fades back to its
+  // context weight before 3c takes over.
+  const handshake = 1 - ease(f, CUE('3c').start - 30, CUE('3c').start - 6);
   const pos = (id: NodeId) => positions[id];
   const links: LinkDraw[] = [];
 
@@ -818,10 +844,10 @@ const linksAt = (f: number): LinkDraw[] => {
     links.push({
       id: 'browser-website',
       path: autoPath(pos('browser'), pos('website'), 84),
-      appear: 8,
-      draw: 18,
-      width: 1.8,
-      colour: 'rgba(150,166,188,.42)',
+      appear: CUE('3b').start,
+      draw: 10,
+      width: 1.8 + 0.4 * handshake,
+      colour: `rgba(150,166,188,${(0.42 + 0.3 * handshake).toFixed(2)})`,
       opacity: pair('browser', 'website', CUE('3b').start, CUE('4').start),
     });
   }
@@ -834,7 +860,7 @@ const linksAt = (f: number): LinkDraw[] => {
       appear: CUE('3b').start + 10,
       draw: 16,
       arrow: true,
-      hot: ease(f, CUE('3b').start + 6, CUE('3b').start + 18) * (1 - ease(f, CUE('3c').start - 10, CUE('3c').start + 4)),
+      hot: ease(f, UPLOAD_START - 2, UPLOAD_START + 12) * (1 - ease(f, UPLOAD_ARRIVE, UPLOAD_ARRIVE + 12)),
       opacity: pair('browser', 'storage', CUE('3b').start, CUE('3c').start),
     });
   }
@@ -953,12 +979,32 @@ const pulsesAt = (): PulseHop[] => {
   const positions = FIXED_POSITIONS;
   const pos = (id: NodeId) => positions[id];
   const hops: PulseHop[] = [];
+  if (pos('browser') && pos('website')) {
+    hops.push({
+      id: 'browser-website-request',
+      path: autoPath(pos('browser'), pos('website'), 84),
+      start: ASK_START,
+      end: ASK_END,
+      from: 'browser',
+      to: 'website',
+    });
+  }
+  if (pos('website') && pos('browser')) {
+    hops.push({
+      id: 'website-browser-url',
+      path: autoPath(pos('website'), pos('browser'), 84),
+      start: URL_START,
+      end: URL_END,
+      from: 'website',
+      to: 'browser',
+    });
+  }
   if (pos('browser') && pos('storage')) {
     hops.push({
       id: 'browser-storage',
       path: browserStoragePath(pos('browser'), pos('storage')),
-      start: CUE('3b').start + 8,
-      end: word('3b', 'S3', 0, 'end'),
+      start: UPLOAD_START,
+      end: UPLOAD_ARRIVE,
       from: 'browser',
       to: 'storage',
     });
@@ -1733,8 +1779,8 @@ const SecondUpload: React.FC<{f: number; browser: Pt; storage: Pt; queue: Pt}> =
 };
 
 const UploadChip: React.FC<{f: number; browser: Pt; storage: Pt}> = ({f, browser, storage}) => {
-  const start = CUE('3b').start + 8;
-  const arrive = word('3b', 'S3', 0, 'end');
+  const start = UPLOAD_START;
+  const arrive = UPLOAD_ARRIVE;
   const opacity = ease(f, start, start + 8) * (1 - ease(f, arrive - 6, arrive + 8));
   if (opacity <= 0.001) return null;
   const path = browserStoragePath(browser, storage);
