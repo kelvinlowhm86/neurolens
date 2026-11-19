@@ -43,6 +43,6 @@ const word = (shot: keyof typeof SHOT, token: string, occurrence = 0, edge: 'sta
 
 // Moments keyed to words (frames in the intro).
 export const BRAIN_IN = word('1b', 'brain') - 10; // "how a brain will respond"
-export const DROP = word('2b', 'it', 0, 'end'); // "Drop it in": the file lands
+export const DROP = word('2b', 'in', 0, 'end'); // "Drop it in": the file lands
 export const CREDIT_POP = word('2b', 'use') - 6; // "you see what it'll use"
 export const HELD = word('2c', 'held'); // "held from your credit"

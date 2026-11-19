@@ -495,6 +495,7 @@ const LAYOUTS: Layout[] = [
     thumbNodes: ['check'],
     extra: [...FFPROBE_EXTRA, READOUT_SPACE],
     maxScale: 1.3,
+    caption: 'below',
   },
   {row: '4r', at: CUE('4r').start, ids: ['check', 'gpu'], extra: [BAD_FILE_EXTRA], maxScale: 1.45, move: 18},
   {row: '5a', at: CUE('5a').start, ids: ['gpu'], extra: [PANEL_EXTRA], maxScale: 1.5},
@@ -792,7 +793,7 @@ const thumbStateAt = (f: number) => {
 };
 
 const readoutOpacity = (f: number) =>
-  ease(f, CUE('4').start + 8, CUE('4').start + 20) * (1 - ease(f, CUE('4r').start - 10, CUE('4r').start + 4));
+  ease(f, CUE('4').start + 8, CUE('4').start + 20) * (1 - ease(f, CUE('4r').start - 22, CUE('4r').start - 12));
 
 const statusOpacity = (f: number) =>
   ease(f, word('5b', 'month') - 2, word('5b', 'month') + 12) * (1 - ease(f, CUE('5c').start - 10, CUE('5c').start + 2));
@@ -1979,6 +1980,11 @@ export const runFramingCheck = (): string[] => {
     if (layout.caption === 'below' && subject.y2 > CAPTION_Y - CAPTION_GAP / 2) {
       fail(`subject comes within ${CAPTION_GAP / 2}px of the caption (bottom edge ${Math.round(subject.y2)})`);
     }
+    if (layout.caption === 'below') {
+      for (const card of cardSpecsAt(f)) {
+        if (card.opacity > 0.02 && overlaps(card.box, caption)) fail(`${card.id} card overlaps the caption`);
+      }
+    }
     const pass10 = PASS10_SCALE[layout.row];
     if (pass10 !== undefined && cam.scale < pass10 - 1e-4) {
       fail(`camera scale ${cam.scale.toFixed(4)} is smaller than pass 10's ${pass10}`);
@@ -2118,7 +2124,7 @@ export const WalkthroughV6Diagram: React.FC = () => {
       </AbsoluteFill>
 
       <Caption y={CAPTION_Y} text="asynchronous" from={CUE('3d').start + 8} to={CUE('4').start - 10} hot="asynchronous" />
-      <Caption y={CAPTION_Y} text="server-side validation" from={word('4', 'server-side') - 8} to={word('4', 'works') - 10} hot="validation" />
+      <Caption y={CAPTION_Y} text="server-side validation" from={word('4', 'server-side') - 8} to={CUE('4r').start} hot="validation" />
       <Caption y={CAPTION_Y} text="scale to zero" from={word('5b', 'scales') - 8} to={CUE('5c').start - 8} hot="zero" />
       <Caption y={CAPTION_Y} text="cold start" from={word('5c', 'cold') - 8} to={word('5c', 'which') - 8} hot="start" />
       <Caption y={CAPTION_Y} text="dead-letter queue" from={word('7a', 'dead-letter') - 8} to={word('7a', 'hold') - 10} hot="dead-letter" />

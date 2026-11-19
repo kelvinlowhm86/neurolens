@@ -46,29 +46,36 @@ export const Intro: React.FC = () => {
   const frame = useCurrentFrame();
   const t = frame / FPS;
 
-  // 1a-1c: the clip, then the clip beside its brain.
+  // 1a-2a: the clip, then the clip beside its brain; 2a keeps the TikTok on screen.
   const shrink = easeInOut(frame, SHOT['1b'].start, SHOT['1b'].start + 18);
-  const clipW = lerp(560, 320, shrink);
-  const clipH = (clipW * 16) / 9;
-  const clipX = lerp(680, 480, shrink);
-  const clipY = lerp(36, 540 - clipH / 2, shrink);
-  const clipOpacity = 1 - easeOut(frame, SHOT['1c'].start - 4, SHOT['1c'].start + 8);
-  const brainIn = easeOut(frame, BRAIN_IN, BRAIN_IN + 30) * clipOpacity;
+  const baseW = lerp(560, 320, shrink);
+  const baseH = (baseW * 16) / 9;
+  const baseX = lerp(680, 480, shrink);
+  const baseY = lerp(36, 540 - baseH / 2, shrink);
+  const clipCx = baseX + baseW / 2;
+  const clipCy = baseY + baseH / 2;
+  const clipOpacity = 1 - easeOut(frame, SHOT['2b'].start + 8, SHOT['2b'].start + 14);
+  const brainIn = easeOut(frame, BRAIN_IN, BRAIN_IN + 30) * (1 - easeOut(frame, SHOT['2a'].start, SHOT['2a'].start + 18));
 
-  // 1c-2a: the upload zone, then the file dragged over it and dropped on "Drop it in" (2b).
-  const zoneIn = easeOut(frame, SHOT['1c'].start + 2, SHOT['1c'].start + 18);
+  // 2b: the clip shrinks into the file chip, the drop zone appears, and the chip is dragged in.
+  const morph = easeInOut(frame, SHOT['2b'].start, SHOT['2b'].start + 10);
+  const clipW = lerp(baseW, 90, morph);
+  const clipH = (clipW * 16) / 9;
+  const clipX = clipCx - clipW / 2;
+  const clipY = clipCy - clipH / 2;
+  const zoneIn = easeOut(frame, SHOT['2b'].start, SHOT['2b'].start + 10);
   const zoneOut = 1 - easeOut(frame, DROP + 20, DROP + 30);
   const zoneDim = 1 - 0.7 * easeOut(frame, DROP - 14, DROP + 6);
-  const chipIn = easeOut(frame, SHOT['2a'].start + 8, SHOT['2a'].start + 22);
-  const drag = easeInOut(frame, SHOT['2a'].start + 14, DROP);
+  const chipIn = easeOut(frame, SHOT['2b'].start + 2, SHOT['2b'].start + 12);
+  const drag = easeInOut(frame, SHOT['2b'].start + 8, DROP);
   const dropped = frame >= DROP;
-  const chipPos = {x: lerp(1480, 960, drag), y: lerp(850, 590, drag)};
+  const chipPos = {x: lerp(clipCx, 960, drag), y: lerp(clipCy, 590, drag)};
   const chipScale = frame < DROP ? lerp(1.04, 1, drag) : 1 - 0.04 * Math.sin(clamp((frame - DROP) / 10) * Math.PI);
   const chipOut = 1 - easeOut(frame, DROP + 20, DROP + 30);
   const ring = clamp((frame - DROP) / 18);
   const cursorX = chipPos.x + 36;
   const cursorY = chipPos.y + 34;
-  const cursorOpacity = easeOut(frame, SHOT['2a'].start + 6, SHOT['2a'].start + 18) * (1 - easeOut(frame, DROP + 14, DROP + 30));
+  const cursorOpacity = easeOut(frame, SHOT['2b'].start + 2, SHOT['2b'].start + 12) * (1 - easeOut(frame, DROP + 14, DROP + 30));
 
   // 2b-2c: the file's length and credit, then the held slice.
   const rowIn = easeOut(frame, DROP + 22, DROP + 38);
