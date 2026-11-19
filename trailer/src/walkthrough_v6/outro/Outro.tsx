@@ -116,13 +116,10 @@ const PlayIcon: React.FC = () => (
 const ViewCounter: React.FC<{opacity: number; question: number}> = ({opacity, question}) => (
   <div style={{
     position: 'absolute', left: PHONE.x + PHONE.w / 2, top: PHONE.y + PHONE_H + 24, transform: 'translateX(-50%)',
-    display: 'flex', alignItems: 'center', gap: 16, opacity, fontFamily, whiteSpace: 'nowrap',
+    display: 'flex', alignItems: 'center', gap: 12, opacity, fontFamily, whiteSpace: 'nowrap',
   }}>
     <PlayIcon />
-    <span style={{position: 'relative', fontSize: 42, fontWeight: 600, color: C.text, fontVariantNumeric: 'tabular-nums', letterSpacing: '-.01em', lineHeight: 1}}>
-      <span style={{filter: 'blur(8px)', opacity: 0.5}}>1.2M</span>
-      <span style={{position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.hot, fontWeight: 700, opacity: question}}>?</span>
-    </span>
+    <span style={{fontSize: 42, fontWeight: 700, color: C.hot, lineHeight: 1, opacity: question}}>?</span>
   </div>
 );
 
@@ -151,7 +148,9 @@ export const Outro: React.FC = () => {
 
   // 11: a calm wide product shot, a slow push-in, then the existing fade to black.
   const homeIn = easeOut(frame, CLOSE_START + 2, CLOSE_START + 22);
-  const closeSecond = (frame - CLOSE_START) / 30;
+  // The close carries the clip on from where shot 10 left it, so it never restarts.
+  const closeFrom = CURSOR_FROM + (CLOSE_START - CLIP_JUMP) / 30;
+  const closeSecond = closeFrom + (frame - CLOSE_START) / 30;
   const closePush = lerp(1, 1.045, easeInOut(frame, CLOSE_START, DURATION));
   const fadeBlack = easeInOut(frame, DURATION - 30, DURATION);
 
@@ -209,7 +208,7 @@ export const Outro: React.FC = () => {
       {homeIn > 0.01 ? (
         <div style={{position: 'absolute', inset: 0, opacity: homeIn, transform: `scale(${closePush})`, transformOrigin: 'center center'}}>
           <Sequence from={CLOSE_START} durationInFrames={DURATION - CLOSE_START} layout="none">
-            <PhoneClip {...CLOSE_CLIP} from={0} />
+            <PhoneClip {...CLOSE_CLIP} from={closeFrom} />
           </Sequence>
           <BrainView x={CLOSE_BRAIN.x} y={CLOSE_BRAIN.y} size={CLOSE_BRAIN.size} second={clamp(closeSecond, 0, TO)} />
           <div style={{position: 'absolute', left: 0, right: 0, top: 724, textAlign: 'center'}}>

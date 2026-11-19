@@ -79,7 +79,7 @@ export const Result: React.FC = () => {
       />
 
       <div style={{
-        position: 'absolute', left: CHART.x, top: CHART.y - 44, display: 'flex', alignItems: 'center', gap: 30,
+        position: 'absolute', right: 1920 - CHART.x - CHART.w, top: CHART.y - 44, display: 'flex', alignItems: 'center', gap: 30,
         fontFamily, fontSize: 28, fontWeight: 500, opacity: legendOpacity, pointerEvents: 'none', whiteSpace: 'nowrap',
       }}>
         <span style={{display: 'flex', alignItems: 'center', gap: 12, color: C.text}}>

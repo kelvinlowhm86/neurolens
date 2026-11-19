@@ -20,20 +20,29 @@ export const DURATION = INTRO + DIAGRAM + RESULT + OUTRO;
 
 // Voice: one wav per script line, placed at its line's first word. Music (bed file at -14 LUFS) is
 // ducked: it sits ~15 dB under the voice (-19.9 LUFS) while someone speaks and rises in the pauses.
-const MUSIC_UNDER_VOICE = 0.1; // -20 dB
-const MUSIC_IN_GAPS = 0.22; // -13 dB
-const DUCK_RAMP = 8; // frames to dip before a line and to recover after it
+const MUSIC_UNDER_VOICE = 0.11; // -19 dB
+const MUSIC_IN_GAPS = 0.16; // -16 dB: a gentle 3 dB lift, not a swell
+const DUCK_DOWN = 15; // frames to dip before a line
+const DUCK_UP = 36; // frames to recover after it (slow, so the rise is felt, not heard)
+const MIN_GAP = 2 * FPS; // shorter pauses stay ducked, so the music doesn't pump between sentences
 const MUSIC_FADE_IN = 2 * FPS;
 const MUSIC_FADE_OUT = 4 * FPS;
 
 // Every voice line as [start, end] frames in the full video.
 const SPEECH: [number, number][] = (
   [[0, INTRO_LINES], [INTRO, DIAGRAM_LINES], [INTRO + DIAGRAM, RESULT_LINES], [INTRO + DIAGRAM + RESULT, OUTRO_LINES]] as [number, LineCue[]][]
-).flatMap(([offset, lines]) => lines.map((l): [number, number] => [offset + l.start, offset + l.start + l.frames]));
+).flatMap(([offset, lines]) => lines.map((l): [number, number] => [offset + l.start, offset + l.start + l.frames]))
+  .sort((a, b) => a[0] - b[0])
+  .reduce<[number, number][]>((out, [s, e]) => {
+    const last = out[out.length - 1];
+    if (last && s - last[1] < MIN_GAP) last[1] = Math.max(last[1], e);
+    else out.push([s, e]);
+    return out;
+  }, []);
 
-// 1 while speaking, 0 in a pause, with short ramps either side of each line.
+// 1 while speaking, 0 in a longer pause, with soft ramps either side.
 const speaking = (f: number) => Math.max(0, ...SPEECH.map(([s, e]) =>
-  interpolate(f, [s - DUCK_RAMP, s, e, e + DUCK_RAMP], [0, 1, 1, 0], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'})));
+  interpolate(f, [s - DUCK_DOWN, s, e, e + DUCK_UP], [0, 1, 1, 0], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'})));
 
 const VoiceLines: React.FC<{lines: LineCue[]}> = ({lines}) => (
   <>
