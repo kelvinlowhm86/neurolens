@@ -29,7 +29,7 @@ for (const [key, source] of [[GIST.onScreen, REPORT.moment.what_happens], [GIST.
 
 const CARD = {x: 160, y: 100, w: 1600, h: 740};
 // The full report sentence stays in the small three-row card; the big Do card says it in one line.
-const SUGGESTION_HEADLINE = 'Add a one-second shot of her face';
+const SUGGESTION_HEADLINE = 'Cut in a quick shot of her reacting';
 
 // 10: the clip and the brain keep moving, with a thin live response line under them.
 const PHONE = {x: 330, y: 170, w: 330};

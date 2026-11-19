@@ -16,8 +16,8 @@ export const SHOTS = buildShots([
   {shot: '11', ids: ['11.1']},
 ]);
 export const CUES = SHOTS.cues;
-// The closing frame holds 1.5 s after the voice's hold, then fades to black.
-export const DURATION = SHOTS.duration + 45;
+// The closing frame holds 3 s after the voice's hold while the music comes up, then fades to black.
+export const DURATION = SHOTS.duration + 90;
 export const LINES = CUES.flatMap((cue) => cue.lines);
 export const SHOT = Object.fromEntries(CUES.map((cue) => [cue.shot, cue])) as Record<
   '9a' | '9b' | '10a' | '10b' | '11',

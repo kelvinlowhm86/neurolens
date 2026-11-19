@@ -64,8 +64,8 @@ Click any moment on the line, and the video jumps right to it.
 ## 9. The report (report card; caption "Claude · Amazon Bedrock", then the 0:08-0:13 "Do" line)
 [Do I have to read the chart myself?]
 Then Claude, on Amazon Bedrock, writes it up moment by moment, with what to change.
-Over the old photos, that dashed line nearly drops to nothing, so it suggests adding a
-one-second shot of her face, to give sound-off viewers something to hold on to.
+Over the old photos, that dashed line nearly drops to nothing, so it suggests cutting in a
+quick shot of her reacting to the photos, to give sound-off viewers something to hold on to.
 
 ## 10. Honest limit
 [So will this get me views?]

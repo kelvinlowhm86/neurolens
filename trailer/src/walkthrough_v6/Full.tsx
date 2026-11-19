@@ -26,7 +26,7 @@ const DUCK_DOWN = 15; // frames to dip before a line
 const DUCK_UP = 36; // frames to recover after it (slow, so the rise is felt, not heard)
 const MIN_GAP = 2 * FPS; // shorter pauses stay ducked, so the music doesn't pump between sentences
 const MUSIC_FADE_IN = 0.5 * FPS;
-const MUSIC_FADE_OUT = 4 * FPS;
+const MUSIC_FADE_OUT = 2 * FPS;
 
 // Every voice line as [start, end] frames in the full video.
 const SPEECH: [number, number][] = (
@@ -74,11 +74,11 @@ const SoundEffects: React.FC<{cues: Sfx[]}> = ({cues}) => (
 );
 
 // Two swells: the wordless moment after "here's the result" (the track's own build lands there),
-// and a smaller lift on the closing shot after the last line.
+// and the closing shot after the last line.
 const LAST_LINE_END = INTRO + DIAGRAM + RESULT + OUTRO_LINES[OUTRO_LINES.length - 1].start + OUTRO_LINES[OUTRO_LINES.length - 1].frames;
 const SWELLS: {start: number; end: number; gain: number}[] = [
   {start: INTRO + DIAGRAM + MUSIC_MOMENT.start, end: INTRO + DIAGRAM + MUSIC_MOMENT.end - 6, gain: 2}, // about +6 dB
-  {start: LAST_LINE_END, end: DURATION, gain: 1.4}, // about +3 dB, under the fade to black
+  {start: LAST_LINE_END, end: DURATION, gain: 2}, // about +6 dB: the music takes the end, then fades out
 ];
 const swell = (f: number) => Math.max(1, ...SWELLS.map(({start, end, gain}) =>
   interpolate(f, [start, start + FPS, end - 15, end], [1, gain, gain, 1], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'})));
