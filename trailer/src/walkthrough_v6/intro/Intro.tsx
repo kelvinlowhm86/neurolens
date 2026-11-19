@@ -4,7 +4,7 @@ import {C, fontFamily} from '../../edit/ui';
 import {
   BrainView, CreditStrip, Cursor, PhoneClip, Ring, Signpost, Stage, clamp, easeBack, easeInOut, easeOut, lerp,
 } from '../common';
-import {BRAIN_IN, CLIP_SECONDS, CREDIT_POP, CREDIT_SECONDS, DROP, FILE_NAME, FPS, HELD, SHOT} from './timeline';
+import {BRAIN_IN, BROWSER_CREDIT_SECONDS, BROWSER_HOLD_SHARE, BROWSER_SECONDS, CREDIT_POP, DROP, FILE_NAME, FPS, HELD, SHOT} from './timeline';
 
 const FRAME_ART = 'walkthrough/swee/frames/f0.jpg';
 // Credit is time, never money; decimal minutes when it is not whole ("1.5 min").
@@ -109,20 +109,20 @@ export const Intro: React.FC = () => {
             border: '1.5px solid rgba(255,255,255,.16)',
           }} />
           <div style={{position: 'absolute', left: 316, top: 56, fontFamily, fontSize: 44, fontWeight: 500, color: C.muted, whiteSpace: 'nowrap'}}>{FILE_NAME}</div>
-          <div style={{position: 'absolute', left: 316, top: 128, fontFamily, fontSize: 64, fontWeight: 600, color: C.text, fontVariantNumeric: 'tabular-nums', letterSpacing: '-.02em'}}>{clock(CLIP_SECONDS)}</div>
+          <div style={{position: 'absolute', left: 316, top: 128, fontFamily, fontSize: 64, fontWeight: 600, color: C.text, fontVariantNumeric: 'tabular-nums', letterSpacing: '-.02em'}}>{clock(BROWSER_SECONDS)}</div>
           <div style={{
             position: 'absolute', left: 316, top: 232, display: 'flex', alignItems: 'baseline', gap: 18, fontFamily, whiteSpace: 'nowrap',
             opacity: clamp(creditPop * 2), transform: `scale(${lerp(0.9, 1, creditPop)})`, transformOrigin: 'left center',
           }}>
             <span style={{fontSize: 46, fontWeight: 500, color: C.muted}}>uses</span>
-            <span style={{fontSize: 120, fontWeight: 600, letterSpacing: '-.04em', color: C.hot, fontVariantNumeric: 'tabular-nums', lineHeight: 1}}>{minutes(CREDIT_SECONDS)}</span>
+            <span style={{fontSize: 120, fontWeight: 600, letterSpacing: '-.04em', color: C.hot, fontVariantNumeric: 'tabular-nums', lineHeight: 1}}>{minutes(BROWSER_CREDIT_SECONDS)}</span>
             <span style={{fontSize: 46, fontWeight: 500, color: C.muted}}>credit</span>
           </div>
         </Card>
       ) : null}
 
       <Signpost text="held" y={808} opacity={heldWord} />
-      <CreditStrip opacity={stripIn} held={held} status={held > 0.5 ? 'held' : ''} lit={held > 0.5} />
+      <CreditStrip opacity={stripIn} held={held} holdShare={BROWSER_HOLD_SHARE} status={held > 0.5 ? 'held' : ''} lit={held > 0.5} />
     </Stage>
   );
 };

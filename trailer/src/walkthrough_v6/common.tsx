@@ -127,18 +127,19 @@ export const Signpost: React.FC<{text: string; y: number; opacity: number}> = ({
 );
 
 /** The credit strip along the bottom, as in the diagram: solid, with a hatched held slice. */
-export const CreditStrip: React.FC<{opacity: number; held: number; status: string; lit?: boolean; label?: string}> = ({
+export const CreditStrip: React.FC<{opacity: number; held: number; status: string; lit?: boolean; label?: string; holdShare?: number}> = ({
   opacity,
   held,
   status,
   lit = false,
   label = '5 min credit',
+  holdShare = 0.2,
 }) => {
   if (opacity <= 0.001) return null;
   const BAR_W = 900;
   const BAR_H = 18;
-  // The held share is 1 of 5 minutes (intro and diagram use the same bar).
-  const hold = 0.2 * held;
+  // `held` animates the hold on; `holdShare` is the held fraction of the 5-minute bar (0.5 min = 0.1).
+  const hold = holdShare * held;
   return (
     <div style={{
       position: 'absolute', left: 0, right: 0, top: STRIP_TOP, height: STRIP_H, boxSizing: 'border-box',

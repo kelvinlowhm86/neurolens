@@ -3,7 +3,7 @@ import {AbsoluteFill, Audio, Sequence, Series, interpolate, staticFile, useCurre
 import {C, fontFamily} from '../edit/ui';
 import {BG, CreditStrip, easeOut} from './common';
 import {Intro} from './intro/Intro';
-import {DURATION as INTRO, LINES as INTRO_LINES} from './intro/timeline';
+import {DURATION as INTRO, LINES as INTRO_LINES, BROWSER_HOLD_SHARE} from './intro/timeline';
 import {WalkthroughV6Diagram, DURATION as DIAGRAM, LINE_CUES as DIAGRAM_LINES, creditWidgetOpacity} from './Diagram37';
 import {Result} from './result/Result';
 import {DURATION as RESULT, LINES as RESULT_LINES} from './result/timeline';
@@ -61,7 +61,7 @@ const CarriedStrip: React.FC = () => {
   const frame = useCurrentFrame();
   return (
     <div style={{position: 'absolute', inset: 0, fontFamily, color: C.text}}>
-      <CreditStrip opacity={1 - creditWidgetOpacity(frame)} held={1} status="held" lit />
+      <CreditStrip opacity={1 - creditWidgetOpacity(frame)} held={1} holdShare={BROWSER_HOLD_SHARE} status="held" lit />
     </div>
   );
 };

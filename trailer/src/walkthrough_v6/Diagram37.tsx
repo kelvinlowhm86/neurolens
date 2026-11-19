@@ -32,7 +32,9 @@ const AREA_H = STRIP_TOP;
 const BAR_W = 900;
 const BAR_H = 18;
 const STRIP_BOX: Box = {x1: 0, y1: STRIP_TOP, x2: 1920, y2: 1080};
-const CREDIT_HOLD = 0.2; // 1 of the 5 minutes is held (intro and diagram use the same bar)
+// The browser's bad reading holds 0.5 min (0.1 of the 5-min bar); shot 4 re-prices it to 1 min (0.2).
+const CREDIT_HOLD_BEFORE = 0.1;
+const CREDIT_HOLD_AFTER = 0.2;
 // Captions sit above the strip; the box height is measured from the rendered pill.
 const CAPTION_Y = 836;
 const CAPTION_H = 88;
@@ -464,7 +466,7 @@ export const STILLS = [
   {row: '3b', frame: beat('3b', 0.52)},
   {row: '3c', frame: word('3c', 'and')},
   {row: '3d', frame: CUE('3d').start + 185},
-  {row: '4', frame: word('4', 'credit') + 20},
+  {row: '4', frame: word('4', 'again') + 8},
   {row: '4r', frame: beat('4r', 0.72)},
   {row: '5a', frame: beat('5a', 0.55)},
   {row: '5b', frame: word('5b', 'scales') + 10},
@@ -494,7 +496,7 @@ const LAYOUTS: Layout[] = [
     extra: [...FFPROBE_EXTRA, READOUT_SPACE],
     maxScale: 1.3,
   },
-  {row: '4r', at: CUE('4r').start, ids: ['check', 'gpu'], extra: [BAD_FILE_EXTRA], maxScale: 1.45},
+  {row: '4r', at: CUE('4r').start, ids: ['check', 'gpu'], extra: [BAD_FILE_EXTRA], maxScale: 1.45, move: 18},
   {row: '5a', at: CUE('5a').start, ids: ['gpu'], extra: [PANEL_EXTRA], maxScale: 1.5},
   {row: '5b', at: CUE('5b').start, ids: ['gpu'], extra: [STATUS_EXTRA], maxScale: 1.55, caption: 'below'},
   {row: '5c', at: CUE('5c').start, ids: ['gpu'], extra: [CLOCK_EXTRA, RING_EXTRA], maxScale: 1.55},
@@ -758,7 +760,7 @@ const linksAt = (f: number): LinkDraw[] => {
 const thumbOpacityAt = (f: number) => {
   const in4 =
     ease(f, CUE('4').start + 8, CUE('4').start + 20) *
-    (1 - ease(f, CUE('4r').start - 40, CUE('4r').start - 28));
+    (1 - ease(f, CUE('4r').start - 22, CUE('4r').start - 18));
   const in7 =
     ease(f, CUE('7a').start + 6, CUE('7a').start + 18) *
     (1 - ease(f, CUE('7b').start - 40, CUE('7b').start - 28));
@@ -823,10 +825,10 @@ const CARD_HEIGHT: Record<CardId, number> = {
 const cardSize = (id: CardId): {w: number; h: number} => {
   let content = 0;
   if (id === 'readout') {
-    const TICK = 40;
+    const GAP = 18;
     content = Math.max(
-      textWidth('browser said', 42, 400) + 18 + textWidth('0:44', 42, 600) + 26 + textWidth('file says', 42, 400) + 10 + textWidth('0:44', 42, 600) + 10 + TICK,
-      textWidth('credit', 42, 400) + 18 + textWidth('1 min', 42, 600) + 10 + TICK,
+      textWidth('browser said', 42, 400) + GAP + textWidth('0:25', 42, 600) + GAP + textWidth('→', 42, 400) + GAP + textWidth('file says', 42, 400) + 10 + textWidth('0:44', 42, 600),
+      textWidth('credit', 42, 400) + GAP + textWidth('0.5 min', 42, 600) + GAP + textWidth('→', 42, 400) + GAP + textWidth('1 min', 42, 600),
     );
   } else if (id === 'status') {
     content = Math.max(
@@ -849,10 +851,10 @@ const CARD_NODE: Record<CardId, NodeId> = {
 const CARD_ORDER: CardId[] = ['readout', 'status', 'clock'];
 
 const ffprobeOpacity = (f: number) =>
-  ease(f, word('4', 'opens'), word('4', 'opens') + 12) * (1 - ease(f, CUE('4r').start - 8, CUE('4r').start + 4));
+  ease(f, word('4', 'reads'), word('4', 'reads') + 12) * (1 - ease(f, CUE('4r').start - 8, CUE('4r').start + 4));
 
 const presignedOpacity = (f: number) =>
-  ease(f, word('3b', 'short-lived'), word('3b', 'short-lived') + 12) * (1 - ease(f, CUE('3c').start - 14, CUE('3c').start));
+  ease(f, word('3b', 'presigned'), word('3b', 'presigned') + 12) * (1 - ease(f, CUE('3c').start - 14, CUE('3c').start));
 
 const CARD_OPACITY: Record<CardId, (f: number) => number> = {
   readout: readoutOpacity,
@@ -871,6 +873,9 @@ const creditGlowAt = (f: number) =>
     ease(f, word('7a', 'hold') - 4, word('7a', 'hold') + 8) * (1 - ease(f, word('7a', 'back', 0, 'end'), word('7a', 'back', 0, 'end') + 8)),
     ease(f, word('7a', 'once', 1) - 2, word('7a', 'once', 1) + 10) * (1 - ease(f, word('7a', 'once', 1) + 22, word('7a', 'once', 1) + 34)),
   );
+// Shot 4 re-prices the hold from the browser's 0.5 min to the file's 1 min.
+const creditHoldShare = (f: number) =>
+  lerp(CREDIT_HOLD_BEFORE, CREDIT_HOLD_AFTER, ease(f, word('4', 'credit'), word('4', 'again') + 4));
 
 export const creditWidgetOpacity = (f: number) =>
   ease(f, CUE('3b').start + 6, CUE('3b').start + 20) * (1 - ease(f, CUE('7b').start - 14, CUE('7b').start + 2));
@@ -951,35 +956,41 @@ const CardShell: React.FC<{box: Box; opacity: number; children: React.ReactNode}
   );
 };
 
+const Struck: React.FC<{children: React.ReactNode; strike: number}> = ({children, strike}) => (
+  <span style={{position: 'relative', display: 'inline-block', color: C.text, opacity: 1 - 0.38 * strike}}>
+    {children}
+    <span style={{
+      position: 'absolute', left: 0, top: '52%', height: 4, width: `${strike * 100}%`, borderRadius: 2,
+      background: '#8E98A5',
+    }} />
+  </span>
+);
+
 const ReadoutCard: React.FC<{f: number; box: Box; opacity: number}> = ({f, box, opacity}) => {
-  // "opens the file", "its real length" (confirms what the browser said), "works the credit out again".
-  const claimedOn = ease(f, word('4', 'opens') - 4, word('4', 'opens') + 8);
-  const realOn = ease(f, word('4', 'real') + 2, word('4', 'real') + 14);
-  const creditOn = ease(f, word('4', 'works') - 4, word('4', 'works') + 8);
-  const creditTick = ease(f, word('4', 'again'), word('4', 'again') + 12);
-  const tick = (on: number) => (
-    <span style={{display: 'inline-flex', color: C.hot, opacity: on}}>
-      <Icon name="tick" size={40} />
-    </span>
-  );
+  // The browser's reading is struck when the voice says "trusting"; the file's real length lands on
+  // "real length". The credit is re-priced on "credit again" (the strip grows with it).
+  const browserStrike = ease(f, word('4', 'trusting'), word('4', 'trusting') + 10);
+  const fileOn = ease(f, word('4', 'real') + 2, word('4', 'real') + 14);
+  const creditStrike = ease(f, word('4', 'credit'), word('4', 'credit') + 10);
+  const creditNew = ease(f, word('4', 'credit'), word('4', 'again') + 4);
+  const arrow: React.CSSProperties = {color: '#8E98A5'};
   return (
     <CardShell box={box} opacity={opacity}>
       <div style={{display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 12, height: '100%', fontSize: 42, whiteSpace: 'nowrap'}}>
         <div style={{display: 'flex', alignItems: 'center', gap: 18}}>
-          <span style={{color: '#8E98A5', opacity: claimedOn}}>browser said</span>
-          <span style={{color: C.text, opacity: claimedOn}}>0:44</span>
-          <span style={{display: 'flex', alignItems: 'center', gap: 10, opacity: realOn}}>
+          <span style={{color: '#8E98A5'}}>browser said</span>
+          <Struck strike={browserStrike}>0:25</Struck>
+          <span style={{...arrow, opacity: fileOn}}>→</span>
+          <span style={{display: 'flex', alignItems: 'center', gap: 10, opacity: fileOn}}>
             <span style={{color: '#8E98A5'}}>file says</span>
             <span style={{color: C.hot, fontWeight: 600}}>0:44</span>
-            {tick(1)}
           </span>
         </div>
         <div style={{display: 'flex', alignItems: 'center', gap: 18}}>
-          <span style={{color: '#8E98A5', opacity: creditOn}}>credit</span>
-          <span style={{display: 'flex', alignItems: 'center', gap: 10, opacity: creditOn}}>
-            <span style={{color: C.hot, fontWeight: 600}}>1 min</span>
-            {tick(creditTick)}
-          </span>
+          <span style={{color: '#8E98A5'}}>credit</span>
+          <Struck strike={creditStrike}>0.5 min</Struck>
+          <span style={{...arrow, opacity: creditNew}}>→</span>
+          <span style={{color: C.hot, fontWeight: 600, opacity: creditNew}}>1 min</span>
         </div>
       </div>
     </CardShell>
@@ -1060,8 +1071,9 @@ const CreditStrip: React.FC<{f: number}> = ({f}) => {
   const badVisible = badFileVisibleAt(f);
   const badReturned = badRefundAt(f);
   const glow = creditGlowAt(f);
-  const holdWidth = CREDIT_HOLD * (1 - charged);
-  const solidWidth = 1 - CREDIT_HOLD + holdWidth * returned;
+  const holdShare = creditHoldShare(f);
+  const holdWidth = holdShare * (1 - charged);
+  const solidWidth = 1 - holdShare + holdWidth * returned;
   const hatchWidth = holdWidth * (1 - returned);
   const refunded = badVisible > 0.5 && badReturned > 0.5;
   const status = charged > 0.5 ? 'charged once' : returned > 0.5 ? 'hold returned' : refunded ? 'refunded' : 'held';
@@ -2106,12 +2118,12 @@ export const WalkthroughV6Diagram: React.FC = () => {
       </AbsoluteFill>
 
       <Caption y={CAPTION_Y} text="asynchronous" from={CUE('3d').start + 8} to={CUE('4').start - 10} hot="asynchronous" />
-      <Caption y={CAPTION_Y} text="server-side validation" from={word('4', 'trusting') - 8} to={word('4', 'works') - 10} hot="validation" />
+      <Caption y={CAPTION_Y} text="server-side validation" from={word('4', 'server-side') - 8} to={word('4', 'works') - 10} hot="validation" />
       <Caption y={CAPTION_Y} text="scale to zero" from={word('5b', 'scales') - 8} to={CUE('5c').start - 8} hot="zero" />
-      <Caption y={CAPTION_Y} text="cold start" from={CUE('5c').start - 8} to={word('5c', 'but') - 8} hot="start" />
+      <Caption y={CAPTION_Y} text="cold start" from={word('5c', 'cold') - 8} to={word('5c', 'which') - 8} hot="start" />
       <Caption y={CAPTION_Y} text="dead-letter queue" from={word('7a', 'dead-letter') - 8} to={word('7a', 'hold') - 10} hot="dead-letter" />
       <Caption y={CAPTION_Y} text="idempotent" from={word('7a', 'idempotent') - 8} to={word('7a', 'twice') - 6} hot="idempotent" />
-      <Caption y={CAPTION_Y} text="infrastructure as code" from={CUE('7d').start + 8} to={DURATION - 4} hot="code" />
+      <Caption y={CAPTION_Y} text="infrastructure as code" from={word('7d', 'infrastructure') - 8} to={DURATION - 4} hot="code" />
 
       {cards.map((card) => {
         if (card.id === 'readout') return <ReadoutCard key={card.id} f={f} box={card.box} opacity={card.opacity} />;

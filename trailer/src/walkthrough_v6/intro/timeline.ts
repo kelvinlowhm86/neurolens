@@ -13,7 +13,15 @@ export const FILE_NAME = 'tiktok_ZSg5soxrR.mp4';
 // as time ("uses 1 min"), so a 44 s clip is two blocks = 60 s of credit.
 const BLOCK_S = 30;
 const ALLOWANCE_S = 0.5;
-export const CREDIT_SECONDS = Math.max(1, Math.ceil((CLIP_SECONDS - ALLOWANCE_S) / BLOCK_S)) * BLOCK_S;
+const CREDIT_MINUTES = 5;
+const creditFor = (seconds: number) => Math.max(1, Math.ceil((seconds - ALLOWANCE_S) / BLOCK_S)) * BLOCK_S;
+
+// The browser's metadata is wrong here (bad metadata happens): it reads the 44 s clip as 0:25, so the
+// row shows 0:25 and 0.5 min, and the strip holds 0.5 of its 5 min. Shot 4 shows the server's 1 min.
+export const BROWSER_SECONDS = 25;
+export const CREDIT_SECONDS = creditFor(CLIP_SECONDS);
+export const BROWSER_CREDIT_SECONDS = creditFor(BROWSER_SECONDS);
+export const BROWSER_HOLD_SHARE = BROWSER_CREDIT_SECONDS / (CREDIT_MINUTES * 60);
 
 export const SHOTS = buildShots([
   {shot: '1a', ids: ['1.1']},
