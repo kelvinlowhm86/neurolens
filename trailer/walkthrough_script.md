@@ -39,10 +39,10 @@ and no GPU ever wakes up.
 
 ## 5. The GPU (diagram: SageMaker runs TRIBE; GPU greys out when idle)
 [What runs on the GPU, and is it on all day?]
-The job then wakes a GPU on SageMaker, which runs TRIBE, a research model from Meta trained on
+The job then wakes a GPU on SageMaker, which runs TRIBE v2, a research model from Meta trained on
 brain scans from over seven hundred people.
 A GPU left on all month would cost about thirteen hundred dollars, so it scales to zero when idle.
-The trade-off is a cold start of a few minutes, which is fine for an analysis, not a chat reply.
+The trade-off is a cold start of a few minutes, which is fine for a report you come back to.
 
 ## 7. When things go wrong (diagram: retry, dead-letter queue, watchdog Lambda)
 [What if it breaks? Do I lose my money?]
@@ -59,7 +59,7 @@ down in one go.
 ## 8. The result (real page, large and calm)
 About ten minutes later, here's the result.
 The line shows how strong the response is, and the brain shows where. The dashed line is the same video with the sound off.
-Click the peak, and the video jumps right to it.
+Click anywhere on the line, like the peak, and the video jumps right to that moment.
 
 ## 9. The report (report card; caption "Claude · Amazon Bedrock", then the 0:08-0:13 "Do" line)
 [Do I have to read the chart myself?]

@@ -1924,7 +1924,7 @@ const GpuPanel: React.FC<{f: number; gpu: Pt}> = ({f, gpu}) => {
     >
       <div style={{position: 'absolute', left: 0, right: 0, top: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 16, color: '#FFC08A'}}>
         <Icon name="model" size={44} />
-        <div style={{fontSize: 50, fontWeight: 600, letterSpacing: '-.03em', color: C.text}}>TRIBE (Meta)</div>
+        <div style={{fontSize: 50, fontWeight: 600, letterSpacing: '-.03em', color: C.text}}>TRIBE v2 (Meta)</div>
       </div>
       <div style={{position: 'absolute', left: 0, right: 0, top: 80, textAlign: 'center', fontSize: 30, color: '#8F99A6', letterSpacing: '.005em'}}>
         learned from 700+ people's brain scans
