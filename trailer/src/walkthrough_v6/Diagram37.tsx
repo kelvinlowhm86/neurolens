@@ -145,8 +145,8 @@ const WEBSITE: StateKey[] = [
   {at: 0, state: 'dim'},
   {at: CUE('3c').start, state: 'lit'},
   {at: word('3c', 'lands'), state: 'idle'},
-  {at: CUE('3d').start + 76, state: 'lit'},
-  {at: CUE('3d').start + 109, state: 'dim'},
+  {at: CUE('3d').start + 51, state: 'lit'},
+  {at: CUE('3d').start + 84, state: 'dim'},
   {at: RETURN_BACK_END, state: 'lit'},
   {at: RETURN_END + 8, state: 'dim'},
 ];
@@ -169,7 +169,7 @@ const QUEUE: StateKey[] = [
   {at: CUE('3c').start, state: 'idle'},
   {at: word('3c', 'queue'), state: 'lit'},
   {at: CUE('3d').start, state: 'idle'},
-  {at: CUE('3d').start + 130, state: 'lit'},
+  {at: CUE('3d').start + 105, state: 'lit'},
   {at: CUE('4').start, state: 'lit'},
   {at: beat('4', 0.3), state: 'idle'},
   {at: CUE('5a').start, state: 'lit'},
@@ -550,7 +550,7 @@ const DUPLICATE_EXTRA: Box = {
 export const STILLS = [
   {row: '3b', frame: beat('3b', 0.52)},
   {row: '3c', frame: word('3c', 'queue', 0, 'end') + 12},
-  {row: '3d', frame: CUE('3d').start + 185},
+  {row: '3d', frame: CUE('3d').start + 172},
   {row: '4', frame: word('4', 'again') + 8},
   {row: '4r', frame: beat('4r', 0.72)},
   {row: '5a', frame: beat('5a', 0.55)},
@@ -967,8 +967,8 @@ const pulsesAt = (): PulseHop[] => {
     hops.push({
       id: 'second-browser-storage',
       path: browserStoragePath(pos('browser'), pos('storage')),
-      start: CUE('3d').start + 40,
-      end: CUE('3d').start + 100,
+      start: CUE('3d').start + 15,
+      end: CUE('3d').start + 75,
       from: 'browser',
       to: 'storage',
     });
@@ -1142,8 +1142,10 @@ const clockOpacity = (f: number) =>
   ease(f, CUE('5c').start - 2, CUE('5c').start + 10) * (1 - ease(f, CUE('7a').start - 10, CUE('7a').start + 4));
 
 
+// The TRIBE panel opens only once the job card has landed on the GPU ("...wakes a GPU").
+const PANEL_IN = () => word('5a', 'GPU', 0, 'end') + 8;
 const gpuPanelOpacity = (f: number) =>
-  ease(f, word('5a', 'wakes'), word('5a', 'wakes') + 24) * (1 - ease(f, CUE('5b').start, CUE('5b').start + 14));
+  ease(f, PANEL_IN(), PANEL_IN() + 24) * (1 - ease(f, CUE('5b').start, CUE('5b').start + 14));
 
 const runningAt = (f: number) => {
   const up = CUE('5b').start;
@@ -1619,7 +1621,7 @@ const QueueRack: React.FC<{f: number; queue: Pt}> = ({f, queue}) => {
   if (opacity <= 0.001) return null;
   const drop = glide(f, word('3c', 'adds'), word('3c', 'queue', 0, 'end'));
   const jobTop = lerp(queue.y - 330, queueJobTop(queue, 0), drop);
-  const secondStart = CUE('3d').start + 160;
+  const secondStart = CUE('3d').start + 135;
   const secondDrop = glide(f, secondStart, secondStart + 24);
   const secondOn = ease(f, secondStart, secondStart + 10);
   const secondTop = lerp(queue.y - 330, queueJobTop(queue, 1), secondDrop);
@@ -1696,7 +1698,7 @@ const BadFile: React.FC<{f: number; check: Pt}> = ({f, check}) => {
 };
 
 const SecondUpload: React.FC<{f: number; browser: Pt; storage: Pt; queue: Pt}> = ({f, browser, storage, queue}) => {
-  const start = CUE('3d').start + 40;
+  const start = CUE('3d').start + 15;
   const through = start + 60;
   const leave = through + 6;
   const arrive = leave + 60;
@@ -1948,7 +1950,7 @@ const DuplicateJobs: React.FC<{f: number; gpu: Pt}> = ({f, gpu}) => {
 const GpuPanel: React.FC<{f: number; gpu: Pt}> = ({f, gpu}) => {
   const opacity = gpuPanelOpacity(f);
   if (opacity <= 0.001) return null;
-  const start = word('5a', 'wakes');
+  const start = PANEL_IN();
   const passOn = ease(f, start + 4, start + 18);
   const inputBrightness = 0.45 + 0.55 * passOn;
   const captionOn = ease(f, start + 6, start + 18);
@@ -2466,7 +2468,7 @@ const queueSafeAreaCheck = () => {
 // Sound effects, each on the frame its visual lands (placed and mixed in Full.tsx).
 export const DIAGRAM_SFX: Sfx[] = [
   {frame: word('3c', 'queue', 0, 'end'), sound: 'tick'}, // the first job lands in the queue
-  {frame: CUE('3d').start + 160 + 24, sound: 'tick'}, // the second job lands
+  {frame: CUE('3d').start + 135 + 24, sound: 'tick'}, // the second job lands
   {frame: word('4', 'trusting'), sound: 'scribble'}, // 0:25 struck out
   {frame: word('4', 'credit'), sound: 'scribble'}, // 0.5 min struck out
   {frame: beat('4r', 0.34), sound: 'denied'}, // the bad file's cross
