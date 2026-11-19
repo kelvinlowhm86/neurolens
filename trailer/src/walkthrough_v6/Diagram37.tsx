@@ -4,7 +4,6 @@ import {C, fontFamily} from '../edit/ui';
 import {clamp, ease} from '../edit/anim';
 import {
   Caption,
-  DANGER,
   Icon,
   IconName,
   Link,
@@ -193,12 +192,14 @@ const CHECK: StateKey[] = [
   {at: CUE('5a').start - 30, state: 'idle'}, // done once it hands the job on; quiet before the camera moves (lit, its purpose line won't fit the frame)
 ];
 
+const RING_FULL_BEFORE_7A = 12; // frames: the cold-start ring completes this long before line 7a
+
 const GPU: StateKey[] = [
   {at: CUE('4r').start, state: 'off'},
   {at: word('5a', 'wakes'), state: 'lit'}, // "wakes a GPU on SageMaker"
   {at: word('5b', 'zero'), state: 'off'}, // "scales to zero when idle"
   {at: CUE('5c').start, state: 'idle'}, // starting one takes a few minutes
-  {at: CUE('7a').start, state: 'lit'},
+  {at: CUE('7a').start - RING_FULL_BEFORE_7A, state: 'lit'}, // lights the moment the cold-start ring fills, so 7a opens on a running GPU
   {at: word('7a', 'fails'), state: 'off'},
   {at: word('7a', 'charged'), state: 'lit'}, // "only charged once the result is saved": a normal run that succeeds (the failure has ended with the refund)
   {at: CUE('7b').start, state: 'lit'}, // a stuck job's GPU, before the watchdog
@@ -1841,8 +1842,8 @@ const JobArrival: React.FC<{f: number; check: Pt; gpu: Pt}> = ({f, check, gpu}) 
   );
 };
 
-const badgeCenter = (pos: Pt): Pt => ({x: pos.x + 45, y: pos.y - 45});
-const BADGE_SIZE = 68;
+const badgeCenter = (pos: Pt): Pt => ({x: pos.x + 50, y: pos.y - 50});
+const BADGE_SIZE = 80; // about 60% of a node icon: readable in the wide 7a shot without outweighing the icon
 const badgeBoxAt = (pos: Pt): Box => {
   const center = badgeCenter(pos);
   return {
@@ -1877,15 +1878,15 @@ const RingBadge: React.FC<{pos: Pt; opacity: number}> = ({pos, opacity}) => {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        background: 'rgba(11,12,15,.96)',
-        border: '2px solid rgba(224,90,79,.9)',
-        color: DANGER,
-        boxShadow: '0 0 22px rgba(224,90,79,.28)',
+        background: 'rgba(58,16,14,.97)',
+        border: '3px solid rgba(240,98,86,1)',
+        color: '#FF7468',
+        boxShadow: '0 0 36px rgba(240,98,86,.55)',
         opacity,
         transform: `scale(${0.8 + 0.2 * opacity})`,
       }}
     >
-      <Icon name="cross" size={38} />
+      <Icon name="cross" size={46} />
     </div>
   );
 };
@@ -2133,11 +2134,16 @@ const GpuPanel: React.FC<{f: number; gpu: Pt}> = ({f, gpu}) => {
 const ProgressRing: React.FC<{f: number; gpu: Pt}> = ({f, gpu}) => {
   const opacity = ease(f, CUE('5c').start + 2, CUE('5c').start + 14) * (1 - ease(f, CUE('7a').start - 8, CUE('7a').start + 4));
   if (opacity <= 0.001) return null;
-  const progress = glide(f, CUE('5c').start + 10, CUE('7a').start - 12);
+  const full = CUE('7a').start - RING_FULL_BEFORE_7A;
+  const progress = glide(f, CUE('5c').start + 10, full);
+  const flare = ease(f, full - 2, full + 3) * (1 - ease(f, full + 3, full + 14)); // one soft pulse as it fills
   const r = 70;
   const circumference = 2 * Math.PI * r;
   return (
     <svg width={1} height={1} style={{position: 'absolute', left: 0, top: 0, overflow: 'visible', opacity}}>
+      {flare > 0.001 ? (
+        <circle cx={gpu.x} cy={gpu.y} r={r} fill="none" stroke={C.hot} strokeWidth={4 + 10 * flare} opacity={0.45 * flare} style={{filter: 'blur(6px)'}} />
+      ) : null}
       <circle cx={gpu.x} cy={gpu.y} r={r} fill="none" stroke="rgba(120,138,160,.2)" strokeWidth={4} />
       <circle
         cx={gpu.x}
@@ -2517,8 +2523,10 @@ export const DIAGRAM_SFX: Sfx[] = [
   {frame: word('4', 'trusting'), sound: 'scribble'}, // 0:25 struck out
   {frame: word('4', 'credit'), sound: 'scribble'}, // 0.5 min struck out
   {frame: beat('4r', 0.34), sound: 'denied'}, // the bad file's cross
+  {frame: CUE('7a').start - RING_FULL_BEFORE_7A, sound: 'ready'}, // the GPU finishes starting and lights
   {frame: word('7a', 'once'), sound: 'stamp'}, // the "charged" stamp
   {frame: word('7a', 'twice'), sound: 'skipped'}, // the duplicate job #42: "already charged · skipped"
+  {frame: word('7b', 'running'), sound: 'powerdown'}, // the watchdog stops the stuck GPU
   {frame: RETURN_BROWSER_LIT, sound: 'chime'}, // the result reaches the Browser
 ];
 

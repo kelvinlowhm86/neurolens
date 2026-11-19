@@ -61,7 +61,7 @@ const SFX_ON = STEM === 'bed' ? 0 : 1;
 
 // Effects sit under the voice: bright, short sounds that cut through without competing.
 // Each file peaks at -3 dBFS; these gains set the mix.
-const SFX_GAIN: Record<SfxName, number> = {click: 0.99, tick: 0.54, scribble: 0.46, denied: 0.45, stamp: 0.39, skipped: 0.55, chime: 0.3}; // chime unchanged (Josh: right level, about -24 LUFS momentary max); the rest about 1 dB under it. click file is limited +7 dB so it reaches it; denied and stamp are ElevenLabs takes (error #2, confirm #1) trimmed
+const SFX_GAIN: Record<SfxName, number> = {click: 0.99, tick: 0.54, scribble: 0.46, denied: 0.45, stamp: 0.39, skipped: 0.55, chime: 0.3, ready: 0.27, powerdown: 0.27}; // chime unchanged (Josh: right level, about -24 LUFS momentary max); the rest about 1 dB under it. click file is limited +7 dB so it reaches it; denied and stamp are ElevenLabs takes (error #2, confirm #1) trimmed
 
 const SoundEffects: React.FC<{cues: Sfx[]}> = ({cues}) => (
   <>
