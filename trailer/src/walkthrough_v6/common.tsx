@@ -47,7 +47,7 @@ export const PhoneClip: React.FC<{
       position: 'absolute', left: x, top: y, width: w, height: h,
       borderRadius: Math.round(w * 0.09), overflow: 'hidden', background: '#000', boxSizing: 'border-box',
       border: '1.5px solid rgba(255,255,255,.16)',
-      boxShadow: `0 30px 70px rgba(0,0,0,.6), 0 0 ${60 * glow}px rgba(255,138,42,${0.4 * glow})`,
+      boxShadow: `0 0 ${60 * glow}px rgba(255,138,42,${0.4 * glow})`,
       opacity, transform: `scale(${scale})`, transformOrigin: 'center center', zIndex: 8,
     }}>
       <OffthreadVideo
@@ -121,7 +121,7 @@ export const Signpost: React.FC<{text: string; y: number; opacity: number}> = ({
     <div style={{
       fontSize: 44, fontWeight: 600, letterSpacing: '.005em', color: C.hot,
       background: 'rgba(8,9,11,.8)', border: `1px solid ${C.rule}`, borderRadius: 999,
-      padding: '15px 38px 17px', boxShadow: '0 18px 50px rgba(0,0,0,.5)', whiteSpace: 'nowrap',
+      padding: '15px 38px 17px', whiteSpace: 'nowrap',
     }}>{text}</div>
   </div>
 );
@@ -144,7 +144,7 @@ export const CreditStrip: React.FC<{opacity: number; held: number; status: strin
     <div style={{
       position: 'absolute', left: 0, right: 0, top: STRIP_TOP, height: STRIP_H, boxSizing: 'border-box',
       background: 'rgba(11,12,15,.9)', borderTop: `1.5px solid ${lit ? 'rgba(255,158,84,.5)' : C.rule}`,
-      boxShadow: lit ? '0 -10px 34px rgba(255,138,42,.1)' : '0 -10px 30px rgba(0,0,0,.4)', opacity,
+      boxShadow: lit ? '0 -10px 34px rgba(255,138,42,.1)' : 'none', opacity,
     }}>
       <div style={{
         position: 'absolute', left: SAFE, top: 0, bottom: 0, display: 'flex', alignItems: 'center',

@@ -194,7 +194,6 @@ export const Outro: React.FC = () => {
           <div style={{
             position: 'absolute', left: CARD.x, top: CARD.y, width: CARD.w, height: CARD.h, borderRadius: 28, boxSizing: 'border-box',
             background: `rgba(17,19,22,${0.92 * (1 - rowsQuiet)})`, border: `1.5px solid rgba(36,38,43,${1 - rowsQuiet})`,
-            boxShadow: `0 30px 80px rgba(0,0,0,${0.55 * (1 - rowsQuiet)})`,
           }}>
             <div style={{position: 'absolute', left: 60, top: 56, fontFamily, fontSize: 44, fontWeight: 600, color: C.muted, opacity: 1 - rowsQuiet, fontVariantNumeric: 'tabular-nums'}}>{range}</div>
             <div style={{position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, opacity: 1}}>

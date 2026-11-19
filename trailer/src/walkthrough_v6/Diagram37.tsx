@@ -1397,7 +1397,6 @@ const CardShell: React.FC<{box: Box; opacity: number; children: React.ReactNode}
         borderRadius: 26,
         background: 'rgba(13,15,18,.97)',
         border: `1.5px solid ${C.rule}`,
-        boxShadow: '0 20px 50px rgba(0,0,0,.5)',
         fontFamily,
         color: C.text,
         opacity,
@@ -1589,7 +1588,7 @@ const CreditStrip: React.FC<{f: number}> = ({f}) => {
         boxSizing: 'border-box',
         background: 'rgba(11,12,15,.9)',
         borderTop: `1.5px solid ${lit ? 'rgba(255,158,84,.5)' : C.rule}`,
-        boxShadow: lit ? '0 -10px 34px rgba(255,138,42,.1)' : '0 -10px 30px rgba(0,0,0,.4)',
+        boxShadow: lit ? '0 -10px 34px rgba(255,138,42,.1)' : 'none',
         opacity: opacity * (0.8 + 0.2 * glow),
       }}
     >
@@ -1726,7 +1725,6 @@ const BadFile: React.FC<{f: number; check: Pt}> = ({f, check}) => {
         borderRadius: 16,
         background: '#2A2E35',
         border: '1.5px solid rgba(150,166,188,.38)',
-        boxShadow: '0 14px 30px rgba(0,0,0,.5)',
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
@@ -2019,7 +2017,7 @@ const GpuPanel: React.FC<{f: number; gpu: Pt}> = ({f, gpu}) => {
         borderRadius: 44,
         background: '#0B0D10',
         border: '2px solid rgba(255,138,42,.58)',
-        boxShadow: '0 0 60px rgba(255,138,42,.18), 0 30px 70px rgba(0,0,0,.7)',
+        boxShadow: '0 0 60px rgba(255,138,42,.18)',
         fontFamily,
         opacity,
         transform: `scale(${0.96 + 0.04 * opacity})`,

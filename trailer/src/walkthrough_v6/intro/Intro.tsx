@@ -20,7 +20,7 @@ const Card: React.FC<{box: typeof ZONE; opacity: number; dashed?: boolean; glow?
   <div style={{
     position: 'absolute', left: box.x, top: box.y, width: box.w, height: box.h, borderRadius: 28, boxSizing: 'border-box',
     background: 'rgba(17,19,22,.92)', border: dashed ? `3px dashed ${glow > 0.5 ? 'rgba(255,138,42,.8)' : '#343943'}` : `1.5px solid ${C.rule}`,
-    boxShadow: `0 30px 80px rgba(0,0,0,.55), 0 0 ${60 * glow}px rgba(255,138,42,${0.25 * glow})`, opacity,
+    boxShadow: `0 0 ${60 * glow}px rgba(255,138,42,${0.25 * glow})`, opacity,
   }}>{children}</div>
 );
 
@@ -34,7 +34,7 @@ const FileChip: React.FC<{x: number; y: number; opacity: number; scale: number}>
   <div style={{
     position: 'absolute', left: x, top: y, height: 132, padding: '0 40px 0 22px', display: 'flex', alignItems: 'center', gap: 24,
     borderRadius: 22, background: '#1C1E22', border: '1.5px solid rgba(255,158,84,.7)', boxSizing: 'border-box',
-    boxShadow: '0 24px 60px rgba(0,0,0,.6), 0 0 44px rgba(255,138,42,.22)', opacity,
+    boxShadow: '0 0 44px rgba(255,138,42,.22)', opacity,
     transform: `translate(-50%, -50%) scale(${scale})`, fontFamily, fontSize: 44, fontWeight: 600, color: C.text, whiteSpace: 'nowrap', zIndex: 20,
   }}>
     <Img src={staticFile(FRAME_ART)} style={{width: 76, height: 96, objectFit: 'cover', borderRadius: 10}} />
