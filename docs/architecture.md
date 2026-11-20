@@ -247,6 +247,11 @@ Two designs that were built, run on real GPUs and later replaced are kept as git
 | `custom-gpu-stripe` | Paid credit top-ups through Stripe in test mode, on the self-managed EC2 GPU workers. | Credit became a free allowance that an admin grants. The TRIBE v2 licence is non-commercial, so credit cannot be sold. | `docs/M3b_spec.md` (top-ups) and `docs/M3b_build_log.md` in the tag |
 | `custom-gpu` | The self-managed EC2 GPU workers (an Auto Scaling group of on-demand `g6e` machines that scale on the job queue), with everything built up to that point except Stripe. | Replaced by the SageMaker endpoint (see Design decisions). | `docs/M2a_spec.md`, `docs/M2b_spec.md` and their build logs in the tag |
 
+The two features are separate, so each tag is needed only for its own feature. To bring one back, take its pieces from its tag and fit them to today's code:
+
+- Payments, from `custom-gpu-stripe`: `neurolens/web/stripe_webhook.py`, `credit_test_topup` in `neurolens/billing.py`, the `/api/top-up/checkout` route, the top-up panel in `static/index.html`, the `stripe` block in `config.json`, the webhook function in Terraform and `tests/test_m3b_stripe.py`. Top-ups add rows to the same credit ledger the product uses today.
+- EC2 workers, from `custom-gpu`: `infra/terraform/worker.tf`, `scaling.tf` and `worker_userdata.sh.tftpl`, `infra/build_ami.sh`, `infra/deploy_code.sh`, `infra/pull_code.sh`, `infra/neurolens-worker.service`, `infra/debug_worker.sh` and the `infra/lambda/breaker.py` spend breaker. These would replace `infra/terraform/sagemaker.tf` and `neurolens/lambdas/gpu_guard.py`.
+
 ## Known limitations
 
 What NeuroLens cannot do, or cannot yet check.
