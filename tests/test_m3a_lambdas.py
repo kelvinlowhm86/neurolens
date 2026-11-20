@@ -1,10 +1,9 @@
-"""M3a Lambdas: the dead-letter handler and the reaper, called directly (moto S3 + PostgreSQL).
-Written first from docs/M3a_spec.md §7 and §10.
+"""Lambdas: the dead-letter handler and the reaper, called directly (moto S3 + PostgreSQL).
 
 On AWS both build a `DataApiDatabase` from environment variables set by Terraform. Here
 `neurolens.db.DataApiDatabase` is replaced by a factory returning the test's PostgreSQL database,
 so the handlers run unchanged against the real schema; the environment carries the same names as
-the worker's deployment values (NEUROLENS_DB_* from §3a, NEUROLENS_S3_BUCKET).
+the worker's deployment values (NEUROLENS_DB_* and NEUROLENS_S3_BUCKET).
 """
 
 import json
@@ -86,7 +85,7 @@ def queued_with_last_error(pg, job_id):
 
 
 def consented_job(db, new_key, *, ext=".mp4", user_id=USER_ID):
-    """A reserved job whose owner consented to the research copy (M3c §3a)."""
+    """A reserved job whose owner consented to the research copy."""
     job_id, key = new_key(ext, user_id=user_id)
     billing.ensure_user(db, user_id, f"{user_id}@example.com", STARTER_CENTS)
     billing.reserve(db, user_id, job_id, key, f"clip{ext}", 3000, research_consent=True)
@@ -94,7 +93,7 @@ def consented_job(db, new_key, *, ext=".mp4", user_id=USER_ID):
 
 
 def research_keys(job_id, ext=".mp4"):
-    """The research copy's key, as `storage.put_dataset` writes it (M3f §5b)."""
+    """The research copy's key, as `storage.put_dataset` writes it."""
     return [f"dataset/{job_id}/video{ext}"]
 
 
@@ -150,7 +149,7 @@ def test_dead_letter_handler_raises_for_a_freshly_claimed_job(aws, db, pg, lambd
     job_id, key = new_job()
     assert billing.claim(db, job_id) == 1
     before = pg.snapshot()
-    with pytest.raises(Exception):  # noqa: B017 - the spec says "raise", not which exception
+    with pytest.raises(Exception):  # noqa: B017 - "raises" is promised, but not which exception
         dlq_handler()(sqs_event(key, bucket=aws.bucket), None)
     assert pg.snapshot() == before
 
@@ -206,7 +205,7 @@ def test_a_dead_letter_refund_deletes_the_jobs_upload(aws, db, pg, lambda_env, n
 def test_a_dead_letter_refund_of_a_consented_job_deletes_its_research_copy(
     aws, db, pg, lambda_env, new_key
 ):
-    """A crash after the worker wrote the dataset copy but before the result (M3a §7b)."""
+    """A crash after the worker wrote the dataset copy but before the result."""
     job_id, key = consented_job(db, new_key)
     write_research_copy(aws, job_id, key)
     queued_with_last_error(pg, job_id)
@@ -439,7 +438,7 @@ def test_reaper_refunds_a_job_whose_upload_delete_fails_and_still_reaps_the_othe
         return DeleteFails(inner, first_key) if service_name == "s3" else inner
 
     monkeypatch.setattr(boto3, "client", client)
-    with pytest.raises(Exception):  # noqa: B017 - the spec says the run raises
+    with pytest.raises(Exception):  # noqa: B017 - the run is expected to raise
         run_reaper()
 
     for job_id in (first, second):
@@ -467,7 +466,7 @@ def test_reaper_refunds_and_raises_when_s3_reports_a_failed_delete(
         return DeleteReportsErrors(inner, key) if service_name == "s3" else inner
 
     monkeypatch.setattr(boto3, "client", client)
-    with pytest.raises(Exception):  # noqa: B017 - the spec says the run raises
+    with pytest.raises(Exception):  # noqa: B017 - the run is expected to raise
         run_reaper()
 
     job = pg.job(job_id)

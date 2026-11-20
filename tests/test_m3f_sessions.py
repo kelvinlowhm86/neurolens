@@ -1,4 +1,4 @@
-"""M3f sign-in sessions (docs/M3f_spec.md §6b, §10 "Sessions").
+"""Sign-in sessions.
 
 A verified sign-in creates a random token, stores only its SHA-256 in `sessions` and puts only
 the token in the signed cookie. A request is signed in while that row exists and `last_seen_at`

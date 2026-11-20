@@ -1,4 +1,4 @@
-"""Apply infra/migrations/*.sql in order, once each (M3a §3c).
+"""Apply infra/migrations/*.sql in order, once each.
 
     python infra/apply_schema.py --backend data_api   # Aurora (NEUROLENS_DB_* in .env)
     python infra/apply_schema.py --backend postgres   # local PostgreSQL (NEUROLENS_DB_DSN in .env)

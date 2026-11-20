@@ -1,4 +1,4 @@
-"""M3e retention (docs/M3e_spec.md §7, §11 "Retention").
+"""Retention.
 
 A successful upload records `retention_added_at`; after the sixty-day clean-up removed the
 research copy the route refuses with 409 `dataset_removed`. Job history exposes
@@ -71,7 +71,7 @@ def make_job(db, *, consent=True, done=True, processing=False):
 
 @pytest.fixture(autouse=True)
 def youtube_falls_back(monkeypatch):
-    """M3j: the save route looks the link up; these tests keep the unknown-facts fallback."""
+    """The save route looks the link up; these tests keep the unknown-facts fallback."""
     try:
         from neurolens import youtube
     except ImportError:

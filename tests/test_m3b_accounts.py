@@ -1,11 +1,11 @@
-"""M3b accounts and credit in neurolens.billing (real PostgreSQL 16 through NEUROLENS_TEST_DSN).
-Written first from docs/M3b_spec.md §2c, §7a, §7b and §8: `sign_in`'s linking rule (one user per
-verified email, our own UUIDs, no ledger row for 0 starter credit), two simultaneous first
-sign-ins ending as one user, `ensure_user` without a starter row for 0, `grant_credit`,
-`list_jobs`, and the 002 migration. The Data API backend is checked on Aurora by
-infra/check_aurora.py (§7c).
+"""Accounts and credit in neurolens.billing (real PostgreSQL 16 through NEUROLENS_TEST_DSN).
 
-The M3a ledger invariants are checked after every test by the shared fixture.
+`sign_in`'s linking rule (one user per verified email, our own UUIDs, no ledger row for 0
+starter credit), two simultaneous first sign-ins ending as one user, `ensure_user` without a
+starter row for 0, `grant_credit`, `list_jobs`, and the 002 migration. The Data API backend is
+checked on Aurora by infra/check_aurora.py.
+
+The ledger invariants are checked after every test by the shared fixture.
 """
 
 import threading
@@ -160,7 +160,7 @@ def test_a_sign_in_links_to_the_development_style_user_with_that_email(db, pg):
 def test_two_simultaneous_first_sign_ins_with_one_email_make_one_user(
     db, pg, row_lock, same_identity
 ):
-    """Deterministic (M3a §10's method): a third connection locks `users` against inserts, both
+    """Deterministic (method): a third connection locks `users` against inserts, both
     sign-ins find nothing and wait at their insert, then the lock is released. The loser's
     `ON CONFLICT DO NOTHING` inserts nothing, and it reads the winner's row by email in the same
     transaction (a caught unique-violation would abort the transaction instead)."""
@@ -208,7 +208,7 @@ def test_ensure_user_with_starter_credit_still_writes_one_starter_row(db, pg):
     assert pg.kinds("dev-user") == ["starter"]
 
 
-# ---------------------------------------------------------------- grant_credit (§7a)
+# ---------------------------------------------------------------- grant_credit
 
 
 def test_grant_credit_adds_exactly_the_amount_with_a_grant_row(db, pg):
@@ -248,7 +248,7 @@ def test_grant_credit_to_an_unknown_email_raises_lookup_error(db, pg):
     assert pg.snapshot() == before
 
 
-# ---------------------------------------------------------------- list_jobs (§4a)
+# ---------------------------------------------------------------- list_jobs
 
 
 def test_list_jobs_returns_only_the_users_jobs_newest_first(db, pg):

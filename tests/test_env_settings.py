@@ -1,7 +1,7 @@
 """Tests for the split between shared settings (config.json) and secrets (.env).
 
-Written from docs/M1_spec.md section 2. conftest.py replaces `load_dotenv` with a no-op for
-every test; the tests here that need the real one put it back with `real_load_dotenv`.
+conftest.py replaces `load_dotenv` with a no-op for every test; the tests here that need the
+real one put it back with `real_load_dotenv`.
 """
 
 import copy
@@ -21,7 +21,7 @@ ENV_TO_KEY = {
     "NEUROLENS_AWS_REGION": ("aws", "region"),
     "NEUROLENS_S3_BUCKET": ("aws", "s3_bucket"),
     "NEUROLENS_GPU_ENDPOINT": ("aws", "gpu_endpoint"),
-    # M3a §3a / §9: the database's deployment-specific identifiers
+    # /: the database's deployment-specific identifiers
     "NEUROLENS_DB_CLUSTER_ARN": ("aws", "db_cluster_arn"),
     "NEUROLENS_DB_SECRET_ARN": ("aws", "db_secret_arn"),
     "NEUROLENS_DB_NAME": ("aws", "db_name"),
@@ -331,7 +331,7 @@ def test_configure_env_with_hf_token_still_sets_it(hf_clean, tmp_path):
 
 def test_worker_run_reads_its_config_through_load_settings(make_cfg, monkeypatch, patch_everywhere):
     cfg = make_cfg(db={"backend": "postgres", "dsn": "postgresql://unused.invalid/neurolens"})
-    # M3e §4: serve() builds the database from config; never a real connection here
+    # Serve builds the database from config; never a real connection here
     patch_everywhere("from_config", lambda *a, **kw: object(), "neurolens.db", "neurolens.worker")
     del cfg["aws"]["s3_bucket"]
     loaded = []
@@ -410,9 +410,9 @@ def test_committed_config_keeps_the_shared_shape(committed_cfg):
 
 
 def test_committed_config_keeps_development_mode_local_and_no_starter_credit(committed_cfg):
-    """M3a §2, §9: the shared config runs the development identity on a local-only address (the
+    """The shared config runs the development identity on a local-only address (the
     database's identifiers come only from the environment, checked by the aws test above).
-    M3b §7a: new accounts start with 0 credit, so open sign-up gives no free GPU time."""
+    new accounts start with 0 credit, so open sign-up gives no free GPU time."""
     assert committed_cfg.get("auth", {}).get("mode", "dev") == "dev"
     assert committed_cfg.get("server", {}).get("host", "127.0.0.1") == "127.0.0.1"
     assert committed_cfg["billing"]["starter_cents"] == 0

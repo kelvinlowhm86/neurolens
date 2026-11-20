@@ -1,4 +1,4 @@
-"""Screen early-access requests by email (docs/M3k_spec.md §9).
+"""Screen early-access requests by email.
 
     python infra/access_requests.py list --backend data_api
     python infra/access_requests.py decline --backend postgres

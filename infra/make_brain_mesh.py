@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Make the page's 3D brain mesh and head shell (M3d §8).
+"""Make the page's 3D brain mesh and head shell.
 
 static/brain/fsaverage6_pial.bin, little-endian:
     uint32 vertex count (81924)

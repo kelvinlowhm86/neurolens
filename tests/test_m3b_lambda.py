@@ -1,7 +1,7 @@
-"""M3b web Lambda launcher and import hygiene. Written first from docs/M3b_spec.md §3a, §7b, §8
-and §11: `neurolens.web.lambda_handler.handler` answers a function-URL event (payload 2.0) for
-/healthz, returns several Set-Cookie values as separate cookies, and builds the app once per
-container; the web code never imports neurolens.inference, torch or numpy.
+"""Web Lambda launcher and import hygiene: `neurolens.web.lambda_handler.handler` answers a
+function-URL event (payload 2.0) for /healthz, returns several Set-Cookie values as separate
+cookies, and builds the app once per container; the web code never imports
+neurolens.inference, torch or numpy.
 """
 
 import base64
@@ -30,7 +30,7 @@ def body_of(resp):
 
 @pytest.fixture(autouse=True)
 def youtube_key_parameter(ssm):
-    """M3j §2: the deployed launcher now needs the YouTube key, stored like Terraform stores it."""
+    """The deployed launcher now needs the YouTube key, stored like Terraform stores it."""
     ssm.put_parameter(
         Name="/neurolens/web/youtube_api_key", Value="test-youtube-key", Type="SecureString"
     )

@@ -1,4 +1,4 @@
-"""M3e billing: `verify_queued` and the fields `job_state` gains (docs/M3e_spec.md §3, §3a).
+"""Billing: `verify_queued` and the fields `job_state` gains.
 
 The dispatcher prices a job before any GPU runs, so the old attempt-guarded `verify` becomes a
 queued-only check under the job's row lock. Every test reads money and job state directly from

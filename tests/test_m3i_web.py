@@ -1,4 +1,4 @@
-"""M3i web changes (docs/M3i_spec.md §2, §6-§9, §11).
+"""Web changes.
 
 The retention route needs a valid `video_url` and `same_cut`, parses a Facebook report with the
 link's video id, and saves the link and its source. The invite credit is read from `config.json`,
@@ -165,7 +165,7 @@ def retention_keys(aws, job_id):
 
 @pytest.fixture(autouse=True)
 def youtube_falls_back(monkeypatch):
-    """M3j: the save route looks the link up; these tests keep the unknown-facts fallback."""
+    """The save route looks the link up; these tests keep the unknown-facts fallback."""
     try:
         from neurolens import youtube
     except ImportError:

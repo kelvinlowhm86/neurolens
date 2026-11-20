@@ -1,4 +1,4 @@
-"""M3d §2: the Glasser HCP-MMP1 signal masks and the map files' integrity.
+"""The Glasser HCP-MMP1 signal masks and the map files' integrity.
 
 No network call: the annot round-trip writes a small synthetic file with nibabel.
 """
@@ -11,7 +11,7 @@ import pytest
 
 
 def response():
-    """Imported lazily so the rest of the suite still collects before the M3d code exists."""
+    """Imported lazily so the rest of the suite still collects before the code exists."""
     import neurolens.response as module
 
     return module

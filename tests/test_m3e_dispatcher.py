@@ -1,4 +1,4 @@
-"""M3e dispatcher (docs/M3e_spec.md §2, §3, §11 "Dispatcher").
+"""Dispatcher.
 
 The dispatcher sits between S3's upload notice and the async GPU endpoint: it checks the file,
 prices it through `billing.verify_queued`, and either invokes SageMaker or refunds before any GPU

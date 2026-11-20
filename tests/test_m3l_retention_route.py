@@ -1,4 +1,4 @@
-"""M3l's Real viewers strip route (docs/M3l_spec.md §4, §7).
+"""Real viewers strip route.
 
 `GET /api/jobs/<id>/retention` gives the caller the newest quality-checked curve stored for their
 own job as points and the video's duration. Another person's job and a job without a curve are

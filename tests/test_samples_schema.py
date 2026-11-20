@@ -1,4 +1,4 @@
-"""data/samples.json entries have the M3d §9 shape the page reads.
+"""Data/samples.json entries have the shape the page reads.
 
 The list may be empty until step 3 adds the new open-licensed samples; every entry present must
 carry the full entry and a format-2 result, and any brain file must be a whole number of
@@ -44,7 +44,7 @@ SUMMARY_KEYS = {"audio_dependence"}
 
 @pytest.mark.parametrize("sample", SAMPLES, ids=[s.get("id", "?") for s in SAMPLES])
 def test_sample_has_the_new_entry_shape(sample):
-    # M3h §7/§18d: a sample may also carry its stored report, its PDF and the two role flags.
+    # /: a sample may also carry its stored report, its PDF and the two role flags.
     optional = {"report", "pdf_file", "sharing_example", "landing"}
     assert ENTRY_KEYS <= set(sample) <= ENTRY_KEYS | optional
     assert sample["result"]["format"] == 2

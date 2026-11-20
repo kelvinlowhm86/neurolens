@@ -1,4 +1,4 @@
-"""M3h §4, §13: the compare routes.
+"""The compare routes.
 
 Both orders of the ids are one pair, every refusal has its code, a failed start gives the try
 back, GET serves the stored answer, and a signed-out visitor cannot reach Bedrock.

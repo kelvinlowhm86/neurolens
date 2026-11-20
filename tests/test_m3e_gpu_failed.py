@@ -1,4 +1,4 @@
-"""M3e GPU error handler (docs/M3e_spec.md §5, §11 "Error handler").
+"""GPU error handler.
 
 SageMaker's error topic delivers an SNS notification for any request that crashes, hangs, times
 out or expires without a GPU. The handler reuses `lambdas.finish_job`: a result means the job is
@@ -118,7 +118,7 @@ def test_a_fresh_claim_raises_and_changes_nothing(aws, db, pg, gpu_env, new_job)
     before = pg.snapshot()
     handler = gpu_failed()
 
-    with pytest.raises(Exception):  # noqa: B017 - the spec says "raises", not which exception
+    with pytest.raises(Exception):  # noqa: B017 - "raises" is promised, but not which exception
         handler(sns_event(job_id), None)
 
     assert pg.snapshot() == before

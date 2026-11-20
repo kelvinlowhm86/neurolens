@@ -1,4 +1,4 @@
-"""M3h §2, §5d, §13: the shown order and the model's [A]/[B] markers.
+"""The shown order and the model's [A]/[B] markers.
 
 `orient_comparison` turns a stored answer for the video the person opened, without ever
 changing the stored object; `_comparison_problem` rejects an answer that names a video

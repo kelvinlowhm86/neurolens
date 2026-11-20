@@ -1,4 +1,4 @@
-"""M3e web pause check (docs/M3e_spec.md §8, §11 "Web").
+"""Web pause check.
 
 The presign route reads the SageMaker endpoint's scalable target through Application Auto
 Scaling. A target maximum of 0, or no target at all, means processing is paused; an unreadable

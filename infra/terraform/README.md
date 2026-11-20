@@ -1,7 +1,7 @@
 # NeuroLens: AWS resources (Terraform)
 
-Creates everything NeuroLens needs on AWS: the S3 bucket and SQS queue (M1), the network and
-database (M2a/M3a), the website and sign-in (M3b), and from M3e a SageMaker asynchronous GPU
+Creates everything NeuroLens needs on AWS: the S3 bucket and SQS queue, the network and
+database, the website and sign-in, and a SageMaker asynchronous GPU
 endpoint, its image repository and build, the job Lambdas and their alarms. Terraform keeps a
 record of what it created, so running `apply` twice is safe (the second run reports no changes)
 and `destroy` removes everything it created. The region is one setting (`region` in
@@ -33,7 +33,7 @@ What it creates
 - Alarms on one SNS email topic: the GPU guard stopped a GPU, the GPU guard has not run, Aurora has
   been awake for much of 6 hours, and one error alarm per Lambda.
 
-The endpoint only exists once `worker_image` is set: build the image first (§2b).
+The endpoint only exists once `worker_image` is set: build the image first (section 2b).
 
 Cost: with everything stopped, the running cost is the stored image, the ECR repository,
 Aurora storage and the S3 files, a few dollars a month (the reaper waking Aurora every 3 hours is
@@ -42,7 +42,7 @@ about $3). A GPU bills only while it runs: about $2.61/h for `ml.g6e.xlarge`, $1
 itself 7 idle minutes after the last job. A deploy starts one
 instance for about 7 minutes (roughly $0.50-0.80).
 
-From an empty account: §0, §1, §2, §2e (database tables), §2f, §2b; then §5 for each work session and §6 to tear
+From an empty account: section 0, section 1, section 2, section 2e (database tables), section 2f, section 2b; then section 5 for each work session and section 6 to tear
 down.
 
 ## 0. Before you start (once)
@@ -65,7 +65,7 @@ down.
    - A Google OAuth client for sign-in: in the Google Cloud console, set up the OAuth consent
      screen first if asked, then APIs & Services > Credentials > Create OAuth client ID > type
      "Web application". This gives `google_client_id`; its secret is stored in item 6. The
-     redirect URI is added after the first apply (§2f).
+     redirect URI is added after the first apply (section 2f).
    - A YouTube Data API v3 key: in the same Google Cloud project, enable "YouTube Data API v3",
      then Credentials > Create API key and restrict the key to that API. No billing is needed.
      The key is stored in item 6.
@@ -151,9 +151,9 @@ database values. Put them in the git-ignored `.env` at the repo root as `NEUROLE
 `NEUROLENS_DB_CLUSTER_ARN`, `NEUROLENS_DB_SECRET_ARN` and `NEUROLENS_DB_NAME`
 (see `.env.example`).
 
-## 2f. Sign-in (M3b)
+## 2f. Sign-in
 
-Run §2e first: sign-in writes to its tables.
+Run section 2e first: sign-in writes to its tables.
 
 After the first apply:
 
@@ -175,7 +175,7 @@ After the first apply:
    that has them (`data/videos/README.md`), or the script stops at the missing file. Then open `sign_in_test_url` and sign in once with Google
    and once with email and password.
 
-## 2b. The GPU image and endpoint (M3e)
+## 2b. The GPU image and endpoint
 
 `infra/worker_image/Dockerfile` pins AWS's PyTorch base image by digest. To move to a newer one,
 look up its digest (the deploy user may read that repository) and replace tag and digest there:
@@ -300,4 +300,4 @@ A running job dies and is refunded. `start_work.sh` puts the maximum back to 1.
 
 ## 6. Tear down
 
-Follow `docs/M4_spec.md` §6 for the steps, their order, and which steps run in each account.
+The full teardown, in order and per account, is in `docs/operating.md` ("Teardown").

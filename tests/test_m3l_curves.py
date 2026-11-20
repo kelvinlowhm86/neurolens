@@ -1,4 +1,4 @@
-"""M3l's one curve rule (docs/M3l_spec.md §3, §7).
+"""One curve rule.
 
 A curve pays when every other rule passes and the checked video has at least 1,000 views. There
 is no one-week wait any more: a young video with enough views pays at once, and a hidden or

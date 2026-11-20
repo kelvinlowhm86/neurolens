@@ -115,7 +115,7 @@ aws application-autoscaling describe-scaling-activities --service-namespace sage
   --query 'ScalingActivities[].[StartTime,EndTime,StatusCode,Description,StatusMessage]' --output text | sort
 ```
 
-`spot_placement_scores.tsv` (3 Oct): the first, single snapshot of the same scores for `g6e.xlarge` in each region (all 1), behind the M2a move from Spot to on-demand.
+`spot_placement_scores.tsv` (3 Oct): the first, single snapshot of the same scores for `g6e.xlarge` in each region (all 1), behind the move from Spot to on-demand.
 
 `spot_placement_scores_2026-10-28.tsv`: EC2 Spot placement scores (1 = least likely to get capacity, 10 = most) every 30 minutes from 11:41 to 19:34 SGT, for each of our four GPU types alone and for any of them (`ALL`), in five regions. A hint about EC2 capacity, not proof of SageMaker capacity (SageMaker draws on its own pool). Averages for `ALL`: us-east-1 6.5, us-west-2 5.9, eu-central-1 5.5, ap-northeast-1 3.0, us-east-2 2.0; `g6e.xlarge` alone scored 1 in every region all day.
 
@@ -123,7 +123,7 @@ What it means: L40S GPUs were scarce everywhere that day, us-east-1 was no worse
 
 # Evidence: worker image and start-up timings (2026-10-03 to 2026-10-05)
 
-These are the worker figures the specs cite, with their dates.
+These are the worker figures, with their dates.
 
 ## Images (2026-10-03)
 
@@ -137,7 +137,7 @@ These are the worker figures the specs cite, with their dates.
 
 ## First real GPU jobs (2026-10-03)
 
-Before the §7a fixes, a 52.2 s clip returned 53 rows and a 119.01 s clip returned 239 rows (the
+Before the ghost-word timeline fix, a 52.2 s clip returned 53 rows and a 119.01 s clip returned 239 rows (the
 ghost-word timeline bug); after the fix the 119.01 s clip returns 120 rows. The video was encoded
 twice per job before the fix and once after. Peak GPU memory was 19.8 GB before the fix and
 19.94 GB after (the text model); video encoding used 13.5 GB.

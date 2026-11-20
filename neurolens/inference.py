@@ -120,7 +120,7 @@ class ThumbnailFailed(RuntimeError):
 
 
 def spoken_words(events):
-    """The spoken words of `build_events`, in time order, as {"start", "text"} dicts (M3g §2b).
+    """The spoken words of `build_events`, in time order, as {"start", "text"} dicts.
 
     Empty in fake mode (its stand-in has no words) and when the video has no speech.
     """
@@ -135,7 +135,7 @@ def spoken_words(events):
 
 
 def make_thumbnail(path, seconds):
-    """A still from `seconds` into the video, 320 px wide, as JPEG bytes (M3d §5b).
+    """A still from `seconds` into the video, 320 px wide, as JPEG bytes.
 
     Raises ThumbnailFailed on a non-zero exit, a timeout (30 s) or empty output. It is only a
     picture, so the worker carries on without one.
@@ -174,7 +174,7 @@ PLAY_COPY_WAIT_SECONDS = 300  # the analysis waits this long for the phone copy 
 
 
 class PlayCopy:
-    """The phone-friendly H.264 copy of the upload, encoded in the background (M3d §5c).
+    """The phone-friendly H.264 copy of the upload, encoded in the background.
 
     Some uploads (VP9, HEVC) do not play on phones. The copy caps the long edge at 1920 px and
     keeps both sides even, in an MP4 with the moov atom first so it starts while it loads. Entering
@@ -198,8 +198,8 @@ class PlayCopy:
 
     def _start(self):
         # `nice` rather than preexec_fn: the worker runs a heartbeat thread, and preexec_fn is
-        # unsafe in a process with threads. stderr goes to a file, not a pipe nobody reads until
-        # the end: a corrupt stream can print an error per frame, fill a pipe and stall the encode.
+        # Unsafe in a process with threads. stderr goes to a file, not a pipe nobody reads until
+        # The end: a corrupt stream can print an error per frame, fill a pipe and stall the encode.
         self.log_path = self.dst_path.with_suffix(".log")
         with open(self.log_path, "wb") as log:
             self.process = subprocess.Popen(
@@ -231,7 +231,7 @@ class PlayCopy:
                     "-profile:v",
                     "high",
                     # A keyframe every second, so a click on the chart lands at once (libx264's
-                    # default gap is up to 10 s, and a seek decodes from the keyframe before it).
+                    # Default gap is up to 10 s, and a seek decodes from the keyframe before it).
                     "-force_key_frames",
                     "expr:gte(t,n_forced*1)",
                     "-movflags",
@@ -290,7 +290,7 @@ class FramesFailed(RuntimeError):
 
 
 def make_frames(path, seconds):
-    """One JPEG per whole second of the video, for the report (M3g §2a).
+    """One JPEG per whole second of the video, for the report.
 
     `seconds` is the result's duration (its per-second series length), so frame t lines up with
     value t. The long edge is 640 px at most and never upscaled, and the other edge is even.
@@ -345,7 +345,7 @@ def attach_chunk_words(transcript, chunks):
 
     This replaces tribev2's ExtractWordsFromAudio attachment (commit af58661), which gives every
     chunk the whole transcript shifted by start + offset: each word then reappears in every later
-    chunk, 2 * chunk start too late (M2a spec 7a).
+    chunk, 2 * chunk start too late.
     """
     import pandas as pd
 

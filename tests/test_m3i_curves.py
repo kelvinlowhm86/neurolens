@@ -1,4 +1,4 @@
-"""M3i curve collection (docs/M3i_spec.md §3-§4, §6, §11).
+"""Curve collection.
 
 `results.parse_video_link` accepts the YouTube and Facebook forms and names each refusal.
 `results.parse_facebook_retention` accepts only Meta's documented retention reply. `add_curve`
@@ -108,19 +108,19 @@ def snapshot_rows(pg, job_id):
 
 
 def stop_sharing_and_purge(aws, db, job_id):
-    """The Stop-sharing route's two steps (M3f §5c)."""
+    """The Stop-sharing route's two steps."""
     assert billing.mark_dataset_removed(db, job_id, "stopped", user_id=WEB_USER_ID) is True
     billing.purge_job_files(db, aws.s3, aws.bucket, job_id)
 
 
 def delete_and_purge(aws, db, job_id):
-    """The job-delete route's two steps (M3f §5c)."""
+    """The job-delete route's two steps."""
     assert billing.delete_job(db, WEB_USER_ID, job_id) is True
     billing.purge_job_files(db, aws.s3, aws.bucket, job_id)
 
 
 def migration_013_update():
-    """The backfill UPDATE from migration 013, split as conftest splits migrations (M3a §3c)."""
+    """The backfill UPDATE from migration 013, split as conftest splits migrations."""
     statements = []
     current = []
     for line in (MIGRATIONS / "013_curve_reward_ref.sql").read_text().splitlines():

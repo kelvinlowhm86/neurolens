@@ -1,8 +1,8 @@
-"""Dispatcher-started GPU and the GPU name in the boot record (docs/M3f_spec.md §6a).
+"""Dispatcher-started GPU and the GPU name in the boot record.
 
 The dispatcher starts the GPU after a successful async invoke, so the cold start does not wait
 for the scale-out alarm. These tests use small hand-written SageMaker control-plane fakes and the
-same PostgreSQL/S3 fixtures as the M3e dispatcher tests; the GPU is never really woken.
+same PostgreSQL/S3 fixtures as the dispatcher tests; the GPU is never really woken.
 """
 
 import json

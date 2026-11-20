@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Add or replace one dashboard sample, or a stored comparison, from finished jobs (M3d §9, M3h §7).
+"""Add or replace one dashboard sample, or a stored comparison, from finished jobs.
 
     AWS_PROFILE=neurolens python infra/make_sample.py <job_id> <video> <title> <attribution>
     AWS_PROFILE=neurolens python infra/make_sample.py compare <sample_id_1> <job_id_1> \
@@ -9,7 +9,7 @@ The first form downloads the job's result, brain file and report (when present) 
 data/output/<id>/ (id = the video's file stem), grabs a thumbnail at 1 s (or --thumbnail-at), and
 writes the entry into data/samples.json with the summary computed from the result. Re-run it
 after a summary rule change. The compare form copies the stored comparison for two samples that
-are already in samples.json, as two entries, one per way round (M3h §7). Both forms also write
+are already in samples.json, as two entries, one per way round. Both forms also write
 the PDF and record its path. `pdfs` re-renders every stored sample and comparison PDF from
 samples.json after a layout change. This is an operator script: it talks to AWS and is never
 run by the tests.
@@ -108,7 +108,7 @@ def _without_usage(answer):
 
 
 def _frames(s3, bucket, result):
-    """The job's stored frames, or [] when there are none (M3h §18d)."""
+    """The job's stored frames, or [] when there are none."""
     job_id = result.get("job_id") if isinstance(result, dict) else None
     if not job_id:
         return []
@@ -269,7 +269,7 @@ def add_comparison(args):
 
 
 def re_render_pdfs():
-    """Render every stored sample report and comparison again (M3h §18d)."""
+    """Render every stored sample report and comparison again."""
     import boto3
 
     from neurolens import report_pdf

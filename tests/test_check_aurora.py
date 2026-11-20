@@ -1,4 +1,4 @@
-"""infra/check_aurora.py stays importable and covers the current jobs columns (M3e §10).
+"""Infra/check_aurora.py stays importable and covers the current jobs columns.
 
 It is an operator tool, not run against a database here: this pins its imports and argument
 parsing, and that the type checks include migration 005's retention columns.

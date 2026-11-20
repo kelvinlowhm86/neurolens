@@ -1,4 +1,4 @@
-"""M3h §18f: the two PDF routes.
+"""The two PDF routes.
 
 Signed out is 401, another user's job or pair is 404, no written report is 409 no_report, and the
 attachment name is the CSV's shape with its own suffix. Everything is faked: moto S3 and the

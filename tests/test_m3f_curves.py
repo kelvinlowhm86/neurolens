@@ -1,5 +1,4 @@
-"""M3f research curves (docs/M3f_spec.md §5d, §10 "add_curve", "curve_quality",
-"Retention route").
+"""Research curves.
 
 `billing.add_curve` stores a snapshot, rewards at most one analysis per job (and not at all for
 an invalid curve, a $0 job, a video hash already rewarded on another account, or a user at the
@@ -137,7 +136,7 @@ class PutFails:
 
 @pytest.fixture(autouse=True)
 def youtube_falls_back(monkeypatch):
-    """M3j: the save route looks the link up; these tests keep the unknown-facts fallback."""
+    """The save route looks the link up; these tests keep the unknown-facts fallback."""
     try:
         from neurolens import youtube
     except ImportError:
@@ -471,7 +470,7 @@ def test_add_curve_refuses_a_job_that_is_not_eligible(db, pg, case):
     add_curve = getattr(billing, "add_curve", None)
     assert callable(add_curve), "billing.add_curve is missing"
     before = pg.snapshot()
-    with pytest.raises(Exception):  # noqa: B017 - the spec names no exception type here
+    with pytest.raises(Exception):  # noqa: B017 - no specific exception type is promised here
         add_curve(db, caller, job_id, **curve_args(job_id))
 
     assert pg.snapshot() == before

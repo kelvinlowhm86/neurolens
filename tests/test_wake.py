@@ -1,4 +1,4 @@
-"""POST /api/wake starts Aurora's resume from the landing page's first interaction (M3b §2)."""
+"""POST /api/wake starts Aurora's resume from the landing page's first interaction."""
 
 import pytest
 from botocore.exceptions import ClientError

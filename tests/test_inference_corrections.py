@@ -1,8 +1,8 @@
-"""The pure helpers of the inference corrections. Written from docs/M2a_spec.md section 7a.
+"""The pure helpers of the inference corrections.
 
 Runs on a laptop: small pandas tables and numpy arrays, no tribev2, torch or GPU.
 
-The spec does not fix the container for attach_chunk_words, so the inputs are pandas
+The design does not fix the container for attach_chunk_words, so the inputs are pandas
 DataFrames (the shape tribev2's events and WhisperX transcripts take), and the output is read
 through pd.DataFrame(...), which accepts a DataFrame or a list of dicts alike.
 """
@@ -158,8 +158,8 @@ def test_three_chunks_of_a_150_second_file_put_every_word_once_at_its_true_time(
 
 
 def test_a_chunk_whose_start_differs_from_its_offset_maps_by_start_plus_word_minus_offset():
-    # chunk0 covers 0-30 s of the file and sits at 10 s on the video timeline;
-    # chunk1 covers 30-60 s of the file and sits at 100 s.
+    # Chunk0 covers 0-30 s of the file and sits at 10 s on the video timeline;
+    # Chunk1 covers 30-60 s of the file and sits at 100 s.
     out = attached(
         transcript(("x", 5), ("y", 31.5), ("z", 59)),
         chunks((10, 0, 30), (100, 30, 30)),

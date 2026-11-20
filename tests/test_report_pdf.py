@@ -1,4 +1,4 @@
-"""M3h §18f: the PDF module's hard cases.
+"""The PDF module's hard cases.
 
 Light treatment: a PDF starts with %PDF, its text holds the headline and the names, and every
 awkward result renders without error. No pixel positions or exact numbers are pinned.

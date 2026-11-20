@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Ships the last commit as the website (M3b §3c): the web function's code, then the page
+# Ships the last commit as the website: the web function's code, then the page
 # and its sample data into the bucket's site/ prefix, then clears CloudFront's cache so the new
 # page shows at once. Run after `terraform apply` has created the functions.
 set -euo pipefail
@@ -19,7 +19,7 @@ if ! python3 -I -c "import neurolens.web.app" 2>/dev/null; then
   echo "python3 cannot import neurolens: activate the project venv first." >&2; exit 1
 fi
 
-# 1. Code. The zip goes through the bucket's deploy/ prefix (M3h §18e), then Lambda reads it
+# 1. Code. The zip goes through the bucket's deploy/ prefix, then Lambda reads it
 # from there; wait until the update is live.
 infra/build_web_lambda.sh
 aws s3 cp build/web_lambda.zip "s3://$BUCKET/deploy/web_lambda.zip" --only-show-errors

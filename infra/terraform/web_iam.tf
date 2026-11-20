@@ -1,4 +1,4 @@
-# Role of the web function (M3b §3a, M3c §5, §7). It may do only what its code needs, and the
+# Role of the web function. It may do only what its code needs, and the
 # permissions boundary caps it whatever is written here.
 
 locals {
@@ -75,7 +75,7 @@ locals {
       },
       {
         # Deleting a video or the whole account removes its upload, result and research
-        # prefix (M3f §5c). Missing keys are fine.
+        # Prefix. Missing keys are fine.
         Sid    = "DeleteJobFiles"
         Effect = "Allow"
         Action = "s3:DeleteObject"
@@ -86,28 +86,28 @@ locals {
         ]
       },
       {
-        # A retention snapshot's raw report and parsed CSV (M3f §5d).
+        # A retention snapshot's raw report and parsed CSV.
         Sid      = "StoreRetentionSnapshots"
         Effect   = "Allow"
         Action   = "s3:PutObject"
         Resource = "${aws_s3_bucket.main.arn}/dataset/*/retention/*"
       },
       {
-        # Account deletion removes the user's logins from our pool only (M3c §5).
+        # Account deletion removes the user's logins from our pool only.
         Sid      = "DeleteCognitoLogins"
         Effect   = "Allow"
         Action   = ["cognito-idp:ListUsers", "cognito-idp:AdminDeleteUser"]
         Resource = aws_cognito_user_pool.users.arn
       },
       {
-        # Start the one report function asynchronously (M3g §4, §8).
+        # Start the one report function asynchronously.
         Sid      = "StartTheReport"
         Effect   = "Allow"
         Action   = "lambda:InvokeFunction"
         Resource = aws_lambda_function.report.arn
       },
       {
-        # Email the operator when someone asks for free minutes (M3k §9).
+        # Email the operator when someone asks for free minutes.
         Sid      = "NotifyAccessRequests"
         Effect   = "Allow"
         Action   = "sns:Publish"
@@ -130,7 +130,6 @@ resource "aws_iam_role" "web" {
       Principal = { Service = "lambda.amazonaws.com" }
     }]
   })
-  tags = { Milestone = "M3b" }
 }
 
 resource "aws_iam_role_policy" "web" {

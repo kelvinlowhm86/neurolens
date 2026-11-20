@@ -1,5 +1,5 @@
 CREATE TABLE users (
-  user_id     TEXT PRIMARY KEY,               -- Google 'sub' from M3b; the dev user in M3a
+  user_id     TEXT PRIMARY KEY,               -- Google 'sub' for a signed-in user; the development user in dev mode
   email       TEXT NOT NULL,
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );

@@ -1,4 +1,4 @@
-"""Tests for FAKE_INFERENCE mode in neurolens.inference. Written from docs/M2a_spec.md §7a."""
+"""Tests for FAKE_INFERENCE mode in neurolens.inference."""
 
 import json
 import math
@@ -58,9 +58,9 @@ def test_probe_duration_returns_a_float(clip_path):
 
 
 # ---------------------------------------------------------------- fake build_events / predict
-# M2a section 7a: run_inference and strip_audio are replaced by build_events, without_audio and
-# predict. In fake mode predict gives seeded random numbers of shape (ceil(duration), 20484),
-# seeded from the file's size (plus 1 for the no-audio pass).
+# Run_inference and strip_audio are replaced by build_events, without_audio and
+# Predict. In fake mode predict gives seeded random numbers of shape (ceil(duration), 20484),
+# Seeded from the file's size (plus 1 for the no-audio pass).
 
 
 @pytest.fixture

@@ -1,4 +1,4 @@
-"""The dispatcher Lambda (docs/M3e_spec.md §2, §3).
+"""The dispatcher Lambda.
 
 SQS event source on the jobs queue, batch size 1. For each uploaded file it checks the size,
 measures the duration with ffprobe and prices the job through ``billing.verify_queued`` before
@@ -69,7 +69,7 @@ def dispatch(
 
     if state["status"] in billing.TERMINAL:
         if state["status"] == billing.FAILED:
-            # A refund deleted the upload; this copy landed afterwards (M3a §7b).
+            # A refund deleted the upload; this copy landed afterwards.
             logger.info(f"Skipped {job_id}: already refunded, deleting the late upload")
             _delete_upload(s3, bucket, key)
         else:
@@ -101,7 +101,7 @@ def dispatch(
         logger.info(f"Skipped {job_id}: no longer queued")
         return "skipped"
     if verdict != billing.OK:
-        # verify_queued already refunded the job (too long or short credit).
+        # Verify_queued already refunded the job (too long or short credit).
         logger.warning(f"Refunded {job_id}: {verdict}")
         _delete_upload(s3, bucket, key)
         return "refunded"
@@ -134,7 +134,7 @@ def dispatch(
 
 
 def start_gpu_if_off(control, endpoint):
-    """Start the endpoint after a dispatch (M3f §6a). Returns the outcome; never raises."""
+    """Start the endpoint after a dispatch. Returns the outcome; never raises."""
     try:
         variants = control.describe_endpoint(EndpointName=endpoint).get("ProductionVariants", [])
     except Exception:

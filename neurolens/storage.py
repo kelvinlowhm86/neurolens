@@ -14,7 +14,7 @@ from botocore.exceptions import ClientError
 logger = logging.getLogger("neurolens")
 
 # The extension of the stored object comes from the declared content type, never from the
-# user's filename.
+# User's filename.
 CONTENT_TYPE_EXTENSIONS = {
     "video/mp4": ".mp4",
     "video/quicktime": ".mov",
@@ -119,7 +119,7 @@ def put_result(s3, bucket, job_id, result):
 
 
 def brain_bytes(preds):
-    """The raw with-audio predictions as float16 little-endian, row-major, no header (M3d §5).
+    """The raw with-audio predictions as float16 little-endian, row-major, no header.
 
     Raises ValueError if any value is not finite after the cast: float16 overflows above 65,504,
     and a NaN or infinity must never reach a stored brain file.
@@ -134,7 +134,7 @@ def brain_bytes(preds):
 
 
 def put_brain(s3, bucket, job_id, preds):
-    """Write results/<job_id>.brain, replacing an earlier copy (M3d §5)."""
+    """Write results/<job_id>.brain, replacing an earlier copy."""
     s3.put_object(
         Bucket=bucket,
         Key=f"results/{job_id}.brain",
@@ -144,7 +144,7 @@ def put_brain(s3, bucket, job_id, preds):
 
 
 def put_thumbnail(s3, bucket, job_id, data):
-    """Write results/<job_id>.jpg, replacing an earlier copy (M3d §5b)."""
+    """Write results/<job_id>.jpg, replacing an earlier copy."""
     s3.put_object(
         Bucket=bucket,
         Key=f"results/{job_id}.jpg",
@@ -154,7 +154,7 @@ def put_thumbnail(s3, bucket, job_id, data):
 
 
 def put_play_copy(s3, bucket, job_id, path):
-    """Write results/<job_id>.play.mp4 from a local file, replacing an earlier copy (M3d §5c).
+    """Write results/<job_id>.play.mp4 from a local file, replacing an earlier copy.
 
     `upload_file` streams large videos in multipart uploads, so the whole copy is never in memory.
     """
@@ -167,7 +167,7 @@ def put_play_copy(s3, bucket, job_id, path):
 
 
 def put_frames(s3, bucket, job_id, data):
-    """Write results/<job_id>.frames, replacing an earlier copy (M3g §2b)."""
+    """Write results/<job_id>.frames, replacing an earlier copy."""
     s3.put_object(
         Bucket=bucket,
         Key=f"results/{job_id}.frames",
@@ -177,7 +177,7 @@ def put_frames(s3, bucket, job_id, data):
 
 
 def get_frames(s3, bucket, job_id):
-    """The frames in time order and the spoken words from results/<job_id>.frames (M3g §2b).
+    """The frames in time order and the spoken words from results/<job_id>.frames.
 
     A missing object or a malformed zip raises.
     """
@@ -190,9 +190,9 @@ def get_frames(s3, bucket, job_id):
 
 
 def put_dataset(s3, bucket, job_id, upload_key):
-    """Keep a consented job's video under dataset/<job_id>/ and nothing else (M3j §9b).
+    """Keep a consented job's video under dataset/<job_id>/ and nothing else.
 
-    The video is copied from the upload key, keeping its extension (M3f §5b). NeuroLens's own
+    The video is copied from the upload key, keeping its extension. NeuroLens's own
     result and brain stay under results/. A redelivered job replaces the same copy. Any S3 error
     is raised to the worker's failure path.
     """
@@ -246,7 +246,7 @@ def object_exists(s3, bucket, key):
 def job_keys(job_id, object_key):
     """The job's own S3 keys: the upload, its result, brain, thumbnail, frames and phone copy.
 
-    The shared copy is not a fixed list (M3f §5b): dataset/<job_id>/ also holds retention
+    The shared copy is not a fixed list: dataset/<job_id>/ also holds retention
     snapshots.
     """
     job_id = str(job_id)
@@ -273,7 +273,7 @@ def delete_keys(s3, bucket, keys):
 
 
 def delete_job_prefixes(s3, bucket, job_id):
-    """Delete every object under dataset/<job_id>/, paged (M3f §5c).
+    """Delete every object under dataset/<job_id>/, paged.
 
     The job id must be a canonical UUID: nothing else can widen the prefix. Raises on any delete
     S3 reports as failed, so a caller never marks a copy removed while part of it remains.
@@ -310,7 +310,7 @@ def get_report(s3, bucket, job_id):
 
 
 def comparison_pair(x, y):
-    """The one canonical pair for two jobs: lowercase UUID text, sorted (M3h §2).
+    """The one canonical pair for two jobs: lowercase UUID text, sorted.
 
     A-vs-B and B-vs-A are the same comparison, so every caller uses this order. Raises ValueError
     for a non-UUID or for the same job twice.
@@ -322,7 +322,7 @@ def comparison_pair(x, y):
 
 
 def comparison_key(job_a, job_b):
-    """The comparison's report key, under results/ so it expires with the results (M3h §2)."""
+    """The comparison's report key, under results/ so it expires with the results."""
     return f"results/{job_a}_{job_b}.report.json"
 
 

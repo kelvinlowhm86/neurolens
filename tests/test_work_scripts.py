@@ -1,4 +1,4 @@
-"""infra/start_work.sh and infra/stop_work.sh against a fake `aws` (docs/M3e_spec.md §6b).
+"""Infra/start_work.sh and infra/stop_work.sh against a fake `aws`.
 
 The scripts run under bash with stub `aws`, `terraform` and `sleep` first on PATH. The `aws` stub
 keeps the world in a JSON file (so a change is seen by later calls), logs every call, and fails
@@ -396,7 +396,7 @@ def test_stop_endpoint_that_never_reaches_zero_is_not_confirmed(sandbox):
         ("application-autoscaling register-scalable-target", {}),
         ("application-autoscaling delete-scheduled-action", {}),
         # The new script skips the update call when desired is already 0, so this case
-        # needs an endpoint above 0 for the injected failure to be reached.
+        # Needs an endpoint above 0 for the injected failure to be reached.
         ("sagemaker update-endpoint-weights-and-capacities", {"instances": 1}),
         ("sagemaker describe-endpoint", {}),
     ],

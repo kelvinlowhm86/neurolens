@@ -1,5 +1,5 @@
-"""The GPU container's job logic (`worker.handle_job`), from the merged M1, M2b, M3a and M3d
-worker tests (docs/M3e_spec.md §4b, §4c, §11 "Container").
+"""The GPU container's job logic (`worker.handle_job`), from the merged,, and
+worker tests ("Container").
 
 SageMaker has already downloaded the upload, so handle_job gets a local path and takes the object
 key and verified duration from the job row. A test that runs the pipeline therefore verifies the
@@ -572,7 +572,7 @@ def test_duplicate_is_charged_once_and_leaves_the_other_result(
 def test_a_pipeline_failure_returns_failed_with_a_short_error(
     aws, db, pg, make_cfg, roi_masks_small, new_job, clip_path, patch_everywhere
 ):
-    """The container refunds at once, deletes the files and answers FAILED (spec §4c). The
+    """The container refunds at once, deletes the files and answers FAILED. The
     user-facing error is the first line, never a traceback and never over 200 characters."""
     job_id, key = new_job()
     upload_clip(aws, key, clip_path)

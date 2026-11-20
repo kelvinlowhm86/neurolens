@@ -1,4 +1,4 @@
-"""The database layer (M3a §3d): one small interface, two backends running identical SQL.
+"""The database layer: one small interface, two backends running identical SQL.
 
 - `DataApiDatabase`: Aurora through the RDS Data API (workers, Lambdas, web on AWS).
 - `PostgresDatabase`: plain PostgreSQL through psycopg 3 (tests and laptop).
@@ -43,7 +43,7 @@ _CURVE_UNIQUE_CONSTRAINT = "retention_snapshots_curve_sha256_key"
 
 
 def check_sql(sql):
-    """Refuse `%` and string literals in application SQL (§3d), on both backends alike, so a
+    """Refuse `%` and string literals in application SQL, on both backends alike, so a
     statement that works on a laptop never fails differently on AWS."""
     if "%" in sql:
         raise ValueError(f"application SQL must not contain '%': {sql!r}")
@@ -78,7 +78,7 @@ class PostgresDatabase:
         from psycopg.rows import dict_row
 
         # The connection's context manager commits on normal exit, rolls back on an exception,
-        # and closes the connection either way.
+        # And closes the connection either way.
         with psycopg.connect(self._dsn, row_factory=dict_row) as conn:
             yield _PostgresTransaction(conn)
 
@@ -91,7 +91,7 @@ class _PostgresTransaction:
         return self._run(to_pyformat(sql), params or {})
 
     def execute_unchecked(self, sql):
-        """Run a statement as-is, with no parameters (migrations only, §3c)."""
+        """Run a statement as-is, with no parameters (migrations only)."""
         return self._run(sql, None)
 
     def _run(self, sql, params):
@@ -135,7 +135,7 @@ def data_api_client(region=None):
 
 
 class DataApiDatabase:
-    """Aurora through the RDS Data API. Only waking from auto-pause is retried (§3d): a failed
+    """Aurora through the RDS Data API. Only waking from auto-pause is retried: a failed
     commit, whose outcome is unknown, is raised to the caller, and the billing guards make the
     caller's retry safe. The client must not retry on its own (see data_api_client)."""
 
@@ -183,7 +183,7 @@ class DataApiDatabase:
                 return resp["transactionId"]
             except ClientError as exc:
                 # While resuming, Aurora answers either code. Retrying BeginTransaction is
-                # safe: it runs no statement.
+                # Safe: it runs no statement.
                 if exc.response.get("Error", {}).get("Code") not in _WAKING_CODES:
                     raise
                 remaining = deadline - time.monotonic()
@@ -236,7 +236,7 @@ class _DataApiTransaction:
         return self._db._execute(self._id, sql, parameters)
 
     def execute_unchecked(self, sql):
-        """Run a statement as-is, with no parameters (migrations only, §3c)."""
+        """Run a statement as-is, with no parameters (migrations only)."""
         return self._db._execute(self._id, sql, None)
 
 

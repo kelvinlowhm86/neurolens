@@ -1,4 +1,4 @@
-"""Credit billing (M3a §4): reserve at upload, verify after measuring, capture on success, and
+"""Credit billing: reserve at upload, verify after measuring, capture on success, and
 refund on every failure path.
 
 Every function takes a `Database` (neurolens.db) first and does its work in one transaction.
@@ -29,10 +29,10 @@ LOST_CLAIM = "lost_claim"
 OK = "ok"
 # A live worker refreshes its claim every <= 50 s; a processing job older than this is dead.
 STALE_AFTER_S = 90
-# The wording of the research-consent box (M3f §5a). A wording change needs a new value here and
-# the new text on the page together; old jobs keep the version they agreed to.
+# The wording of the research-consent box. A wording change needs a new value here and
+# The new text on the page together; old jobs keep the version they agreed to.
 CONSENT_VERSION = "2026-11-03"
-# A session row older than this (by its last use) no longer signs anybody in (M3f §6b).
+# A session row older than this (by its last use) no longer signs anybody in.
 SESSION_DAYS = 30
 # The reward preview's defaults when a caller does not supply config.json's research limits.
 DEFAULT_REWARD_CAP = 5
@@ -75,19 +75,19 @@ class JobActive(Exception):
 
 
 class AccountDeleted(Exception):
-    """The account has been marked deleted, so it can no longer start work (M3c §5)."""
+    """The account has been marked deleted, so it can no longer start work."""
 
 
 class TooManyWaiting(Exception):
-    """The user already has the maximum number of queued jobs (M3f §2a)."""
+    """The user already has the maximum number of queued jobs."""
 
 
 class DuplicateCurve(Exception):
-    """This exact retention curve is already stored (M3f §5d)."""
+    """This exact retention curve is already stored."""
 
 
 class CurveRefused(Exception):
-    """A job that cannot take a curve, with the reply the web route gives (M3f §5d)."""
+    """A job that cannot take a curve, with the reply the web route gives."""
 
     def __init__(self, code, message, status=409):
         super().__init__(message)
@@ -97,14 +97,14 @@ class CurveRefused(Exception):
 
 
 class VideoTaken(CurveRefused):
-    """Another account already linked this published video (M3i §6)."""
+    """Another account already linked this published video."""
 
     def __init__(self):
         super().__init__("video_link_taken", "This video is linked to another account.")
 
 
 class VideoLinkChanged(CurveRefused):
-    """This analysis is already linked to a different published video (M3i §6)."""
+    """This analysis is already linked to a different published video."""
 
     def __init__(self):
         super().__init__("video_link_changed", "This analysis is already linked to another video.")
@@ -147,7 +147,7 @@ def _holds_claim(job, attempt):
 
 
 def _move(tx, user_id, job_id, kind, available_delta, reserved_delta):
-    """Change the balance and write the matching ledger row (the ledger invariant, §3c)."""
+    """Change the balance and write the matching ledger row (the ledger invariant)."""
     tx.execute(
         "UPDATE balances SET available_cents = available_cents + :available, "
         "reserved_cents = reserved_cents + :reserved WHERE user_id = :user_id",
@@ -202,7 +202,7 @@ def _create_user(tx, user_id, email, starter_cents):
 
 
 def _user_by_email(tx, email, *, lock=False):
-    # `lock` holds the row until commit, so a sign-in and an account delete take turns (M3c §5).
+    # `lock` holds the row until commit, so a sign-in and an account delete take turns.
     rows = tx.execute(
         "SELECT user_id FROM users WHERE lower(email) = lower(:email)"
         + (" FOR UPDATE" if lock else ""),
@@ -212,7 +212,7 @@ def _user_by_email(tx, email, *, lock=False):
 
 
 def _keep_email_current(tx, user_id, email):
-    """Store a returning sign-in's verified email (M3b §2c), so an address the user has given up
+    """Store a returning sign-in's verified email, so an address the user has given up
     no longer links a stranger to their account. Left unchanged when another user holds it."""
     stored = tx.execute("SELECT email FROM users WHERE user_id = :user_id", {"user_id": user_id})
     if stored[0]["email"].lower() == email.lower():
@@ -230,7 +230,7 @@ def _keep_email_current(tx, user_id, email):
 
 
 def ensure_user(db, user_id, email, starter_cents):
-    """Create the user with the starter credit, once (dev mode's fixed user, M3b §2b). Two
+    """Create the user with the starter credit, once (dev mode's fixed user). Two
     simultaneous first calls both succeed and grant it once; a later call changes nothing (not
     even the email)."""
     with db.transaction() as tx:
@@ -238,7 +238,7 @@ def ensure_user(db, user_id, email, starter_cents):
 
 
 def sign_in(db, issuer, subject, email, starter_cents):
-    """The user for a verified sign-in (M3b §2c), in one transaction: the sign-in's own
+    """The user for a verified sign-in, in one transaction: the sign-in's own
     `(issuer, subject)` first; else the user with this email (any letter case), linked to it;
     else a new user with a random UUID and the starter credit. Every insert uses
     ON CONFLICT DO NOTHING and re-reads the winner, because a caught unique-violation would
@@ -246,7 +246,7 @@ def sign_in(db, issuer, subject, email, starter_cents):
 
     The user row is locked as it is found, and a marked account is never found, so a sign-in
     racing `delete_account` either links before the mark (and the mark removes the link) or
-    makes a new account after it (M3c §5)."""
+    makes a new account after it."""
     key = {"issuer": issuer, "subject": subject}
     find_identity = (
         "SELECT i.user_id FROM identities i JOIN users u ON u.user_id = i.user_id "
@@ -286,9 +286,9 @@ def user_by_email(db, email):
 
 
 def grant_credit(db, email, cents):
-    """Add credit to the user with this email (any letter case), with a `grant` ledger row
-    (M3b §7a). A waiting or declined access request is marked granted in the same transaction
-    (M3k §4). Returns the user ID."""
+    """Add credit to the user with this email (any letter case), with a `grant` ledger row. A
+    waiting or declined access request is marked granted in the same transaction. Returns the
+    user ID."""
     if not isinstance(cents, int) or isinstance(cents, bool) or cents <= 0:
         raise ValueError(f"cents must be a positive whole number, not {cents!r}")
     with db.transaction() as tx:
@@ -319,7 +319,7 @@ def reset_credit(db, email):
 
 
 def _has_funding(tx, user_id):
-    """True when the account has had credit beyond the starter (M3k §6)."""
+    """True when the account has had credit beyond the starter."""
     return bool(
         tx.execute(
             "SELECT 1 AS present FROM ledger WHERE user_id = :user_id "
@@ -330,13 +330,13 @@ def _has_funding(tx, user_id):
 
 
 def is_funded(db, user_id):
-    """Whether the account has had credit beyond the starter (M3k §6), shared with /api/me."""
+    """Whether the account has had credit beyond the starter, shared with /api/me."""
     with db.transaction() as tx:
         return _has_funding(tx, user_id)
 
 
 def _reward_status(tx, user_id, reward_cap, reward_window_days):
-    """(funded, under_cap) for the account, not the job (M3f §5d, M3j §5).
+    """(funded, under_cap) for the account, not the job.
 
     `funded` means it has had credit beyond the starter; `under_cap` means fewer than
     `reward_cap` rewards in the window. Shared by `add_curve`, `curve_offer` and `list_jobs`, so
@@ -367,11 +367,11 @@ def _curve_reward(
     min_views=DEFAULT_MIN_VIEWS,
     preview=False,
 ):
-    """The reward a curve would pay and the first refusal (M3j §5, M3l §3).
+    """The reward a curve would pay and the first refusal.
 
-    Conditions run in the spec's order: invalid (quality flags, save only), not_charged,
+    Conditions are checked in this order: invalid (quality flags, save only), not_charged,
     already_rewarded (this job, the same video hash, or the same rewarded link on a job),
-    not_funded, cap_reached, length_mismatch, too_few_views (M3l §3). `cents` is what the curve
+    not_funded, cap_reached, length_mismatch, too_few_views. `cents` is what the curve
     pays when `reason` is None, and what a check promises; the save pays only then.
 
     `preview` ignores the link and the length, which is what `list_jobs` shows before the form is
@@ -396,7 +396,7 @@ def _curve_reward(
         return cents, None
     if facts is not None:
         # The server's own measured length only; the page's figure is the user's word. A job
-        # with no measured length cannot prove the match, so it is not paid.
+        # With no measured length cannot prove the match, so it is not paid.
         analysed_ms = job["verified_duration_ms"]
         if analysed_ms is None or abs(facts.duration_s - analysed_ms / 1000) > length_tolerance_s:
             return refuse("length_mismatch")
@@ -413,10 +413,10 @@ def list_jobs(
     reward_cap=DEFAULT_REWARD_CAP,
     reward_window_days=DEFAULT_REWARD_WINDOW_DAYS,
 ):
-    """The user's jobs, newest first, at most `limit` (M3b §4a, M3f §3, §5d).
+    """The user's jobs, newest first, at most `limit`.
 
     Deleted and cancelled jobs are left out. `claimed_at` is UTC text; `cancellable` marks a
-    queued job the dispatcher has not priced yet (M3e §8). For a done, shared job, `sharing` is
+    queued job the dispatcher has not priced yet. For a done, shared job, `sharing` is
     true while its shared copy is present, `curve_count` is its stored curves, and
     `curve_reward_cents` is what a valid curve would return now (0 when it cannot);
     `curve_rewarded` is true once a curve has returned this job's credit. The amount comes from
@@ -472,9 +472,9 @@ def list_jobs(
 
 
 def delete_job(db, user_id, job_id):
-    """Mark the user's job deleted under its row lock, keeping its row and ledger (M3c §4).
+    """Mark the user's job deleted under its row lock, keeping its row and ledger.
 
-    This is the mark half of job deletion (M3f §5c): it happens before the files are purged, so
+    This is the mark half of job deletion: it happens before the files are purged, so
     no curve can be added while the purge runs. A copy purged earlier (Stop sharing, the 90-day
     rule) has its `dataset_purged_at` cleared, so its own files are purged now too. False,
     changing nothing, when the job is not the user's, already deleted, or still queued or
@@ -496,12 +496,12 @@ def delete_job(db, user_id, job_id):
 
 
 def purge_job_files(db, s3, bucket, job_id):
-    """Delete a marked job's files, then record that they are gone (M3f §5c).
+    """Delete a marked job's files, then record that they are gone.
 
     The research prefix always goes, and the job's `retention_snapshots` rows go with it. A
     deleted job's own files (upload, result, brain, thumbnail) go too; a copy that was only
     removed keeps the user's own result. Deleting a job also removes every comparison it is part
-    of, in S3 and in the database (M3h §6).
+    of, in S3 and in the database.
     """
     with db.transaction() as tx:
         rows = tx.execute(
@@ -539,7 +539,7 @@ def purge_job_files(db, s3, bucket, job_id):
 
 
 def mark_dataset_removed(db, job_id, reason, *, user_id=None, require_no_snapshot=False):
-    """Mark a job's shared copy removed under its row lock, if it is still eligible (M3f §5c).
+    """Mark a job's shared copy removed under its row lock, if it is still eligible.
 
     One guarded update: the job must be done, consented, not already removed and not deleted.
     With `user_id` it must also be that user's, and with `require_no_snapshot` it must still have
@@ -570,7 +570,7 @@ def mark_dataset_removed(db, job_id, reason, *, user_id=None, require_no_snapsho
 
 
 def mark_dataset_purged(db, job_id, *, own_files=False):
-    """Record that a marked copy's files are gone (M3f §5c). False if it was not marked.
+    """Record that a marked copy's files are gone. False if it was not marked.
 
     A purge that did not delete the job's own files (`own_files` false) records nothing once
     the job has been deleted meanwhile, so that purge is still owed.
@@ -587,7 +587,7 @@ def mark_dataset_purged(db, job_id, *, own_files=False):
 
 
 def curve_exists(db, curve_sha256):
-    """True when any job or account already stored this exact curve (M3f §5d)."""
+    """True when any job or account already stored this exact curve."""
     with db.transaction() as tx:
         rows = tx.execute(
             "SELECT 1 AS present FROM retention_snapshots WHERE curve_sha256 = :sha LIMIT 1",
@@ -597,15 +597,15 @@ def curve_exists(db, curve_sha256):
 
 
 def delete_account(db, user_id):
-    """Mark a user's account and jobs deleted and return its `(issuer, subject)` identities
-    (M3c §5). Refuses with JobActive while any of their jobs is queued or processing.
+    """Mark a user's account and jobs deleted and return its `(issuer, subject)` identities.
+    Refuses with JobActive while any of their jobs is queued or processing.
 
     Lock order: every caller takes the balance row before job rows. Here the balance row is
     locked first, so a racing `reserve` either wins before the mark or is refused after it. The
     email is replaced at once, and the sessions and identities are gone, so every tab is signed
     out and signing in again makes a new, empty account. The access request is deleted too: it
-    holds only a channel link and a note (M3k §4). `remove_deleted_account` deletes the rows
-    once every job's files are purged (M3f §5c).
+    holds only a channel link and a note. `remove_deleted_account` deletes the rows
+    once every job's files are purged.
     """
     with db.transaction() as tx:
         locked = tx.execute(
@@ -644,11 +644,11 @@ def delete_account(db, user_id):
 
 
 def remove_deleted_account(db, user_id):
-    """Delete a marked account's rows once every job's files are gone (M3c §5, M3f §5c).
+    """Delete a marked account's rows once every job's files are gone.
 
     Only when the user has `deleted_at` and every job has `dataset_purged_at`; otherwise change
     nothing and return False. Credit is free, so no financial record is kept. The access request
-    goes too, before the user row: it may have raced the delete (M3k §4). Locks the balance row
+    goes too, before the user row: it may have raced the delete. Locks the balance row
     first, like every money-or-job transaction.
     """
     with db.transaction() as tx:
@@ -688,7 +688,7 @@ def get_balance(db, user_id):
 
 
 def record_video_hash(db, job_id, sha256):
-    """Store the SHA-256 of the video, so one video can be rewarded once (M3f §5b, §5d)."""
+    """Store the SHA-256 of the video, so one video can be rewarded once."""
     with db.transaction() as tx:
         rows = tx.execute(
             "UPDATE jobs SET video_sha256 = :sha WHERE job_id = CAST(:job_id AS uuid) "
@@ -715,10 +715,10 @@ def reserve(
     """Move the estimated price from available to reserved and create the queued job.
 
     Raises InsufficientCredit (changing nothing) if the available credit is lower. With consent,
-    the current CONSENT_VERSION and the time are stored too (M3f §5a). `max_waiting_jobs` refuses
-    with TooManyWaiting when the user already has that many queued jobs (M3f §2a); the balance
+    the current CONSENT_VERSION and the time are stored too. `max_waiting_jobs` refuses
+    with TooManyWaiting when the user already has that many queued jobs; the balance
     row lock makes the count and the new job one decision per user. Raises AccountDeleted
-    (changing nothing) once the account's delete has marked it (M3c §5).
+    (changing nothing) once the account's delete has marked it.
     """
     price = estimate_cost_cents(client_duration_ms / 1000)
     consent_version = CONSENT_VERSION if research_consent else None
@@ -793,8 +793,8 @@ def claim(db, job_id):
 
 def job_state(db, job_id):
     """The job's status, timing, claim and research fields plus `object_key` and
-    `verified_duration_ms` (M3e §3a), or None for an unknown job. Deliberately sees deleted jobs
-    too (M3c §4)."""
+    `verified_duration_ms`, or None for an unknown job. Deliberately sees deleted jobs
+    too."""
     with db.transaction() as tx:
         rows = tx.execute(
             "SELECT status, updated_at, attempt, research_consent, object_key, "
@@ -821,7 +821,7 @@ def touch(db, job_id, attempt):
 
 
 def set_stage(db, job_id, attempt, stage, now=None):
-    """Set `stage` and append {"stage", "at"} to `stages` (UTC, M2b §4's format)."""
+    """Set `stage` and append {"stage", "at"} to `stages` (UTC, the stored format)."""
     at = (now or datetime.now(UTC)).astimezone(UTC).strftime(storage.TIME_FORMAT)
     return _update_held(
         db,
@@ -836,15 +836,15 @@ def set_stage(db, job_id, attempt, stage, now=None):
 
 
 def verify_queued(db, job_id, verified_duration_ms, max_duration_s):
-    """Price a queued job by its measured duration, before any GPU runs (M3e §3a). Returns "ok",
+    """Price a queued job by its measured duration, before any GPU runs. Returns "ok",
     "not_queued" (nothing changed), or the refund reason it applied."""
     with db.transaction() as tx:
         job = _lock_job(tx, job_id)
         if job is None or job["status"] != QUEUED:
             return "not_queued"
         # The length limit is a product rule, checked before any credit logic, whatever the
-        # balance (settings.max_duration). Also before recording the duration: a crafted file
-        # can claim more hours than the INTEGER column holds.
+        # Balance (settings.max_duration). Also before recording the duration: a crafted file
+        # Can claim more hours than the INTEGER column holds.
         if verified_duration_ms > max_duration_s * 1000:
             reason = "duration_exceeds_max_verified"
             _refund(tx, job_id, job, reason, None)
@@ -951,8 +951,8 @@ def issue_refund(
 
 
 def record_gpu_wait(db, job_id, until):
-    """Record when a dispatched request's GPU wait runs out, while the job is still queued
-    (M3l §2b). False, changing nothing, once a worker has claimed it."""
+    """Record when a dispatched request's GPU wait runs out, while the job is still queued. False,
+    changing nothing, once a worker has claimed it."""
     seconds = max(0, round((until - datetime.now(UTC)).total_seconds()))
     with db.transaction() as tx:
         rows = tx.execute(
@@ -964,8 +964,8 @@ def record_gpu_wait(db, job_id, until):
 
 
 def refund_if_gpu_wait_over(db, job_id):
-    """Refund a queued, never-claimed job whose recorded GPU wait ended more than the grace ago
-    (M3l §2c). True when this call refunded it; False, changing nothing, otherwise.
+    """Refund a queued, never-claimed job whose recorded GPU wait ended more than the grace ago.
+    True when this call refunded it; False, changing nothing, otherwise.
 
     The row lock makes this and a worker's claim mutually exclusive, so exactly one wins.
     """
@@ -994,7 +994,7 @@ def refund_if_gpu_wait_over(db, job_id):
 
 
 def claim_report(db, user_id, job_id, max_tries, stale_minutes):
-    """Claim one report attempt for the user's done job (M3g §3). True if this call got it.
+    """Claim one report attempt for the user's done job. True if this call got it.
 
     It may claim a report never started, one that failed, or a `writing` one older than
     `stale_minutes` (a Lambda that died); never a fresh `writing` one or one at its try cap.
@@ -1024,7 +1024,7 @@ def claim_report(db, user_id, job_id, max_tries, stale_minutes):
 
 
 def finish_report(db, job_id, state, error=None):
-    """Finish a `writing` report as `ready` or `failed` (M3g §3). False if no row changed."""
+    """Finish a `writing` report as `ready` or `failed`. False if no row changed."""
     with db.transaction() as tx:
         rows = tx.execute(
             "UPDATE jobs SET report_state = :state, report_error = :error "
@@ -1041,7 +1041,7 @@ def finish_report(db, job_id, state, error=None):
 
 
 def release_report_try(db, job_id):
-    """Mark a report failed and give its try back, for a Lambda that could not start (M3g §4)."""
+    """Mark a report failed and give its try back, for a Lambda that could not start."""
     with db.transaction() as tx:
         tx.execute(
             "UPDATE jobs SET report_state = :failed, report_tries = report_tries - 1 "
@@ -1054,7 +1054,7 @@ def release_report_try(db, job_id):
 
 
 def claim_comparison(db, user_id, job_a, job_b, max_tries, stale_minutes):
-    """Claim one comparison attempt for two of the user's done jobs (M3h §3).
+    """Claim one comparison attempt for two of the user's done jobs.
 
     Both job rows are locked first, so a racing delete either finishes before the mark (the purge
     sees this row) or marks the job first and the claim sees it. The canonical pair means B-vs-A
@@ -1100,7 +1100,7 @@ def claim_comparison(db, user_id, job_a, job_b, max_tries, stale_minutes):
 
 
 def finish_comparison(db, job_a, job_b, state, error=None):
-    """Finish a `writing` comparison if neither job is deleted (M3h §3). False if no row changed."""
+    """Finish a `writing` comparison if neither job is deleted. False if no row changed."""
     with db.transaction() as tx:
         rows = tx.execute(
             "UPDATE comparisons SET state = :state, error = :error "
@@ -1121,8 +1121,7 @@ def finish_comparison(db, job_a, job_b, state, error=None):
 
 
 def release_comparison_try(db, job_a, job_b):
-    """Mark a comparison failed and give its try back, for a Lambda that could not start
-    (M3h §4)."""
+    """Mark a comparison failed and give its try back, for a Lambda that could not start."""
     with db.transaction() as tx:
         tx.execute(
             "UPDATE comparisons SET state = :failed, tries = tries - 1 "
@@ -1133,7 +1132,7 @@ def release_comparison_try(db, job_a, job_b):
 
 
 def get_comparison(db, job_a, job_b):
-    """The comparison row (`state`, `tries`, `started_at`) or None (M3h §3)."""
+    """The comparison row (`state`, `tries`, `started_at`) or None."""
     with db.transaction() as tx:
         rows = tx.execute(
             "SELECT state, tries, started_at FROM comparisons "
@@ -1156,11 +1155,11 @@ def _text_array(values):
 
 
 def _curve_state(tx, user_id, job_id, video_ref, *, lock=False):
-    """The job checks and link refusals shared by `add_curve` and `curve_offer` (M3j §5).
+    """The job checks and link refusals shared by `add_curve` and `curve_offer`.
 
     Returns `(job, same_video_rewarded, same_link_rewarded)`. The job must be the caller's, done,
     shared, not removed and not deleted. A link another account already used raises VideoTaken,
-    and a job already linked to a different video raises VideoLinkChanged (M3i §6). The
+    and a job already linked to a different video raises VideoLinkChanged. The
     once-per-link reward guard reads `jobs.curve_reward_ref`, never `retention_snapshots`, so a
     purged copy cannot forget a reward. `lock` takes the job row lock, as the save must; the
     check is read-only and leaves it alone.
@@ -1224,7 +1223,7 @@ def curve_offer(
     length_tolerance_s,
     min_views=DEFAULT_MIN_VIEWS,
 ):
-    """What `add_curve` would pay for this link, without writing anything (M3j §5-§6).
+    """What `add_curve` would pay for this link, without writing anything.
 
     The same job checks, link refusals and reward helper as the save, so the check's answer and
     the save's can never disagree. Returns `(cents, reason)`.
@@ -1268,12 +1267,12 @@ def add_curve(
 ):
     """Store one retention snapshot and reward the analysis when all the rules allow it.
 
-    One transaction with the balance row locked before the job row (M3f §5c, §5d): the job checks
-    and link refusals are `_curve_state`'s, shared with `curve_offer` (M3j §5). A curve already
+    One transaction with the balance row locked before the job row: the job checks
+    and link refusals are `_curve_state`'s, shared with `curve_offer`. A curve already
     stored under the same hash, on any job or account, raises DuplicateCurve and stores nothing.
     A valid curve of a charged job returns the captured price once, when the reward rules allow
     it: with the video's length within `length_tolerance_s` when it can be checked and at least
-    `min_views` checked views when the count is known (M3l §3), when neither the video hash
+    `min_views` checked views when the count is known, when neither the video hash
     nor the published link (`jobs.curve_reward_ref`) has been rewarded, by an account that has
     had credit beyond the starter and below the per-window cap. The checked facts (views, publish
     date, length) are stored too. All checks run before anything is written, so a refusal stores

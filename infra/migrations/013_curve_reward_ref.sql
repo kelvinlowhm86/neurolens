@@ -1,4 +1,4 @@
--- M3i 013 (docs/M3i_spec.md §6): the rewarded link is kept on the job, so a purged copy cannot
+-- The rewarded link is kept on the job, so a purged copy cannot
 -- forget the reward and pay the same published video again.
 ALTER TABLE jobs ADD COLUMN curve_reward_ref TEXT;
 UPDATE jobs j

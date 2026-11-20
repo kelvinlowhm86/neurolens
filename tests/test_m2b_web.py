@@ -1,8 +1,7 @@
-"""M2b status and result endpoints, rewritten for M3a (Flask test client + moto + PostgreSQL).
-Written from docs/M3e_spec.md §8 and docs/M3b_spec.md §4a, against the Aurora-backed endpoints
-with a seeded job owned by the app's development user. Status and result come from the database
-alone: a result in S3 never makes an unfinished job look done. Ownership checks and the
-refunded-job rules are in tests/test_m3a_web.py.
+"""Status and result endpoints (Flask test client + moto + PostgreSQL), against the
+Aurora-backed endpoints with a seeded job owned by the app's development user. Status and result
+come from the database alone: a result in S3 never makes an unfinished job look done. Ownership
+checks and the refunded-job rules are in tests/test_m3a_web.py.
 """
 
 import json
@@ -179,7 +178,7 @@ def test_result_is_404_result_not_ready_when_missing_for_a_job_in_progress(clien
     billing.set_stage(db, job_id, attempt, "transcribing")
     resp = client.get(f"/api/jobs/{job_id}/result")
     assert resp.status_code == 404
-    assert resp.get_json()["error"] == "result_not_ready"  # M3b §4a
+    assert resp.get_json()["error"] == "result_not_ready"
 
 
 @pytest.mark.parametrize("bad", BAD_IDS)
@@ -199,7 +198,7 @@ from moto import mock_aws
 
 
 class EmptyDatabase:
-    # The Database interface (M3a 3d) with no rows: every job is unknown.
+    # The Database interface with no rows: every job is unknown.
     @contextlib.contextmanager
     def transaction(self):
         yield self

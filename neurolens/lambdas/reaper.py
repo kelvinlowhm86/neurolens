@@ -1,4 +1,4 @@
-"""Reaper (docs/M3a §7, M3e §5, M3f §5c, §6b), every 3 hours.
+"""Reaper, every 3 hours.
 
 Backstop for a lost GPU notification: a job still open four hours after creation is settled if
 its result exists, else refunded ``deadline_passed``. Every run also retries the file deletes of
@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 DEADLINE_S = 4 * 60 * 60
 HEARTBEAT_STALE_S = 10 * 60
 FAILED_RETRY_S = 2 * 24 * 60 * 60
-# Matches the dataset/ S3 lifecycle rule (M3f §5c).
+# Matches the dataset/ S3 lifecycle rule.
 SNAPSHOT_RETENTION_DAYS = 1095
 
 
@@ -71,7 +71,7 @@ def unpurged_dataset_jobs(db):
 
 
 def expired_sessions(db):
-    """Delete session rows not used within SESSION_DAYS (M3f §6b)."""
+    """Delete session rows not used within SESSION_DAYS."""
     with db.transaction() as tx:
         tx.execute(
             "DELETE FROM sessions WHERE last_seen_at < now() "
@@ -81,13 +81,13 @@ def expired_sessions(db):
 
 
 def deleted_accounts(db):
-    """The users whose account delete has marked but not yet removed (M3c §5)."""
+    """The users whose account delete has marked but not yet removed."""
     with db.transaction() as tx:
         return tx.execute("SELECT user_id FROM users WHERE deleted_at IS NOT NULL")
 
 
 def expired_snapshots(db):
-    """Delete curve snapshots past the S3 lifecycle's age (M3f §5c)."""
+    """Delete curve snapshots past the S3 lifecycle's age."""
     with db.transaction() as tx:
         tx.execute(
             "DELETE FROM retention_snapshots WHERE added_at < now() "
@@ -129,7 +129,7 @@ def reap(db, s3, bucket, job):
 
 
 def clean_dataset(db, s3, bucket, job):
-    """Mark and delete one shared copy past the limit (M3f §5c)."""
+    """Mark and delete one shared copy past the limit."""
     job_id = job["job_id"]
     if not billing.mark_dataset_removed(db, job_id, "no_curve", require_no_snapshot=True):
         return

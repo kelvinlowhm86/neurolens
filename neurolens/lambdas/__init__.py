@@ -1,4 +1,4 @@
-"""Shared Lambda helpers (docs/M3a §7, M3e §3, §5, §6c).
+"""Shared Lambda helpers.
 
 Pure Python plus boto3 (the Lambda runtime provides it): no numpy, no psycopg. Configuration
 comes from environment variables set by Terraform, named as everywhere else.
@@ -57,7 +57,7 @@ def appscaling_client():
 
 def finish_job(db, s3, bucket, job_id):
     """True when the job is finished (charged, refunded or already terminal); False while a
-    live worker holds it (M3e §5).
+    live worker holds it.
 
     A result means the job is settled; otherwise a queued or stale job is refunded
     ``processing_failed`` and every file of the job is deleted. A delete that fails raises after

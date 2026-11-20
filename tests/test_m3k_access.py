@@ -1,4 +1,4 @@
-"""M3k early access by request (docs/M3k_spec.md §3-§6, §11).
+"""Early access by request.
 
 A signed-in user asks for free minutes with a channel link; the operator screens it and grants or
 declines. The request is stored once per account, emailed to the operator, and its status is

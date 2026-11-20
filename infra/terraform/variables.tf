@@ -59,7 +59,7 @@ variable "worker_image" {
 }
 
 variable "max_instances" {
-  description = "Most GPUs the endpoint may run. Stays 1 (M3e §1); 2 only if the account's GPU quota allows it."
+  description = "Most GPUs the endpoint may run. Stays 1; 2 only if the account's GPU quota allows it."
   type        = number
   default     = 1
 
@@ -71,7 +71,7 @@ variable "max_instances" {
 
 variable "auth_domain_prefix" {
   description = <<-EOT
-    The Cognito sign-in page's address prefix (M3b §2a): <prefix>.auth.<region>.amazoncognito.com.
+    The Cognito sign-in page's address prefix: <prefix>.auth.<region>.amazoncognito.com.
     Unique in the region; lowercase letters, numbers and hyphens; no "aws", "amazon" or
     "cognito". Google's authorized redirect URI is built from it (output google_redirect_uri).
   EOT

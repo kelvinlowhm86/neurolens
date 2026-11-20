@@ -1,5 +1,4 @@
-"""M3f web changes (docs/M3f_spec.md §2a, §3, §4 item 7, §5a, §5d, §7, §10 "claim",
-"Consent version", "Presign", "CSV header", "app.py").
+"""Web changes.
 
 `claim` records `claimed_at`; `list_jobs` leaves out cancelled jobs and returns `claimed_at`,
 `cancellable`, `sharing`, `curve_count` and `curve_reward_cents`. Presign accepts only the current

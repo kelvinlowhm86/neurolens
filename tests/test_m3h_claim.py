@@ -1,4 +1,4 @@
-"""M3h §3, §13: claiming, finishing and releasing a comparison.
+"""Claiming, finishing and releasing a comparison.
 
 A comparison is free but has at most `report.max_tries` tries, only failures use one up, and the
 row is keyed by the canonical pair so B-vs-A can never start a second report. PostgreSQL is real;

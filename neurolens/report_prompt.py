@@ -1,4 +1,4 @@
-"""The report's request to Claude (M3g §5b, M3h §5b). Pure Python: the Lambda and tests
+"""The report's request to Claude. Pure Python: the Lambda and tests
 import it."""
 
 import base64
@@ -6,7 +6,7 @@ import copy
 
 from neurolens import results
 
-# How long the prompt asks the answer to be (M3g §5d, M3h §5d). Guidance only: the report
+# How long the prompt asks the answer to be. Guidance only: the report
 # Lambda checks that the answer makes sense, never its length or counts.
 MAX_HEADLINE = 120
 MIN_MOMENTS, MAX_MOMENTS = 1, 8
@@ -231,7 +231,7 @@ def series_table(result):
 
 def comparison_table(a, b):
     """One row per second for both videos side by side, a blank past the shorter one, so a
-    second can be compared with the same second of the other video (M3h §5b)."""
+    second can be compared with the same second of the other video."""
     names = [(label, name) for name in [*_SHOWN, "muted_overall"] for label in "AB"]
     seconds = max(a["duration_seconds"], b["duration_seconds"])
     a_above, a_near, a_below = _tallies(a["signals"]["overall"])
@@ -259,7 +259,7 @@ def comparison_table(a, b):
 
 
 def words_block(words, label=None):
-    """The spoken words, or None when there are none (M3h §5b)."""
+    """The spoken words, or None when there are none."""
     if not words:
         return None
     header = f"Video {label} spoken words:" if label else "Spoken words:"
@@ -268,7 +268,7 @@ def words_block(words, label=None):
 
 
 def frame_blocks(frames, seconds, label=None):
-    """Each second's label followed by its picture (M3h §5b)."""
+    """Each second's label followed by its picture."""
     prefix = f"{label} " if label else ""
     content = []
     for second, frame in enumerate(frames[:seconds]):
@@ -287,7 +287,7 @@ def frame_blocks(frames, seconds, label=None):
 
 
 def _video_blocks(result, frames, words, label=None):
-    """The spoken words, then the pictures; the table comes after them (M3g §5b)."""
+    """The spoken words, then the pictures; the table comes after them."""
     content = []
     spoken = words_block(words, label)
     if spoken:
@@ -297,14 +297,14 @@ def _video_blocks(result, frames, words, label=None):
 
 
 def build_request(result, frames, words):
-    """(system, content) for one video's report (M3g §5b)."""
+    """(system, content) for one video's report."""
     content = _video_blocks(result, frames, words)
     content.append({"type": "text", "text": series_table(result)})
     return SYSTEM_PROMPT, content
 
 
 def build_comparison_request(a, b):
-    """(system, content) for a comparison: A's words and frames, B's, then one table (M3h §5b)."""
+    """(system, content) for a comparison: A's words and frames, B's, then one table."""
     result_a, frames_a, words_a = a
     result_b, frames_b, words_b = b
     content = _video_blocks(result_a, frames_a, words_a, "A")
@@ -316,7 +316,7 @@ def build_comparison_request(a, b):
 
 
 def _plain_letters(text, flip):
-    """The [A]/[B] markers turned into the shown letters (M3h §2): with flip the opened video
+    """The [A]/[B] markers turned into the shown letters: with flip the opened video
     (stored B) is A, so [A] becomes B and [B] becomes A; else [A] becomes A and [B] B."""
     first, second = ("B", "A") if flip else ("A", "B")
     out = text.replace("[A]", first).replace("[B]", second)
@@ -330,7 +330,7 @@ def _plain_letters(text, flip):
 
 
 def orient_comparison(report, flip):
-    """The stored comparison turned for the video the person opened (M3h §2): a copy with the
+    """The stored comparison turned for the video the person opened: a copy with the
     markers filled in and, with `flip`, every A and B swapped. Never mutates the input, and
     raises when the answer was written before the markers."""
     if not isinstance(report, dict):

@@ -9,7 +9,7 @@ from conftest import LambdaContext, fresh_import, function_url_event
 
 @pytest.fixture(autouse=True)
 def youtube_key_parameter(ssm):
-    """M3j §2: the deployed launcher now needs the YouTube key, stored like Terraform stores it."""
+    """The deployed launcher now needs the YouTube key, stored like Terraform stores it."""
     ssm.put_parameter(
         Name="/neurolens/web/youtube_api_key", Value="test-youtube-key", Type="SecureString"
     )

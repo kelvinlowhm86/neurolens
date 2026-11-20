@@ -1,4 +1,4 @@
-"""M3h §6, §13: deleting either video removes its comparisons.
+"""Deleting either video removes its comparisons.
 
 The comparison row and object go in the same purge as the job's own files, the partner video is
 untouched, a failed S3 delete leaves the rows for the reaper, and the account can then be

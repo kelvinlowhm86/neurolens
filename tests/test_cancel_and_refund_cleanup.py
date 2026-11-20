@@ -1,9 +1,8 @@
-"""M3d's Cancel route and M3a §7b's upload cleanup after a refund.
+"""Cancel route and upload cleanup after a refund.
 
-Written first from docs/M3d_spec.md §7 and §10 ("Cancel route (full: money)") and
-docs/M3a_spec.md §7b and §10 ("A refund deletes the upload"). The route is exercised through
-Flask's test client on the test PostgreSQL schema and moto S3; the container is called directly
-through `worker.handle_job`, as tests/test_m3e_container.py does.
+The route is exercised through Flask's test client on the test PostgreSQL schema and moto S3;
+the container is called directly through `worker.handle_job`, as tests/test_m3e_container.py
+does.
 """
 
 import contextlib

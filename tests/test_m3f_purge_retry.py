@@ -1,4 +1,4 @@
-"""M3f purge retry for job deletion (docs/M3f_spec.md §5c).
+"""Purge retry for job deletion.
 
 A job becomes invisible the moment it is marked deleted, so the route answers success even if
 the purge fails; the reaper then retries the purge for every marked job, consented or not. For a

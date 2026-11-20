@@ -1,4 +1,4 @@
-"""M3h §5, §13: the comparison path of the report Lambda.
+"""The comparison path of the report Lambda.
 
 The fake Anthropic client stands in for Bedrock; storage is moto S3 and comparison states are
 real PostgreSQL rows. No network, Bedrock or paid call is made.

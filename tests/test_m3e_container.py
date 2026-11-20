@@ -1,4 +1,4 @@
-"""M3e GPU container (docs/M3e_spec.md §4a, §4b, §4c, §11 "Container").
+"""GPU container.
 
 SageMaker has already downloaded the upload and POSTs it to the container, so `handle_job` gets
 a local video path and takes the object key and verified duration from the job row. These tests

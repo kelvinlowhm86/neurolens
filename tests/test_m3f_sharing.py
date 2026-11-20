@@ -1,5 +1,4 @@
-"""M3f research sharing (docs/M3f_spec.md §5a-§5c, §10 "delete_job_prefixes", "Stop sharing",
-"Reaper", "Consent").
+"""Research sharing.
 
 `storage.delete_job_prefixes` pages through `dataset/<job_id>/`, refuses anything that is not a
 UUID and raises when S3 reports a failed delete. The stop-sharing route deletes before it marks
@@ -217,7 +216,7 @@ def test_delete_job_prefixes_raises_when_s3_reports_a_failed_delete(aws):
 
     delete = getattr(storage, "delete_job_prefixes", None)
     assert callable(delete), "storage.delete_job_prefixes is missing"
-    with pytest.raises(Exception):  # noqa: B017 - the spec names no exception type here
+    with pytest.raises(Exception):  # noqa: B017 - no specific exception type is promised here
         delete(DeleteReportsErrors(aws.s3), aws.bucket, job_id)
 
     assert object_exists(aws, key)

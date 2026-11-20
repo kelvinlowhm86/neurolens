@@ -1,6 +1,6 @@
-"""M3d §4, §6-§7 web routes: summary, the 410 for old results, and the brain redirect.
+"""Web routes: summary, the 410 for old results, and the brain redirect.
 
-Flask test client + moto + PostgreSQL, with the same dev-mode fixtures as the M3b/M3c web tests.
+Flask test client + moto + PostgreSQL, with the same dev-mode fixtures as the web tests.
 """
 
 import uuid

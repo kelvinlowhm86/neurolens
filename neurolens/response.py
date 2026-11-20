@@ -1,8 +1,8 @@
 """Pure maths: turns TRIBE v2 predictions into signed brain-response curves. numpy only.
 
-M3d §2: seven signals over the Glasser HCP-MMP1 areas, each value the signed mean over the
+seven signals over the Glasser HCP-MMP1 areas, each value the signed mean over the
 signal's vertices (no absolute value, no rescaling). The muted series are cut to the shared
-length of the two passes. See docs/M3d_spec.md.
+length of the two passes.
 """
 
 import hashlib
@@ -131,7 +131,7 @@ def _rounded(values):
 
 
 def extract_response(preds_full, preds_noaudio, masks):
-    """The format-2 response: signed signal means for both passes (M3d §2-§3)."""
+    """The format-2 response: signed signal means for both passes."""
     full = np.asarray(preds_full)
     noaudio = np.asarray(preds_noaudio)
     length = full.shape[0]

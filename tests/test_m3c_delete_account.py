@@ -1,4 +1,4 @@
-"""M3c account deletion (docs/M3c_spec.md §5, §8).
+"""Account deletion.
 
 `billing.delete_account` (rows gone, other users intact, refused while active, the lock against a
 racing `reserve`) and `POST /api/account/delete` (confirmation, files and rows, one Cognito delete
@@ -284,7 +284,7 @@ def test_account_delete_works_in_cognito_mode_but_is_404_in_dev_mode(
     dev_client, cognito_client, idp, pg, cognito_admin
 ):
     # SPEC-AMBIGUITY: "404 in dev mode" may be a registered route that refuses or no route at
-    # all; only the answer is asserted.
+    # All; only the answer is asserted.
     assert delete_account(dev_client, confirm="DELETE").status_code == 404
     user_id = signed_in_user_id(cognito_client, idp, pg)
     assert delete_account(cognito_client, confirm="DELETE").status_code == 200
@@ -323,7 +323,7 @@ def test_account_delete_removes_the_users_files_and_rows(
     assert object_exists(aws, other_key)  # another user's file is untouched
     assert pg.one("SELECT * FROM users WHERE user_id = %s", other) is not None
     assert pg.job(other_job) is not None
-    # §5 step 4: the route clears the same client's session.
+    # Step 4: the route clears the same client's session.
     assert cognito_client.get("/api/me").status_code == 401
 
 

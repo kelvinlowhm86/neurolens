@@ -1,4 +1,4 @@
-"""M3h §7, §13: stored sample reports and comparisons.
+"""Stored sample reports and comparisons.
 
 The operator script copies a checked report without its usage, can add a comparison from the
 canonical pair either way round, and the deploy filter only publishes comparisons whose two

@@ -1,4 +1,4 @@
-"""The GPU container's boot record (docs/M3e_spec.md §10).
+"""The GPU container's boot record.
 
 At start-up the container writes `experiments/boots/<host>-<start time>.json` with four UTC
 timestamps: `container_start_utc`, `model_loaded_utc`, `warmup_done_utc` and `ready_utc`. The

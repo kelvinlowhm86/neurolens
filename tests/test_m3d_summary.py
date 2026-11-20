@@ -1,4 +1,4 @@
-"""M3d §6-§7: results.summarise, the response config block and the CSV columns (pure Python)."""
+"""results.summarise, the response config block and the CSV columns (pure Python)."""
 
 import csv
 import io

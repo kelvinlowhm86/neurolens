@@ -1,4 +1,4 @@
-"""probe_duration measures a video from its contents, not its header (docs/M3e_spec.md §3
+"""Probe_duration measures a video from its contents, not its header (
 `media.probe_duration`): the span from the earliest packet start to the
 latest packet end (pts_time + duration_time) over every stream. A header is written by whoever
 made the file, so an edited one could understate the length, pass the length limit and be
@@ -54,8 +54,8 @@ def header_duration(path):
 
 CONTAINERS = {b"moov", b"trak", b"mdia"}
 # Byte offset of the 32-bit duration inside each full box's payload (version 0 layout):
-# mvhd/mdhd: version+flags, creation, modification, timescale, duration; tkhd: version+flags,
-# creation, modification, track_ID, reserved, duration.
+# Mvhd/mdhd: version+flags, creation, modification, timescale, duration; tkhd: version+flags,
+# Creation, modification, track_ID, reserved, duration.
 DURATION_OFFSET = {b"mvhd": 16, b"mdhd": 16, b"tkhd": 20}
 
 

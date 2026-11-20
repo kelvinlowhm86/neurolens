@@ -1,4 +1,4 @@
-"""M3h §2, §13: one canonical pair for every comparison.
+"""One canonical pair for every comparison.
 
 A-vs-B and B-vs-A are the same pair: both ids are lowercase UUID text in sorted order. The key
 sits under results/ so it expires with the results and matches the report Lambda's IAM grant.

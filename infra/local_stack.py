@@ -72,8 +72,8 @@ def _config(dsn):
     cfg["db"] = {"backend": "postgres", "dsn": dsn}
     cfg["server"] = {"host": "127.0.0.1", "port": WEB_PORT}
     cfg["auth"] = {"mode": "dev", "dev_user_id": "dev-user", "dev_email": "dev@localhost"}
-    # Public, read-only YouTube lookups (M3j §3); without the variable, links fall back as on a
-    # failed lookup.
+    # Public, read-only YouTube lookups; without the variable, links fall back as on a
+    # Failed lookup.
     if os.environ.get("NEUROLENS_YOUTUBE_API_KEY"):
         cfg["youtube_api_key"] = os.environ["NEUROLENS_YOUTUBE_API_KEY"]
     return cfg
@@ -146,7 +146,7 @@ class FakeReportClient:
 
 
 def _canned_report(result):
-    """A valid report for the local stack, built from the result alone (M3g §9)."""
+    """A valid report for the local stack, built from the result alone."""
     duration = result["duration_seconds"]
     moments = [
         {
@@ -167,7 +167,7 @@ def _canned_report(result):
 
 
 def _canned_comparison(result_a, result_b):
-    """A valid comparison for the local stack, built from the two results alone (M3h §11). The
+    """A valid comparison for the local stack, built from the two results alone. The
     model now writes [A]/[B] markers; the routes orient the answer before it is shown."""
     end_a = min(2, result_a["duration_seconds"] - 1)
     end_b = min(2, result_b["duration_seconds"] - 1)
@@ -266,7 +266,7 @@ class LocalSageMaker:
 
 
 def _console_notifier(request, email):
-    """Show an access request on a laptop instead of emailing it (M3k §5)."""
+    """Show an access request on a laptop instead of emailing it."""
     note = request.get("note") or "-"
     print(
         f"Access request from {email}: {request['platform']} {request['channel_url']} "

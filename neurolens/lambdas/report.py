@@ -1,4 +1,4 @@
-"""The report Lambda (docs/M3g_spec.md §5, docs/M3h_spec.md §5): write a video's AI report
+"""The report Lambda: write a video's AI report
 or a comparison of two videos from Bedrock.
 
 The report or comparison is claimed by the web app before this runs. Bedrock is called only
@@ -17,7 +17,7 @@ from neurolens import billing, lambdas, report_prompt, settings, storage
 logger = logging.getLogger(__name__)
 
 BEDROCK_API_VERSION = "bedrock-2023-05-31"
-# Sent as the structured-output format; the lengths the prompt asks for are guidance only (M3g §5d).
+# Sent as the structured-output format; the lengths the prompt asks for are guidance only.
 _TEXT_LIST = {"type": "array", "items": {"type": "string"}}
 REPORT_SCHEMA = {
     "type": "object",
@@ -115,7 +115,7 @@ def _ends_a_sentence(text):
 
 
 def _report_problem(answer, duration):
-    """Why the answer cannot be shown as a report, or None (M3g §5d). Only what the page relies
+    """Why the answer cannot be shown as a report, or None. Only what the page relies
     on is checked, never lengths or counts: a long report is still a report."""
     if not isinstance(answer, dict):
         return "not a JSON object"
@@ -156,13 +156,13 @@ def _span_problem(span, duration, name):
 
 _MARKER = re.compile(r"\[[AB]\]")
 # A bare B, but not one that is part of a word such as "B-roll"; A only in the forms that
-# betray a missed marker ("A 12 s", "A's"), never the article or an initial.
+# Betray a missed marker ("A 12 s", "A's"), never the article or an initial.
 _BARE_B = re.compile(r"(?<![\w-])B(?![\w-])")
 _BARE_A = re.compile(r"(?<![\w-])A(?: \d|['’]s\b)")
 
 
 def _missed_marker(text):
-    """Why the text still names a video outside the [A]/[B] markers, or None (M3h §5d)."""
+    """Why the text still names a video outside the [A]/[B] markers, or None."""
     stripped = _MARKER.sub("", text)
     if _BARE_B.search(stripped):
         return "a bare B"
@@ -172,7 +172,7 @@ def _missed_marker(text):
 
 
 def _comparison_problem(answer, duration_a, duration_b):
-    """Why the answer cannot be shown as a comparison, or None (M3h §5d). Each span is checked
+    """Why the answer cannot be shown as a comparison, or None. Each span is checked
     against its own video, and only what the page relies on is checked."""
     if not isinstance(answer, dict):
         return "not a JSON object"
@@ -239,16 +239,16 @@ def _usage(response):
 
 
 def _bedrock_client(region):
-    """The Anthropic SDK's Bedrock client; imported here so importers need no SDK (M3g §5c)."""
+    """The Anthropic SDK's Bedrock client; imported here so importers need no SDK."""
     from anthropic import AnthropicBedrock
 
     return AnthropicBedrock(aws_region=region, timeout=280, max_retries=2)
 
 
 def _call_model(client, cfg, system, content, schema):
-    """Ask Bedrock, parse the JSON and build the stored extras, shared by both paths (M3h §5a).
+    """Ask Bedrock, parse the JSON and build the stored extras, shared by both paths.
 
-    Returns (answer, extras, error); error is one of the M3g failure codes, or None.
+    Returns (answer, extras, error); error is one of the failure codes, or None.
     """
     report_cfg = cfg["report"]
     try:
@@ -257,14 +257,14 @@ def _call_model(client, cfg, system, content, schema):
             max_tokens=report_cfg["max_tokens"],
             system=system,
             messages=[{"role": "user", "content": content}],
-            # Lets the model work through the table before the JSON fixes its verdict (M3g §5c).
+            # Lets the model work through the table before the JSON fixes its verdict.
             thinking={"type": "adaptive"},
             output_config={
                 "format": {"type": "json_schema", "schema": schema},
                 # The default (high) thinks past max_tokens and the Lambda's time limit.
                 "effort": "medium",
             },
-            # The SDK's default API version is refused by InvokeModel models (M3g §5c).
+            # The SDK's default API version is refused by InvokeModel models.
             extra_body={"anthropic_version": BEDROCK_API_VERSION},
         )
     except Exception:
@@ -347,7 +347,7 @@ def write_report(job_id, db, s3, bucket, client, cfg):
 
 
 def write_comparison(job_a, job_b, db, s3, bucket, client, cfg):
-    """Write the claimed comparison for the canonical pair. Never raises (M3h §5a)."""
+    """Write the claimed comparison for the canonical pair. Never raises."""
     job_a, job_b = storage.comparison_pair(job_a, job_b)
     try:
         row = billing.get_comparison(db, job_a, job_b)

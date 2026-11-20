@@ -1,4 +1,4 @@
-"""Dead-letter handler (docs/M3a_spec.md §7): settles or refunds every job that failed twice.
+"""Dead-letter handler: settles or refunds every job that failed twice.
 
 SQS event source on the dead-letter queue, batch size 1. Each job is finished by
 `lambdas.finish_job`: a result means it is charged, otherwise a queued or stale job is refunded

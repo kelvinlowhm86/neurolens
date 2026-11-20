@@ -1,4 +1,4 @@
-"""Cold-start table (docs/M3e_spec.md §10): one row per SageMaker scale-out.
+"""Cold-start table: one row per SageMaker scale-out.
 
 Joins Application Auto Scaling's scaling activities with the container's own boot record
 (`container_start_utc`, `model_loaded_utc`, `warmup_done_utc`, `ready_utc`) and the first job's

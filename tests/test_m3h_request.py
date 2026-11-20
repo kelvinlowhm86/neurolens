@@ -1,4 +1,4 @@
-"""M3h §5b, §13: the shared request builders.
+"""The shared request builders.
 
 The numbers go to the model as one row per second (not one long list per signal), and a
 comparison sends A's labelled blocks before B's, each picture after its own second's label.

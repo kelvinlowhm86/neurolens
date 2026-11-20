@@ -1,4 +1,4 @@
-# ─── Private network for Aurora (M3e §9) ──────────────────────────────────
+# ─── Private network for Aurora ──────────────────────────────────
 #
 # Only the database lives here: its subnet group needs subnets in at least two availability
 # zones. Nothing else uses the VPC. SageMaker runs in AWS's own network, and the container

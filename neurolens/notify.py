@@ -1,4 +1,4 @@
-"""Emailing the operator about an access request (M3k §5), through the SNS topic that emails the
+"""Emailing the operator about an access request, through the SNS topic that emails the
 alarms.
 
 boto3 is imported inside the notifier, as elsewhere in `web/`, so importing this module never
@@ -7,7 +7,7 @@ loads AWS code or makes a call.
 
 
 def sns_notifier(region, topic_arn):
-    """A `notify(request, email)` callable that publishes one access request to SNS (M3k §5)."""
+    """A `notify(request, email)` callable that publishes one access request to SNS."""
 
     def notify(request, email):
         import boto3

@@ -1,4 +1,4 @@
-"""The unreadable-video rule (M3e §3, §4b).
+"""The unreadable-video rule.
 
 ffprobe cannot measure a file that is not a video, so `media.probe_duration` raises
 `UnreadableVideo`. The dispatcher refuses such an upload before any GPU runs (covered by

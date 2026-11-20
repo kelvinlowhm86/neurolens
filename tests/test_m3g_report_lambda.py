@@ -1,4 +1,4 @@
-"""M3g §11: the report Lambda and its request builder (docs/M3g_spec.md §5).
+"""The report Lambda and its request builder.
 
 The fake Anthropic client stands in for Bedrock; storage is moto S3 and report states are real
 PostgreSQL rows. No network, Bedrock or paid call is made.

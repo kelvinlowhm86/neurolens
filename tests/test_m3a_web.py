@@ -1,7 +1,7 @@
-"""M3a web changes (Flask test client + moto + PostgreSQL). Written first from docs/M3a_spec.md §2,
-§6 and §10: presign with a reservation (402, the 1-second minimum, the user's key), /api/me,
-Aurora-backed status and result with ownership checks made before any S3 request, the crash
-window, the dev-mode guard and ensure_user once per user per process.
+"""Web changes (Flask test client + moto + PostgreSQL): presign with a reservation (402, the
+1-second minimum, the user's key), /api/me, Aurora-backed status and result with ownership checks
+made before any S3 request, the crash window, the dev-mode guard and ensure_user once per user
+per process.
 """
 
 import re
@@ -194,7 +194,7 @@ def test_presign_failing_after_the_reservation_refunds_it(client, pg, patch_ever
 
 
 def test_me_returns_email_and_balance(client):
-    """M3b §4a's shape: the balance grouped under one key."""
+    """Shape: the balance grouped under one key."""
     resp = client.get("/api/me")
     assert resp.status_code == 200
     assert resp.get_json() == {
@@ -401,7 +401,7 @@ def test_result_of_an_unfinished_job_without_a_result_is_404(client, db, claimed
         billing.claim(db, job_id)
     resp = client.get(f"/api/jobs/{job_id}/result")
     assert resp.status_code == 404
-    assert resp.get_json()["error"] == "result_not_ready"  # M3b §4a
+    assert resp.get_json()["error"] == "result_not_ready"
 
 
 def test_result_of_a_failed_job_is_404_even_when_a_result_exists(aws, client, db):

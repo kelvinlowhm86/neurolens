@@ -1,11 +1,10 @@
-"""M3b web endpoints (Flask test client + moto + PostgreSQL). Written first from
-docs/M3b_spec.md §2c, §4a, §8 and §11: /api/me, job history with its `limit` rule and 30-day
-`result_available`, the CSV export and `neurolens.results.to_csv`, the result routes' exact
-not-available errors (ownership checked before any S3 call), the crash window, presign refused
-while GPU work is paused (reading the SageMaker scalable target, failing closed), 503
-`database_waking` within the web app's 45 s budget, and /api/samples gone.
+"""Web endpoints (Flask test client + moto + PostgreSQL): /api/me, job history with its `limit`
+rule and 30-day `result_available`, the CSV export and `neurolens.results.to_csv`, the result
+routes' exact not-available errors (ownership checked before any S3 call), the crash window,
+presign refused while GPU work is paused (reading the SageMaker scalable target, failing
+closed), 503 `database_waking` within the web app's 45 s budget, and /api/samples gone.
 
-History, CSV and result tests run in dev mode, which is always signed in (§2b).
+History, CSV and result tests run in dev mode, which is always signed in.
 """
 
 import csv
@@ -51,8 +50,8 @@ JOB_KEYS = {
 }
 DAY = 24 * 3600
 
-# M3d format 2: three with-audio seconds, two no-audio seconds. The numbers are awkward on
-# purpose (a float that is whole, an int, tiny and long decimals).
+# Format 2: three with-audio seconds, two no-audio seconds. The numbers are awkward on
+# Purpose (a float that is whole, an int, tiny and long decimals).
 SIGNALS = {
     "faces": [0.4306, 1e-05, -0.5],
     "bodies": [0.0, 0.148, 0.25],
@@ -399,7 +398,7 @@ PRESIGN = {
 
 
 class FakeAppScaling:
-    """The Application Auto Scaling API the pause check reads (M3e §8)."""
+    """The Application Auto Scaling API the pause check reads."""
 
     def __init__(self, max_capacity=1):
         self.max_capacity = max_capacity
@@ -474,7 +473,7 @@ def test_presign_in_dev_mode_never_reads_a_scalable_target(client, pg, aws_calls
 def test_me_is_503_database_waking_within_the_45_s_budget(
     aws, make_cfg, tmp_path, waking_aurora, patch_everywhere
 ):
-    """The web app builds its Data API database with resume_wait_s=45 (§2c), so a request ends
+    """The web app builds its Data API database with resume_wait_s=45, so a request ends
     before the Lambda's and CloudFront's 60 s timeouts."""
     client, clock = waking_aurora
     patch_everywhere(

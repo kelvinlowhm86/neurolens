@@ -1,4 +1,4 @@
--- M3f 006 (docs/M3f_spec.md §5a-§5e, §6b): claims, research consent versions, video hashes,
+-- Claims, research consent versions, video hashes,
 -- curve snapshots and rewards, the copy-removal reason, and server-side sign-in sessions.
 ALTER TABLE jobs ADD COLUMN claimed_at TIMESTAMPTZ;
 ALTER TABLE jobs ADD COLUMN consent_version TEXT;

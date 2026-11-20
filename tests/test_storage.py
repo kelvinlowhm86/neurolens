@@ -1,6 +1,6 @@
 """Tests for neurolens.storage (moto, no real AWS).
 
-The presign tests follow the M3a interface (docs/M3a_spec.md §6, a spec'd change): the key comes
+The presign tests follow the interface (a spec'd change): the key comes
 from `object_key(user_id, job_id, content_type)` (uploads/{user_id}/{job_id}{ext}, retiring
 test-user), and `presign_upload(s3, bucket, object_key, max_bytes, expires_in=300)`
 returns {"url", "fields", "expires_in"}; the route creates the job id itself.

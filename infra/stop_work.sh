@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Emergency pause (docs/M3e_spec.md §6b): no GPU may start or stay on, and no keep-warm survives.
+# Emergency pause: no GPU may start or stay on, and no keep-warm survives.
 # It deletes the keep-warm action before scaling down, then reads the target back.
 # It then sends desired count 0 on every poll until the endpoint reads InService at 0/0; a refusal
 # because an update is in progress just means trying again.

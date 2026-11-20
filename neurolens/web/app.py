@@ -1,8 +1,8 @@
 """Flask routes. The web tier never runs the model: analysis happens in the worker.
 
-From M3a the database owns users, credit and job state (docs/M3a_spec.md §6): presign reserves
+The database owns users, credit and job state: presign reserves
 credit before handing out the upload form, and status and result answer only the job's owner,
-checked in the database before any S3 request. From M3b (docs/M3b_spec.md §2-§4, §7b): Cognito
+checked in the database before any S3 request. Cognito
 sign-in on AWS, every /api/* route needs a signed-in user, POSTs take JSON only, no CORS, job
 history and CSV export, uploads refused while GPU work is paused.
 """
@@ -43,11 +43,11 @@ from neurolens.web import auth
 
 logger = logging.getLogger("neurolens")
 
-DEFAULT_STARTER_CENTS = 500  # M3a §3b
+DEFAULT_STARTER_CENTS = 500
 MIN_DURATION_SECONDS = 1  # a zero-length job would cost nothing yet start a GPU
 MAX_FILENAME_CHARS = 255  # the filename is display only
 OPEN = (billing.QUEUED, billing.PROCESSING)
-WEB_RESUME_WAIT_S = 45  # under the Lambda's and CloudFront's 60 s timeouts (M3b §2c)
+WEB_RESUME_WAIT_S = 45  # under the Lambda's and CloudFront's 60 s timeouts
 RESULT_DAYS = 30  # the results/ lifecycle rule (Terraform)
 VIDEO_LINK_SECONDS = 3600  # a video is streamed in pieces; one hour outlives a paused viewer
 HISTORY_LIMIT, HISTORY_MAX = 50, 100
@@ -125,7 +125,7 @@ def _stem(filename):
 
 
 def _disposition(stem, suffix="NeuroLens.csv", fallback="NeuroLens result.csv"):
-    """The attachment name, "<stem> – <suffix>" (M3f §4.7, M3h §18b). HTTP headers are latin-1,
+    """The attachment name, "<stem> – <suffix>". HTTP headers are latin-1,
     so the full name goes in RFC 5987's `filename*`; `filename` carries a plain-ASCII fallback."""
     stem = stem.strip()
     if not stem:
@@ -160,14 +160,14 @@ def _old_result():
 
 
 def _not_signed_in():
-    """The one not-signed-in answer: clear the session and its hint cookie (M3c §5)."""
+    """The one not-signed-in answer: clear the session and its hint cookie."""
     session.clear()
     response, status = _error("not_signed_in", "Please sign in.", status=401)
     return auth.clear_signed_in_hint(response), status
 
 
 def _delete_curve_files(s3, bucket, keys, job_id):
-    """Remove the two snapshot files a refused curve upload wrote (M3f §5d)."""
+    """Remove the two snapshot files a refused curve upload wrote."""
     try:
         if not storage.delete_keys(s3, bucket, keys):
             logger.error(f"S3 reported failed deletes for the refused curve of {job_id}")
@@ -335,7 +335,7 @@ def create_app(
         """Every /api/* route except GET /api/limits: JSON for POSTs (cross-site forms cannot send
         it without a CORS check this app never grants), and a signed-in user except for POST
         /api/wake. The limits are public so signed-out visitors' sample brains can be coloured
-        (M3d §6); the wake so the landing page can start Aurora's resume before sign-in."""
+        the wake so the landing page can start Aurora's resume before sign-in."""
         if not request.path.startswith("/api/"):
             return None
         if request.path == "/api/limits" and request.method == "GET":
@@ -387,7 +387,7 @@ def create_app(
     @app.route("/app")
     def app_page():
         page = send_from_directory(str(static_dir), "app.html")
-        # The landing page's hint follows the sliding session (M3f §6b).
+        # The landing page's hint follows the sliding session.
         if cognito and auth.current_user() is not None:
             return auth.set_signed_in_hint(page)
         return page
@@ -676,7 +676,7 @@ def create_app(
 
     @app.route("/api/access-request", methods=["POST"])
     def access_request():
-        """Ask for free minutes with a channel link (M3k §6).
+        """Ask for free minutes with a channel link.
 
         The row is committed before the email is sent, because the table is the list of requests:
         a failed notification is logged without the requester's details and still answers 201.
@@ -753,7 +753,7 @@ def create_app(
             return _error("presign_failed", "Could not prepare the upload.", status=500)
 
         if autoscaling is not None:
-            # Before any reservation: while GPU work is stopped no upload could run (§4a).
+            # Before any reservation: while GPU work is stopped no upload could run.
             try:
                 paused = scaling.endpoint_paused(autoscaling, gpu_endpoint)
             except Exception:
@@ -822,7 +822,7 @@ def create_app(
 
     @app.route("/api/jobs")
     def list_jobs():
-        """The caller's jobs, newest first (M3b §4a)."""
+        """The caller's jobs, newest first."""
         limit = request.args.get("limit", str(HISTORY_LIMIT))
         if not re.fullmatch(r"\d+", limit) or not 1 <= int(limit) <= HISTORY_MAX:
             return _error("bad_limit", f"limit must be a whole number from 1 to {HISTORY_MAX}.")
@@ -865,7 +865,7 @@ def create_app(
         return jsonify(rows)
 
     def refund_gpu_wait(job_id):
-        """Refund a job whose GPU wait ran out (M3l §2c) while its owner looks. A failure here
+        """Refund a job whose GPU wait ran out while its owner looks. A failure here
         must not break the answer: it is logged, and the reaper refunds the job later."""
         try:
             return billing.refund_if_gpu_wait_over(db, str(job_id))
@@ -906,7 +906,7 @@ def create_app(
         return rows[0], None
 
     def shared_job(job_id):
-        """The caller's own done, shared job, else the refusal both curve routes give (M3j §6)."""
+        """The caller's own done, shared job, else the refusal both curve routes give."""
         job, error = owned_job(job_id)
         if error:
             return None, error
@@ -922,7 +922,7 @@ def create_app(
         return job, None
 
     def video_facts(platform, video_id, job_id):
-        """The checked facts for a link, or None when they cannot be checked (M3j §4).
+        """The checked facts for a link, or None when they cannot be checked.
 
         Facebook supplies none. A YouTube lookup that fails or finds no video is logged; a missing
         video is a 400 on both routes, while every other failure falls back to the analysis date.
@@ -1041,7 +1041,7 @@ def create_app(
 
     @app.route("/api/jobs/<job_id>/report.pdf")
     def job_report_pdf(job_id):
-        """The written report as a PDF (M3h §18b)."""
+        """The written report as a PDF."""
         result, job, error = owned_result(job_id)
         if error:
             return error
@@ -1068,7 +1068,7 @@ def create_app(
 
     @app.route("/api/jobs/<job_id>/brain")
     def job_brain(job_id):
-        """Redirect to a five-minute presigned GET of the raw brain file (M3d §7)."""
+        """Redirect to a five-minute presigned GET of the raw brain file."""
         _, _, error = owned_result(job_id)
         if error:
             return error
@@ -1081,7 +1081,7 @@ def create_app(
 
     @app.route("/api/jobs/<job_id>/thumbnail")
     def job_thumbnail(job_id):
-        """Redirect to a five-minute presigned GET of the video's thumbnail (M3d §7)."""
+        """Redirect to a five-minute presigned GET of the video's thumbnail."""
         job, error = owned_job(job_id)
         if error:
             return error
@@ -1098,7 +1098,7 @@ def create_app(
 
     @app.route("/api/jobs/<job_id>/video")
     def job_video(job_id):
-        """A one-hour presigned GET of the caller's own video (M3d §7).
+        """A one-hour presigned GET of the caller's own video.
 
         The phone copy is tried first, then the upload, then a consented job's dataset copy.
         """
@@ -1125,8 +1125,7 @@ def create_app(
 
     @app.route("/api/jobs/<job_id>/cancel", methods=["POST"])
     def cancel_job(job_id):
-        """Refund and delete a queued job the caller owns, before the dispatcher prices it
-        (M3d §7, M3e §8)."""
+        """Refund and delete a queued job the caller owns, before the dispatcher prices it."""
         job, error = owned_job(job_id)
         if error:
             return error
@@ -1151,7 +1150,7 @@ def create_app(
 
     @app.route("/api/jobs/<job_id>/stop-sharing", methods=["POST"])
     def stop_sharing(job_id):
-        """Mark a shared job's research copy removed, then delete it (M3f §5c)."""
+        """Mark a shared job's research copy removed, then delete it."""
         job, error = owned_job(job_id)
         if error:
             return error
@@ -1177,7 +1176,7 @@ def create_app(
 
     @app.route("/api/jobs/<job_id>/retention/check", methods=["POST"])
     def job_retention_check(job_id):
-        """What this curve would pay, before any work, without writing anything (M3j §6)."""
+        """What this curve would pay, before any work, without writing anything."""
         job, error = shared_job(job_id)
         if error:
             return error
@@ -1228,7 +1227,7 @@ def create_app(
 
     @app.route("/api/jobs/<job_id>/retention")
     def job_retention_curve(job_id):
-        """The newest quality-checked curve stored for the caller's own job (M3l §4)."""
+        """The newest quality-checked curve stored for the caller's own job."""
         job, error = owned_job(job_id)
         if error:
             return error
@@ -1261,7 +1260,7 @@ def create_app(
 
     @app.route("/api/jobs/<job_id>/retention", methods=["POST"])
     def job_retention(job_id):
-        """Store a shared job's audience-retention snapshot and reward it when valid (M3f §5d)."""
+        """Store a shared job's audience-retention snapshot and reward it when valid."""
         job, error = shared_job(job_id)
         if error:
             return error
@@ -1307,7 +1306,7 @@ def create_app(
             views, published = None, None
         else:
             # Training weights only, never reward rules: optional, so a lookup that failed after
-            # the check (which hid these questions) still saves.
+            # The check (which hid these questions) still saves.
             views = data.get("views")
             if views is not None and views not in RETENTION_VIEWS:
                 return _error("invalid_request", "views must be one of the listed choices.")
@@ -1390,7 +1389,7 @@ def create_app(
 
     @app.route("/api/jobs/<job_id>/report", methods=["POST"])
     def start_report(job_id):
-        """Claim one free report attempt and start the report Lambda (M3g §4)."""
+        """Claim one free report attempt and start the report Lambda."""
         job, error = owned_job(job_id)
         if error:
             return error
@@ -1431,7 +1430,7 @@ def create_app(
 
     @app.route("/api/jobs/<job_id>/report")
     def get_report(job_id):
-        """The report's state, tries left and stored answer (M3g §4)."""
+        """The report's state, tries left and stored answer."""
         job, error = owned_job(job_id)
         if error:
             return error
@@ -1474,7 +1473,7 @@ def create_app(
 
     @app.route("/api/compare/<x>/<y>/report", methods=["POST"])
     def start_comparison(x, y):
-        """Claim one free comparison attempt and start the report Lambda (M3h §4)."""
+        """Claim one free comparison attempt and start the report Lambda."""
         a, b, _, _, error = comparison_ids(x, y)
         if error:
             return error
@@ -1528,7 +1527,7 @@ def create_app(
 
     @app.route("/api/compare/<x>/<y>/report")
     def get_comparison(x, y):
-        """The comparison's state, tries left and stored answer, turned so x is A (M3h §4, §2)."""
+        """The comparison's state, tries left and stored answer, turned so x is A."""
         a, b, job_x, job_y, error = comparison_ids(x, y)
         if error:
             return error
@@ -1557,7 +1556,7 @@ def create_app(
 
     @app.route("/api/compare/<x>/<y>/report.pdf")
     def comparison_report_pdf(x, y):
-        """The written comparison as a PDF, turned so x is A and its name first (M3h §18b, §2)."""
+        """The written comparison as a PDF, turned so x is A and its name first."""
         a, b, job_x, job_y, error = comparison_ids(x, y)
         if error:
             return error
@@ -1598,7 +1597,7 @@ def create_app(
 
     @app.route("/api/jobs/<job_id>", methods=["DELETE"])
     def delete_job(job_id):
-        """Mark the caller's job deleted, then delete every file it owns (M3c §4, M3f §5c)."""
+        """Mark the caller's job deleted, then delete every file it owns."""
         job, error = owned_job(job_id)
         if error:
             return error
@@ -1618,8 +1617,7 @@ def create_app(
 
     @app.route("/api/account/delete", methods=["POST"])
     def delete_account():
-        """Mark the caller's account deleted, remove its logins, purge its files and rows
-        (M3c §5)."""
+        """Mark the caller's account deleted, remove its logins, purge its files and rows."""
         if not cognito:
             return _not_found()
         data = request.get_json(silent=True)

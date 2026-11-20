@@ -1,6 +1,6 @@
-"""M3a credit billing (neurolens.billing) against a real PostgreSQL 16. Written first from
-docs/M3a_spec.md §3b, §4 and §10. The four ledger invariants are checked after every test by the
-`db_dsn` fixture in conftest.py.
+"""Credit billing (neurolens.billing) against a real PostgreSQL 16.
+
+The four ledger invariants are checked after every test by the `db_dsn` fixture in conftest.py.
 
 Prices: CENTS_PER_BLOCK per started 30 s block with a half-second allowance (neurolens.pricing),
 so 3 s and 27.4 s cost one block, 61 s costs three and 120 s costs four.
@@ -186,7 +186,7 @@ def test_claim_of_an_unknown_job_returns_none(db):
 
 
 def test_claim_staleness_30s_cannot_120s_can(db, pg):
-    """§10: a processing job touched 30 s ago cannot be claimed; one touched 120 s ago can."""
+    """A processing job touched 30 s ago cannot be claimed; one touched 120 s ago can."""
     job_id = claimed(db)
     pg.age(job_id, updated_s=30)
     assert billing.claim(db, job_id) is None
@@ -283,7 +283,7 @@ def test_settle_success_captures_exactly_the_verified_price(db, pg):
 
 
 def test_settle_success_needs_no_attempt_and_works_on_a_queued_job(db, pg):
-    """A finished result is always charged, whoever finished it (§4a)."""
+    """A finished result is always charged, whoever finished it."""
     make_user(db)
     job_id, _ = reserve(db)
     assert billing.settle_success(db, job_id) is True

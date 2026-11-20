@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Builds the SageMaker container image (docs/M3e_spec.md §4d): zips the repository at HEAD,
+# Builds the SageMaker container image: zips the repository at HEAD,
 # uploads it to s3://<bucket>/build/source.zip, starts the CodeBuild project, waits, and prints
 # the image digest. A deploy is: this script, put the digest in terraform.tfvars, terraform apply.
 set -euo pipefail

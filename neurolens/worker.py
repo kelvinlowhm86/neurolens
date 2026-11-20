@@ -1,4 +1,4 @@
-"""The SageMaker GPU container (docs/M3e_spec.md §4).
+"""The SageMaker GPU container.
 
 `python worker.py serve` loads the model, warms it up, writes a boot record and listens on port
 8080. SageMaker POSTs one video per request to /invocations; the job logic claims the job, runs
@@ -146,7 +146,7 @@ def job_temp_dir(feature_cache=None):
 
     `tempfile.tempdir` and TMPDIR point at it for the job, so the audio and transcript the model
     extracts land there too. Both are restored and the folder is removed whole whatever happens.
-    One job runs at a time (M3e §4a), so the process-wide temporary folder is safe to move.
+    One job runs at a time, so the process-wide temporary folder is safe to move.
     """
     base = tempfile.gettempdir()
     folder = tempfile.mkdtemp(prefix="job-", dir=base)
@@ -170,7 +170,7 @@ def job_temp_dir(feature_cache=None):
 
 
 def _frames_zip(frames, words):
-    """The report's frames file: 0000.jpg, 0001.jpg, ... and words.json, uncompressed (M3g §2b)."""
+    """The report's frames file: 0000.jpg, 0001.jpg, ... and words.json, uncompressed."""
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_STORED) as archive:
         for number, data in enumerate(frames):
@@ -254,7 +254,7 @@ def handle_job(job_id, video_path, *, s3, db, cfg, roi_masks, keep_alive=None):
         state = billing.job_state(db, job_id)
         if state is None or state["status"] in billing.TERMINAL:
             if state is not None and state["status"] == billing.FAILED:
-                # A refund deleted the upload; this one landed afterwards (M3a §7b).
+                # A refund deleted the upload; this one landed afterwards.
                 try:
                     s3.delete_object(Bucket=cfg["aws"]["s3_bucket"], Key=state["object_key"])
                 except Exception:
@@ -379,7 +379,7 @@ def _analyse(
         stage("extracting_roi")
         result = extract_response(preds_full, preds_noaudio, roi_masks)
         # Cast and check before any write: an overflowing or non-finite value must fail the job
-        # before the dataset copy or the result exists (M3d §5).
+        # Before the dataset copy or the result exists.
         storage.brain_bytes(preds_full)
 
         # Frames are for the optional report: cutting or storing them never fails the paid job.
@@ -405,12 +405,12 @@ def _analyse(
 
         if research_consent:
             stage("saving_dataset")
-            # Recorded before the copy, so a copy that fails still leaves the hash (M3f §5b).
+            # Recorded before the copy, so a copy that fails still leaves the hash.
             billing.record_video_hash(db, job_id, _sha256_file(video_path))
             storage.put_dataset(s3, bucket, job_id, object_key)
 
         # The phone copy is only for playback, so it never fails the paid job. Waited for before
-        # the stage, so the claim is checked again after a long wait and before any result write.
+        # The stage, so the claim is checked again after a long wait and before any result write.
         play_copied = play_copy.wait(inference.PLAY_COPY_WAIT_SECONDS)
         stage("saving_result")
         if play_copied:
@@ -529,7 +529,7 @@ class _Handler(BaseHTTPRequestHandler):
         reply = (500, {"job_id": job_id, "outcome": Outcome.FAILED.value})
         try:
             with job_temp_dir(server.feature_cache) as folder:
-                # A name never used before on this instance, as the feature cache relies on (§4a).
+                # A name never used before on this instance, as the feature cache relies on.
                 path = folder / f"{folder.name}.mp4"
                 try:
                     length = int(self.headers.get("Content-Length", ""))
@@ -604,9 +604,9 @@ def serve():
     validate_config(cfg)
     aws = cfg["aws"]
     db = dbmod.from_config(cfg)
-    # tribev2 writes each job's extracted features here. In the container ./models is the copy of
-    # the weights SageMaker downloads, which must stay untouched, so use /tmp. Never empty it
-    # while the process runs: exca creates each subfolder once and remembers it.
+    # Tribev2 writes each job's extracted features here. In the container ./models is the copy of
+    # The weights SageMaker downloads, which must stay untouched, so use /tmp. Never empty it
+    # While the process runs: exca creates each subfolder once and remembers it.
     feature_cache = tempfile.mkdtemp(prefix="neurolens-features-")
     inference.load_model(cfg, feature_cache=feature_cache)
     model_loaded = datetime.now(UTC)

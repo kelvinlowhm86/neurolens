@@ -1,4 +1,4 @@
-"""The PDF of a written report and of a written comparison (M3h §18a).
+"""The PDF of a written report and of a written comparison.
 
 Pure layout: no AWS, no database, no model. `fpdf2` and `fontTools` are imported inside the
 functions that need them, so the web function's cold start is unchanged until a PDF is asked
@@ -39,7 +39,7 @@ PAGE_BOTTOM = 20
 
 
 def _mmss(value):
-    """Whole seconds as m:ss, floored like the page's fmtRange (M3h §18a)."""
+    """Whole seconds as m:ss, floored like the page's fmtRange."""
     try:
         seconds = max(0, int(math.floor(float(value))))
     except (TypeError, ValueError):
@@ -164,7 +164,7 @@ class _Doc:
         return self.get_string_width(text)
 
     def ellipsis(self, text, width):
-        """Shorten a name in the middle, keeping its extension (M3h §18a)."""
+        """Shorten a name in the middle, keeping its extension."""
         text = str(text or "")
         if self.text_width(text) <= width:
             return text
@@ -635,7 +635,7 @@ def _new_doc(kind, strings):
 
 
 def report_pdf(name, result, report, frames):
-    """The PDF for one written report (M3h §18a)."""
+    """The PDF for one written report."""
     report = report or {}
     signals = result.get("signals") or {}
     overall = list(signals.get("overall") or [])
@@ -720,7 +720,7 @@ def report_pdf(name, result, report, frames):
 
 
 def comparison_pdf(a, b, report):
-    """The PDF for one written comparison (M3h §18a)."""
+    """The PDF for one written comparison."""
     report = report or {}
     name_a, result_a, frames_a = a
     name_b, result_b, frames_b = b

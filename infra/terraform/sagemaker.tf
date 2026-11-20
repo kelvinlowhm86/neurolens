@@ -1,4 +1,4 @@
-# ─── SageMaker asynchronous GPU endpoint (M3e §6a, §9) ────────────────────
+# ─── SageMaker asynchronous GPU endpoint ────────────────────
 #
 # SageMaker starts a GPU when a request is waiting and stops it after 7 idle minutes. The
 # container does the bookkeeping (claim, charge, refund); SageMaker only runs and stops machines.
@@ -55,7 +55,6 @@ resource "aws_ecr_repository" "worker" {
     scan_on_push = true
   }
 
-  tags = { Milestone = "M3e" }
 }
 
 # The image the endpoint runs carries the tag `live` and must never expire (SageMaker pulls it
@@ -95,7 +94,6 @@ resource "aws_ecr_lifecycle_policy" "worker" {
 resource "aws_cloudwatch_log_group" "codebuild" {
   name              = "/aws/codebuild/neurolens-worker-image"
   retention_in_days = 30
-  tags              = { Milestone = "M3e" }
 }
 
 # Linux x86-64, Docker in privileged mode, one hour. The source is the repository at HEAD,
@@ -140,7 +138,6 @@ resource "aws_codebuild_project" "worker_image" {
     }
   }
 
-  tags = { Milestone = "M3e" }
 }
 
 # ─── The model, endpoint configuration and endpoint ───────────────────────
@@ -177,10 +174,9 @@ resource "aws_sagemaker_model" "main" {
     }
   }
 
-  tags = { Milestone = "M3e" }
 }
 
-# The endpoint configuration is the one resource Cloud Control manages (instance pools, §6a).
+# The endpoint configuration is the one resource Cloud Control manages (instance pools).
 resource "awscc_sagemaker_endpoint_config" "main" {
   count = local.image_ready ? 1 : 0
 
@@ -219,7 +215,6 @@ resource "awscc_sagemaker_endpoint_config" "main" {
 resource "aws_cloudwatch_log_group" "sagemaker_endpoint" {
   name              = "/aws/sagemaker/Endpoints/neurolens"
   retention_in_days = var.log_retention_days
-  tags              = { Milestone = "M3e" }
 }
 
 resource "aws_sagemaker_endpoint" "main" {
@@ -230,7 +225,6 @@ resource "aws_sagemaker_endpoint" "main" {
 
   depends_on = [aws_cloudwatch_log_group.sagemaker_endpoint]
 
-  tags = { Milestone = "M3e" }
 
   # An update SageMaker rolls back (for example no GPU capacity) ends InService on the old
   # configuration, and the provider reports success. Without this check Terraform would then
@@ -310,10 +304,9 @@ resource "terraform_data" "live_image" {
 # The endpoint's error notifications (no success topic: the container settles a success itself).
 resource "aws_sns_topic" "gpu_errors" {
   name = "neurolens-gpu-errors"
-  tags = { Milestone = "M3e" }
 }
 
-# ─── Scaling: a GPU on demand, back to 0 after 7 idle minutes (M3e §6a) ───
+# ─── Scaling: a GPU on demand, back to 0 after 7 idle minutes ───
 
 resource "aws_appautoscaling_target" "endpoint" {
   count = local.image_ready ? 1 : 0
@@ -371,7 +364,6 @@ resource "aws_cloudwatch_metric_alarm" "scale_out" {
   treat_missing_data  = "notBreaching"
 
   alarm_actions = [aws_appautoscaling_policy.scale_out[0].arn]
-  tags          = { Milestone = "M3e" }
 }
 
 # The backlog counts requests in progress too, so a running job holds the GPU. Missing data
@@ -421,5 +413,4 @@ resource "aws_cloudwatch_metric_alarm" "scale_in" {
   treat_missing_data  = "breaching"
 
   alarm_actions = [aws_appautoscaling_policy.scale_in[0].arn]
-  tags          = { Milestone = "M3e" }
 }

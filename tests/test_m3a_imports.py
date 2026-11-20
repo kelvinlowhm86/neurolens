@@ -1,6 +1,8 @@
-"""M3a import hygiene. Written first from docs/M3a_spec.md §3d, §7 and §10: the database layer,
-billing and the Lambdas' modules import without numpy (the Lambda zip has none), psycopg (only
-the PostgreSQL backend needs it, imported lazily inside the class) or neurolens.inference."""
+"""Import hygiene for the database layer, billing and the Lambdas' modules.
+
+These modules import without numpy (the Lambda zip has none), psycopg (only the PostgreSQL
+backend needs it, imported lazily inside the class) or neurolens.inference.
+"""
 
 import json
 import subprocess

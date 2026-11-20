@@ -1,4 +1,4 @@
-"""The cost formula, shared by the web app, the worker and (from M3) billing.
+"""The cost formula, shared by the web app, the worker and billing.
 
 This module is the one place the price lives. $1.00 per started 30-second block, with a
 half-second allowance so a 30.02 s ad is one block, and a minimum of one block. The pages get the

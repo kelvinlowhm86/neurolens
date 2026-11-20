@@ -1,4 +1,4 @@
-"""Cancel only before dispatch (M3e §8, §11 "Cancel window").
+"""Cancel only before dispatch.
 
 A queued job with no `verified_duration_ms` can be cancelled: refunded and its upload deleted.
 Once the dispatcher has priced it (`verified_duration_ms` set), SageMaker will start a GPU for

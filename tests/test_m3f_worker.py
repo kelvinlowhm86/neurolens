@@ -1,4 +1,4 @@
-"""M3f worker storage split (docs/M3f_spec.md §5b, §10 "Worker"; M3j §9b).
+"""Worker storage split.
 
 A consented job keeps its video under `dataset/<job_id>/`; NeuroLens's own output stays only in
 `results/`. The worker records the video's SHA-256 before the copy, so it survives a copy that

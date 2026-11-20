@@ -1,4 +1,4 @@
-"""Fresh review fixes (docs/M3c_spec.md §5, §8; docs/M3f_spec.md §5c, §5d, §6b, §7, §10).
+"""Fresh review fixes.
 
 Account deletion marks first and purges later; the reward preview matches what `add_curve` pays;
 `sharing` needs a done job; a stopped-then-deleted copy gets its own files purged; snapshots go
@@ -518,7 +518,7 @@ def test_a_purged_stopped_videos_hash_still_blocks_another_reward(aws, db, pg):
 
 @pytest.fixture(autouse=True)
 def youtube_falls_back(monkeypatch):
-    """M3j: the save route looks the link up; these tests keep the unknown-facts fallback."""
+    """The save route looks the link up; these tests keep the unknown-facts fallback."""
     try:
         from neurolens import youtube
     except ImportError:

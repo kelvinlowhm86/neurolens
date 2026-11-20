@@ -1,4 +1,4 @@
-"""M3a 004: a job ends at most once, ever (docs/M3a_spec.md §3c, §10).
+"""A job ends at most once, ever.
 
 PostgreSQL tests, written first: a unique partial index on ledger (job_id) refuses a second
 capture or refund row for a job, rows of other kinds and rows with no job stay unconstrained,

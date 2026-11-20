@@ -8,12 +8,12 @@ terraform {
       version = "~> 6.28"
     }
     # SageMaker instance pools cannot be expressed by the aws provider; the endpoint
-    # configuration alone uses Cloud Control (docs/M3e_spec.md §6a).
+    # Configuration alone uses Cloud Control.
     awscc = {
       source  = "hashicorp/awscc"
       version = "~> 1.107"
     }
-    # Zips the Lambdas' code (the one M3a/M3e zip).
+    # Zips the Lambdas' code (the one zip).
     archive = {
       source  = "hashicorp/archive"
       version = "~> 2.0"
@@ -32,20 +32,19 @@ terraform {
   }
 }
 
-# The region is one setting: us-east-1 by default, because the g6e GPU family used from
-# M2a onward is not offered in Singapore. The state bucket above stays in us-east-1 whatever this is.
+# The region is one setting: us-east-1 by default, because the g6e GPU family used here is
+# not offered in Singapore. The state bucket above stays in us-east-1 whatever this is.
 provider "aws" {
   region = var.region
 
   default_tags {
     tags = {
-      Project   = "neurolens"
-      Milestone = "M3e"
+      Project = "neurolens"
     }
   }
 }
 
-# Cloud Control manages the endpoint configuration only (docs/M3e_spec.md §6a). It uses the
+# Cloud Control manages the endpoint configuration only. It uses the
 # same credentials and region as the aws provider.
 provider "awscc" {
   region = var.region

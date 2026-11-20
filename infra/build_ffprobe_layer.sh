@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Builds the dispatcher's ffprobe Lambda layer (docs/M3e_spec.md §3): a static Linux x86-64
+# Builds the dispatcher's ffprobe Lambda layer: a static Linux x86-64
 # ffprobe in bin/, zipped where Terraform uploads it. Pinned by release URL and SHA-256.
 set -euo pipefail
 

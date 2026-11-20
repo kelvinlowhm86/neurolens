@@ -1,4 +1,4 @@
-"""M3j web changes (docs/M3j_spec.md §2, §4, §6, §8, §9, §9b, §11).
+"""Web changes.
 
 The check route looks the video up before any work and names every reward reason; the save route
 does its own lookup and stores the checked facts instead of the questions. The launcher reads the
@@ -136,7 +136,7 @@ def make_job(
         db, user_id, job_id, key, "clip.mp4", round(seconds * 1000), research_consent=consent
     )
     if state != "queued":
-        # The dispatcher measures the length before any GPU runs (M3e §3a).
+        # The dispatcher measures the length before any GPU runs.
         assert billing.verify_queued(db, job_id, round(seconds * 1000), 3600) == "ok"
     if state in ("processing", "done"):
         assert billing.claim(db, job_id) == 1
@@ -442,7 +442,7 @@ def test_the_save_rejects_an_answer_the_check_supplied(
 def test_without_facts_the_questions_are_optional_weights(
     db, aws, make_cfg, tmp_path, monkeypatch, pg, answered
 ):
-    """A lookup that fails after the check hid the questions must still save (M3j §6)."""
+    """A lookup that fails after the check hid the questions must still save."""
     from neurolens import youtube
 
     client = app_for(aws, db, make_cfg, tmp_path)

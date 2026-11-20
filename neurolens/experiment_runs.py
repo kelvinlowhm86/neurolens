@@ -1,7 +1,7 @@
-"""Experiment run folders in S3 (docs/M4_spec.md §3, the artifact contract).
+"""Experiment run folders in S3 (the artifact contract).
 
 Each run lives in experiments/<experiment>/<run_id>/ with a manifest.json that lists the run's
-files. Shared by the experiment scripts and, later, M4's study export. boto3 clients are passed in.
+files. Shared by the experiment scripts and, later, study export. boto3 clients are passed in.
 """
 
 import csv
@@ -12,7 +12,7 @@ from botocore.exceptions import ClientError
 
 from neurolens import storage
 
-# The files each experiment must have before its manifest may be written (M4 §3).
+# The files each experiment must have before its manifest may be written.
 EXPERIMENT_FILES = {
     "experiment-1": ["runs.csv"],
     "experiment-2": [

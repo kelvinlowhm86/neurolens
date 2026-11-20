@@ -1,4 +1,4 @@
-"""M3e reaper (docs/M3e_spec.md §5 "Reaper", §7 "Clean-up", §11 "Reaper").
+"""Reaper.
 
 The reaper is the backstop for a lost GPU notification: any open job four hours after creation
 is refunded, every failed job's files are retried for two days, and a consented dataset copy
@@ -225,7 +225,7 @@ def test_a_delete_that_still_fails_makes_the_run_raise(
         return DeleteFails(inner, key) if service_name == "s3" else inner
 
     monkeypatch.setattr(boto3, "client", client)
-    with pytest.raises(Exception):  # noqa: B017 - the spec says the run raises
+    with pytest.raises(Exception):  # noqa: B017 - the run is expected to raise
         run_reaper()
 
     assert pg.job(job_id)["status"] == "failed"
@@ -339,7 +339,7 @@ def test_a_failed_dataset_delete_marks_the_row_and_raises(
         return DeleteFails(inner, video_key) if service_name == "s3" else inner
 
     monkeypatch.setattr(boto3, "client", client)
-    with pytest.raises(Exception):  # noqa: B017 - the spec says the run raises
+    with pytest.raises(Exception):  # noqa: B017 - the run is expected to raise
         run_reaper()
 
     job = pg.job(job_id)

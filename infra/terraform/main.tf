@@ -36,7 +36,7 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "main" {
 }
 
 # Refuse any request that is not over HTTPS, including the presigned POST and any GET. CloudFront
-# (only this distribution) may read the site/ prefix and nothing else (M3b §3b): uploads and
+# (only this distribution) may read the site/ prefix and nothing else: uploads and
 # results stay unreachable through it.
 resource "aws_s3_bucket_policy" "main" {
   bucket = aws_s3_bucket.main.id
@@ -77,10 +77,10 @@ resource "aws_s3_bucket_policy" "main" {
 # Prefix-scoped expiry, not one blanket rule. Days are the smallest unit S3 lifecycle uses.
 #   uploads/              30 d   (S3 rounds to midnight UTC: 30-31 days) the input videos (job status lives in Aurora)
 #   results/              30 d   how long a result stays viewable / downloadable (product decision)
-#   dataset/             1095 d  shared videos and retention curves, kept for research (M3f §5b)
+#   dataset/             1095 d  shared videos and retention curves, kept for research
 #   sagemaker-output/     1 d    SageMaker's async answers; the job row and results/ are the record
 #   build/                7 d    source.zip for the image build; one build needs it only that day
-#   experiments/ never expire: M4 reads experiments/* for the final report.
+#   experiments/ never expire: the final report reads experiments/*.
 resource "aws_s3_bucket_lifecycle_configuration" "main" {
   bucket = aws_s3_bucket.main.id
 
@@ -159,26 +159,24 @@ resource "aws_s3_bucket_cors_configuration" "main" {
 resource "aws_sqs_queue" "jobs" {
   name = var.queue_name
 
-  # Every message waits 15 s, so the user can still cancel before the dispatcher starts a GPU
-  # (M3e §3, §8).
+  # Every message waits 15 s, so the user can still cancel before the dispatcher starts a GPU.
   delay_seconds = 15
 
   # The dispatcher gets at most 180 s per message (AWS asks for six times the function
-  # timeout), so a slow dispatch is not redelivered while it is still invoking (M3e §3).
+  # Timeout), so a slow dispatch is not redelivered while it is still invoking.
   visibility_timeout_seconds = 1080
 
   sqs_managed_sse_enabled = true
 
-  # A message that fails twice goes to the dead-letter queue, whose handler refunds the job
-  # (M3a §7). No automatic retry on the GPU: the container and the error handler settle a
-  # failed request (M3e §5).
+  # A message that fails twice goes to the dead-letter queue, whose handler refunds the job. No automatic retry on the GPU: the container and the error handler settle a
+  # Failed request.
   redrive_policy = jsonencode({
     deadLetterTargetArn = aws_sqs_queue.jobs_dlq.arn
     maxReceiveCount     = 2
   })
 }
 
-# Jobs that failed twice. From M3a the dead-letter handler Lambda (lambdas.tf) settles or refunds
+# Jobs that failed twice. The dead-letter handler Lambda (lambdas.tf) settles or refunds
 # each one; SQS moves messages here itself, so no container needs queue access. A message the
 # handler cannot finish yet (a container still holds the job) is tried again after the visibility timeout,
 # which must be at least the Lambda's 120 s timeout (AWS recommends 6 times it); messages are kept

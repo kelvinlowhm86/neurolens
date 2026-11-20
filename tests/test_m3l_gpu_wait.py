@@ -1,4 +1,4 @@
-"""M3l honest GPU wait (docs/M3l_spec.md §2, §7).
+"""Honest GPU wait.
 
 A dispatched request records when its GPU wait runs out. Once that time has passed (plus a small
 grace), a queued, unclaimed job is refunded ``no_gpu_free`` instead of waiting for the reaper's

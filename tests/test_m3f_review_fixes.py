@@ -1,4 +1,4 @@
-"""M3f review fixes (docs/M3f_spec.md §5c, §5d, §7, §10).
+"""Review fixes.
 
 The RDS Data API sends an integer as a bigint (`longValue`); PostgreSQL's `make_interval`
 needs an integer argument, so every `make_interval(days => ...)` must cast its parameter.

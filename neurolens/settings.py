@@ -9,14 +9,14 @@ from pathlib import Path
 
 def server_address(cfg):
     """(host, port) the web app binds to: config `server.host` / `server.port`, by default
-    127.0.0.1:5003 (this machine only; the development identity requires it, M3a §2)."""
+    127.0.0.1:5003 (this machine only; the development identity requires it)."""
     server = (cfg or {}).get("server") or {}
     return server.get("host", "127.0.0.1"), server.get("port", 5003)
 
 
 class UnsafeConfigError(Exception):
     """A setting combination that must never run, e.g. the development identity on a public
-    address (M3a §2)."""
+    address."""
 
 
 def get_root():
@@ -73,13 +73,13 @@ def apply_env(cfg):
     NEUROLENS_DB_CLUSTER_ARN / _SECRET_ARN / _NAME ->
     aws.db_cluster_arn / aws.db_secret_arn / aws.db_name; NEUROLENS_REPORT_FUNCTION ->
     aws.report_function; NEUROLENS_DB_DSN -> db.dsn (a local
-    PostgreSQL DSN holds a password, so it never goes in config.json). M3b's web functions:
+    PostgreSQL DSN holds a password, so it never goes in config.json). The web functions:
     NEUROLENS_AUTH_MODE / _COGNITO_ISSUER / _COGNITO_CLIENT_ID / _COGNITO_DOMAIN -> auth.mode /
     auth.cognito_issuer / auth.cognito_client_id / auth.cognito_domain,
     NEUROLENS_PUBLIC_BASE_URL -> public_base_url, NEUROLENS_ADMIN_EMAILS ->
     auth.admin_emails (a comma-separated list, lowercased, stripped, empty entries dropped),
     NEUROLENS_CONTACT_EMAIL -> contact_email (stripped; blank means unset), and
-    NEUROLENS_DEPLOYED -> deployed: true. NEUROLENS_YOUTUBE_API_KEY -> youtube_api_key (M3j §2).
+    NEUROLENS_DEPLOYED -> deployed: true. NEUROLENS_YOUTUBE_API_KEY -> youtube_api_key.
     Only variables that are set and non-empty change anything, except
     NEUROLENS_ADMIN_EMAILS: set but blank means no admins. The input is never modified.
     """
@@ -127,7 +127,7 @@ def apply_env(cfg):
 
 
 def get_parameter(ssm_client, name):
-    """One Parameter Store SecureString, decrypted (M3b §2b). Raises if it does not exist."""
+    """One Parameter Store SecureString, decrypted. Raises if it does not exist."""
     return ssm_client.get_parameter(Name=name, WithDecryption=True)["Parameter"]["Value"]
 
 
@@ -165,21 +165,21 @@ def configure_env(cfg, paths):
     data = Path(paths["data"])
 
     # The token is optional here: it normally arrives through the environment (.env), and fake
-    # mode needs none.
+    # Mode needs none.
     if cfg.get("hf_token"):
         os.environ["HF_TOKEN"] = cfg["hf_token"]
 
     # HF_HOME is the root the other HF caches derive from; the rest are set explicitly
-    # so they survive anyone overriding HF_HOME downstream.
+    # So they survive anyone overriding HF_HOME downstream.
     os.environ["HF_HOME"] = str(models)
     os.environ["HF_HUB_CACHE"] = str(models / "hub")
     os.environ["HUGGINGFACE_HUB_CACHE"] = str(models / "hub")  # legacy alias
     os.environ["HF_ASSETS_CACHE"] = str(models / "assets")
     os.environ["HF_DATASETS_CACHE"] = str(models / "datasets")
-    # hf_xet is installed, so downloads stream through its dedup chunk cache.
+    # Hf_xet is installed, so downloads stream through its dedup chunk cache.
     # Left unset it defaults under HF_HOME, but it is large enough to be worth pinning.
     os.environ["HF_XET_CACHE"] = str(models / "xet")
-    # torch.hub / torchvision weights would otherwise go to ~/.cache/torch.
+    # Torch.hub / torchvision weights would otherwise go to ~/.cache/torch.
     os.environ["TORCH_HOME"] = str(models / "torch")
 
     os.environ["NILEARN_DATA"] = str(data / "nilearn")
@@ -189,11 +189,11 @@ def configure_env(cfg, paths):
 
 
 # The max duration reflects the target use case (short-form pre-roll / social ad
-# creative). The GPU was chosen for it: memory and job time grow with video length
-# and were measured only up to 120 s. A 120 s 4K video takes about 40-47 minutes, so
-# a running job must never be stopped as idle. This is a hard
-# product constraint, independent of billing — it must be enforced
-# regardless of credit balance (see M3e §3a `verify_queued`, which must check this
+# Creative). The GPU was chosen for it: memory and job time grow with video length
+# And were measured only up to 120 s. A 120 s 4K video takes about 40-47 minutes, so
+# A running job must never be stopped as idle. This is a hard
+# Product constraint, independent of billing — it must be enforced
+# Regardless of credit balance (see `verify_queued`, which must check this
 # BEFORE any credit-adjustment logic, not instead of it).
 def max_duration(cfg):
     """Longest accepted video in seconds (120 when unset or when there is no config)."""

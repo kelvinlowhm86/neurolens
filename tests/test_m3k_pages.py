@@ -1,4 +1,4 @@
-"""M3k's page copy and operator script (docs/M3k_spec.md §8-§9, §11).
+"""Page copy and operator script.
 
 The free minutes come from `billing.invite_cents` and the view minimum from
 `research.curve_min_views`; neither number is typed into a page. The "1,000+ followers"

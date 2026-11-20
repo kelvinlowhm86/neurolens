@@ -1,4 +1,4 @@
-"""M2a tests, written from docs/M2a_spec.md section 6.
+"""Tests for the early worker and result helpers.
 
 Covers: put_result (S3 results, never overwritten), the worker publishing through it and the
 DUPLICATE outcome, and resolve_paths keeping absolute paths. A result that exists before any work
@@ -79,8 +79,8 @@ def stored(aws, job_id):
 
 # ---------------------------------------------------------------- put_result
 # The installed moto implements put_object(IfNoneMatch="*") (checked: the second write fails
-# with PreconditionFailed), so these run against moto's real behaviour. The 409/500 cases use
-# a wrapped client because moto cannot be made to raise them.
+# With PreconditionFailed), so these run against moto's real behaviour. The 409/500 cases use
+# A wrapped client because moto cannot be made to raise them.
 
 
 def test_put_result_writes_results_job_id_json_and_returns_true(aws):
@@ -168,7 +168,7 @@ def test_worker_publishes_through_put_result(
 def test_existing_result_gives_skipped_and_is_left_unchanged(
     aws, make_cfg, roi_masks_small, db, new_job, clip_path
 ):
-    """A result that exists before any work is SKIPPED (M3e §4b). The result is still left
+    """A result that exists before any work is SKIPPED. The result is still left
     unchanged."""
     job_id, key = new_job()
     aws.s3.upload_file(str(clip_path), aws.bucket, key)

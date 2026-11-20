@@ -1,5 +1,5 @@
 // POST JSON with its SHA-256 in x-amz-content-sha256: behind CloudFront's origin access control
-// a POST without it is refused before it reaches the app (M3b). A classic script, so both
+// a POST without it is refused before it reaches the app. A classic script, so both
 // pages' scripts can call it. `options` adds fetch options (keepalive for a POST that must
 // survive the page navigating away).
 async function postJSON(url, body, options = {}) {

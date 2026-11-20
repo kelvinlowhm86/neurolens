@@ -1,14 +1,14 @@
-"""Shared fixtures for the M1 tests.
+"""Shared fixtures for the tests.
 
 Everything AWS-related runs against moto, an in-memory fake of S3. Fake credentials
 are set for every test so that an accidental real AWS call fails instead of costing money.
 
-M3a (docs/M3a_spec.md §10): database tests run against a real PostgreSQL 16 named by
+database tests run against a real PostgreSQL 16 named by
 NEUROLENS_TEST_DSN. Each test gets a fresh schema built from infra/migrations/*.sql, and the
 ledger invariants are checked for every user when the test ends.
 
-M3b (docs/M3b_spec.md §2, §7b, §8): Cognito-mode apps get their settings from `cognito_cfg` and
-their Parameter Store secrets from moto (`ssm`). Sign-in goes through §8's seam: `init_auth`
+Cognito-mode apps get their settings from `cognito_cfg` and
+their Parameter Store secrets from moto (`ssm`). Sign-in goes through its seam: `init_auth`
 receives fake `server_metadata`, and `responses` fakes only HTTP (the token endpoint returns an
 ID token signed with a test RSA key, the JWKS URL returns that key), so Authlib's real state,
 nonce and signature checks run and nothing contacts Cognito or Google.
@@ -30,16 +30,16 @@ import numpy as np
 import pytest
 
 BUCKET = "neurolens-test-bucket"
-# The 7 signals of M3d §2; these stand in for response.SIGNALS so light tests need no atlas.
+# The 7 signals of; these stand in for response.SIGNALS so light tests need no atlas.
 ROI_NAMES = ["faces", "bodies", "scenes", "visual", "sound", "speech", "social"]
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 MIGRATIONS = REPO_ROOT / "infra" / "migrations"
-# The user that owns the worker tests' jobs (uploads/{user_id}/{job_id}.mp4, M3a §6).
+# The user that owns the worker tests' jobs (uploads/{user_id}/{job_id}.mp4).
 USER_ID = "test-user"
 USER_EMAIL = "test-user@example.com"
-STARTER_CENTS = 500  # M3a §3b default
-# The web app's development user in make_cfg (M3a §2), distinct from create_app's built-in one.
+STARTER_CENTS = 500  # default
+# The web app's development user in make_cfg, distinct from create_app's built-in one.
 WEB_USER_ID = "web-user"
 WEB_USER_EMAIL = "web-user@example.com"
 LOCAL_DB_HINT = (
@@ -67,16 +67,16 @@ ENV_SETTING_VARS = [
     "HF_TOKEN",
     "NEUROLENS_AWS_REGION",
     "NEUROLENS_S3_BUCKET",
-    "NEUROLENS_GPU_ENDPOINT",  # M3e: aws.gpu_endpoint
-    "NEUROLENS_DEPLOYED",  # M3e: marks a deployed (Cognito) web app
-    "NEUROLENS_DB_CLUSTER_ARN",  # M3a §3a: aws.db_cluster_arn
-    "NEUROLENS_DB_SECRET_ARN",  # M3a §3a: aws.db_secret_arn
-    "NEUROLENS_DB_NAME",  # M3a §3a: aws.db_name
-    "NEUROLENS_AUTH_MODE",  # M3b §2b: auth.mode
-    "NEUROLENS_COGNITO_ISSUER",  # M3b §2b: auth.cognito_issuer
-    "NEUROLENS_COGNITO_CLIENT_ID",  # M3b §2b: auth.cognito_client_id
-    "NEUROLENS_COGNITO_DOMAIN",  # M3b §2b: auth.cognito_domain
-    "NEUROLENS_PUBLIC_BASE_URL",  # M3b §2b: public_base_url
+    "NEUROLENS_GPU_ENDPOINT",  # aws.gpu_endpoint
+    "NEUROLENS_DEPLOYED",  # marks a deployed (Cognito) web app
+    "NEUROLENS_DB_CLUSTER_ARN",  # aws.db_cluster_arn
+    "NEUROLENS_DB_SECRET_ARN",  # aws.db_secret_arn
+    "NEUROLENS_DB_NAME",  # aws.db_name
+    "NEUROLENS_AUTH_MODE",  # auth.mode
+    "NEUROLENS_COGNITO_ISSUER",  # auth.cognito_issuer
+    "NEUROLENS_COGNITO_CLIENT_ID",  # auth.cognito_client_id
+    "NEUROLENS_COGNITO_DOMAIN",  # auth.cognito_domain
+    "NEUROLENS_PUBLIC_BASE_URL",  # public_base_url
     "NEUROLENS_ADMIN_EMAILS",  # auth.admin_emails (booth admins)
     "NEUROLENS_CONTACT_EMAIL",  # contact_email (privacy and retention pages)
 ]
@@ -130,11 +130,11 @@ def make_cfg(aws, tmp_path):
             "hf_download_timeout": 300,
             "max_video_duration_seconds": 120,
             "max_upload_bytes": 300000000,
-            # M3d §6: the response at which the 3D map's heat colour is full.
+            # The response at which the 3D map's heat colour is full.
             "response": {"colour_range": 0.5},
-            # M3e §4b: the heartbeat settings config.json gains (same values).
+            # The heartbeat settings config.json gains (same values).
             "worker": {"heartbeat_seconds": 50, "max_job_minutes": 75},
-            # M3a §9: the development identity, starter credit and the address the app binds to.
+            # The development identity, starter credit and the address the app binds to.
             # No `db` block: tests hand the database in (create_app(db=...), handle_job(db=...)).
             "auth": {"mode": "dev", "dev_user_id": WEB_USER_ID, "dev_email": WEB_USER_EMAIL},
             "billing": {"starter_cents": STARTER_CENTS},
@@ -189,8 +189,8 @@ def roi_masks_small():
 
 @pytest.fixture
 def new_key():
-    """Returns (job_id, key) for a fresh upload key (M3a §6: uploads/{user_id}/{job_id}{ext}).
-    No jobs row exists for it: to the M3a worker it is an unknown job."""
+    """Returns (job_id, key) for a fresh upload key (uploads/{user_id}/{job_id}{ext}).
+    No jobs row exists for it: to the worker it is an unknown job."""
 
     def make(ext=".mp4", user_id=USER_ID):
         job_id = str(uuid.uuid4())
@@ -202,7 +202,7 @@ def new_key():
 @pytest.fixture
 def new_job(db, new_key):
     """Returns (job_id, key) for a fresh upload key whose job is reserved in the database, as the
-    presign endpoint leaves it (M3a §4a Stage 1): the user exists with the starter credit and the
+    presign endpoint leaves it (Stage 1): the user exists with the starter credit and the
     job is `queued` with the price of `client_seconds` reserved."""
     from neurolens import billing
 
@@ -215,7 +215,7 @@ def new_job(db, new_key):
     return make
 
 
-# ---------------------------------------------------------------- PostgreSQL (M3a §10)
+# ---------------------------------------------------------------- PostgreSQL
 
 
 @pytest.fixture(scope="session")
@@ -231,7 +231,7 @@ def pg_dsn():
 
 def migration_statements():
     """Every statement of infra/migrations/*.sql in order, split as apply_schema.py splits them
-    (M3a §3c): a statement ends with `;` at the end of a line."""
+    a statement ends with `;` at the end of a line."""
     statements = []
     for path in sorted(MIGRATIONS.glob("*.sql")):
         current = []
@@ -269,7 +269,7 @@ INVARIANT_QUERIES = {
             WHERE j.user_id = b.user_id AND j.status IN ('queued', 'processing')), 0)
     """,
     # 4. done: exactly one capture row and no refund; failed: exactly one refund row and no
-    #    capture; a job still open has neither (only the two terminal functions write them)
+    #    Capture; a job still open has neither (only the two terminal functions write them)
     "terminal job without exactly one outcome": """
         WITH c AS (
             SELECT j.job_id, j.status,
@@ -293,12 +293,12 @@ def check_invariants(conn):
         rows = conn.execute(sql).fetchall()
         if rows:
             broken[name] = [r[0] for r in rows]
-    assert not broken, f"M3a §10 ledger invariants broken: {broken}"
+    assert not broken, f"ledger invariants broken: {broken}"
 
 
 @pytest.fixture
 def db_dsn(pg_dsn):
-    """A DSN for a fresh schema with the migrations applied. When the test ends the four §10
+    """A DSN for a fresh schema with the migrations applied. When the test ends the four
     invariants are checked for every user (a failure there shows as an error of the test), then
     the schema is dropped."""
     import psycopg
@@ -323,12 +323,12 @@ def db_dsn(pg_dsn):
 
 @pytest.fixture
 def db(db_dsn):
-    """The application's PostgreSQL backend (M3a §3d) on the test's fresh schema."""
+    """The application's PostgreSQL backend on the test's fresh schema."""
     from neurolens.db import PostgresDatabase
 
     database = PostgresDatabase(db_dsn)
     yield database
-    close = getattr(database, "close", None)  # the spec gives it no close(); use one if present
+    close = getattr(database, "close", None)  # the interface has no close(); use one if present
     if callable(close):
         close()
 
@@ -414,7 +414,7 @@ def pg(db_dsn):
 
 
 class RowLock:
-    """A third connection that holds `SELECT ... FOR UPDATE` on rows until released (M3a §10's
+    """A third connection that holds `SELECT ... FOR UPDATE` on rows until released (
     deterministic concurrency): callers can wait until N other sessions are blocked behind it."""
 
     def __init__(self, dsn, pg):
@@ -431,7 +431,7 @@ class RowLock:
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
             # A second waiter queues behind the first one's tuple lock, not the holder's, so
-            # count every session of this database that waits on any lock (tests run serially).
+            # Count every session of this database that waits on any lock (tests run serially).
             row = self._pg.one(
                 "SELECT count(*) AS n FROM pg_stat_activity "
                 "WHERE datname = current_database() AND cardinality(pg_blocking_pids(pid)) > 0"
@@ -465,7 +465,7 @@ def row_lock(db_dsn, pg):
 def patch_everywhere(monkeypatch):
     """Replace a function wherever the implementation might look it up.
 
-    The spec names the functions by module (for example neurolens.inference.predict) but
+    The functions are named by module (for example neurolens.inference.predict), but
     not how the worker imports them, so patch the module attribute and, if present, the copy
     in the worker / web modules.
     """
@@ -486,7 +486,7 @@ class SpyS3:
     """Wraps a boto3 client: records every call and refuses the listed ones.
 
     `forbid_on_uploads` refuses a call only when it targets an uploaded video (a key under
-    uploads/). The worker also reads results/ objects (result_exists, from M2b), so "never
+    uploads/). The worker also reads results/ objects (result_exists), so "never
     download the video" cannot be checked by refusing get_object altogether.
     """
 
@@ -524,14 +524,14 @@ def spy_s3(aws):
     return make
 
 
-# ---------------------------------------------------------------- M3b (docs/M3b_spec.md)
+# ----------------------------------------------------------------
 
 ISSUER = "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_TestPool"
 CLIENT_ID = "test-client-id"
 COGNITO_DOMAIN = "neurolens-test.auth.us-east-1.amazoncognito.com"
 PUBLIC_BASE_URL = "https://d111111abcdef8.cloudfront.net"
 GPU_ENDPOINT = "neurolens-gpu-test"
-# §8's sign-in seam: fake URLs that only `responses` answers.
+# Sign-in seam: fake URLs that only `responses` answers.
 SERVER_METADATA = {
     "issuer": ISSUER,
     "authorization_endpoint": "https://idp.test/oauth2/authorize",
@@ -547,7 +547,7 @@ MISSING = object()  # a claim left out of the ID token
 
 @pytest.fixture
 def ssm(aws):
-    """moto's Parameter Store holding the five /neurolens/web/* SecureStrings (§2b)."""
+    """Moto's Parameter Store holding the five /neurolens/web/* SecureStrings."""
     import boto3
 
     client = boto3.client("ssm", region_name="us-east-1")
@@ -558,7 +558,7 @@ def ssm(aws):
 
 @pytest.fixture
 def cognito_cfg(make_cfg):
-    """A Cognito-mode config as the web Lambda has it after settings.apply_env (§2b): every
+    """A Cognito-mode config as the web Lambda has it after settings.apply_env: every
     required setting present."""
 
     def make(**overrides):
@@ -589,7 +589,7 @@ def cognito_cfg(make_cfg):
 
 @pytest.fixture
 def auth_seam(patch_everywhere):
-    """§8: every init_auth call gets the fake server_metadata, so Authlib never downloads
+    """Every init_auth call gets the fake server_metadata, so Authlib never downloads
     Cognito's OpenID configuration."""
     from neurolens.web import auth
 
@@ -697,7 +697,7 @@ def sign_in(
 
 @pytest.fixture
 def cognito_app(aws, db, cognito_cfg, ssm, idp, auth_seam, tmp_path):
-    """create_app in Cognito mode (§8: create_app(..., ssm_client=...)) on the test database,
+    """create_app in Cognito mode (create_app(..., ssm_client=...)) on the test database,
     moto S3 and Parameter Store, with the sign-in seam in place."""
     from neurolens.web.app import create_app
 
@@ -745,7 +745,7 @@ class FakeClock:
 
 @pytest.fixture
 def waking_aurora(monkeypatch):
-    """An rds-data client (built as M3a requires, without retries) whose every call answers
+    """An rds-data client (built as requires, without retries) whose every call answers
     DatabaseResumingException, as Aurora does while it wakes; neurolens.db runs on a fake clock.
     Returns (client, clock)."""
     from botocore.exceptions import ClientError
@@ -828,7 +828,7 @@ class LambdaContext:
 
 @pytest.fixture
 def lambda_env(aws, ssm, make_cfg, tmp_path, monkeypatch):
-    """What Terraform gives the web and webhook functions (§2b, §3a, §7b): config.json in the code
+    """What Terraform gives the web and webhook functions: config.json in the code
     bundle's root, deployment values in environment variables, secrets in Parameter Store.
     `write_config(**overrides)` rewrites config.json."""
     root = tmp_path / "bundle"

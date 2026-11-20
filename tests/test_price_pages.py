@@ -24,5 +24,5 @@ def test_page_holds_no_hard_coded_price(page):
 
 
 def test_app_reads_the_price_from_the_limits():
-    # The landing page shows no price at all (non-commercial service, spec M3d 8b).
+    # The landing page shows no price at all (non-commercial service).
     assert "cents_per_block" in (REPO_ROOT / "static" / "app.html").read_text()

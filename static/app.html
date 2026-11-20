@@ -1221,7 +1221,7 @@ window.brainMap = {
 const params = new URLSearchParams(window.location.search);
 // minSec writes a length limit in words ("1 min 30 s"). Credit is an amount, so creditWords writes
 // it in decimal minutes ("1.5 min"), never as a video length (m:ss) or money; converted at the
-// served price, null until /api/limits has loaded (M3f §2c).
+// Served price, null until /api/limits has loaded.
 function minSec(seconds) {
   const n = Math.max(0, Math.floor(seconds));
   const m = Math.floor(n / 60), s = n % 60;
@@ -1985,7 +1985,7 @@ function updateSamplesFirst(jobs) {
 function renderHistory(jobs) {
   jobsCache = jobs;
   updateSamplesFirst(jobs);
-  // A result opened from a ?job= link predates this list, so re-check its title and link (§4.17).
+  // A result opened from a ?job= link predates this list, so re-check its title and link.
   const shown = currentContext && currentContext.jobId
     ? jobs.find(job => job.job_id === currentContext.jobId) : null;
   if (shown) {
@@ -2246,7 +2246,7 @@ function openJob(job) {
     trackJob(job.job_id);
     return;
   }
-  // Switch to the player at once; the result replaces this line when it arrives (§4.16).
+  // Switch to the player at once; the result replaces this line when it arrives.
   setViewName('player');
   $('reportBody').classList.add('active');
   $('reportEmpty').style.display = 'none';
@@ -2568,7 +2568,7 @@ function captureFrame(file, duration) {
   });
 }
 
-// ---- Batch upload dialog (§2a) ----
+// ---- Batch upload dialog ----
 
 const uploadDialog = $('uploadDialog'), dialogZone = $('dialogZone'), batchInput = $('batchInput');
 const COARSE_POINTER = matchMedia('(pointer: coarse)').matches;
@@ -2758,7 +2758,7 @@ function startBatchUpload() {
   processQueue();
 }
 
-// ---- Upload queue (§2b): one file at a time, one presign just before its upload ----
+// ---- Upload queue: one file at a time, one presign just before its upload ----
 
 let uploadQueue = [], queueRunning = false;
 const cancelWindows = new Map();      // job_id → when its 15-second window ends
@@ -2808,7 +2808,7 @@ function stopQueueAfter(entry, reason, signedOut) {
 const UPLOAD_STALL_MS = 60000;
 
 // The version of the consent wording shown in the upload dialog; the server records it per job and
-// refuses an outdated one (M3f §5a). Change it together with the wording and billing.CONSENT_VERSION.
+// Refuses an outdated one. Change it together with the wording and billing.CONSENT_VERSION.
 const CONSENT_VERSION = '2026-11-03';
 
 async function uploadEntry(entry) {
@@ -2852,7 +2852,7 @@ async function uploadEntry(entry) {
   const jobId = presign.job_id;
   entry.jobId = jobId;
   loadBalance();
-  // Removed while the presign was in flight: its job now exists, so cancel and never upload (§2b).
+  // Removed while the presign was in flight: its job now exists, so cancel and never upload.
   if (entry.removed) {
     cancelReservedJob(jobId);
     return;
@@ -2872,7 +2872,7 @@ async function uploadEntry(entry) {
       clearStallTimer();
       stallTimer = setTimeout(() => xhr.abort(), UPLOAD_STALL_MS);
     };
-    // The upload ended without the file arriving: cancel the reserved job (§2b).
+    // The upload ended without the file arriving: cancel the reserved job.
     const failUpload = message => {
       if (finished) return;
       finished = true;
@@ -2965,7 +2965,7 @@ async function cancelNewJob(jobId, button) {
 const POLL_MS = 5000;
 // A done job whose result will not load is retried this many times, then the page says so.
 const RESULT_LOAD_TRIES = 4;
-// Short History failure texts, each shown with "· not charged" (§4.5).
+// Short History failure texts, each shown with "· not charged".
 const FAILURE_TEXTS = {
   unreadable_video: 'Not a readable video',
   deadline_passed: "Didn't finish in time",
@@ -3025,7 +3025,7 @@ async function pollJob(jobId) {
     const res = await fetch(`/api/jobs/${jobId}/status`);
     if (trackedJob !== jobId) return;
     if (res.status === 404) {
-      // A failed or unknown job opens History, not the player (§4.8); the row shows the reason.
+      // A failed or unknown job opens History, not the player; the row shows the reason.
       again = false;
       resetUI();
       loadHistory();
@@ -3884,7 +3884,7 @@ function openResult(jobId, result) {
 }
 
 // The results page shows the thank-you card for a shared job until its first snapshot;
-// it and the History row's link and "⋯" item open the same curve form (§5d).
+// It and the History row's link and "⋯" item open the same curve form.
 let resultCurve = null;
 function showRetention(jobId, title) {
   let cached = null;
@@ -3937,7 +3937,7 @@ function jobCurveTarget(job) {
   };
 }
 
-// ---- Curve form (§5d) ----
+// ---- Curve form ----
 
 const curveDialog = $('curveDialog');
 const CURVE_VIEWS = [['lt_1k', 'Under 1k'], ['1k_10k', '1k–10k'], ['10k_100k', '10k–100k'], ['gt_100k', 'Over 100k']];
@@ -4382,7 +4382,7 @@ $('curveSave').addEventListener('click', async () => {
   }
 });
 
-// ---- Stop sharing (§5c) ----
+// ---- Stop sharing ----
 
 const stopShareDialog = $('stopShareDialog');
 let stopShareTarget = null;
@@ -4423,16 +4423,16 @@ $('stopShareBtn').addEventListener('click', async () => {
   }
 });
 
-// ---- Tab title (§3) ----
+// ---- Tab title ----
 
-// Jobs uploaded from this tab (§3). tabTotal counts them from the moment they are queued;
+// Jobs uploaded from this tab. tabTotal counts them from the moment they are queued;
 // tabJobs holds a job's id once it exists, with whether it has appeared in the list yet.
 let tabTotal = 0, tabTitleDone = false, tabTitleVisHandler = null;
 const tabJobs = new Map();
 // A single job analysed from this page also names the tab ("Analysing · NeuroLens"); a
 // batch's own title wins while one runs, and the tab returns to "NeuroLens" afterwards.
 let progressTabTitle = false;
-// A job the page cancels itself leaves the count at once (§4.18); the list path then never sees it.
+// A job the page cancels itself leaves the count at once; the list path then never sees it.
 function forgetTabJob(jobId) {
   if (!tabJobs.delete(jobId)) return;
   tabTotal = Math.max(0, tabTotal - 1);
@@ -5804,7 +5804,7 @@ function buildCompareView() {
   const avgA = averageOverall(currentResult), avgB = averageOverall(comparison.result);
   const onAverage = v => v == null ? '' : ` · ${levelWord(v).toLowerCase()} on average`;
   const averageTip = v => v == null ? '' : ` · average ${fmtSigned(v)}`;
-  // The open video is always A: left and orange; the other is B: right and blue (M3h §8).
+  // The open video is always A: left and orange; the other is B: right and blue.
   $('compareNameA').textContent = `${aName}${onAverage(avgA)}`;
   $('compareNameA').title = `${aName}${averageTip(avgA)}`;
   $('compareNameB').textContent = `${bName}${onAverage(avgB)}`;

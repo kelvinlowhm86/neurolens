@@ -1,4 +1,4 @@
-"""M3d §8: the committed fsaverage6 pial mesh, the head shell and their licence."""
+"""The committed fsaverage6 pial mesh, the head shell and their licence."""
 
 import struct
 from pathlib import Path

@@ -1,7 +1,9 @@
-"""M2b result helpers in neurolens.storage (moto). Written from the M2b storage interfaces. M3a
-retired the S3 status objects: the get_status/put_status and `stages` tests are gone with their
-Aurora equivalents (§10, tests/test_m3a_billing.py set_stage and tests/test_m3a_worker.py);
-result_exists/get_result stay."""
+"""Result helpers in neurolens.storage (moto).
+
+The S3 status objects are retired: the get_status/put_status and `stages` tests are gone with
+their Aurora equivalents (tests/test_m3a_billing.py set_stage and tests/test_m3a_worker.py);
+result_exists/get_result stay.
+"""
 
 from neurolens import storage
 
@@ -32,4 +34,4 @@ def test_get_result_returns_the_stored_json_or_none(aws):
     assert storage.get_result(aws.s3, aws.bucket, "job-1") == result
 
 
-# ---------------------------------------------------------------- status objects retired (M3a)
+# ---------------------------------------------------------------- status objects retired

@@ -1,4 +1,4 @@
-"""A stored result's summary and CSV, and the response config check (M3d §6-§7). Pure Python:
+"""A stored result's summary and CSV, and the response config check. Pure Python:
 the web tier imports it."""
 
 import csv
@@ -41,7 +41,7 @@ def _number(value):
 
 
 def validate_response_config(cfg):
-    """Raise ValueError unless cfg is a usable `response` block (M3d §6)."""
+    """Raise ValueError unless cfg is a usable `response` block."""
     if not isinstance(cfg, dict):
         raise ValueError("The response config must be an object.")
     if "colour_range" not in cfg:
@@ -63,7 +63,7 @@ def _audio_dependence(overall, muted):
 
 
 def summarise(result):
-    """The audio dependence served with a result (M3d §6), computed at serve time."""
+    """The audio dependence served with a result, computed at serve time."""
     overall = result["signals"]["overall"]
     muted = result["muted"]["overall"]
     return {"audio_dependence": _audio_dependence(overall, muted)}
@@ -193,7 +193,7 @@ def _facebook_id(host, path, query):
 
 
 def parse_video_link(text):
-    """The (platform, video_id) of a published video's YouTube or Facebook link (M3i §3).
+    """The (platform, video_id) of a published video's YouTube or Facebook link.
 
     The form's link is accepted with or without `https://`, `www.` or `m.`; a refusal raises
     ValueError with the sentence the form shows. Only the documented YouTube and Facebook page
@@ -234,7 +234,7 @@ def parse_video_link(text):
 
 
 def parse_facebook_retention(text, video_id):
-    """The (elapsed_ratio, watch_ratio) rows of Meta's documented retention reply (M3i §4).
+    """The (elapsed_ratio, watch_ratio) rows of Meta's documented retention reply.
 
     The reply is `GET /<video_id>/video_insights?metric=total_video_retention_graph`: one
     lifetime metric whose id starts with the linked video's id and whose last value holds the
@@ -271,7 +271,7 @@ def parse_facebook_retention(text, video_id):
 
 
 def retention_csv(pairs):
-    """The stored two-column CSV for parsed retention pairs (M3c §3c)."""
+    """The stored two-column CSV for parsed retention pairs."""
     out = io.StringIO()
     writer = csv.writer(out, lineterminator="\n")
     writer.writerow(["elapsed_ratio", "watch_ratio"])
@@ -280,13 +280,13 @@ def retention_csv(pairs):
 
 
 def parse_retention_csv(text):
-    """The (elapsed_ratio, watch_ratio) pairs of a stored retention CSV (M3l §4)."""
+    """The (elapsed_ratio, watch_ratio) pairs of a stored retention CSV."""
     reader = csv.DictReader(io.StringIO(text))
     return [(float(row["elapsed_ratio"]), float(row["watch_ratio"])) for row in reader]
 
 
 def retention_points(pairs, duration_s):
-    """A stored curve as [seconds, percent] points for the page's Real viewers strip (M3l §4)."""
+    """A stored curve as [seconds, percent] points for the page's Real viewers strip."""
     return [[ratio * duration_s, watch * 100] for ratio, watch in pairs]
 
 
@@ -296,7 +296,7 @@ MAX_WATCH_RATIO = 10
 
 
 def curve_quality(pairs):
-    """The failed checks of an audience-retention curve, empty when it is valid (M3f §5d).
+    """The failed checks of an audience-retention curve, empty when it is valid.
 
     A full curve has at least 20 points, a watch-ratio spread of at least 0.02, ends no higher
     than it started, and has no value above 10.

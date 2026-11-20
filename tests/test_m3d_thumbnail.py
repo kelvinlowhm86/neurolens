@@ -1,6 +1,5 @@
-"""M3d §5b and §7: thumbnails, their lifecycle, and the thumbnail route.
+"""Thumbnails, their lifecycle, and the thumbnail route.
 
-Written first from docs/M3d_spec.md §10 ("Thumbnail (full: deletion and ownership)").
 The worker runs in fake mode as in tests/test_m3d_worker.py; deletes use moto.
 """
 

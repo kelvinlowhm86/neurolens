@@ -1,4 +1,4 @@
-"""Tests for neurolens.pricing. Written from docs/M3a_spec.md §3b (prices).
+"""Tests for neurolens.pricing.
 
 The formula is CENTS_PER_BLOCK * max(1, ceil((d - ALLOWANCE_SECONDS) / BLOCK_SECONDS)) cents:
 $1.00 per started 30-second block today, with a half-second allowance. The module constants are the
@@ -9,7 +9,7 @@ import pytest
 from neurolens import pricing
 from neurolens.pricing import estimate_cost_cents, estimate_cost_usd
 
-# (duration in seconds, started 30-second blocks), as in the spec: up to 30.5 s is one block,
+# (duration in seconds, started 30-second blocks): up to 30.5 s is one block,
 # 60 s two and 120 s four.
 CASES = [
     (0.2, 1),

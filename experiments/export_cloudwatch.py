@@ -1,4 +1,4 @@
-"""Experiment 2: the one-minute endpoint backlog and instance-count series (M3e §10), written to
+"""Experiment 2: the one-minute endpoint backlog and instance-count series, written to
 experiment-2/<run_id>/cloudwatch.csv.
 
     python experiments/export_cloudwatch.py <run_id> \
@@ -51,9 +51,9 @@ def main():
         # The async backlog metrics carry only EndpointName.
         query("backlog", "AWS/SageMaker", "ApproximateBacklogSize", endpoint_only, "Maximum"),
         # Each running instance reports its CPU once a minute, so the sample count is the number
-        # of instances (AWS's documented method). The instance metrics live in their own namespace
-        # with the variant as a second dimension, and exist only because the endpoint's role may
-        # publish them (infra/terraform/iam.tf).
+        # Of instances (AWS's documented method). The instance metrics live in their own namespace
+        # With the variant as a second dimension, and exist only because the endpoint's role may
+        # Publish them (infra/terraform/iam.tf).
         query(
             "instances",
             "/aws/sagemaker/Endpoints",

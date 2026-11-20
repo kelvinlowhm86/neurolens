@@ -1,4 +1,4 @@
-"""Early access by request (M3k §4): one channel link per account, screened by hand.
+"""Early access by request: one channel link per account, screened by hand.
 
 The request row, not the notification email, is the list of requests. Every function takes a
 `Database` first and does its work in one transaction.
@@ -18,11 +18,11 @@ PLATFORMS = {
 
 
 class AlreadyRequested(Exception):
-    """This account already asked for free minutes (M3k §4)."""
+    """This account already asked for free minutes."""
 
 
 def platform_of(url):
-    """The platform named by a channel link (M3k §4).
+    """The platform named by a channel link.
 
     Only `http`/`https` links to one of the four platforms, with a path other than empty or `/`,
     are accepted. The host is lowercased and one leading `www.` or `m.` is ignored. Anything else
@@ -45,7 +45,7 @@ def platform_of(url):
 
 
 def _clean_note(note):
-    """The note stripped, with empty text stored as null; at most 500 characters (M3k §4)."""
+    """The note stripped, with empty text stored as null; at most 500 characters."""
     if note is None:
         return None
     if not isinstance(note, str):
@@ -59,7 +59,7 @@ def _clean_note(note):
 
 
 def add_request(db, user_id, channel_url, note):
-    """Store a waiting request, once per account, and return it (M3k §4).
+    """Store a waiting request, once per account, and return it.
 
     Validates the link and note first, so a bad request writes nothing. The insert only finds a
     user that is not deleted, so a request racing the account delete writes nothing. An account
@@ -95,7 +95,7 @@ def add_request(db, user_id, channel_url, note):
 
 
 def request_status(db, user_id):
-    """The account's request status, or None when it has not asked (M3k §4)."""
+    """The account's request status, or None when it has not asked."""
     with db.transaction() as tx:
         rows = tx.execute(
             "SELECT status FROM access_requests WHERE user_id = :user_id", {"user_id": user_id}
@@ -104,7 +104,7 @@ def request_status(db, user_id):
 
 
 def waiting_requests(db):
-    """Every waiting request with its account's email, oldest first (M3k §4, §9)."""
+    """Every waiting request with its account's email, oldest first."""
     with db.transaction() as tx:
         return tx.execute(
             "SELECT r.user_id, u.email, r.channel_url, r.platform, r.note, r.created_at "
@@ -115,7 +115,7 @@ def waiting_requests(db):
 
 
 def decline(db, email):
-    """Decline the account's waiting request (M3k §4, §9). False when there is none."""
+    """Decline the account's waiting request. False when there is none."""
     with db.transaction() as tx:
         rows = tx.execute(
             "UPDATE access_requests SET status = :declined, decided_at = now() "

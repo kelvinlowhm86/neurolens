@@ -1,4 +1,4 @@
-"""Importing the light modules must not pull in heavy libraries. From docs/M0_spec.md."""
+"""Importing the light modules must not pull in heavy libraries. From."""
 
 import json
 import subprocess
@@ -29,7 +29,7 @@ def test_import_pulls_in_no_heavy_modules(module):
     assert json.loads(proc.stdout.strip().splitlines()[-1]) == []
 
 
-# ---- Added in M1 (docs/M1_spec.md §7): the new light modules stay light.
+# ---- Added : the new light modules stay light.
 M1_MODULES = ["neurolens.storage", "neurolens.pricing", "neurolens.worker"]
 
 
@@ -67,7 +67,7 @@ def test_storage_and_pricing_import_without_neurolens_inference(module):
     assert proc.stdout.strip().splitlines()[-1] == "False"
 
 
-# ---- Added in M1 cleanup (docs/M1_spec.md section 7): the web tier never loads the model code.
+# ---- Added in cleanup: the web tier never loads the model code.
 CREATE_APP_CODE = """
 import json, sys, tempfile
 from pathlib import Path
@@ -83,7 +83,7 @@ CFG_WITHOUT_AWS = {
     "max_video_duration_seconds": 120,
     "max_upload_bytes": 300000000,
     "response": {"colour_range": 0.5},
-    # M3a §9: config.json's development identity and local-only address
+    # Config.json's development identity and local-only address
     "auth": {"mode": "dev", "dev_user_id": "dev-user", "dev_email": "dev@localhost"},
     "billing": {"starter_cents": 500},
     "server": {"host": "127.0.0.1", "port": 5003},

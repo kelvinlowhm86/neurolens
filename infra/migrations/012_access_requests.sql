@@ -1,4 +1,4 @@
--- M3k 012 (docs/M3k_spec.md §3): one screened request for free minutes per account.
+-- One screened request for free minutes per account.
 CREATE TABLE access_requests (
   user_id     TEXT PRIMARY KEY REFERENCES users(user_id),
   channel_url TEXT NOT NULL,

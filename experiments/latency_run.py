@@ -1,4 +1,4 @@
-"""Experiment 1, one run (docs/M4_spec.md §3): upload one clip like a browser would, follow the
+"""Experiment 1, one run: upload one clip like a browser would, follow the
 job to the end and add one row to experiment-1/<run_id>/runs.csv in S3.
 
     python experiments/latency_run.py data/videos/_test_clips/clip_15s.mp4 \
@@ -6,7 +6,7 @@ job to the end and add one row to experiment-1/<run_id>/runs.csv in S3.
 
 Needs the web app running (`python app.py`) and a warm endpoint (`infra/start_work.sh --keep-warm`,
 then one warm-up job). The stage times come from the status endpoint's `stages`, which it keeps
-for a finished job (docs/M3e_spec.md §8); the job's end is its `updated_at`. Stage times have
+for a finished job; the job's end is its `updated_at`. Stage times have
 one-second resolution, so the stage columns are whole seconds. `render_ms` is left empty: read
 window.neurolensTimings.render_ms in the browser console on 3 runs per clip length and add it by
 hand.

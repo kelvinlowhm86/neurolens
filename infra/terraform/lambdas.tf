@@ -1,4 +1,4 @@
-# ─── The job Lambdas (M3a §7, M3e §3, §5, §6c) ────────────────────────────
+# ─── The job Lambdas ────────────────────────────
 #
 # One zip with every pure-Python module they import (no numpy, no torch): the dead-letter
 # handler, the reaper, the dispatcher, the SageMaker error handler and the GPU guard. They run
@@ -28,7 +28,7 @@ locals {
     "neurolens/lambdas/gpu_guard.py",
     "neurolens/lambdas/report.py",
   ]
-  # gpu_failed does the dead-letter handler's work on a SageMaker notification (§5), so it shares
+  # Gpu_failed does the dead-letter handler's work on a SageMaker notification, so it shares
   # that role's rights.
   m3a_lambdas = {
     dlq        = { name = "neurolens-dlq-handler", handler = "neurolens.lambdas.dlq_handler.handler" }
@@ -69,7 +69,6 @@ resource "aws_iam_role" "m3a_lambda" {
       Principal = { Service = "lambda.amazonaws.com" }
     }]
   })
-  tags = { Milestone = "M3e" }
 }
 
 resource "aws_iam_role_policy" "m3a_lambda" {
@@ -92,7 +91,7 @@ resource "aws_iam_role_policy" "m3a_lambda" {
         ]
       },
       {
-        # A refund deletes every file the job has (M3a §7b, M3f §5c).
+        # A refund deletes every file the job has.
         Sid    = "DeleteAJobsFilesAfterRefund"
         Effect = "Allow"
         Action = "s3:DeleteObject"
@@ -131,7 +130,6 @@ resource "aws_cloudwatch_log_group" "m3a_lambda" {
 
   name              = "/aws/lambda/${each.value.name}"
   retention_in_days = var.log_retention_days
-  tags              = { Milestone = "M3a" }
 }
 
 resource "aws_lambda_function" "m3a" {
@@ -151,7 +149,6 @@ resource "aws_lambda_function" "m3a" {
   }
 
   depends_on = [aws_cloudwatch_log_group.m3a_lambda, aws_iam_role_policy.m3a_lambda]
-  tags       = { Milestone = "M3e" }
 }
 
 # One message at a time. A raised error (a container still holds the job) leaves the message for
@@ -177,15 +174,14 @@ resource "aws_lambda_permission" "sns_invoke_gpu_failed" {
   source_arn    = aws_sns_topic.gpu_errors.arn
 }
 
-# Always on, owned by Terraform alone (M3b §6). Each run wakes Aurora for about 11 minutes (measured;
+# Always on, owned by Terraform alone. Each run wakes Aurora for about 11 minutes (measured;
 # it pauses 300 s after the last connection closes). Every 3 hours costs about $3 a month; hourly
-# measured about $15. A lost notification is refunded within about 7 hours (M3e §5).
+# Measured about $15. A lost notification is refunded within about 7 hours.
 resource "aws_cloudwatch_event_rule" "reaper" {
   name                = "neurolens-reaper-schedule"
   description         = "Run the NeuroLens reaper (settles or refunds stuck jobs) every 3 hours."
   schedule_expression = "rate(3 hours)"
   state               = "ENABLED"
-  tags                = { Milestone = "M3b" }
 }
 
 resource "aws_cloudwatch_event_target" "reaper" {
@@ -201,7 +197,7 @@ resource "aws_lambda_permission" "events_invoke_reaper" {
   source_arn    = aws_cloudwatch_event_rule.reaper.arn
 }
 
-# ─── Dispatcher (M3e §3) ──────────────────────────────────────────────────
+# ─── Dispatcher ──────────────────────────────────────────────────
 
 resource "aws_iam_role" "dispatcher" {
   name                 = "neurolens-dispatcher${local.iam_suffix}"
@@ -214,7 +210,6 @@ resource "aws_iam_role" "dispatcher" {
       Principal = { Service = "lambda.amazonaws.com" }
     }]
   })
-  tags = { Milestone = "M3e" }
 }
 
 resource "aws_iam_role_policy" "dispatcher" {
@@ -252,7 +247,7 @@ resource "aws_iam_role_policy" "dispatcher" {
         Resource = local.endpoint_arn
       },
       {
-        # Start the GPU after a dispatch so the cold start does not wait for the alarm (M3f §6a).
+        # Start the GPU after a dispatch so the cold start does not wait for the alarm.
         Sid      = "StartTheGpu"
         Effect   = "Allow"
         Action   = ["sagemaker:DescribeEndpoint", "sagemaker:UpdateEndpointWeightsAndCapacities"]
@@ -288,7 +283,6 @@ resource "aws_lambda_layer_version" "ffprobe" {
 resource "aws_cloudwatch_log_group" "dispatcher" {
   name              = "/aws/lambda/neurolens-dispatcher"
   retention_in_days = var.log_retention_days
-  tags              = { Milestone = "M3e" }
 }
 
 resource "aws_lambda_function" "dispatcher" {
@@ -311,7 +305,6 @@ resource "aws_lambda_function" "dispatcher" {
   }
 
   depends_on = [aws_cloudwatch_log_group.dispatcher, aws_iam_role_policy.dispatcher]
-  tags       = { Milestone = "M3e" }
 }
 
 resource "aws_lambda_event_source_mapping" "dispatcher" {
@@ -320,7 +313,7 @@ resource "aws_lambda_event_source_mapping" "dispatcher" {
   batch_size       = 1
 }
 
-# ─── GPU guard (M3e §6c) ──────────────────────────────────────────────────
+# ─── GPU guard ──────────────────────────────────────────────────
 
 resource "aws_iam_role" "gpu_guard" {
   name                 = "neurolens-gpu-guard${local.iam_suffix}"
@@ -333,7 +326,6 @@ resource "aws_iam_role" "gpu_guard" {
       Principal = { Service = "lambda.amazonaws.com" }
     }]
   })
-  tags = { Milestone = "M3e" }
 }
 
 resource "aws_iam_role_policy" "gpu_guard" {
@@ -369,7 +361,6 @@ resource "aws_iam_role_policy" "gpu_guard" {
 resource "aws_cloudwatch_log_group" "gpu_guard" {
   name              = "/aws/lambda/neurolens-gpu-guard"
   retention_in_days = var.log_retention_days
-  tags              = { Milestone = "M3e" }
 }
 
 resource "aws_lambda_function" "gpu_guard" {
@@ -389,7 +380,6 @@ resource "aws_lambda_function" "gpu_guard" {
   }
 
   depends_on = [aws_cloudwatch_log_group.gpu_guard, aws_iam_role_policy.gpu_guard]
-  tags       = { Milestone = "M3e" }
 }
 
 resource "aws_cloudwatch_event_rule" "gpu_guard" {
@@ -397,7 +387,6 @@ resource "aws_cloudwatch_event_rule" "gpu_guard" {
   description         = "Run the NeuroLens GPU guard (stop a GPU left on with nothing to do)."
   schedule_expression = "rate(10 minutes)"
   state               = "ENABLED"
-  tags                = { Milestone = "M3e" }
 }
 
 resource "aws_cloudwatch_event_target" "gpu_guard" {
@@ -413,7 +402,7 @@ resource "aws_lambda_permission" "events_invoke_gpu_guard" {
   source_arn    = aws_cloudwatch_event_rule.gpu_guard.arn
 }
 
-# ─── The AI report (M3g §5, §8) ───────────────────────────────────────────
+# ─── The AI report ───────────────────────────────────────────
 #
 # Its own Lambda because Bedrock takes ~30-90 s, longer than the web function's 60 s. The
 # Anthropic SDK ships as a layer (infra/build_report_layer.sh), so this zip stays dependency-free.
@@ -437,7 +426,6 @@ resource "aws_iam_role" "report" {
       Principal = { Service = "lambda.amazonaws.com" }
     }]
   })
-  tags = { Milestone = "M3g" }
 }
 
 resource "aws_iam_role_policy" "report" {
@@ -503,7 +491,6 @@ resource "aws_lambda_layer_version" "report" {
 resource "aws_cloudwatch_log_group" "report" {
   name              = "/aws/lambda/neurolens-report"
   retention_in_days = var.log_retention_days
-  tags              = { Milestone = "M3g" }
 }
 
 resource "aws_lambda_function" "report" {
@@ -514,7 +501,7 @@ resource "aws_lambda_function" "report" {
   filename         = data.archive_file.m3a_lambdas.output_path
   source_code_hash = data.archive_file.m3a_lambdas.output_base64sha256
   layers           = [aws_lambda_layer_version.report.arn]
-  # Three SDK attempts of up to 280 s each fit (M3g §5a); stale_minutes stays above it.
+  # Three SDK attempts of up to 280 s each fit; stale_minutes stays above it.
   timeout                        = 900
   memory_size                    = 512
   reserved_concurrent_executions = 5
@@ -526,7 +513,6 @@ resource "aws_lambda_function" "report" {
   }
 
   depends_on = [aws_cloudwatch_log_group.report, aws_iam_role_policy.report]
-  tags       = { Milestone = "M3g" }
 }
 
 # A queued request older than 4 min is dropped. The function's timeout is 900 s and

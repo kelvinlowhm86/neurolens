@@ -1,11 +1,11 @@
-"""M3b: `sign_in` keeps `users.email` current (real PostgreSQL 16 through NEUROLENS_TEST_DSN).
-Written first from docs/M3b_spec.md §2c "Account linking rule" and the "Accounts" test bullet:
-a known `(issuer, subject)` signing in with a different verified email (compared lowercased)
+"""`sign_in` keeps `users.email` current (real PostgreSQL 16 through NEUROLENS_TEST_DSN).
+
+A known `(issuer, subject)` signing in with a different verified email (compared lowercased)
 updates the stored email in the same transaction, so an email the user has given up no longer
 links strangers to the account. A change of letter case only leaves it alone; a new email that
 another user already holds leaves both users unchanged and logs a warning (merging is out of scope).
 
-The M3a ledger invariants are checked after every test by the shared fixture.
+The ledger invariants are checked after every test by the shared fixture.
 """
 
 import logging
@@ -81,5 +81,5 @@ def test_a_new_email_held_by_another_user_changes_nothing_and_logs_a_warning(db,
     assert any(r.name == "neurolens" and r.levelno == logging.WARNING for r in caplog.records), (
         "the email clash must be logged as a warning on the 'neurolens' logger"
     )
-    # the database connection is still usable afterwards (no half-aborted transaction left)
+    # The database connection is still usable afterwards (no half-aborted transaction left)
     assert billing.sign_in(db, ISSUER, "sub-bob", "bob@example.com", STARTER_CENTS) == bob

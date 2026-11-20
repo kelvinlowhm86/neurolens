@@ -1,4 +1,4 @@
-"""Experiment 1 analysis (docs/M4_spec.md §3): median, minimum and maximum of every stage, per
+"""Experiment 1 analysis: median, minimum and maximum of every stage, per
 clip length, from experiment-1 runs.csv files.
 
     python experiments/latency_breakdown.py --run-id <run_id> [--run-id <run_id> ...]

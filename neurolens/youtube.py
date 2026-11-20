@@ -1,4 +1,4 @@
-"""A public YouTube video's facts from the Data API (M3j §3). Standard library only.
+"""A public YouTube video's facts from the Data API. Standard library only.
 
 The web tier calls `lookup` for a link the user gives it. A reply that is not a video, or a lookup
 that cannot be made, is told apart: no items is `None`; every failure is `LookupFailed`, whose
@@ -67,7 +67,7 @@ def _facts(item):
 
 
 def lookup(video_id, api_key, *, timeout=5):
-    """The public video's facts, or None when YouTube has no such item (M3j §3).
+    """The public video's facts, or None when YouTube has no such item.
 
     A missing key, a network error, a timeout, a non-200 reply, or a reply of the wrong shape
     raises `LookupFailed`. The message is deliberately generic: it never carries the key or the

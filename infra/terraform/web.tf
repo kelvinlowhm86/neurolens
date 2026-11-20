@@ -1,4 +1,4 @@
-# The public website's front door and sign-in (M3b §2a, §3b). Day one builds the CloudFront
+# The public website's front door and sign-in. Day one builds the CloudFront
 # address with the page origin and Cognito with Google, so the sign-in round trip can be checked
 # before any web code exists; the Lambda API origin and the web and webhook functions follow.
 
@@ -97,7 +97,6 @@ resource "aws_cloudfront_distribution" "site" {
     cloudfront_default_certificate = true
   }
 
-  tags = { Milestone = "M3b" }
 }
 
 locals {
@@ -136,10 +135,9 @@ resource "aws_cognito_user_pool" "users" {
     email_sending_account = "COGNITO_DEFAULT"
   }
 
-  tags = { Milestone = "M3b" }
 }
 
-# The Google OAuth client's secret, stored once by hand as a SecureString (M3b §2a), so no apply
+# The Google OAuth client's secret, stored once by hand as a SecureString, so no apply
 # needs it in the shell. It also ends up in the encrypted Terraform state, as for any provider.
 data "aws_ssm_parameter" "google_client_secret" {
   name = "/neurolens/terraform/google_client_secret"
@@ -197,12 +195,12 @@ resource "aws_cognito_user_pool_domain" "users" {
   managed_login_version = 1 # the classic hosted pages; the newer managed login needs Essentials
 }
 
-# ─── The web function (M3b §3a) ───────────────────────────────────────────
+# ─── The web function ───────────────────────────────────────────
 #
 # It runs outside the VPC: it reaches Cognito, Parameter Store, S3 and the Data API over AWS's
 # public endpoints, so it never depends on a NAT Gateway. Its role is in web_iam.tf. The zip is
 # too large for a direct Terraform upload with the PDF code, so it lives in the bucket and the
-# function reads it from there (M3h §18e). Build it first with infra/build_web_lambda.sh; after
+# Function reads it from there. Build it first with infra/build_web_lambda.sh; after
 # that infra/deploy_web.sh ships code to the same key, so an apply for anything else never needs
 # a build and never changes the running code.
 
@@ -232,11 +230,10 @@ locals {
   }
 }
 
-# Someone asked for free minutes (M3k §9): the database holds the request, this topic only emails
+# Someone asked for free minutes: the database holds the request, this topic only emails
 # The operator confirms the subscription email once after apply. No standing cost.
 resource "aws_sns_topic" "access_requests" {
   name = "neurolens-access-requests"
-  tags = { Milestone = "M3k" }
 }
 
 resource "aws_sns_topic_subscription" "access_requests_email" {
@@ -258,7 +255,6 @@ resource "aws_ssm_parameter" "web_deployment" {
   name  = "/neurolens/web/${each.key}"
   type  = "String"
   value = each.value
-  tags  = { Milestone = "M3b" }
 }
 
 # Log lines contain user ids and email addresses: kept 14 days, and removed by `terraform destroy`.
@@ -267,14 +263,12 @@ resource "aws_cloudwatch_log_group" "web" {
 
   name              = "/aws/lambda/${each.value.name}"
   retention_in_days = var.log_retention_days
-  tags              = { Milestone = "M3b" }
 }
 
 resource "aws_s3_object" "web_zip" {
   bucket = aws_s3_bucket.main.bucket
   key    = "deploy/web_lambda.zip"
   source = local.web_zip
-  tags   = { Milestone = "M3h" }
 
   lifecycle {
     # Uploaded once; deploy_web.sh replaces it, and its upload carries no tags.
@@ -308,7 +302,6 @@ resource "aws_lambda_function" "web" {
     aws_iam_role_policy.web,
     aws_s3_object.web_zip,
   ]
-  tags = { Milestone = "M3b" }
 }
 
 # The web function: callable only through this CloudFront distribution (signed requests). Function

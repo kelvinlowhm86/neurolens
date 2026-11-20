@@ -1,6 +1,6 @@
 """Tests for POST /api/uploads/presign (Flask test client + moto).
 
-Updated for docs/M3a_spec.md §6 (a spec'd change): the app gets a PostgreSQL database (the route
+Updated for (a spec'd change): the app gets a PostgreSQL database (the route
 reserves credit first) and the key is under the development user's folder,
 uploads/{user_id}/{job_id}{ext}, retiring placeholder-user. A route without an S3 client answers
 500 `not_configured`. The reservation itself is tested in tests/test_m3a_web.py.
@@ -198,8 +198,8 @@ def test_error_responses_do_not_hand_out_upload_fields(client):
 
 
 def test_no_s3_client_gives_not_configured_and_holds_no_money(client_for, pg):
-    """M3a §6: a route that needs an S3 client the app doesn't have returns 500 not_configured
-    (M1 said presign_failed)."""
+    """A route that needs an S3 client the app doesn't have returns 500 not_configured
+    (said presign_failed)."""
     client, _ = client_for(with_s3=False, with_aws=False)
     resp = client.post("/api/uploads/presign", json=body())
     assert resp.status_code == 500
@@ -270,10 +270,10 @@ def test_config_without_max_upload_bytes_cannot_presign(aws, db, pg, make_cfg, t
     data = resp.get_json()
     assert data["error"] == "presign_failed"
     assert "fields" not in data and "url" not in data
-    # M3a: no money is left held (nothing reserved, or the reservation refunded)
+    # No money is left held (nothing reserved, or the reservation refunded)
     assert pg.rows("SELECT 1 FROM jobs WHERE status IN ('queued', 'processing')") == []
     assert pg.balance(WEB_USER_ID) in (None, (STARTER_CENTS, 0))
-    # the limits endpoint still answers, reporting the missing limit as null
+    # The limits endpoint still answers, reporting the missing limit as null
     limits = client.get("/api/limits")
     assert limits.status_code == 200
     assert limits.get_json()["max_upload_bytes"] is None
@@ -301,6 +301,6 @@ def test_create_app_with_cfg_needs_no_config_json(monkeypatch, tmp_path, make_cf
     data_dir = tmp_path / "data"
     data_dir.mkdir()
     app = create_app(data_dir=data_dir, cfg=make_cfg())
-    resp = app.test_client().get("/api/limits")  # M3b §8: /api/samples is removed
+    resp = app.test_client().get("/api/limits")  # /api/samples is removed
     assert resp.status_code == 200
     assert resp.get_json()["max_upload_bytes"] == make_cfg()["max_upload_bytes"]

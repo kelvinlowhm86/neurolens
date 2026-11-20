@@ -1,4 +1,4 @@
-# ─── Roles for the GPU container and the image build (M3e §9) ─────────────
+# ─── Roles for the GPU container and the image build ─────────────
 #
 # Every role carries the permissions boundary from infra/iam/neurolens-role-boundary.json
 # (created by hand in the console). The deploy user may only create roles that carry it, so AWS
@@ -25,7 +25,6 @@ resource "aws_iam_role" "sagemaker" {
       Principal = { Service = "sagemaker.amazonaws.com" }
     }]
   })
-  tags = { Milestone = "M3e" }
 }
 
 resource "aws_iam_role_policy" "sagemaker" {
@@ -54,7 +53,7 @@ resource "aws_iam_role_policy" "sagemaker" {
       },
       {
         # Our result and brain under results/, the shared video under dataset/, and the boot
-        # record (M3f §5b).
+        # Record.
         Sid    = "WriteResultsDatasetAndBootRecords"
         Effect = "Allow"
         Action = "s3:PutObject"
@@ -66,7 +65,7 @@ resource "aws_iam_role_policy" "sagemaker" {
         ]
       },
       {
-        # A refund deletes every file the job has (M3e §4c, M3f §5c).
+        # A refund deletes every file the job has.
         Sid    = "DeleteAJobsFilesAfterRefund"
         Effect = "Allow"
         Action = "s3:DeleteObject"
@@ -101,7 +100,7 @@ resource "aws_iam_role_policy" "sagemaker" {
       },
       {
         # SageMaker publishes the instance metrics (CPU, memory, GPU, disk) with this role; without
-        # it there are none, and Experiment 2 cannot count running instances (M3e §10).
+        # It there are none, and Experiment 2 cannot count running instances.
         # PutMetricData has no resource, so the namespace condition is the scope.
         Sid       = "PublishEndpointInstanceMetrics"
         Effect    = "Allow"
@@ -110,7 +109,7 @@ resource "aws_iam_role_policy" "sagemaker" {
         Condition = { StringEquals = { "cloudwatch:namespace" = "/aws/sagemaker/Endpoints" } }
       },
       {
-        # The endpoint's ErrorTopic (M3e §5).
+        # The endpoint's ErrorTopic.
         Sid      = "PublishGpuErrors"
         Effect   = "Allow"
         Action   = "sns:Publish"
@@ -133,7 +132,6 @@ resource "aws_iam_role" "codebuild" {
       Principal = { Service = "codebuild.amazonaws.com" }
     }]
   })
-  tags = { Milestone = "M3e" }
 }
 
 resource "aws_iam_role_policy" "codebuild" {
@@ -171,7 +169,7 @@ resource "aws_iam_role_policy" "codebuild" {
         Resource = "*"
       },
       {
-        # The Dockerfile's base is AWS's PyTorch inference image in account 763104351884 (M3e §4d).
+        # The Dockerfile's base is AWS's PyTorch inference image in account 763104351884.
         Sid      = "PullTheAwsBaseImage"
         Effect   = "Allow"
         Action   = ["ecr:BatchCheckLayerAvailability", "ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer"]

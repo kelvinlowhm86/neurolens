@@ -1,4 +1,4 @@
-"""Who is asking (M3a §2, M3b §2, M3f §6b). The only place the web app reads identity.
+"""Who is asking. The only place the web app reads identity.
 
 Two modes. "dev" (laptop and tests): a fixed development user, allowed only on a local-only
 address and never on AWS, so it can never be exposed publicly; every request is signed in as it.
@@ -138,7 +138,7 @@ def end_session(db):
 
 
 def set_signed_in_hint(response):
-    """The landing page's hint (M3d §8b): no identity, only which buttons show."""
+    """The landing page's hint: no identity, only which buttons show."""
     response.set_cookie(
         SIGNED_IN_HINT_COOKIE,
         "1",

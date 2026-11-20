@@ -1,4 +1,4 @@
-"""M3d §5 worker and storage: the brain file's bytes, its write order, and its failures.
+"""Worker and storage: the brain file's bytes, its write order, and its failures.
 
 Full treatment because a missed write order could publish a result without its brain file, or
 leave user data behind after a failed run.

@@ -1,4 +1,4 @@
-"""M3g §11: frames, the worker, report billing and web routes (docs/M3g_spec.md).
+"""Frames, the worker, report billing and web routes.
 
 Covers frame cutting and storage, the worker's frame capture, the report claim/finish/release
 functions and the two web routes. The report Lambda and request builder live in
@@ -310,7 +310,7 @@ def test_get_frames_raises_on_a_malformed_zip(aws):
     aws.s3.put_object(Bucket=aws.bucket, Key=FRAMES_KEY.format(job_id=job_id), Body=b"not a zip")
     get_frames = storage.get_frames
 
-    with pytest.raises(Exception):  # noqa: B017 - the spec names no exception type here
+    with pytest.raises(Exception):  # noqa: B017 - no specific exception type is promised here
         get_frames(aws.s3, aws.bucket, job_id)
 
 

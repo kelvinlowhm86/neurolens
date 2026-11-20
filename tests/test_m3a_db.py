@@ -1,7 +1,7 @@
-"""M3a database layer: neurolens.db's PostgreSQL backend and the migrations. Written first from
-docs/M3a_spec.md §3c, §3d and §10 (real PostgreSQL 16 through NEUROLENS_TEST_DSN).
+"""Database layer: neurolens.db's PostgreSQL backend and the migrations, on a real PostgreSQL 16
+through NEUROLENS_TEST_DSN.
 
-The Data API backend has no scripted-reply tests (§10): infra/check_aurora.py checks it on Aurora.
+The Data API backend has no scripted-reply tests: infra/check_aurora.py checks it on Aurora.
 """
 
 import re
@@ -17,7 +17,7 @@ from neurolens import billing
 
 
 def test_migrations_hold_only_plain_statements_the_data_api_can_run_one_by_one():
-    """§3c: no functions or DO blocks, each statement ending with `;` at the end of a line (the
+    """No functions or DO blocks, each statement ending with `;` at the end of a line (the
     conftest applies them split exactly that way, so the schema itself is tested)."""
     assert sorted(p.name for p in MIGRATIONS.glob("*.sql"))[0] == "001_init.sql"
     for statement in migration_statements():
@@ -134,9 +134,9 @@ def test_jsonb_written_through_a_cast_reads_back_as_python_objects(db, new_job):
     ids=["percent", "percent_with_params", "literal", "literal_in_where", "literal_with_params"],
 )
 def test_sql_with_a_percent_sign_or_a_string_literal_raises(db, sql, params):
-    """§3d: application SQL never contains `%` or string literals, and the rewrite raises if it
+    """Application SQL never contains `%` or string literals, and the rewrite raises if it
     finds either. Every statement here is valid PostgreSQL, so the error is the rewrite's."""
-    with pytest.raises(Exception):  # noqa: B017 - the spec does not name the exception type
+    with pytest.raises(Exception):  # noqa: B017 - no specific exception type is promised here
         with db.transaction() as tx:
             tx.execute(sql, params)
 

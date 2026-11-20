@@ -1,6 +1,6 @@
-"""Tests for neurolens.web.app via create_app(). From docs/M0_spec.md.
+"""Tests for neurolens.web.app via create_app. From.
 
-M3b §8 retired `/api/samples` (the page reads /data/samples.json), and with it the test that
+ retired `/api/samples` (the page reads /data/samples.json), and with it the test that
 the route equals data/samples.json.
 """
 
@@ -29,7 +29,7 @@ def test_index_serves_index_html(client):
 
 def test_thumbnail_is_served(tmp_path):
     """A sample thumbnail under data/output/ is served as is. Uses its own data folder, so it does
-    not depend on which samples data/samples.json lists (M3d §9 empties it until the AWS day)."""
+    not depend on which samples data/samples.json lists (empties it until the AWS day)."""
     data = tmp_path / "data"
     thumb = data / "output" / "clip" / "thumb.jpg"
     thumb.parent.mkdir(parents=True)

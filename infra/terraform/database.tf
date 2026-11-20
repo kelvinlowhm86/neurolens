@@ -1,4 +1,4 @@
-# ─── Aurora PostgreSQL through the Data API (M3a §3a) ──────────────────────
+# ─── Aurora PostgreSQL through the Data API ──────────────────────
 #
 # Users, credit balances and job state. Serverless v2 from 0 ACU: it pauses after 5 idle minutes
 # and wakes in about 15 s on the next call, so it costs only while a session or a job uses it.
@@ -15,7 +15,6 @@ locals {
 resource "aws_db_subnet_group" "db" {
   name       = "neurolens-db"
   subnet_ids = aws_subnet.private[*].id
-  tags       = { Milestone = "M3a" }
 }
 
 # No ingress and no egress rule: Terraform removes AWS's default allow-all egress rule.
@@ -23,7 +22,7 @@ resource "aws_security_group" "db" {
   name        = "neurolens-db"
   description = "NeuroLens Aurora: no rules (reached only through the RDS Data API)"
   vpc_id      = aws_vpc.main.id
-  tags        = { Name = "neurolens-db", Milestone = "M3a" }
+  tags        = { Name = "neurolens-db" }
 }
 
 resource "aws_rds_cluster" "db" {
@@ -44,19 +43,18 @@ resource "aws_rds_cluster" "db" {
 
   serverlessv2_scaling_configuration {
     min_capacity             = 0
-    max_capacity             = 1 # our load is a few small queries; each wake resumes at the maximum (M3b §6)
+    max_capacity             = 1 # our load is a few small queries; each wake resumes at the maximum
     seconds_until_auto_pause = 300
   }
 
   # 1 day of automatic backups (free at this size). `terraform destroy` works without a manual step
-  # and really deletes the data (M4's teardown relies on this).
+  # And really deletes the data (teardown relies on this).
   backup_retention_period  = 1
   skip_final_snapshot      = true
   delete_automated_backups = true
   deletion_protection      = false
   apply_immediately        = true
 
-  tags = { Milestone = "M3a" }
 }
 
 resource "aws_rds_cluster_instance" "db" {
@@ -67,7 +65,6 @@ resource "aws_rds_cluster_instance" "db" {
   engine_version             = aws_rds_cluster.db.engine_version
   publicly_accessible        = false
   auto_minor_version_upgrade = false # no surprise upgrade (and Terraform drift) mid-project
-  tags                       = { Milestone = "M3a" }
 }
 
 locals {
@@ -90,7 +87,7 @@ locals {
   ]
 }
 
-# Forgotten-database alarm (M3b §6): awake in more than 30% of the minutes of each of 6 hours in a
+# Forgotten-database alarm: awake in more than 30% of the minutes of each of 6 hours in a
 # row means something keeps it awake (an open tab, a retrying Lambda): about $1.40 a day at 0.5 ACU.
 # The metric reads 0 while paused, so the hourly 70th percentile of its per-minute values is above 0
 # exactly when it was awake for over 30% of the hour, whatever capacity it ran at. A reaper wake
@@ -113,5 +110,4 @@ resource "aws_cloudwatch_metric_alarm" "db_awake_long" {
 
   alarm_actions = [aws_sns_topic.alerts.arn]
   ok_actions    = [aws_sns_topic.alerts.arn]
-  tags          = { Milestone = "M3b" }
 }

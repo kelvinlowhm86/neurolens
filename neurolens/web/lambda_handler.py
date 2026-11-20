@@ -1,4 +1,4 @@
-"""The web app's AWS launcher (docs/M3b_spec.md §3a); the laptop's is app.py.
+"""The web app's AWS launcher; the laptop's is app.py.
 
 Lambda calls `handler` with a function-URL event (payload 2.0), which apig-wsgi turns into a WSGI
 request for Flask and back, keeping several Set-Cookie values apart. The app is built on the

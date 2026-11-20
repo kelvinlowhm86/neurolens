@@ -1,5 +1,4 @@
-"""Publishing a result ends the money decision, and each job gets its own temp folder (M3e §4b,
-§11 "Container").
+"""Publishing a result ends the money decision, and each job gets its own temp folder.
 
 After `put_result` succeeds nothing refunds: a failure to charge is logged as SETTLE_FAILED and
 the error handler's `finish_job` settles it. Each invocation runs in a fresh folder under the

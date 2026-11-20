@@ -1,4 +1,4 @@
-"""Video measurement with ffprobe (docs/M3e_spec.md §3).
+"""Video measurement with ffprobe.
 
 Standard library only, so the dispatcher Lambda can import it without numpy or the model code.
 """
@@ -33,7 +33,7 @@ def _probe_failure(message, stderr):
 
 def probe_duration(path, timeout_s=30):
     """Video length in seconds, measured with ffprobe from the file's packets, not the length its
-    header declares (M3e §3: whoever made the file wrote the header, so it could understate the
+    header declares (whoever made the file wrote the header, so it could understate the
     length). Raises UnreadableVideo when the file itself is at fault, ProbeFailed when ffprobe
     could not fetch or finish it."""
     try:
@@ -87,12 +87,12 @@ def probe_duration(path, timeout_s=30):
     except (ValueError, KeyError, TypeError, AttributeError) as err:
         raise UnreadableVideo(f"ffprobe could not read {path}") from err
     if not has_video:
-        # e.g. an audio-only .mp4: it would pass the length check, then fail in the model
+        # E.g. an audio-only .mp4: it would pass the length check, then fail in the model
         raise UnreadableVideo(f"{path} has no video stream")
     if not starts:
         raise UnreadableVideo(f"ffprobe found no timestamped packets in {path}")
     # A negative start (AAC encoder priming) counts as 0, so an honest file measures what its
-    # header says.
+    # Header says.
     duration = max(ends) - max(min(starts), 0.0)
     if not math.isfinite(duration):
         raise UnreadableVideo(f"ffprobe gave a non-finite duration for {path}")

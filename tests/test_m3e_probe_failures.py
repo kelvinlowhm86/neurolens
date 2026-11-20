@@ -1,4 +1,4 @@
-"""Probe failures that are not the file's fault are retried, not refunded (M3e §3, §11).
+"""Probe failures that are not the file's fault are retried, not refunded.
 
 `probe_duration` blames the video only when ffprobe read it and found it unusable (no video
 stream, no timestamped packets, a non-finite duration, or "Invalid data found when processing

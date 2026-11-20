@@ -1,4 +1,4 @@
-"""SageMaker error notification handler (docs/M3e_spec.md §5).
+"""SageMaker error notification handler.
 
 Subscribed to the endpoint's error topic. The notification names the failed request's
 ``inferenceId`` (our job id). ``lambdas.finish_job`` charges a job whose result exists, else

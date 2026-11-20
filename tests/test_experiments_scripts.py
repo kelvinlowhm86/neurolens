@@ -1,6 +1,6 @@
-"""Experiment scripts (docs/M3e_spec.md §10).
+"""Experiment scripts.
 
-M3e changes where the cold-start rows come from: Application Auto Scaling's scaling activities,
+ changes where the cold-start rows come : Application Auto Scaling's scaling activities,
 the container's boot records (`container_start_utc`, `model_loaded_utc`, `warmup_done_utc`,
 `ready_utc`) and the first job's `transcribing` stage. The CloudWatch export's series become the
 endpoint backlog and its instance count, and a run's manifest records the image digest instead
@@ -104,7 +104,7 @@ RUNS = [
 
 
 def stat(row, col, name):
-    """§1a names the statistics but not their keys: accept `<col>_<stat>` or row[col][stat],
+    """Names the statistics but not their keys: accept `<col>_<stat>` or row[col][stat],
     with min/max or minimum/maximum."""
     names = {"median": ("median",), "min": ("min", "minimum"), "max": ("max", "maximum")}[name]
     for n in names:

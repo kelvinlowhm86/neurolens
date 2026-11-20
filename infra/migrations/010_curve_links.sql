@@ -1,4 +1,4 @@
--- M3i 010 (docs/M3i_spec.md §5): each curve names the published video it belongs to, the form's
+-- Each curve names the published video it belongs to, the form's
 -- Same / Lightly edited / Re-cut answer, and the Facebook report source.
 ALTER TABLE retention_snapshots ADD COLUMN video_ref TEXT;
 ALTER TABLE retention_snapshots ADD COLUMN same_cut TEXT

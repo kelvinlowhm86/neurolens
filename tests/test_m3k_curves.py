@@ -1,8 +1,8 @@
-"""The 1,000-view curve rule (docs/M3k_spec.md §7, M3l §3, §7).
+"""The 1,000-view curve rule.
 
 A checked video must show at least `research.curve_min_views` views before its curve pays.
 Hidden and unknown view counts keep paying as before, because those creators were screened by
-hand. M3l removes the one-week wait, so the view count is no longer paired with a date. The check
+hand. removes the one-week wait, so the view count is no longer paired with a date. The check
 and the save share the rule, so their answers agree; the check's reply names the view count it
 saw and the minimum it applied.
 """

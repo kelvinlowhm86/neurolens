@@ -1,4 +1,4 @@
-"""M3c per-video deletion (docs/M3c_spec.md §4, §8).
+"""Per-video deletion.
 
 `DELETE /api/jobs/<job_id>`: every file gone, the job hidden from every route, its ledger intact,
 refused while active, safe to repeat, and a reported S3 error still answers success and leaves the
@@ -88,7 +88,7 @@ def make_job(db, *, content_type="video/mp4", done=True, processing=False, user_
 
 
 def seed_files(aws, job_id, key):
-    """Every file §4 step 2 names for this job, with the dataset video's real extension."""
+    """Every file step 2 names for this job, with the dataset video's real extension."""
     ext = PurePosixPath(key).suffix
     dataset_video = f"dataset/{job_id}/video{ext}"
     for name, body in (

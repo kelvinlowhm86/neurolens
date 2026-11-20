@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Starts processing (docs/M3e_spec.md §6b): the SageMaker endpoint's normal state is max 1.
+# Starts processing: the SageMaker endpoint's normal state is max 1.
 #   infra/start_work.sh                         scale out on demand; the GPU stops after 7 idle minutes
 #   infra/start_work.sh --keep-warm [--hours N] one GPU now, for N hours (1-5, default 3); AWS ends it
 set -euo pipefail

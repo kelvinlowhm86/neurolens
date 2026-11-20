@@ -1,4 +1,4 @@
-"""M3e GPU guard (docs/M3e_spec.md §6c, §11 "Guard").
+"""GPU guard.
 
 The guard reads SageMaker and Application Auto Scaling through small recording clients, and the
 jobs table through PostgreSQL. It stops the endpoint only when an instance is running, no

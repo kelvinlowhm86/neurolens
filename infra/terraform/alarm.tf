@@ -1,4 +1,4 @@
-# ─── GPU and Lambda alarms (M3e §6c, §9) ──────────────────────────────────
+# ─── GPU and Lambda alarms ──────────────────────────────────
 # One email topic (confirm the subscription email once after the first apply):
 # - the GPU guard stopped a GPU that scale-in should have stopped: a person should look;
 # - the GPU guard has not run for 30 minutes (EventBridge switched off or removed);
@@ -15,13 +15,13 @@ resource "aws_sns_topic_subscription" "alerts_email" {
   endpoint  = var.alert_email
 }
 
-# Forgotten-database alarm (M3b §6): awake in more than 30% of the minutes of each of 6 hours in a
+# Forgotten-database alarm: awake in more than 30% of the minutes of each of 6 hours in a
 # row means something keeps it awake (a forgotten stop_work.sh, an open tab, a retrying Lambda):
 # about $1.40 a day at 0.5 ACU. The metric reads 0 while paused, so the hourly 70th percentile of
 # its per-minute values is above 0 exactly when it was awake for over 30% of the hour, whatever
 # capacity it ran at. A reaper wake (about 11 minutes, measured) stays below that; a caller every
 # 12 minutes (about 45%) and a held minimum (100%) are above it.
-# ─── GPU guard alarms (M3e §6c) ───────────────────────────────────────────
+# ─── GPU guard alarms ───────────────────────────────────────────
 
 # The guard logs GPU_GUARD_STOPPED only when scale-in did not stop the GPU. The alarm emails so a
 # person can look at the other signal (scale-in) while the guard keeps the spend bounded.
@@ -53,7 +53,6 @@ resource "aws_cloudwatch_metric_alarm" "gpu_guard_stopped" {
 
   alarm_actions = [aws_sns_topic.alerts.arn]
   ok_actions    = [aws_sns_topic.alerts.arn]
-  tags          = { Milestone = "M3e" }
 }
 
 # Two stops within 30 minutes mean the first did not work: after a real stop, new work keeps the
@@ -77,7 +76,6 @@ resource "aws_cloudwatch_metric_alarm" "gpu_guard_stuck" {
 
   alarm_actions = [aws_sns_topic.alerts.arn]
   ok_actions    = [aws_sns_topic.alerts.arn]
-  tags          = { Milestone = "M3e" }
 }
 
 # The error alarm above catches a run that fails, not one that never happens. Lambda publishes no
@@ -99,10 +97,9 @@ resource "aws_cloudwatch_metric_alarm" "gpu_guard_not_running" {
 
   alarm_actions = [aws_sns_topic.alerts.arn]
   ok_actions    = [aws_sns_topic.alerts.arn]
-  tags          = { Milestone = "M3e" }
 }
 
-# ─── One error alarm per Lambda (M3b §6b) ──────────────────────────────────
+# ─── One error alarm per Lambda ──────────────────────────────────
 # Catches a function that runs and fails, not one that never runs. The dead-letter handler and
 # the error handler also error, by design, while a container still holds a job (a rare duplicate
 # message): one such email is expected; repeated ones are not.
@@ -137,10 +134,9 @@ resource "aws_cloudwatch_metric_alarm" "lambda_errors" {
   treat_missing_data  = "notBreaching"
 
   alarm_actions = [aws_sns_topic.alerts.arn]
-  tags          = { Milestone = "M3b" }
 }
 
-# A Cognito account deletion whose login removal failed (M3c §5). The route logs
+# A Cognito account deletion whose login removal failed. The route logs
 # COGNITO_DELETE_FAILED and answers 500 login_delete_failed, so the function itself does not fail
 # and the Lambda error alarm above never fires. The operator deletes the login by hand.
 resource "aws_cloudwatch_log_metric_filter" "cognito_delete_failed" {
@@ -171,5 +167,4 @@ resource "aws_cloudwatch_metric_alarm" "cognito_delete_failed" {
 
   alarm_actions = [aws_sns_topic.alerts.arn]
   ok_actions    = [aws_sns_topic.alerts.arn]
-  tags          = { Milestone = "M3c" }
 }

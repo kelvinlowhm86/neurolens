@@ -1,4 +1,4 @@
-"""GPU guard (docs/M3e_spec.md §6c), every 10 minutes.
+"""GPU guard, every 10 minutes.
 
 Stops the endpoint when an instance is running or still wanted, no keep-warm holds it, and
 neither a live claim, a dispatched request nor any recent job activity says work is still coming.
@@ -54,7 +54,7 @@ def check(db, *, sagemaker, appscaling, endpoint):
     variant = variants[0] if variants else {}
     instances = variant.get("CurrentInstanceCount", 0)
     # A desired count with no instance yet is a start AWS has not filled (no GPU free); it keeps
-    # trying, and the GPU would arrive later with nobody waiting for it.
+    # Trying, and the GPU would arrive later with nobody waiting for it.
     desired = variant.get("DesiredInstanceCount", 0)
     if instances < 1 and desired < 1:
         return False
@@ -71,7 +71,7 @@ def check(db, *, sagemaker, appscaling, endpoint):
         return False
 
     # Logged before the call: the stuck alarm counts decisions to stop, and a stop still in
-    # progress from the last run refuses this one.
+    # Progress from the last run refuses this one.
     logger.warning(f"GPU_GUARD_STOPPED {instances} {desired}")
     try:
         sagemaker.update_endpoint_weights_and_capacities(

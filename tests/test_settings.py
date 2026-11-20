@@ -1,4 +1,4 @@
-"""Tests for neurolens.settings. Written from docs/M0_spec.md."""
+"""Tests for neurolens.settings."""
 
 import json
 import os
@@ -38,7 +38,7 @@ def clean_env(monkeypatch):
     for name in ENV_VARS:
         monkeypatch.setenv(name, "placeholder")
         monkeypatch.delenv(name)
-    # configure_env refuses to run if huggingface_hub was already imported
+    # Configure_env refuses to run if huggingface_hub was already imported
     monkeypatch.delitem(sys.modules, "huggingface_hub", raising=False)
     return monkeypatch
 

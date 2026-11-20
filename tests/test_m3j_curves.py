@@ -1,7 +1,7 @@
-"""M3j checked publish dates and length (docs/M3j_spec.md §3, §5, §11).
+"""Checked publish dates and length.
 
 `youtube.lookup` turns the Data API's reply into facts or refuses loudly without leaking the key.
-The checked facts include the publish date, length and view count. M3l removed the one-week wait:
+The checked facts include the publish date, length and view count. removed the one-week wait:
 a video of a different length is saved without credit, and enough views otherwise pay at once.
 The check and the save use the same rules, so their answers agree. Money and snapshots are read
 directly from PostgreSQL; time moves by changing the job's `created_at` or the facts'
@@ -238,7 +238,7 @@ def make_job(
         db, user_id, job_id, key, "clip.mp4", round(seconds * 1000), research_consent=consent
     )
     if state != "queued":
-        # The dispatcher measures the length before any GPU runs (M3e §3a).
+        # The dispatcher measures the length before any GPU runs.
         assert billing.verify_queued(db, job_id, round(seconds * 1000), 3600) == "ok"
     if state in ("processing", "done", "failed"):
         assert billing.claim(db, job_id) == 1
@@ -501,7 +501,7 @@ def test_list_jobs_no_longer_promises_a_reward_date(db, pg):
 
 
 def test_a_job_without_a_measured_length_is_not_paid_for_a_checked_video(db, pg):
-    """The match cannot be proved without the server's own length (M3j §5)."""
+    """The match cannot be proved without the server's own length."""
     job_id, _ = make_job(db)
     pg.conn.execute(
         "UPDATE jobs SET verified_duration_ms = NULL WHERE job_id = %s::uuid", (job_id,)

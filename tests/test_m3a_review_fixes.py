@@ -1,4 +1,4 @@
-"""Fixes from the M3a money-slice review: the Data API client never retries on its own, an upload
+"""Fixes from the money-slice review: the Data API client never retries on its own, an upload
 name that is not a job id is an unknown job, and a crafted huge duration is refunded as too long
 by the dispatcher's `verify_queued`."""
 

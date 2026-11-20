@@ -1,9 +1,8 @@
-"""M3b sign-in and the app-wide rules (Flask test client + moto + PostgreSQL). Written first from
-docs/M3b_spec.md §2b, §2c, §3a, §8 and §11: the callback through §8's seam (Authlib's real state,
-nonce and signature checks against a test RSA key; only HTTP is faked), the `email_verified`
-rule, failures without a session, the login and logout URLs built from config, the 30-day server
-session (M3f §6b), 401 on every /api/* route, cookie flags, JSON-only POSTs, no CORS,
-/healthz without the database, and fail-fast startup.
+"""Sign-in and the app-wide rules (Flask test client + moto + PostgreSQL): the callback through
+the sign-in seam (Authlib's real state, nonce and signature checks against a test RSA key; only
+HTTP is faked), the `email_verified` rule, failures without a session, the login and logout URLs
+built from config, the 30-day server session, 401 on every /api/* route, cookie flags, JSON-only
+POSTs, no CORS, /healthz without the database, and fail-fast startup.
 """
 
 import re
@@ -194,7 +193,7 @@ def test_a_callback_without_a_login_is_400(cognito_client, pg):
 
 
 def test_google_and_email_sign_ins_with_one_verified_email_reach_one_account(cognito_app, idp):
-    """§2c's linking rule end to end: the second way in finds the first account."""
+    """Linking rule end to end: the second way in finds the first account."""
     app = cognito_app()
     google, email = app.test_client(), app.test_client()
     sign_in(google, idp, sub="google_1001", email="Ann@Example.com")
@@ -313,7 +312,7 @@ def test_slash_serves_the_landing_page(cognito_client):
 
 
 def test_limits_answer_signed_out_and_signed_in(cognito_client, idp):
-    """M3d §6: the page needs colour_range to colour a sample's brain before sign-in."""
+    """The page needs colour_range to colour a sample's brain before sign-in."""
     expected = {
         "max_video_duration_seconds": 120,
         "max_upload_bytes": 300000000,
@@ -333,7 +332,7 @@ def test_limits_answer_signed_out_and_signed_in(cognito_client, idp):
 
 
 def test_dev_mode_is_always_signed_in(aws, db, make_cfg, tmp_path):
-    """§2b: dev mode keeps M3a's development user; every request is signed in as it."""
+    """Dev mode keeps development user; every request is signed in as it."""
     app = create_app(cfg=make_cfg(), data_dir=tmp_path / "data", db=db, s3_client=aws.s3)
     client = app.test_client()
     assert client.get("/api/limits").status_code == 200
@@ -447,7 +446,7 @@ def test_cognito_mode_with_a_missing_setting_fails_fast(cognito_app, cognito_cfg
     for part in path[:-1]:
         node = node[part]
     del node[path[-1]]
-    with pytest.raises(Exception):  # noqa: B017 - the spec fixes no exception type
+    with pytest.raises(Exception):  # noqa: B017 - no specific exception type is promised here
         cognito_app(cfg)
 
 
@@ -590,7 +589,7 @@ def test_a_session_for_a_deleted_user_401s_and_deletes_the_hint(cognito_client, 
 
 
 def test_every_page_post_goes_through_post_json():
-    """M3b: behind CloudFront's origin access control, a POST without `x-amz-content-sha256`
+    """Behind CloudFront's origin access control, a POST without `x-amz-content-sha256`
     is refused before it reaches the app, so every page POST must use the hashing helper."""
     for page in STATIC.glob("*.html"):
         text = page.read_text()

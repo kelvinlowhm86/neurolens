@@ -1,4 +1,4 @@
-"""Tests for neurolens.response, the M3d §2-§3 maths (pure numpy).
+"""Tests for neurolens.response, the maths (pure numpy).
 
 Values: signed means with no rescaling, groups and overall from the signal series, the muted cut
 to the shared length, 3-decimal rounding and the series order. The golden fixture is generated
@@ -17,7 +17,7 @@ import pytest
 
 
 def response():
-    """Imported lazily so the rest of the suite still collects before the M3d code exists."""
+    """Imported lazily so the rest of the suite still collects before the code exists."""
     import neurolens.response as module
 
     return module

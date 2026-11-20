@@ -1,4 +1,4 @@
--- M3b (docs/M3b_spec.md §2c, §7, §8): our own user IDs with a sign-in table, one user per
+-- Our own user IDs with a sign-in table, one user per
 -- verified email, credit grants and Stripe test-mode top-ups.
 COMMENT ON COLUMN users.user_id IS 'our own UUID (text)';
 

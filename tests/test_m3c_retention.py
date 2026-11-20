@@ -1,4 +1,4 @@
-"""M3c retention curves (docs/M3c_spec.md §3c, §8).
+"""Retention curves.
 
 `neurolens.results.parse_retention_report`'s rules (one broken rule per test) and the JSON route
 `POST /api/jobs/<job_id>/retention`: ownership, a done job, consent, storage and replacement.
@@ -241,7 +241,7 @@ def test_parse_retention_report_refuses_a_row_of_the_wrong_shape(row):
 
 @pytest.fixture(autouse=True)
 def youtube_falls_back(monkeypatch):
-    """M3j: the save route looks the link up; these tests keep the unknown-facts fallback."""
+    """The save route looks the link up; these tests keep the unknown-facts fallback."""
     try:
         from neurolens import youtube
     except ImportError:

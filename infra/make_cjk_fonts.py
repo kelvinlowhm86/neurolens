@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Make the PDF's Chinese/Japanese/Korean fallback fonts (M3h §18a) from the full Noto fonts.
+"""Make the PDF's Chinese/Japanese/Korean fallback fonts from the full Noto fonts.
 
     python infra/make_cjk_fonts.py <NotoSansSC[wght].ttf> <NotoSansKR[wght].ttf>
 

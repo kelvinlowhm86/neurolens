@@ -68,7 +68,7 @@ output "google_redirect_uri" {
 }
 
 output "sign_in_test_url" {
-  description = "Day-one check (M3b): Cognito's sign-in page; a successful sign-in lands on <public_base_url>/auth/callback?code=..."
+  description = "Day-one check: Cognito's sign-in page; a successful sign-in lands on <public_base_url>/auth/callback?code=..."
   value       = "https://${local.cognito_domain}/oauth2/authorize?client_id=${aws_cognito_user_pool_client.web.id}&response_type=code&scope=openid+email&redirect_uri=${local.public_base_url}/auth/callback"
 }
 

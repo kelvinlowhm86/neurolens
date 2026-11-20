@@ -1,4 +1,4 @@
-"""M3c research consent (docs/M3c_spec.md §2, §3a, §3b, §8).
+"""Research consent.
 
 The 003 migration, the consent flag stored by `billing.reserve` and the presign route, and the
 worker's dataset copy: only a consented job is copied, the copy happens before `put_result`, a

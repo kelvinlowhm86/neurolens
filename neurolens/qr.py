@@ -1,7 +1,8 @@
 """Minimal, pure-Python QR Code SVG generator (ISO/IEC 18004, byte mode, EC level L).
 
-Used by the STePS booth pass modal so the web Lambda needs no third-party QR package and the
-browser makes no external request. Supports byte payloads up to 154 bytes (versions 1-7).
+Makes the QR codes for visitor passes on the admin panel, so the web Lambda needs no third-party
+QR package and the browser makes no external request. Supports byte payloads up to 154 bytes
+(versions 1-7).
 """
 
 # (total_codewords, ec_codewords_per_block, num_blocks, alignment_positions) for EC level L.
