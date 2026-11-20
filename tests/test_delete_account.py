@@ -18,8 +18,8 @@ from botocore.exceptions import ClientError
 from conftest import ISSUER, STARTER_CENTS, check_invariants, sign_in
 from neurolens import billing, storage
 from neurolens.web.app import create_app
-from test_m3c_delete_job import DeleteReportsError
-from test_m3f_purge_retry import run_reaper
+from test_delete_job import DeleteReportsError
+from test_purge_retry import run_reaper
 
 GOOGLE = "https://accounts.google.example"
 EMAIL = "ann@example.com"
@@ -323,7 +323,7 @@ def test_account_delete_removes_the_users_files_and_rows(
     assert object_exists(aws, other_key)  # another user's file is untouched
     assert pg.one("SELECT * FROM users WHERE user_id = %s", other) is not None
     assert pg.job(other_job) is not None
-    # Step 4: the route clears the same client's session.
+    # The route also clears the same client's session.
     assert cognito_client.get("/api/me").status_code == 401
 
 

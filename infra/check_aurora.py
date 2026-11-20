@@ -7,8 +7,9 @@ CI tests only the PostgreSQL backend, so this is the one check of the Data API b
 formats. Run it after changing neurolens/db.py's Data API code or adding a migration, and once on
 a new account.
 
-Runs ensure_user, reserve, verify_queued, claim, set_stage and settle_success for a throwaway
-user, then a second job through touch and issue_refund (whose re-check reads boolean columns),
+Runs ensure_user, reserve, verify_queued, claim, touch, set_stage and settle_success for a
+throwaway user, then a second job through reserve and issue_refund (whose re-check reads boolean
+columns),
 checks the ledger invariant, reads the whole `jobs` row back and checks
 the Python type of every column against what the PostgreSQL backend returns, so a wrong
 guess about the Data API's formats is caught here, not in production. Then signs a throwaway

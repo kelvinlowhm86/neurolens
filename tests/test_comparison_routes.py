@@ -11,7 +11,7 @@ import pytest
 from conftest import STARTER_CENTS, WEB_USER_ID
 from neurolens import billing
 from neurolens.web.app import create_app
-from test_m3g_report import job_in_state, put_result
+from test_report import job_in_state, put_result
 
 REPORT = {"max_tries": 3, "stale_minutes": 5}
 MAX_TRIES = REPORT["max_tries"]

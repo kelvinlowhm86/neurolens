@@ -2283,8 +2283,6 @@ async function deleteJob(job) {
   }
 }
 
-// "21 Nov 2026": a numeric date reads differently in different countries.
-const longDate = d => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 const historyTime = d => d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
 // "30 Oct 23:23"; the year shows only when it is not this year.
 const historyDate = d => `${d.toLocaleDateString('en-GB', d.getFullYear() === new Date().getFullYear()
@@ -4490,10 +4488,6 @@ function averageOverall(result) {
   const used = values.length > 1 ? values.slice(1) : values;
   if (!used.length) return null;
   return used.reduce((sum, v) => sum + v, 0) / used.length;
-}
-
-function escapeHtml(text) {
-  return String(text).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
 function currentVideoName() {

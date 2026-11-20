@@ -8,7 +8,7 @@ state are read directly through `pg`.
 
 Checks that moved to the dispatcher (size, duration, credit) or that no longer exist (SQS polling,
 release for retry, a missing upload) are gone; the SageMaker server's HTTP contract lives in
-tests/test_m3e_container.py.
+tests/test_container.py.
 """
 
 import contextlib

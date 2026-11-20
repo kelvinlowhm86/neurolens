@@ -3,7 +3,7 @@
 Updated for (a spec'd change): the app gets a PostgreSQL database (the route
 reserves credit first) and the key is under the development user's folder,
 uploads/{user_id}/{job_id}{ext}, retiring placeholder-user. A route without an S3 client answers
-500 `not_configured`. The reservation itself is tested in tests/test_m3a_web.py.
+500 `not_configured`. The reservation itself is tested in tests/test_presign_ownership.py.
 """
 
 import base64

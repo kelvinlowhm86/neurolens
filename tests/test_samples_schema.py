@@ -1,8 +1,7 @@
 """Data/samples.json entries have the shape the page reads.
 
-The list may be empty until step 3 adds the new open-licensed samples; every entry present must
-carry the full entry and a format-2 result, and any brain file must be a whole number of
-20484-vertex float16 rows.
+The list may be empty; every entry present must carry the full entry and a format-2 result, and
+any brain file must be a whole number of 20484-vertex float16 rows.
 """
 
 import json

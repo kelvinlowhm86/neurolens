@@ -1,6 +1,6 @@
 """Deletion: the brain key is listed and both deletes remove it (moto).
 
-Mirrors tests/test_m3c_delete_job.py and tests/test_m3c_delete_account.py.
+Mirrors tests/test_delete_job.py and tests/test_delete_account.py.
 """
 
 import uuid

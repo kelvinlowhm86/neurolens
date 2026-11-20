@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Builds build/web_lambda.zip, the code of both web functions: the last commit's
+# Builds build/web_lambda.zip, the code of the web function: the last commit's
 # neurolens/ package and config.json, plus the web dependencies installed for Lambda's own
 # platform (Linux arm64, Python 3.12) so nothing built on this Mac breaks there. Terraform needs
 # the zip once, to create the functions; after that deploy_web.sh rebuilds and ships it.

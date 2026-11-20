@@ -332,10 +332,10 @@ def create_app(
 
     @app.before_request
     def api_rules():
-        """Every /api/* route except GET /api/limits: JSON for POSTs (cross-site forms cannot send
-        it without a CORS check this app never grants), and a signed-in user except for POST
-        /api/wake. The limits are public so signed-out visitors' sample brains can be coloured
-        the wake so the landing page can start Aurora's resume before sign-in."""
+        """Apply the /api/* access rules. GET /api/limits and POST /api/wake are public so the
+        landing page can colour sample brains and start Aurora's resume before sign-in; every
+        other route needs a signed-in user. A POST body must be JSON, which a cross-site form
+        cannot send without a CORS check this app never grants."""
         if not request.path.startswith("/api/"):
             return None
         if request.path == "/api/limits" and request.method == "GET":

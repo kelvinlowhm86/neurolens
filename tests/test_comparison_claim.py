@@ -10,7 +10,7 @@ import uuid
 import pytest
 from conftest import STARTER_CENTS, USER_ID
 from neurolens import billing, storage
-from test_m3g_report import job_in_state
+from test_report import job_in_state
 
 REPORT = {"max_tries": 3, "stale_minutes": 5}
 MAX_TRIES = REPORT["max_tries"]

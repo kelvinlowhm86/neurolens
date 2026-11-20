@@ -2,7 +2,7 @@
 
 Covers frame cutting and storage, the worker's frame capture, the report claim/finish/release
 functions and the two web routes. The report Lambda and request builder live in
-tests/test_m3g_report_lambda.py. Everything is faked: moto S3 and PostgreSQL for billing states;
+tests/test_report_lambda.py. Everything is faked: moto S3 and PostgreSQL for billing states;
 no Bedrock or network call is made.
 """
 

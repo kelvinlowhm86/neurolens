@@ -233,7 +233,7 @@ def test_a_delete_that_still_fails_makes_the_run_raise(
     assert object_exists(aws, key)
 
 
-# ---------------------------------------------------------------- the sixty-day clean-up
+# ---------------------------------------------------------------- the ninety-day clean-up
 
 
 def test_clean_up_deletes_the_research_copy_and_marks_the_dataset_removed(
@@ -268,7 +268,7 @@ def test_a_retention_snapshot_skips_the_delete(aws, db, pg, lambda_env, new_key)
         assert object_exists(aws, kept)
 
 
-def test_a_job_under_sixty_days_is_left_alone(aws, db, pg, lambda_env, new_key):
+def test_a_job_under_ninety_days_is_left_alone(aws, db, pg, lambda_env, new_key):
     job_id, key = consented_done_job(db, new_key)
     write_job_files(aws, job_id, key)
     pg.age(job_id, created_s=(RETENTION_DAYS - 1) * DAY)

@@ -175,8 +175,8 @@ resource "aws_lambda_permission" "sns_invoke_gpu_failed" {
 }
 
 # Always on, owned by Terraform alone. Each run wakes Aurora for about 11 minutes (measured;
-# it pauses 300 s after the last connection closes). Every 3 hours costs about $3 a month; hourly
-# Measured about $15. A lost notification is refunded within about 7 hours.
+# it pauses 300 s after the last connection closes). Running every 3 hours costs about $3 a month;
+# hourly, it costs about $15 (measured). A lost notification is refunded within about 7 hours.
 resource "aws_cloudwatch_event_rule" "reaper" {
   name                = "neurolens-reaper-schedule"
   description         = "Run the NeuroLens reaper (settles or refunds stuck jobs) every 3 hours."

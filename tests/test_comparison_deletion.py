@@ -13,8 +13,8 @@ from botocore.exceptions import ClientError
 from conftest import STARTER_CENTS, WEB_USER_ID
 from neurolens import billing, storage
 from neurolens.web.app import create_app
-from test_m3c_delete_job import DeleteReportsError
-from test_m3g_report import job_in_state
+from test_delete_job import DeleteReportsError
+from test_report import job_in_state
 
 
 def canonical(x, y):

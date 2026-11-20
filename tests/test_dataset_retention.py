@@ -1,8 +1,8 @@
 """Retention.
 
-A successful upload records `retention_added_at`; after the sixty-day clean-up removed the
-research copy the route refuses with 409 `dataset_removed`. Job history exposes
-`needs_retention` only for a done, consented job with neither marker.
+A successful upload records `retention_added_at`; after the 90-day clean-up removed the
+research copy the route refuses with 409 `dataset_removed`. Job history exposes `sharing`
+and `curve_count`.
 """
 
 import json
@@ -125,10 +125,10 @@ def test_an_upload_after_the_dataset_was_removed_is_409_dataset_removed(
     assert not object_exists(aws, retention_key(job_id))
 
 
-# ---------------------------------------------------------------- needs_retention
+# ---------------------------------------------------------------- sharing and curve_count
 
 
-def test_list_jobs_marks_only_done_consented_jobs_without_a_curve_or_removal(db, pg):
+def test_list_jobs_marks_sharing_and_curve_count_only_when_needed(db, pg):
     needed, _ = make_job(db, consent=True, done=True)
     with_curve, _ = make_job(db, consent=True, done=True)
     pg.conn.execute(
@@ -156,7 +156,7 @@ def test_list_jobs_marks_only_done_consented_jobs_without_a_curve_or_removal(db,
         assert by_id[job_id] is False
 
 
-def test_the_jobs_api_exposes_needs_retention(aws, db, pg, make_cfg, tmp_path):
+def test_the_jobs_api_exposes_sharing_and_curve_count(aws, db, pg, make_cfg, tmp_path):
     client = app_for(aws, db, make_cfg, tmp_path)
     needed, _ = make_job(db, consent=True, done=True)
     with_curve, _ = make_job(db, consent=True, done=True)

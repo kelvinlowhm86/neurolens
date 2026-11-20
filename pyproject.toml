@@ -15,7 +15,7 @@ include = ["neurolens*"]
 
 [tool.ruff]
 line-length = 100
-extend-exclude = ["*.ipynb", "*.md"]
+extend-exclude = ["*.ipynb", "*.md", "trailer"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B"]

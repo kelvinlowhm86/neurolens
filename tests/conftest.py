@@ -828,7 +828,7 @@ class LambdaContext:
 
 @pytest.fixture
 def lambda_env(aws, ssm, make_cfg, tmp_path, monkeypatch):
-    """What Terraform gives the web and webhook functions: config.json in the code
+    """What Terraform gives the web function: config.json in the code
     bundle's root, deployment values in environment variables, secrets in Parameter Store.
     `write_config(**overrides)` rewrites config.json."""
     root = tmp_path / "bundle"

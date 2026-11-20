@@ -88,7 +88,7 @@ def make_job(db, *, content_type="video/mp4", done=True, processing=False, user_
 
 
 def seed_files(aws, job_id, key):
-    """Every file step 2 names for this job, with the dataset video's real extension."""
+    """Every file this job names, with the dataset video's real extension."""
     ext = PurePosixPath(key).suffix
     dataset_video = f"dataset/{job_id}/video{ext}"
     for name, body in (

@@ -11,8 +11,8 @@ import urllib.parse
 import pytest
 from conftest import USER_ID, WEB_USER_ID
 from neurolens import storage
-from test_m3g_report import app_for, done_job, job_in_state, put_result, set_report
-from test_m3h_routes import comparison_key, done_pair, set_comparison
+from test_report import app_for, done_job, job_in_state, put_result, set_report
+from test_comparison_routes import comparison_key, done_pair, set_comparison
 
 
 def put_report(aws, job_id, report):

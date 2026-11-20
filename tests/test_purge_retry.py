@@ -11,7 +11,7 @@ import json
 
 import pytest
 
-from test_m3f_sharing import (
+from test_sharing import (
     DeleteReportsErrors,
     app_for,
     make_job,

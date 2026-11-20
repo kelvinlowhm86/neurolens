@@ -1,5 +1,5 @@
-"""Emailing the operator about an access request, through the SNS topic that emails the
-alarms.
+"""Emailing the operator about an access request, through the separate access-requests SNS
+topic.
 
 boto3 is imported inside the notifier, as elsewhere in `web/`, so importing this module never
 loads AWS code or makes a call.

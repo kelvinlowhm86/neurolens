@@ -8,7 +8,8 @@ start_work.sh sets the SageMaker variant's maximum to 1; --keep-warm (--hours N)
 minimum to 1 and records a one-time scheduled action that puts the minimum back; --keep-db is
 refused. stop_work.sh deletes keep-warm actions first, sets the scalable target's min and max to 0,
 reads them back, sets the endpoint's desired count to 0, waits for DescribeEndpoint to show 0 and
-prints ALL STOPPED. Uploads are refused while paused by the web app (tests/test_m3e_web.py).
+prints ALL STOPPED. Uploads are refused while paused by the web app
+(tests/test_processing_pause.py).
 """
 
 import datetime

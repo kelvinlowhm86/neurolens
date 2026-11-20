@@ -1,6 +1,6 @@
 """Thumbnails, their lifecycle, and the thumbnail route.
 
-The worker runs in fake mode as in tests/test_m3d_worker.py; deletes use moto.
+The worker runs in fake mode as in tests/test_brain_worker.py; deletes use moto.
 """
 
 import contextlib

@@ -1,4 +1,4 @@
-"""Importing the light modules must not pull in heavy libraries. From."""
+"""Importing the light modules must not pull in heavy libraries."""
 
 import json
 import subprocess
@@ -34,7 +34,7 @@ M1_MODULES = ["neurolens.storage", "neurolens.pricing", "neurolens.worker"]
 
 
 @pytest.mark.parametrize("module", M1_MODULES)
-def test_m1_modules_import_without_heavy_modules(module):
+def test_light_modules_import_without_heavy_modules(module):
     code = (
         "import importlib, json, sys; "
         f"importlib.import_module({module!r}); "

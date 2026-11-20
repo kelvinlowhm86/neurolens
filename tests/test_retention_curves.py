@@ -242,10 +242,7 @@ def test_parse_retention_report_refuses_a_row_of_the_wrong_shape(row):
 @pytest.fixture(autouse=True)
 def youtube_falls_back(monkeypatch):
     """The save route looks the link up; these tests keep the unknown-facts fallback."""
-    try:
-        from neurolens import youtube
-    except ImportError:
-        return
+    from neurolens import youtube
 
     def failed(*args, **kwargs):
         raise youtube.LookupFailed("test fallback")

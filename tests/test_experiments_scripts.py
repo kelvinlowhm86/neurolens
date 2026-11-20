@@ -1,6 +1,6 @@
 """Experiment scripts.
 
- changes where the cold-start rows come : Application Auto Scaling's scaling activities,
+Covers where the cold-start rows come from: Application Auto Scaling's scaling activities,
 the container's boot records (`container_start_utc`, `model_loaded_utc`, `warmup_done_utc`,
 `ready_utc`) and the first job's `transcribing` stage. The CloudWatch export's series become the
 endpoint backlog and its instance count, and a run's manifest records the image digest instead

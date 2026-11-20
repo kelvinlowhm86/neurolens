@@ -1,7 +1,7 @@
 """Status and result endpoints (Flask test client + moto + PostgreSQL), against the
 Aurora-backed endpoints with a seeded job owned by the app's development user. Status and result
 come from the database alone: a result in S3 never makes an unfinished job look done. Ownership
-checks and the refunded-job rules are in tests/test_m3a_web.py.
+checks and the refunded-job rules are in tests/test_presign_ownership.py.
 """
 
 import json

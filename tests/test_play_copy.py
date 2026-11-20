@@ -533,7 +533,7 @@ def test_purging_a_deleted_job_removes_the_play_copy(aws, db):
 
 @pytest.fixture
 def reaper_env(aws, db, monkeypatch, tmp_path, patch_everywhere):
-    """The reaper's Lambda environment, built as tests/test_m3e_reaper.py does."""
+    """The reaper's Lambda environment, built as tests/test_reaper.py does."""
     monkeypatch.setenv(
         "NEUROLENS_DB_CLUSTER_ARN", "arn:aws:rds:us-east-1:000000000000:cluster:neurolens-db"
     )

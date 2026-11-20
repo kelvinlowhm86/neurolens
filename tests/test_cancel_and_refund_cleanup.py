@@ -1,7 +1,7 @@
 """Cancel route and upload cleanup after a refund.
 
 The route is exercised through Flask's test client on the test PostgreSQL schema and moto S3;
-the container is called directly through `worker.handle_job`, as tests/test_m3e_container.py
+the container is called directly through `worker.handle_job`, as tests/test_container.py
 does.
 """
 

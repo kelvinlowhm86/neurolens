@@ -1,6 +1,6 @@
 # The public website's front door and sign-in. Day one builds the CloudFront
 # address with the page origin and Cognito with Google, so the sign-in round trip can be checked
-# before any web code exists; the Lambda API origin and the web and webhook functions follow.
+# before any web code exists; the Lambda API origin and the web function follow.
 
 # ─── CloudFront: one HTTPS address for the page and the API ───────────────
 

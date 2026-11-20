@@ -23,7 +23,7 @@ from botocore.exceptions import ClientError
 from conftest import ISSUER, REPO_ROOT, WEB_USER_ID, sign_in
 from neurolens import billing, storage
 from neurolens.web.app import create_app
-from test_m3f_purge_retry import run_reaper
+from test_purge_retry import run_reaper
 
 STARTER = 10_000
 USER = "fresh-user"

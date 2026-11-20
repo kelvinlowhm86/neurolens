@@ -2,7 +2,7 @@
 
 ffprobe cannot measure a file that is not a video, so `media.probe_duration` raises
 `UnreadableVideo`. The dispatcher refuses such an upload before any GPU runs (covered by
-tests/test_m3e_dispatcher.py); the container also refuses one it is handed, refunding it as
+tests/test_dispatcher.py); the container also refuses one it is handed, refunding it as
 `unreadable_video` and deleting its files. Audio-only files count as unreadable too.
 """
 

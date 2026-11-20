@@ -1,7 +1,7 @@
 """Result helpers in neurolens.storage (moto).
 
 The S3 status objects are retired: the get_status/put_status and `stages` tests are gone with
-their Aurora equivalents (tests/test_m3a_billing.py set_stage and tests/test_m3a_worker.py);
+their Aurora equivalents (tests/test_billing.py `set_stage` and the worker tests);
 result_exists/get_result stay.
 """
 

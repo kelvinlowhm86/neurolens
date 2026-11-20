@@ -2,11 +2,11 @@
 
 Values: signed means with no rescaling, groups and overall from the signal series, the muted cut
 to the shared length, 3-decimal rounding and the series order. The golden fixture is generated
-from the real code in step 3:
+from the real code:
 
     python -c "from tests.test_response import write_golden; write_golden()"
 
-The masks themselves are tested in tests/test_m3d_hcp.py; here they are built by hand.
+The masks themselves are tested in tests/test_hcp.py; here they are built by hand.
 """
 
 import json
@@ -191,7 +191,7 @@ def golden_value():
 
 
 def write_golden(path=GOLDEN_PATH):
-    """Step 3 runs this once the real extract_response exists."""
+    """Write the golden fixture from the current extract_response."""
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = {"recipe": GOLDEN_RECIPE, "result": golden_value()}
     path.write_text(json.dumps(payload, indent=2) + "\n")

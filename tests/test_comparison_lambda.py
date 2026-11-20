@@ -13,7 +13,7 @@ from types import SimpleNamespace
 import pytest
 from botocore.exceptions import ClientError
 from neurolens import results, storage
-from test_m3g_report import done_job
+from test_report import done_job
 
 
 def canonical(x, y):

@@ -601,10 +601,9 @@ def test_no_page_still_says_for_research(page):
 @pytest.fixture
 def fake_worker(monkeypatch):
     monkeypatch.setenv("FAKE_INFERENCE", "1")
-    from neurolens import inference, worker
+    from neurolens import inference
 
     monkeypatch.setattr(inference, "gpu_info", lambda: None)
-    monkeypatch.setattr(worker, "gpu_info", lambda: None, raising=False)
 
 
 def worker_job(db, *, consent=True):
