@@ -238,6 +238,15 @@ The cost: The numbers are relative to typical viewing, not absolute brain activi
 
 In the code: `AGENTS.md`, `neurolens/response.py`
 
+## Earlier versions
+
+Two designs that were built, run on real GPUs and later replaced are kept as git tags. Each tag holds the full working code and the specs that describe it, so either can be used as a blueprint to bring the feature back. The product has changed a lot since, so bringing one back means rebuilding that piece in today's code, not checking the tag out.
+
+| Tag | What it has | Why it was replaced | Where it is described |
+|---|---|---|---|
+| `custom-gpu-stripe` | Paid credit top-ups through Stripe in test mode, on the self-managed EC2 GPU workers. | Credit became a free allowance that an admin grants. The TRIBE v2 licence is non-commercial, so credit cannot be sold. | `docs/M3b_spec.md` (top-ups) and `docs/M3b_build_log.md` in the tag |
+| `custom-gpu` | The self-managed EC2 GPU workers (an Auto Scaling group of on-demand `g6e` machines that scale on the job queue), with everything built up to that point except Stripe. | Replaced by the SageMaker endpoint (see Design decisions). | `docs/M2a_spec.md`, `docs/M2b_spec.md` and their build logs in the tag |
+
 ## Known limitations
 
 What NeuroLens cannot do, or cannot yet check.
