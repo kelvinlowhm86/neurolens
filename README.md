@@ -4,7 +4,9 @@ See how a viewer's brain would respond to your video, second by second, before y
 
 [![CI](https://github.com/kelvinlowhm86/neurolens/actions/workflows/ci.yml/badge.svg)](https://github.com/kelvinlowhm86/neurolens/actions/workflows/ci.yml) [![Live site](https://img.shields.io/badge/live-try%20it-orange)](https://df6girqyykyfa.cloudfront.net) [![Non-commercial](https://img.shields.io/badge/use-non--commercial-lightgrey)](#license)
 
-<!-- TRAILER VIDEO: dragged in on github.com -->
+
+https://github.com/user-attachments/assets/0d59224b-2cf4-4b03-8ae3-85f9da411cef
+
 
 [🏆 Best Project – Platinum, CS5224 track, 29th NUS STEPS (Nov 2026)](https://uvents.nus.edu.sg/event/29th-steps)
 
@@ -39,7 +41,9 @@ NeuroLens is built on Meta's TRIBE v2 (TRImodal Brain Encoder) and predicts, sec
 
 You sign in, upload a video, and the browser sends the file straight to S3. A queue message wakes a dispatcher, which checks credit and hands the video to the GPU worker. The GPU starts only when there is work and stops when idle. The worker runs TRIBE v2 with audio and again without it, turns both predictions into the signals below, and writes a result the page draws.
 
-<!-- WALKTHROUGH VIDEO: dragged in on github.com -->
+
+https://github.com/user-attachments/assets/49fe3651-17ef-4aff-b281-3bc3bb6fcd50
+
 
 The full design is in [docs/architecture.md](docs/architecture.md).
 
