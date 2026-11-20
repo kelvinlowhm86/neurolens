@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Guarded teardown. It deletes data with no undo, so every gate must pass before the next step:
 # the caller and Terraform state must be the same account, the typed confirmation must match, the
-# GPU stop must be proven, the backup must succeed, and the destroy must succeed before the
-# hand-made secrets are deleted. Then it checks for leftovers; it never deletes the state bucket
-# or the deploy user (the account owner does those by hand, docs/operating.md "Teardown").
-# A rerun after a successful destroy resumes at step 4: Terraform's state is then empty, so there
-# is nothing to stop, back up or destroy, but the secrets and leftover check may still have work.
+# GPU stop must be proven, and the destroy must succeed before the hand-made secrets are deleted.
+# Then it checks for leftovers; it never deletes the state bucket or the deploy user (the account
+# owner does those by hand, docs/operating.md "Teardown").
+# A rerun after a successful destroy resumes at step 3: Terraform's state is then empty, so there
+# is nothing to stop or destroy, but the secrets and leftover check may still have work.
 set -euo pipefail
 
 ROOT=$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)
@@ -65,7 +65,7 @@ fi
 
 if [ "$RESUME" = 0 ]; then
   echo "This destroys the NeuroLens stack in account $CALLER_ACCOUNT, region $AWS_REGION."
-  echo "Bucket: $BUCKET. The experiments/ prefix is backed up first; everything else is deleted."
+  echo "Bucket: $BUCKET. Everything in it is deleted."
   printf 'Type the AWS account ID (%s) to confirm destruction: ' "$CALLER_ACCOUNT"
 else
   printf 'Type the AWS account ID (%s) to confirm: ' "$CALLER_ACCOUNT"
@@ -79,7 +79,7 @@ fi
 
 if [ "$RESUME" = 0 ]; then
   # ---- 1. Stop the GPU and prove it ----------------------------------------------------------
-  echo "1/5 Stopping the GPU..."
+  echo "1/4 Stopping the GPU..."
   ENDPOINT=$(terraform -chdir="$TF_DIR" output -raw gpu_endpoint) || {
     echo "Teardown stopped: cannot read gpu_endpoint from Terraform. Nothing was deleted." >&2
     exit 1
@@ -98,28 +98,18 @@ if [ "$RESUME" = 0 ]; then
     exit 1
   fi
 
-  # ---- 2. Back up what the destroy would remove ---------------------------------------------
-  echo "2/5 Backing up experiments/..."
-  BACKUP_DIR="$ROOT/data/teardown_backup/$CALLER_ACCOUNT-$(date -u +%Y%m%dT%H%M%SZ)"
-  mkdir -p "$BACKUP_DIR"
-  if ! aws s3 sync "s3://$BUCKET/experiments/" "$BACKUP_DIR/" --only-show-errors; then
-    echo "Teardown stopped: the backup to $BACKUP_DIR failed. Nothing was destroyed." >&2
-    exit 1
-  fi
-  echo "Backup kept at $BACKUP_DIR"
-
-  # ---- 3. Destroy the stack -----------------------------------------------------------------
-  echo "3/5 Destroying the Terraform stack..."
+  # ---- 2. Destroy the stack -----------------------------------------------------------------
+  echo "2/4 Destroying the Terraform stack..."
   if ! terraform -chdir="$TF_DIR" destroy -auto-approve -input=false; then
     echo "Teardown stopped: terraform destroy failed. The hand-made secrets were left in place." >&2
     exit 1
   fi
 else
-  echo "Skipping steps 1-3: the stack is already destroyed."
+  echo "Skipping steps 1-2: the stack is already destroyed."
 fi
 
-# ---- 4. Delete the secrets people created by hand -----------------------------------------
-echo "4/5 Deleting the hand-made Parameter Store secrets..."
+# ---- 3. Delete the secrets people created by hand -----------------------------------------
+echo "3/4 Deleting the hand-made Parameter Store secrets..."
 SSM_SECRETS=(
   /neurolens/terraform/google_client_secret
   /neurolens/web/flask_secret_key
@@ -139,8 +129,8 @@ for name in "${SSM_SECRETS[@]}"; do
   fi
 done
 
-# ---- 5. Prove nothing under our name is left ----------------------------------------------
-echo "5/5 Checking for leftovers..."
+# ---- 4. Prove nothing under our name is left ----------------------------------------------
+echo "4/4 Checking for leftovers..."
 LEFTOVERS=""
 CHECK_PROBLEMS=0
 leftover() {
@@ -227,10 +217,5 @@ if [ -n "$LEFTOVERS" ] || [ "$SECRET_PROBLEMS" = 1 ] || [ "$CHECK_PROBLEMS" = 1 
 fi
 
 echo "TEARDOWN COMPLETE in $AWS_REGION for account $CALLER_ACCOUNT."
-if [ "$RESUME" = 0 ]; then
-  echo "Backup: $BACKUP_DIR"
-else
-  echo "No new backup was made: the stack was already destroyed."
-fi
 echo "Still to do by hand (docs/operating.md): outside-AWS accounts, the deploy user and policies,"
 echo "the state bucket, and each laptop's local files."

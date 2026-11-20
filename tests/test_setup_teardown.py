@@ -5,8 +5,8 @@ and `sleep` first on PATH. The fakes keep the world in a JSON file, log every ca
 loudly (exit 99) on an unknown AWS call. The scripts and their sibling build/deploy scripts are
 copied or stubbed so the real infra files are never touched.
 
-Teardown deletes data with no undo: a wrong confirmation, an account mismatch, an unproven stop,
-a failed backup or a failed destroy must stop it before the next step. Setup is one command after
+Teardown deletes data with no undo: a wrong confirmation, an account mismatch, an unproven stop
+or a failed destroy must stop it before the next step. Setup is one command after
 the human-only work: it lists every missing prerequisite before changing anything, then runs the
 steps in order and skips finished work on a second run.
 """
@@ -724,14 +724,6 @@ def test_teardown_no_destroy_when_stop_is_not_proven(sandbox):
     assert r.find("terraform", "destroy") == []
 
 
-def test_teardown_no_destroy_when_backup_fails(sandbox):
-    world = teardown_world(fail=["s3 cp", "s3 sync"])
-    r = sandbox.run("teardown.sh", world=world, input_text=ACCOUNT, tty=True)
-    assert r.code != 0
-    assert r.find("s3", "cp") or r.find("s3", "sync")
-    assert r.find("terraform", "destroy") == []
-
-
 def test_teardown_no_ssm_delete_when_destroy_fails(sandbox):
     world = teardown_world(fail=["terraform destroy"])
     r = sandbox.run("teardown.sh", world=world, input_text=ACCOUNT, tty=True)
@@ -740,7 +732,7 @@ def test_teardown_no_ssm_delete_when_destroy_fails(sandbox):
     assert r.find("ssm", "delete-parameter") == []
 
 
-def test_teardown_runs_stop_backup_destroy_secrets_then_leftover_checks(sandbox):
+def test_teardown_runs_stop_destroy_secrets_then_leftover_checks(sandbox):
     r = sandbox.run("teardown.sh", world=teardown_world(), input_text=ACCOUNT, tty=True)
     assert r.code == 0, r.err
 
@@ -748,7 +740,6 @@ def test_teardown_runs_stop_backup_destroy_secrets_then_leftover_checks(sandbox)
         r.find("application-autoscaling", "describe-scalable-targets")
         + r.find("sagemaker", "describe-endpoint")
     )
-    backup = min(r.find("s3", "cp") + r.find("s3", "sync"))
     destroy = r.find("terraform", "destroy")[0]
     deletes = r.find("ssm", "delete-parameter") + r.find("ssm", "delete-parameters")
     leftovers = (
@@ -760,18 +751,17 @@ def test_teardown_runs_stop_backup_destroy_secrets_then_leftover_checks(sandbox)
         + r.find("ssm", "get-parameters-by-path")
         + r.find("iam", "list-roles")
     )
-    assert stop < backup < destroy < min(deletes) < min(leftovers)
+    assert stop < destroy < min(deletes) < min(leftovers)
 
     assert deleted_parameters(r) == set(SSM_SECRETS)
     assert "TEARDOWN COMPLETE" in r.out
 
 
-def test_teardown_clean_run_prints_complete_and_keeps_a_backup(sandbox):
+def test_teardown_clean_run_prints_complete(sandbox):
     r = sandbox.run("teardown.sh", world=teardown_world(), input_text=ACCOUNT, tty=True)
     assert r.code == 0, r.err
     assert "TEARDOWN COMPLETE" in r.out
-    backups = list((sandbox.root / "data" / "teardown_backup").glob(f"{ACCOUNT}-*"))
-    assert backups, "the experiments backup folder was not created"
+    assert r.find("s3", "sync") == []
 
 
 def test_teardown_skips_the_stop_when_the_endpoint_does_not_exist(sandbox):
@@ -907,7 +897,10 @@ def test_deploy_policies_allow_every_teardown_leftover_read():
             actions = statement.get("Action", [])
             actions = [actions] if isinstance(actions, str) else actions
             for action in actions:
-                granted.setdefault(action, []).append(statement.get("Resource"))
+                resources = statement.get("Resource")
+                if isinstance(resources, str):
+                    resources = [resources]
+                granted.setdefault(action, []).extend(resources)
     for action in (
         "resourcegroupstaggingapi:GetResources",
         "secretsmanager:ListSecrets",
@@ -916,9 +909,12 @@ def test_deploy_policies_allow_every_teardown_leftover_read():
         "iam:ListRoles",
     ):
         assert "*" in granted.get(action, []), action
-    assert "arn:aws:ssm:us-east-1:*:parameter/neurolens/*" in granted.get(
-        "ssm:GetParametersByPath", []
-    )
+    # SSM may check the path itself (/neurolens) or a name under it, so both are granted.
+    for resource in (
+        "arn:aws:ssm:us-east-1:*:parameter/neurolens",
+        "arn:aws:ssm:us-east-1:*:parameter/neurolens/*",
+    ):
+        assert resource in granted.get("ssm:GetParametersByPath", []), resource
 
 
 # ---------------------------------------------------------------- setup.sh

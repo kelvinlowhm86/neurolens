@@ -24,7 +24,7 @@ EXTENSION_CONTENT_TYPES = {ext: ct for ct, ext in CONTENT_TYPE_EXTENSIONS.items(
 
 UPLOAD_PREFIX = "uploads/"
 NOT_FOUND_CODES = ("404", "NoSuchKey", "NotFound")
-TIME_FORMAT = "%Y-%m-%dT%H:%M:%SZ"  # every timestamp in job stages and boot records
+TIME_FORMAT = "%Y-%m-%dT%H:%M:%SZ"  # every stored timestamp
 
 
 def object_key(user_id, job_id, content_type):

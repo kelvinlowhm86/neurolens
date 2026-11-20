@@ -1,8 +1,8 @@
 """The SageMaker GPU container.
 
-`python worker.py serve` loads the model, warms it up, writes a boot record and listens on port
-8080. SageMaker POSTs one video per request to /invocations; the job logic claims the job, runs
-the analysis, writes the result and charges or refunds it. `/ping` answers while a job runs.
+`python worker.py serve` loads the model, warms it up and listens on port 8080. SageMaker POSTs
+one video per request to /invocations; the job logic claims the job, runs the analysis, writes the
+result and charges or refunds it. `/ping` answers while a job runs.
 """
 
 import contextlib
@@ -13,13 +13,11 @@ import json
 import logging
 import os
 import shutil
-import socket
 import tempfile
 import threading
 import time
 import uuid
 import zipfile
-from datetime import UTC, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -441,40 +439,6 @@ def _analyse(
         return Outcome.DONE
 
 
-def boot_record(container_start_utc, model_loaded_utc, warmup_done_utc, ready_utc, gpu_name):
-    """Start-up times as UTC text (None for a missing step) and the GPU name. Pure."""
-    return {
-        "container_start_utc": storage.utc_text(container_start_utc)
-        if container_start_utc
-        else None,
-        "model_loaded_utc": storage.utc_text(model_loaded_utc) if model_loaded_utc else None,
-        "warmup_done_utc": storage.utc_text(warmup_done_utc) if warmup_done_utc else None,
-        "ready_utc": storage.utc_text(ready_utc) if ready_utc else None,
-        "gpu_name": gpu_name,
-    }
-
-
-def _put_boot_json(s3, bucket, name, obj):
-    """experiments/boots/<name>.json. Never fatal: a missing record is not a failed job."""
-    try:
-        s3.put_object(
-            Bucket=bucket,
-            Key=f"experiments/boots/{name}.json",
-            Body=json.dumps(obj).encode(),
-            ContentType="application/json",
-        )
-        logger.info(f"Boot record experiments/boots/{name}.json written")
-    except Exception:
-        logger.exception(f"Could not write boot record {name}")
-
-
-def _record_boot(s3, bucket, times):
-    container_start, model_loaded, warmup_done, ready, gpu_name = times
-    record = boot_record(container_start, model_loaded, warmup_done, ready, gpu_name)
-    stamp = storage.utc_text(container_start).replace(":", "")
-    _put_boot_json(s3, bucket, f"{socket.gethostname()}-{stamp}", record)
-
-
 class _Handler(BaseHTTPRequestHandler):
     server_version = "NeuroLensWorker/1"
 
@@ -598,10 +562,9 @@ def make_server(host, port, *, s3, db, cfg, roi_masks, feature_cache=None):
 
 
 def serve():
-    """Load, warm up, record the boot and listen. The start-up order is part of the contract."""
+    """Load, warm up and listen. The start-up order is part of the contract."""
     import boto3
 
-    container_start = datetime.now(UTC)
     cfg = settings.load_settings()
     validate_config(cfg)
     aws = cfg["aws"]
@@ -611,10 +574,8 @@ def serve():
     # While the process runs: exca creates each subfolder once and remembers it.
     feature_cache = tempfile.mkdtemp(prefix="neurolens-features-")
     inference.load_model(cfg, feature_cache=feature_cache)
-    model_loaded = datetime.now(UTC)
     gpu = inference.gpu_info()
-    gpu_name = gpu["device"] if gpu is not None else None
-    logger.info(f"GPU: {gpu_name}")
+    logger.info(f"GPU: {gpu['device'] if gpu is not None else None}")
     roi_masks = inference.roi_masks()
 
     warmup = settings.resolve_paths(cfg, settings.get_root())["data"] / "warmup.mp4"
@@ -622,7 +583,6 @@ def serve():
         raise FileNotFoundError(f"Warm-up clip not found: {warmup}")
     with job_temp_dir(feature_cache):
         inference.build_events(warmup)
-    warmup_done = datetime.now(UTC)
 
     s3 = boto3.client("s3", region_name=aws["region"])
     server = make_server(
@@ -633,10 +593,6 @@ def serve():
         cfg=cfg,
         roi_masks=roi_masks,
         feature_cache=feature_cache,
-    )
-    ready = datetime.now(UTC)
-    _record_boot(
-        s3, aws["s3_bucket"], (container_start, model_loaded, warmup_done, ready, gpu_name)
     )
     logger.info(f"Worker ready on port {PORT}")
     server.serve_forever()

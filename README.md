@@ -101,7 +101,7 @@ The operator guide is [docs/operating.md](docs/operating.md); the human-only fir
 infra/setup.sh
 ```
 
-It lists every missing prerequisite before changing anything, and a second run skips finished work. The first run downloads the model files (about 18 GB) to the laptop to upload them, so it needs that much free disk. `infra/teardown.sh` stops the GPU, backs up `experiments/`, destroys the stack and checks for leftovers.
+It lists every missing prerequisite before changing anything, and a second run skips finished work. The first run downloads the model files (about 18 GB) to the laptop to upload them, so it needs that much free disk. `infra/teardown.sh` stops the GPU, destroys the stack and checks for leftovers.
 
 #### Gated model access
 
@@ -132,7 +132,6 @@ The dependency lists live in `requirements/`, one file per machine type:
 | `worker.txt` | the SageMaker container without the model (nilearn, boto3) |
 | `model.txt` | TRIBE v2 and its encoders (GPU machines and the real-import check) |
 | `prototype.txt` | the two prototype notebooks (the model plus Jupyter and matplotlib) |
-| `experiments.txt` | the experiment scripts (Locust, requests) |
 | `lambdas.txt` | the report Lambda's Anthropic SDK layer |
 | `dev.txt` | laptop and CI: tests and lint (pytest, ruff, moto, psycopg, responses, joserfc, scikit-image) |
 
@@ -145,7 +144,6 @@ The dependency lists live in `requirements/`, one file per machine type:
 - [`static/`](static/): the page, the hand-built SVG charts and the 3D brain assets.
 - [`data/`](data/): sample results (`samples.json`), videos, thumbnails and generated output. See [`data/videos/README.md`](data/videos/README.md).
 - [`infra/`](infra/): Terraform, IAM policies, migrations, the worker image and the operator scripts. See [`infra/README.md`](infra/README.md).
-- [`experiments/`](experiments/): the report experiments. See [`experiments/README.md`](experiments/README.md).
 - [`prototype/`](prototype/): the original local prototype notebooks. See [`prototype/README.md`](prototype/README.md).
 - [`requirements/`](requirements/): one dependency list per machine type.
 - [`tests/`](tests/): pytest; [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs them on every push.

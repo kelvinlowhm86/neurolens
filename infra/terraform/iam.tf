@@ -52,15 +52,13 @@ resource "aws_iam_role_policy" "sagemaker" {
         Resource = aws_s3_bucket.main.arn
       },
       {
-        # Our result and brain under results/, the shared video under dataset/, and the boot
-        # Record.
-        Sid    = "WriteResultsDatasetAndBootRecords"
+        # Our result and brain under results/ and the shared video under dataset/.
+        Sid    = "WriteResultsAndDataset"
         Effect = "Allow"
         Action = "s3:PutObject"
         Resource = [
           "${aws_s3_bucket.main.arn}/results/*",
           "${aws_s3_bucket.main.arn}/dataset/*",
-          "${aws_s3_bucket.main.arn}/experiments/boots/*",
           "${aws_s3_bucket.main.arn}/sagemaker-output/*",
         ]
       },
@@ -100,7 +98,7 @@ resource "aws_iam_role_policy" "sagemaker" {
       },
       {
         # SageMaker publishes the instance metrics (CPU, memory, GPU, disk) with this role; without
-        # It there are none, and Experiment 2 cannot count running instances.
+        # it there are none.
         # PutMetricData has no resource, so the namespace condition is the scope.
         Sid       = "PublishEndpointInstanceMetrics"
         Effect    = "Allow"

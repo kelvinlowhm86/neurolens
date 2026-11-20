@@ -242,7 +242,10 @@
       "Sid": "TeardownLeftoverParametersRead",
       "Effect": "Allow",
       "Action": "ssm:GetParametersByPath",
-      "Resource": "arn:aws:ssm:us-east-1:*:parameter/neurolens/*"
+      "Resource": [
+        "arn:aws:ssm:us-east-1:*:parameter/neurolens",
+        "arn:aws:ssm:us-east-1:*:parameter/neurolens/*"
+      ]
     }
   ]
 }

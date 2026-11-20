@@ -1,4 +1,4 @@
-"""Dispatcher-started GPU and the GPU name in the boot record.
+"""Dispatcher-started GPU.
 
 The dispatcher starts the GPU after a successful async invoke, so the cold start does not wait
 for the scale-out alarm. These tests use small hand-written SageMaker control-plane fakes and the
@@ -8,7 +8,6 @@ same PostgreSQL/S3 fixtures as the dispatcher tests; the GPU is never really wok
 import json
 import logging
 import uuid
-from datetime import UTC, datetime
 
 import pytest
 from botocore.exceptions import ClientError
@@ -164,35 +163,6 @@ def test_update_failure_other_than_validation_is_logged(caplog):
 
     assert control.updates != []
     assert errors(caplog)
-
-
-# ---------------------------------------------------------------- the boot record
-
-
-def test_boot_record_carries_the_gpu_name():
-    start_time = datetime(2026, 10, 14, 3, 0, 41, tzinfo=UTC)
-    record = worker_boot_record(
-        start_time,
-        datetime(2026, 10, 14, 3, 2, 9, tzinfo=UTC),
-        datetime(2026, 10, 14, 3, 3, 55, tzinfo=UTC),
-        datetime(2026, 10, 14, 3, 5, 58, tzinfo=UTC),
-        "NVIDIA L4",
-    )
-
-    assert record["gpu_name"] == "NVIDIA L4"
-
-
-def test_boot_record_keeps_a_missing_gpu_name_as_none():
-    start_time = datetime(2026, 10, 14, 3, 0, 41, tzinfo=UTC)
-    record = worker_boot_record(start_time, None, None, start_time, None)
-
-    assert record["gpu_name"] is None
-
-
-def worker_boot_record(*args):
-    from neurolens import worker
-
-    return worker.boot_record(*args)
 
 
 # ---------------------------------------------------------------- the SQS handler

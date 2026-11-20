@@ -1,7 +1,7 @@
-# ─── The one-page product dashboard (experiments and demos) ────────────────
+# ─── The one-page product dashboard ────────────────────────────────────────
 #
-# One CloudWatch dashboard to watch a run from upload to result and to take screenshots for the
-# report. Every widget points at a resource in this stack, so a rename cannot leave it stale.
+# One CloudWatch dashboard to watch a run from upload to result. Every widget points at a
+# resource in this stack, so a rename cannot leave it stale.
 
 locals {
   # Every function's errors and slowest run, in a stable order: the job Lambdas, then the rest.

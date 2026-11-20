@@ -32,9 +32,9 @@ Operator scripts and the AWS resources they drive. AWS commands run with the pro
 - `deploy_web.sh`: ships the last commit as the website: code, page, public samples and a CloudFront cache clear.
 - `apply_schema.py`: applies `migrations/*.sql` once each and records them.
 - `terraform/`: creates all AWS resources; see `terraform/README.md`.
-- `teardown.sh`: guarded teardown: stops the GPU, backs up `experiments/`, destroys the stack,
-  deletes the hand-made secrets and checks for leftovers; it never deletes the state bucket or the
-  deploy user (see `docs/operating.md`, "Teardown").
+- `teardown.sh`: guarded teardown: stops the GPU, destroys the stack, deletes the hand-made
+  secrets and checks for leftovers; it never deletes the state bucket or the deploy user (see
+  `docs/operating.md`, "Teardown").
 
 ## Laptop
 

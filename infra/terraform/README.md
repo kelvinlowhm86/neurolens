@@ -13,8 +13,7 @@ What it creates
 - One S3 bucket: public access blocked, encrypted, HTTPS-only, ACLs disabled, browser upload
   (CORS) from `allowed_origins`, and prefix-scoped expiry (`uploads/` after `upload_retention_days`,
   `results/` after `result_retention_days`, both 30; `dataset/` after
-  `research.dataset_retention_days` (1095), `sagemaker-output/` after 1, `build/` after 7,
-  `experiments/` never).
+  `research.dataset_retention_days` (1095), `sagemaker-output/` after 1, `build/` after 7).
 - One SQS queue (visibility `queue.visibility_seconds` (1080 s), a `queue.cancel_seconds`
   (15 s) delivery delay) and the wiring that sends a message whenever a file lands under
   `uploads/`. A second queue (`neurolens-jobs-dlq`) receives a job that failed
@@ -297,6 +296,6 @@ A running job dies and is refunded. `start_work.sh` puts the maximum back to `ma
 
 ## 6. Tear down
 
-`infra/teardown.sh` runs the guarded teardown: stop the GPU, back up `experiments/`, destroy the
-stack, delete the hand-made secrets and check for leftovers. The steps it cannot do are in
+`infra/teardown.sh` runs the guarded teardown: stop the GPU, destroy the stack, delete the
+hand-made secrets and check for leftovers. The steps it cannot do are in
 `docs/operating.md` ("Teardown").

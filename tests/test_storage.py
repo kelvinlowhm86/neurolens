@@ -61,7 +61,7 @@ def test_parse_drops_keys_outside_uploads():
         keep,
         ("b1", "results/a.json"),
         ("b1", "code/latest.zip"),
-        ("b1", "experiments/run1.csv"),
+        ("b1", "build/run1.csv"),
         ("b1", "uploads-old/a.mp4"),
     )
     assert parse_s3_event(body) == [keep]

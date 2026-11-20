@@ -1,7 +1,6 @@
 # Laptop and CI: tests and lint. No torch, no tribev2.
 -r web.txt
 -r worker.txt
--r experiments.txt
 -r lambdas.txt
 # infra/upload_model_data.py downloads the model files from HuggingFace (no torch needed).
 huggingface_hub>=0.24

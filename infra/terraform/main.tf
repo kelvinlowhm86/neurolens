@@ -5,8 +5,7 @@ data "aws_caller_identity" "current" {}
 resource "aws_s3_bucket" "main" {
   bucket = var.bucket_name
 
-  # terraform destroy may empty this bucket first (the uploads/results inside it are disposable);
-  # the experiments/ backup is made by infra/teardown.sh before the destroy.
+  # terraform destroy may empty this bucket first (the uploads/results inside it are disposable).
   force_destroy = true
 }
 
@@ -84,7 +83,6 @@ resource "aws_s3_bucket_policy" "main" {
 #   dataset/   research.dataset_retention_days   shared videos and curves, kept for research
 #   sagemaker-output/     1 d    SageMaker's async answers; the job row and results/ are the record
 #   build/                7 d    source.zip for the image build; one build needs it only that day
-#   experiments/ never expire: the final report reads experiments/*.
 resource "aws_s3_bucket_lifecycle_configuration" "main" {
   bucket = aws_s3_bucket.main.id
 
@@ -214,7 +212,7 @@ resource "aws_sqs_queue_policy" "allow_s3" {
 }
 
 # Tell the queue about new uploads. Filtered to uploads/ only: the app also writes
-# results/, dataset/ and experiments/ objects to the same bucket, and an unfiltered notification
+# results/ and dataset/ objects to the same bucket, and an unfiltered notification
 # would enqueue them as spurious jobs.
 resource "aws_s3_bucket_notification" "uploads" {
   bucket = aws_s3_bucket.main.id

@@ -92,7 +92,6 @@ Files in S3 are grouped under key prefixes (the start of a key, like a folder). 
 | `sagemaker-output/` | SageMaker's asynchronous success and failure answers | After 1 day |
 | `build/` | The source zip for an image build | After 7 days |
 | `model-data/` | The model weights and brain maps copied into the GPU container at start | No expiry rule |
-| `experiments/` | Boot records and experiment output | No expiry rule |
 | `deploy/` | The web Lambda zip | No expiry rule |
 | `site/` | The public page and samples served by CloudFront | No expiry rule |
 
@@ -104,7 +103,7 @@ These rules decide when data is deleted, either by an S3 lifecycle rule or by th
 
 | Rule | What happens |
 | --- | --- |
-| S3 lifecycle | S3 deletes `uploads/` after `upload_retention_days` (30 days) and `results/` after `result_retention_days` (30 days), `sagemaker-output/` after 1 day, and `build/` after 7 days. `dataset/` lasts `research.dataset_retention_days` (1,095 days) and `experiments/` never expires. |
+| S3 lifecycle | S3 deletes `uploads/` after `upload_retention_days` (30 days) and `results/` after `result_retention_days` (30 days), `sagemaker-output/` after 1 day, and `build/` after 7 days. `dataset/` lasts `research.dataset_retention_days` (1,095 days). |
 | Results | The page marks a result available only for `result_retention_days` (30 days), and a missing result answers `result_expired`. |
 | Shared copies | A shared copy with no retention curve is removed after `research.no_curve_days` (90 days), and the reaper applies it. |
 | User deletion | A user can stop sharing a copy or delete a job immediately. The job is marked first and the files are deleted; the reaper finishes anything a failed delete leaves. |

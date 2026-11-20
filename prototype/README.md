@@ -3,6 +3,9 @@
 These are a teammate's original local prototype (Destrieux atlas, five regions and engagement
 scores rescaled to 0-1). They need their own GPU and model weights and are not part of the AWS app.
 
+The prototype is not maintained and is kept for reference only. Some parts (for example some input
+videos) were only on the original author's machine, so it may not run as it is.
+
 - `explore.ipynb`: loads TRIBE v2, runs one clip with and without audio, extracts per-region
   engagement, plots the charts and writes `data/output/neurolens_output.png` and
   `data/output/neurolens_output.json`.

@@ -118,7 +118,7 @@ variable "contact_email" {
 }
 
 variable "log_retention_days" {
-  description = "Days CloudWatch keeps the Lambda, web and GPU logs: 90 while developing and running experiments (they hold the run timings), 14 once live."
+  description = "Days CloudWatch keeps the Lambda, web and GPU logs: 90 while developing, 14 once live."
   type        = number
   default     = 14
 }
