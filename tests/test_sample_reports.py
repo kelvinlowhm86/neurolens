@@ -2,7 +2,8 @@
 
 The operator script copies a checked report without its usage, can add a comparison from the
 canonical pair either way round, and the deploy filter only publishes comparisons whose two
-samples are public. S3 and ffmpeg are faked; nothing touches AWS.
+samples are public. S3 and thumbnails are faked; the clips are tiny real videos made with ffmpeg,
+because the script refuses any clip that would not play on every phone. Nothing touches AWS.
 """
 
 import importlib.util
@@ -98,6 +99,27 @@ def comparison_key(a, b):
     return f"results/{a}_{b}.report.json"
 
 
+def tiny_clip(target, codec):
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-v",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            "color=size=64x64:duration=0.2",
+            "-c:v",
+            codec,
+            "-pix_fmt",
+            "yuv420p",
+            "-y",
+            str(target),
+        ],
+        check=True,
+    )
+
+
 @pytest.fixture
 def script(monkeypatch, tmp_path):
     spec = importlib.util.spec_from_file_location("make_sample_under_test", MAKE_SAMPLE)
@@ -105,7 +127,7 @@ def script(monkeypatch, tmp_path):
     spec.loader.exec_module(module)
     data = tmp_path / "data"
     (data / "videos").mkdir(parents=True)
-    (data / "videos" / "clip.mp4").write_bytes(b"video")
+    tiny_clip(data / "videos" / "clip.mp4", "libx264")
     monkeypatch.setattr(module, "ROOT", tmp_path)
     monkeypatch.setattr(module, "DATA", data)
     monkeypatch.setattr(module, "SAMPLES", data / "samples.json")
@@ -215,6 +237,21 @@ def test_make_sample_refuses_a_report_that_fails_the_check(script, monkeypatch):
     assert json.loads(module.SAMPLES.read_text()) == {"samples": []}
 
 
+def test_make_sample_refuses_a_clip_some_phones_cannot_play(script, monkeypatch, tmp_path):
+    module, data = script
+    clip = tmp_path / "old_codec.mp4"
+    tiny_clip(clip, "mpeg4")
+    fake = FakeS3({})
+    module.SAMPLES.write_text(json.dumps({"samples": []}))
+
+    with pytest.raises(SystemExit, match="H.264"):
+        run(module, monkeypatch, fake, [str(uuid.uuid4()), str(clip), "A title", "An attribution"])
+
+    assert fake.downloads == []
+    assert not (data / "videos" / "old_codec.mp4").exists()
+    assert json.loads(module.SAMPLES.read_text())["samples"] == []
+
+
 def test_make_sample_replaces_in_place_and_appends_only_a_new_id(script, monkeypatch):
     module, data = script
     existing = [sample_entry("a", 3), sample_entry("clip", 3), sample_entry("z", 3)]
@@ -238,7 +275,7 @@ def test_make_sample_replaces_in_place_and_appends_only_a_new_id(script, monkeyp
     assert [sample["id"] for sample in samples] == ["a", "clip", "z"]
     assert samples[1]["title"] == "A title"
 
-    (data / "videos" / "clip2.mp4").write_bytes(b"video")
+    tiny_clip(data / "videos" / "clip2.mp4", "libx264")
     second_job = str(uuid.uuid4())
     fake = FakeS3(
         {
