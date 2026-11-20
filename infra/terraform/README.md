@@ -1,6 +1,6 @@
 # NeuroLens: AWS resources (Terraform)
 
-Creates everything NeuroLens needs on AWS: the S3 bucket and SQS queue, the network and
+This creates everything NeuroLens needs on AWS: the S3 bucket and SQS queue, the network and
 database, the website and sign-in, and a SageMaker asynchronous GPU
 endpoint, its image repository and build, the job Lambdas and their alarms. Terraform keeps a
 record of what it created, so running `apply` twice is safe (the second run reports no changes)

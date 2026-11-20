@@ -1,6 +1,6 @@
 # Architecture
 
-NeuroLens runs on Amazon Web Services (AWS). The table below shows each part of the system, the service behind it, and the job it does.
+NeuroLens runs on Amazon Web Services (AWS). Each part of the system maps to one AWS service:
 
 | Part | AWS service | Job |
 | --- | --- | --- |
@@ -59,11 +59,11 @@ In the code: `neurolens/response.py`, `neurolens/inference.py`, `neurolens/worke
 
 ## Data
 
-This part covers where state lives: the database tables, the S3 key prefixes, and the rules that delete old data.
+State lives in the database tables, the S3 key prefixes and the rules that delete old data.
 
 ### Aurora tables
 
-The database keeps its state in these tables. Migrations apply each file once.
+Migrations apply each file once.
 
 | Table | What it holds |
 | --- | --- |
@@ -116,7 +116,7 @@ In the code: `infra/terraform/main.tf`, `neurolens/web/app.py`, `config.json`, `
 
 ## Safety nets
 
-Scheduled Lambdas, alarms and deadlines catch stuck work and runaway spend, so a failure ends in a refund or an email, never a GPU left running.
+Scheduled Lambdas, alarms and deadlines catch stuck work and runaway spend, so a failure ends in a refund or an email, with no GPU left running.
 
 | Safety net | What it does |
 | --- | --- |

@@ -1,6 +1,6 @@
 # Experiments
 
-This folder holds the report experiments. Each script's docstring lists its columns and options. The AWS scripts run from the repo root with the profile variables from `infra/terraform/README.md` §0 exported.
+Each script's docstring lists its columns and options. The AWS scripts run from the repo root with the profile variables from `infra/terraform/README.md` §0 exported.
 
 ## Report experiments
 

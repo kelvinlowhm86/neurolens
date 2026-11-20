@@ -1,6 +1,6 @@
 # Operating NeuroLens
 
-This is the operator guide for NeuroLens on Amazon Web Services (AWS). The detailed first-time commands live in the terraform and infra READMEs; this page gives the order, the day-to-day commands and what to do when an alarm fires.
+Use this guide to run NeuroLens on Amazon Web Services (AWS). The detailed first-time commands live in the terraform and infra READMEs; this page gives the order, the day-to-day commands and what to do when an alarm fires.
 
 In the code: `infra/terraform/README.md`, `infra/README.md`
 
@@ -66,7 +66,7 @@ This script ships the last commit to the web Lambda and the public page.
 infra/deploy_web.sh
 ```
 
-The script needs a clean git tree and the project virtual environment. It ships the last commit: it rebuilds the web Lambda zip, updates the `neurolens-web` Lambda, stages the public page and samples into `site/`, fills the contact address, syncs to S3, and clears the Amazon CloudFront (AWS's content delivery network) cache. A missing sample file stops the deploy; see the videos README.
+The script needs a clean git tree and the project virtual environment, because it ships the last commit. It rebuilds the web Lambda zip, updates the `neurolens-web` Lambda, stages the public page and samples into `site/`, fills the contact address, syncs to S3, and clears the Amazon CloudFront (AWS's content delivery network) cache. A missing sample file stops the deploy; see the videos README.
 
 In the code: `infra/deploy_web.sh`, `infra/build_web_lambda.sh`, `data/videos/README.md`
 

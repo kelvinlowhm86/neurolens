@@ -1,6 +1,6 @@
 # Docs
 
-Design lives in [architecture.md](architecture.md); running it is in [operating.md](operating.md).
+The design is in [architecture.md](architecture.md); how to run it is in [operating.md](operating.md).
 
 - [architecture.md](architecture.md): the AWS design, the path of one video, data and retention, billing, sign-in, the main design decisions and the known limitations.
 - [operating.md](operating.md): first deploy, day-to-day commands, the admin panel, cost watching and teardown.

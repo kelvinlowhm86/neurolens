@@ -123,8 +123,6 @@ What it means: L40S GPUs were scarce everywhere that day, us-east-1 was no worse
 
 # Evidence: worker image and start-up timings (2026-10-03 to 2026-10-05)
 
-These are the worker figures, with their dates.
-
 ## Images (2026-10-03)
 
 | | v1 | v2 |

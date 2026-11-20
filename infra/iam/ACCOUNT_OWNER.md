@@ -1,6 +1,6 @@
 # Letting the deployer set up NeuroLens in your AWS account
 
-This guide gives the deployer their own login (an AWS "user") inside your account, allowed to set up NeuroLens
+The deployer gets their own login (an AWS "user") inside your account, allowed to set up NeuroLens
 and nothing else. Do it once, about 20 minutes, signed in as the account owner (root) or an admin.
 Only step 4's test message costs money, a fraction of a cent.
 

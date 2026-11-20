@@ -12,7 +12,7 @@ See how a viewer's brain would respond to your video, second by second, before y
 
 ## What it does
 
-NeuroLens is built on Meta's TRIBE v2 (TRImodal Brain Encoder). It predicts, second by second, how an average viewer's brain would respond to a video. It shows which brain systems respond (seeing, hearing and understanding), the strongest and weakest moments, how much depends on the soundtrack, and a 3D brain synced to the video.
+NeuroLens is built on Meta's TRIBE v2 (TRImodal Brain Encoder) and predicts, second by second, how an average viewer's brain would respond to a video. It shows which brain systems respond (seeing, hearing and understanding), the strongest and weakest moments, how much depends on the soundtrack, and a 3D brain synced to the video.
 
 ### Features
 
@@ -37,7 +37,7 @@ NeuroLens is built on Meta's TRIBE v2 (TRImodal Brain Encoder). It predicts, sec
 
 ![Architecture](docs/images/architecture.svg)
 
-You sign in, upload a video, and the browser sends the file straight to S3. A queue message wakes a dispatcher, which checks credit and hands the video to the GPU worker; the GPU starts only when there is work and stops when idle. The worker runs TRIBE v2 with audio and again without it, turns both predictions into the signals below, and writes a result the page draws.
+You sign in, upload a video, and the browser sends the file straight to S3. A queue message wakes a dispatcher, which checks credit and hands the video to the GPU worker. The GPU starts only when there is work and stops when idle. The worker runs TRIBE v2 with audio and again without it, turns both predictions into the signals below, and writes a result the page draws.
 
 <!-- WALKTHROUGH VIDEO: dragged in on github.com -->
 

@@ -3,7 +3,9 @@
 This directory is gitignored except this file and `SOURCES.md`; the clips themselves are about 96 MB.
 `data/samples.json` holds the ten public samples (each with its inline result, summary and
 report) and four stored comparisons (two sample pairs, each in both orders), and the thumbnails under `data/output/` are pushed, so the dashboard renders its charts on
-a fresh clone. Everything else is git-ignored. On a fresh clone, a sample's video file, brain file,
+a fresh clone.
+
+Everything else is git-ignored. On a fresh clone, a sample's video file, brain file,
 CSV and PDF (under `data/output/<id>/`) are missing, so video playback and the brain map, CSV and
 PDF downloads need the files restored. `infra/make_sample.py` rebuilds one sample's output folder
 from a finished job; `infra/deploy_web.sh` publishes the samples it finds here to the site. Drop
