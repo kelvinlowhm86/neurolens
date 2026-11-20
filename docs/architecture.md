@@ -222,11 +222,9 @@ What NeuroLens cannot do, or cannot yet check.
 
 | Limitation | Detail |
 | --- | --- |
-| Audience-curve rewards depend on invite-only accounts and manual checks. | A reward needs an account that has had credit beyond the starter, so the invite step limits who can earn one. The operator still screens requests by hand. YouTube's public length and view count can be gamed, and the site does not verify that the signed-in account owns the channel. The proper fix is owner sign-in through YouTube Analytics or Facebook Page Insights, so the site reads the numbers itself; that needs app review by Google or Meta. |
-| Facebook retention cannot be checked automatically. | `video_facts` returns no facts for Facebook, so the length and view checks do not run there. The user pastes a retention report and the site parses it. |
-| Facebook Reels and short links are not accepted. | The form asks for the full Facebook page address. |
+| Audience-curve rewards rely on manual checks. | A reward needs an account that has had credit beyond the starter, so the invite step limits who can earn one, and the operator screens requests by hand. YouTube's public length and view count can be gamed, and the site does not verify that the signed-in account owns the channel. Facebook gets no automatic length or view check at all: the user pastes a retention report, and only full Facebook page addresses are accepted (no Reels or short links). The proper fix is owner sign-in through YouTube Analytics or Facebook Page Insights, so the site reads the numbers itself; that needs app review by Google or Meta. |
 | The AI report cannot hear the soundtrack. | It reads frames and spoken words plus the predicted signals; the prompt says so. |
 | The model predicts perception, not persuasion. | TRIBE v2 predicts how an average viewer's brain responds to what is seen and heard, on the brain's surface. It is not a real brain scan, and it does not measure emotion, reward or intent to buy, so NeuroLens reports attention to sights, sounds and speech, not whether an ad will sell. |
 | Non-commercial use only. | The TRIBE v2 model is licensed CC BY-NC, so NeuroLens cannot be sold as is. |
 
-In the code: `neurolens/web/app.py`, `neurolens/youtube.py`, `neurolens/access.py`, `neurolens/results.py`, `neurolens/report_prompt.py`
+In the code: `neurolens/youtube.py`, `neurolens/access.py`, `neurolens/results.py`, `neurolens/report_prompt.py`
