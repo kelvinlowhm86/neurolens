@@ -245,7 +245,7 @@ Two designs that were built, run on real GPUs and later replaced are kept as git
 | Tag | What it has | Why it was replaced |
 |---|---|---|
 | `custom-gpu-stripe` | Paid credit top-ups through Stripe in test mode. | Credit became a free allowance that an admin grants. The TRIBE v2 licence is non-commercial, so credit cannot be sold. |
-| `custom-gpu` | Self-managed EC2 GPU workers: an Auto Scaling group of on-demand `g6e` machines that scale on the job queue. | SageMaker queues requests, starts and stops the GPU, and falls back to other GPU types by itself, so there are no machines to patch or drain. |
+| `custom-gpu` | Self-managed EC2 GPU workers: an Auto Scaling group of on-demand `g6e` machines that scale on the job queue. | At low volume the two cost about the same, but the EC2 version needs its own network, machine image, scaling and safe shutdown built and maintained. SageMaker provides all of that. |
 
 ## Known limitations
 
