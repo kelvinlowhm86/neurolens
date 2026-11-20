@@ -62,7 +62,7 @@ Thumbs.db
 .vscode/
 .idea/
 
-# ─── Personal files (private instructions and settings, plans, logs, pages) ─
+# ─── Local-only files ─────────────────────────────────────────────────────
 *.local.*
 *.local/
 

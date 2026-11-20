@@ -10,5 +10,3 @@ The design is in [architecture.md](architecture.md); how to run it is in [operat
 - [images/](images/): diagrams, screenshots and photos used in the README and these docs.
 
 The earlier self-managed GPU design (before SageMaker) is kept in the git tags `custom-gpu` and `custom-gpu-stripe`.
-
-`*.local.*`: personal plans, notes and logs; git-ignored and never pushed.
