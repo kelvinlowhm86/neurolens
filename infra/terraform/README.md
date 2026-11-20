@@ -164,19 +164,10 @@ After the first apply:
 
 1. Add `google_redirect_uri` (from `terraform -chdir=infra/terraform output -raw google_redirect_uri`)
    as an authorised redirect URI in the Google OAuth client.
-2. Store the Cognito app client's secret in Parameter Store. Find it in the Cognito console (user
-   pool, App integration, App clients, the client, "Client secret"), or with
-   `aws cognito-idp describe-user-pool-client --user-pool-id <pool id> --client-id <client id>
-   --query UserPoolClient.ClientSecret --output text`: the pool ID is the last part of
-   `terraform -chdir=infra/terraform output -raw cognito_issuer`, the client ID is
-   `terraform -chdir=infra/terraform output -raw cognito_client_id`. From the repo
-   root:
-   ```bash
-   read -rs S && aws ssm put-parameter --name /neurolens/web/cognito_client_secret \
-     --type SecureString --value "$S" --overwrite && unset S
-   ```
-3. `infra/setup.sh` runs `infra/deploy_web.sh` for you; run it again only after changing the page
-   or samples. It also publishes the public samples, whose videos and `data/output/<id>/` files are
+2. `infra/setup.sh` reads the Cognito app client's secret and stores it in Parameter Store as
+   the SecureString `/neurolens/web/cognito_client_secret`, only when it is not there yet. It
+   then runs `infra/deploy_web.sh` for you; run that again only after changing the page or
+   samples. It also publishes the public samples, whose videos and `data/output/<id>/` files are
    git-ignored: on a fresh clone, copy them in first from a checkout that has them
    (`data/videos/README.md`), or the script stops at the missing file. Then open `sign_in_test_url`
    and sign in once with Google and once with email and password.
@@ -194,38 +185,25 @@ aws ecr batch-get-image --region us-east-1 --registry-id 763104351884 \
   --query 'images[0].imageId.imageDigest' --output text
 ```
 
-### Model files in a new account
+### Model files (once per deployment)
 
-A new account's bucket has no `models/` prefix, so `make_model_data.sh` cannot run there. Instead
-copy `model-data/` from an existing deployment's bucket, server-side.
+SageMaker copies `s3://<bucket>/model-data/` into `/opt/ml/model` whenever an instance starts, and
+the container runs with `HF_HUB_OFFLINE=1`. The prefix holds the HuggingFace cache under
+`models/hub/` and the two Glasser brain maps under `data/hcp_mmp/`.
 
-The new bucket exists only after the first apply, and the GPU endpoint (created when
-`worker_image` is set) reads `model-data/` whenever an instance starts. So: first apply with
-`worker_image` empty (no endpoint; `sagemaker.tf`), copy the files, then build the image and apply
-again with `worker_image` set.
+The bucket exists only after the first apply, so the first apply must have `worker_image` empty
+(no endpoint; `sagemaker.tf`). `infra/setup.sh` then checks the prefix: when it is empty it runs
+`infra/upload_model_data.py`, which downloads the model repository from `config.json` and TRIBE
+v2's three encoders from HuggingFace with `HF_TOKEN`, fetches the maps with their SHA-256 checks,
+uploads the folder layout, checks the object count and total size, and deletes its temporary
+folder. The HuggingFace token needs the LLaMA licence accepted first (`README.md`, "Gated Model
+Access"). `setup.sh` refuses to build the image and apply the endpoint while the prefix is empty:
+a failed SageMaker start bills for about 30 minutes and cannot be cancelled.
 
-1. The owner of the existing bucket temporarily allows the new account's deploy user to read
-   `model-data/`: add a bucket policy statement granting `s3:ListBucket` on the bucket with
-   prefix `model-data/` and `s3:GetObject` plus `s3:GetObjectTagging` on `model-data/*`, with
-   Principal = the new deploy user's ARN (large files are copied in parts, and that reads their
-   tags; without it they fail with AccessDenied on GetObjectTagging).
-2. With the NEW account's profile, from the repo root, sync and check that the object counts and
-   total sizes match:
-   ```bash
-   aws s3 sync s3://<old-bucket>/model-data/ s3://<new-bucket>/model-data/
-   aws s3 ls s3://<old-bucket>/model-data/ --recursive --summarize
-   aws s3 ls s3://<new-bucket>/model-data/ --recursive --summarize
-   ```
-3. Remove the temporary statement at once.
-
-`infra/setup.sh` builds the image, writes its digest to `terraform.tfvars` and applies again. In a
-new account, copy `model-data/` as above after the setup and before the first upload.
-
-To do these steps by hand, from the repo root (an existing deployment, whose bucket already has
-`models/`):
+To do it by hand, from the repo root after the first apply:
 
 ```bash
-infra/make_model_data.sh        # once: copies models/ to model-data/ without blobs/, checks counts
+python infra/upload_model_data.py --bucket <bucket_name>
 infra/build_image.sh            # zips HEAD, builds in CodeBuild, prints the image digest
 # put the digest in infra/terraform/terraform.tfvars as worker_image = "sha256:..."
 terraform -chdir=infra/terraform apply

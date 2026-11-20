@@ -103,9 +103,13 @@ if key in (
 if key == "s3 ls":
     target = next((a for a in args[2:] if not a.startswith("-")), "")
     bucket = target.removeprefix("s3://").split("/", 1)[0]
-    if bucket_exists(bucket):
-        out()
-    fail("An error occurred (NoSuchBucket) when calling the ListObjectsV2 operation", 1)
+    if not bucket_exists(bucket):
+        fail("An error occurred (NoSuchBucket) when calling the ListObjectsV2 operation", 1)
+    prefix = target.removeprefix(f"s3://{bucket}").lstrip("/")
+    for obj in w.get("objects", []):
+        if obj["bucket"] == bucket and obj["key"].startswith(prefix):
+            print(f"2020-01-01 00:00:00 {obj['size']:>10} {obj['key']}")
+    out()
 
 if key == "s3api delete-bucket":
     bucket = opt("--bucket")
@@ -143,6 +147,21 @@ if key == "ssm get-parameter":
     if opt("--name") in w.get("ssm_parameters", []):
         out("fake-value")
     fail("An error occurred (ParameterNotFound) when calling the GetParameter operation")
+
+if key == "ssm put-parameter":
+    name = opt("--name")
+    if name not in w.setdefault("ssm_parameters", []):
+        w["ssm_parameters"].append(name)
+    w.setdefault("ssm_values", {})[name] = opt("--value")
+    out()
+
+if key == "cognito-idp describe-user-pool-client":
+    secret = w.get("cognito_client_secret")
+    if secret is None:
+        fail("An error occurred (ResourceNotFoundException) when calling DescribeUserPoolClient")
+    if has_query("ClientSecret"):
+        out(secret)
+    out(json.dumps({"UserPoolClient": {"ClientSecret": secret}}))
 
 if key in ("ssm describe-parameters", "ssm get-parameters-by-path"):
     names = list(w.get("ssm_parameters", []))
@@ -322,6 +341,8 @@ if cmd == "output":
         "db_cluster_arn": "arn:aws:rds:us-east-1:123456789012:cluster:fake",
         "db_secret_arn": "arn:aws:secretsmanager:us-east-1:123456789012:secret:fake",
         "db_name": "neurolens",
+        "cognito_client_id": "fake-client-id",
+        "cognito_user_pool_id": "us-east-1_FAKEPOOL",
     }
     if "-json" in args or "--json" in args:
         out(json.dumps(data))
@@ -343,6 +364,9 @@ if cmd in ("init", "plan", "apply", "destroy", "validate", "fmt", "import"):
     if cmd == "apply":
         w["terraform_state"] = True
         w["terraform_state_empty"] = False
+        bucket = w.get("bucket")
+        if bucket and bucket not in w.setdefault("buckets", []):
+            w["buckets"].append(bucket)
     if cmd == "destroy":
         w["terraform_state"] = True
         w["terraform_state_empty"] = True
@@ -405,6 +429,11 @@ world = json.load(open(os.environ["FAKE_WORLD"]))
 if name in world.get("fail", []) or "step " + name in world.get("fail", []):
     print("fake step failed: " + name, file=sys.stderr)
     sys.exit(1)
+if name == "upload_model_data" and not world.get("upload_leaves_empty"):
+    world.setdefault("objects", []).append(
+        {"bucket": world.get("bucket", ""), "key": "model-data/models/hub/refs/main", "size": 4}
+    )
+    json.dump(world, open(os.environ["FAKE_WORLD"], "w"))
 """
 
 
@@ -444,6 +473,10 @@ def setup_world(**overrides):
         "bucket": DATA_BUCKET,
         "buckets": [STATE_BUCKET],
         "ssm_parameters": list(SSM_SECRETS),
+        "cognito_client_secret": "fake-cognito-secret",
+        "objects": [
+            {"bucket": DATA_BUCKET, "key": "model-data/models/hub/refs/main", "size": 4},
+        ],
         "worker_image": "sha256:" + "a" * 64,
         "fail": [],
     }
@@ -527,6 +560,10 @@ class Sandbox:
         ):
             self.write_stub(self.infra / name, STEP_SH.replace("__NAME__", name[:-3]))
         self.write_stub(self.infra / "apply_schema.py", STEP_PY.replace("__NAME__", "apply_schema"))
+        self.write_stub(
+            self.infra / "upload_model_data.py",
+            STEP_PY.replace("__NAME__", "upload_model_data"),
+        )
 
         self.write_stub(self.bindir / "aws", AWS_STUB)
         self.write_stub(self.bindir / "terraform", TERRAFORM_STUB)
@@ -907,3 +944,71 @@ def test_setup_second_run_with_everything_present_creates_nothing(sandbox):
         "build_image",
     ):
         assert second.find("step", step) == [], step
+
+
+def test_setup_uploads_empty_model_data_before_the_endpoint_apply(sandbox):
+    sandbox.seed(worker_image="")
+    r = sandbox.run("setup.sh", world=setup_world(objects=[]))
+    assert r.code == 0, r.err
+    upload = r.find("step", "upload_model_data")
+    assert upload, "model-data/ was empty but the upload script did not run"
+    applies = r.find("terraform", "apply")
+    assert len(applies) == 2
+    assert upload[0] < applies[1]
+
+
+def test_setup_skips_the_model_data_upload_when_the_prefix_is_not_empty(sandbox):
+    sandbox.seed(worker_image="")
+    r = sandbox.run("setup.sh", world=setup_world())
+    assert r.code == 0, r.err
+    assert r.find("step", "upload_model_data") == []
+    assert len(r.find("terraform", "apply")) == 2
+
+
+def test_setup_never_applies_the_endpoint_when_the_model_data_upload_fails(sandbox):
+    sandbox.seed(worker_image="")
+    r = sandbox.run(
+        "setup.sh",
+        world=setup_world(objects=[], fail=["step upload_model_data"]),
+    )
+    assert r.code != 0
+    assert "model" in r.text.lower()
+    assert len(r.find("terraform", "apply")) == 1
+    assert r.find("step", "build_image") == []
+
+
+def test_setup_refuses_the_endpoint_apply_when_model_data_is_still_empty(sandbox):
+    sandbox.seed(worker_image="")
+    r = sandbox.run("setup.sh", world=setup_world(objects=[], upload_leaves_empty=True))
+    assert r.code != 0
+    assert "model-data" in r.text.lower()
+    assert len(r.find("terraform", "apply")) == 1
+    assert r.find("step", "build_image") == []
+
+
+def test_setup_stores_a_missing_cognito_client_secret_before_deploying(sandbox):
+    sandbox.seed()
+    secrets = [s for s in SSM_SECRETS if s != "/neurolens/web/cognito_client_secret"]
+    r = sandbox.run("setup.sh", world=setup_world(ssm_parameters=secrets))
+    assert r.code == 0, r.err
+
+    puts = [
+        i
+        for i in r.find("ssm", "put-parameter")
+        if option(r.calls[i], "--name") == "/neurolens/web/cognito_client_secret"
+    ]
+    assert len(puts) == 1
+    call = r.calls[puts[0]]
+    assert option(call, "--type") == "SecureString"
+    assert option(call, "--value") == "fake-cognito-secret"
+    assert puts[0] < r.find("step", "deploy_web")[0]
+    assert "/neurolens/web/cognito_client_secret" in r.world["ssm_parameters"]
+
+
+def test_setup_does_not_overwrite_an_existing_cognito_client_secret(sandbox):
+    sandbox.seed()
+    r = sandbox.run("setup.sh", world=setup_world())
+    assert r.code == 0, r.err
+    names = [option(r.calls[i], "--name") for i in r.find("ssm", "put-parameter")]
+    assert "/neurolens/web/cognito_client_secret" not in names
+    assert r.find("step", "deploy_web")

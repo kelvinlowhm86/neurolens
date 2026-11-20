@@ -72,7 +72,7 @@ The model outputs one row per second of video over 20,484 points of the cortex (
 
 Each signal is the mean over its area's points; each group is the mean of its signals, and overall is the mean of the three groups. The worker also runs the video with its sound removed and computes the same 11 series from that pass (muted), cut to the shared length of the two passes.
 
-The brain-area map comes from the Glasser HCP-MMP1 parcellation (360 areas; Glasser et al. 2016, *Nature*). The two map files live in the weights prefix (`model-data/data/hcp_mmp/`, uploaded once by `infra/make_model_data.sh`); the container checks their SHA-256, so it never runs on a changed map. The map is Human Connectome Project data under the WU-Minn HCP Open Access Data Use Terms (see License).
+The brain-area map comes from the Glasser HCP-MMP1 parcellation (360 areas; Glasser et al. 2016, *Nature*). The two map files live in the weights prefix (`model-data/data/hcp_mmp/`, uploaded once by `infra/upload_model_data.py`); the container checks their SHA-256, so it never runs on a changed map. The map is Human Connectome Project data under the WU-Minn HCP Open Access Data Use Terms (see License).
 
 Result format 2 (`results/<job_id>.json`):
 

@@ -2,9 +2,11 @@
 # First deploy (or repair) in one command, after the human-only work in docs/operating.md:
 # prerequisites, the Google/Flask/YouTube Parameter Store secrets and terraform.tfvars.
 # It lists every missing prerequisite before changing anything, then creates the state bucket and
-# backend file, builds the web zip and both layers, applies, applies the database schema, deploys
-# the site, builds the worker image, puts its digest in terraform.tfvars and applies again.
-# A second run skips work that is already done (bucket, backend, artifacts, image).
+# backend file, builds the web zip and both layers, applies, uploads the model files when their
+# prefix is empty, applies the database schema, stores the Cognito client secret when missing,
+# deploys the site, builds the worker image, puts its digest in terraform.tfvars and applies again.
+# A second run skips work that is already done (bucket, backend, artifacts, model files, secret,
+# image).
 set -euo pipefail
 
 ROOT=$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)
@@ -36,7 +38,7 @@ STATE_BUCKET="neurolens-tfstate-$AWS_ACCOUNT_ID"
 STATE_REGION=us-east-1   # the state bucket lives here regardless of the deployment region
 
 # Secrets a person stores before the first apply. The Cognito client secret does not exist yet:
-# the first apply creates the client, so it is stored by hand afterwards (terraform README 2f).
+# the first apply creates the client, so it is stored below from Cognito's own answer.
 PRE_APPLY_SECRETS=(
   /neurolens/terraform/google_client_secret
   /neurolens/web/flask_secret_key
@@ -106,7 +108,40 @@ run_step "the first Terraform apply" \
   terraform -chdir="$TF_DIR" apply -auto-approve -input=false
 
 # Now the state exists, so Terraform records the region and account the scripts must use.
+# shellcheck disable=SC1091
 source "$INFRA/aws_env.sh"
+
+BUCKET=$(terraform -chdir="$TF_DIR" output -raw bucket_name)
+MODEL_DATA_URI="s3://$BUCKET/model-data/"
+
+# SageMaker copies model-data/ into every GPU instance at start and the container runs offline,
+# so an empty prefix makes the endpoint fail at boot.
+model_data_objects() {
+  aws s3 ls "$MODEL_DATA_URI" --recursive | head -n 1
+}
+
+if [ -z "$(model_data_objects)" ]; then
+  run_step "uploading the model files to $MODEL_DATA_URI" \
+    python3 "$INFRA/upload_model_data.py" --bucket "$BUCKET"
+fi
+
+# The first apply creates the Cognito client. Store its secret once, before the site needs it.
+store_cognito_client_secret() {
+  local name=/neurolens/web/cognito_client_secret pool_id client_id secret
+  if aws ssm get-parameter --name "$name" --with-decryption >/dev/null 2>&1; then
+    return 0
+  fi
+  pool_id=$(terraform -chdir="$TF_DIR" output -raw cognito_user_pool_id)
+  client_id=$(terraform -chdir="$TF_DIR" output -raw cognito_client_id)
+  secret=$(aws cognito-idp describe-user-pool-client \
+    --user-pool-id "$pool_id" --client-id "$client_id" \
+    --query UserPoolClient.ClientSecret --output text)
+  if [ -z "$secret" ] || [ "$secret" = "None" ]; then
+    echo "Cognito returned no client secret for $client_id." >&2
+    return 1
+  fi
+  aws ssm put-parameter --name "$name" --type SecureString --value "$secret" >/dev/null
+}
 
 # apply_schema.py reads the deployment values through its environment, so the operator does not
 # have to copy them into .env before the first deploy.
@@ -116,6 +151,7 @@ NEUROLENS_DB_NAME=$(terraform -chdir="$TF_DIR" output -raw db_name)
 export NEUROLENS_DB_CLUSTER_ARN NEUROLENS_DB_SECRET_ARN NEUROLENS_DB_NAME
 run_step "applying the database schema" \
   python3 "$INFRA/apply_schema.py" --backend data_api
+run_step "storing the Cognito client secret" store_cognito_client_secret
 run_step "deploying the website" "$INFRA/deploy_web.sh"
 
 # ---- Worker image: build once, record its digest, then apply the endpoint ------------------
@@ -138,6 +174,12 @@ set_tfvars_worker_image() {
 }
 
 if [ -z "$(tfvars_worker_image)" ]; then
+  if [ -z "$(model_data_objects)" ]; then
+    echo "Setup stopped: $MODEL_DATA_URI is empty, so the GPU endpoint would fail at start." >&2
+    echo "A failed SageMaker start bills for about 30 minutes and cannot be cancelled." >&2
+    echo "Run python3 $INFRA/upload_model_data.py, then run setup.sh again." >&2
+    exit 1
+  fi
   if ! BUILD_OUT=$("$INFRA/build_image.sh"); then
     echo "Setup stopped: building the GPU image failed." >&2
     exit 1
@@ -154,4 +196,3 @@ if [ -z "$(tfvars_worker_image)" ]; then
 fi
 
 echo "Setup complete: Terraform state in $STATE_BUCKET, website deployed."
-echo "If the Cognito client secret is not stored yet, store it now (terraform README section 2f)."

@@ -20,8 +20,11 @@ Operator scripts and the AWS resources they drive. AWS commands run with the pro
 
 - `setup.sh`: first deploy in one command after the human-only steps: lists every missing
   prerequisite before changing anything, then creates the state bucket and backend, builds the
-  artifacts, applies, applies the schema, deploys the site, builds the image and applies again; a
-  second run skips finished work.
+  artifacts, applies, uploads the model files when their prefix is empty, applies the schema,
+  stores the Cognito client secret when missing, deploys the site, builds the image and applies
+  again; a second run skips finished work.
+- `upload_model_data.py`: fills `s3://<bucket>/model-data/` from HuggingFace and the HCP maps
+  for a new deployment; `setup.sh` runs it when the prefix is empty.
 - `build_image.sh`: builds the SageMaker container image in CodeBuild and prints its digest.
 - `build_web_lambda.sh`: builds `build/web_lambda.zip`, the code of the web Lambda functions.
 - `build_ffprobe_layer.sh`: builds the dispatcher's static ffprobe Lambda layer.
@@ -41,7 +44,6 @@ Operator scripts and the AWS resources they drive. AWS commands run with the pro
 
 - `make_brain_mesh.py`: makes `static/brain/fsaverage6_pial.bin` and `head.bin`.
 - `make_cjk_fonts.py`: makes the report PDF's Chinese/Japanese/Korean fallback fonts.
-- `make_model_data.sh`: fills `s3://<bucket>/model-data/` once for SageMaker.
 - `make_sample.py`: adds or replaces one dashboard sample or stored comparison from finished jobs.
 
 ## Folders

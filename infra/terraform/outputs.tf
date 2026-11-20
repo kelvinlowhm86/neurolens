@@ -69,6 +69,11 @@ output "cognito_issuer" {
   value = local.cognito_issuer
 }
 
+output "cognito_user_pool_id" {
+  description = "Read by infra/setup.sh to fetch the client secret after the first apply."
+  value       = aws_cognito_user_pool.users.id
+}
+
 output "cognito_client_id" {
   value = aws_cognito_user_pool_client.web.id
 }

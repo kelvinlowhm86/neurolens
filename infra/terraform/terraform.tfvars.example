@@ -19,10 +19,9 @@ alert_email = "you@example.com"
 # Contact address on the privacy and retention pages (empty: a GitHub repo link).
 # contact_email = "you@example.com"
 
-# The GPU is a SageMaker endpoint. In a new account, copy model-data/ first
-# (infra/terraform/README.md section 2b, "Model files in a new account"): apply with this empty, copy,
-# then build and apply with the digest. Build the image with infra/build_image.sh (it prints its
-# digest), then put the digest here and apply again. Empty: no endpoint is created.
+# The GPU is a SageMaker endpoint. Keep this empty for the first apply: infra/setup.sh uploads the
+# model files to model-data/ first, then builds the image with infra/build_image.sh (it prints its
+# digest), puts the digest here and applies again. Empty: no endpoint is created.
 # worker_image   = "sha256:REPLACE-WITH-THE-BUILT-IMAGE-DIGEST"
 # max_instances  = 1          # up to the account's GPU quota
 # idle_stop_minutes = 7       # idle time before the last GPU stops
