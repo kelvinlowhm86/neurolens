@@ -23,10 +23,10 @@ def _scalable_target_id(endpoint):
 
 
 def _work_possible(db):
-    """True when a live claim, a dispatched request, recent activity, or an active booth
+    """True when a live claim, a dispatched request, recent activity, or an active admin
     keep-warm setting says work is coming."""
     with db.transaction() as tx:
-        warm = billing._read_booth_gpu_warm(tx)
+        warm = billing._read_visitor_gpu_warm(tx)
         rows = tx.execute(
             "SELECT "
             "EXISTS(SELECT 1 FROM jobs WHERE status = :processing "

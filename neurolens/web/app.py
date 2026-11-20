@@ -59,7 +59,7 @@ GITHUB_REPO_URL = "https://github.com/kelvinlowhm86/neurolens"
 CONTACT_PAGES = ("privacy.html", "retention_guide.html")
 
 
-def is_booth_admin(email, admin_emails):
+def is_admin(email, admin_emails):
     if not isinstance(email, str) or not email.strip():
         return False
     return email.strip().lower() in admin_emails
@@ -350,9 +350,9 @@ def create_app(
 
     def signed_in_user():
         """(user_id, email) of the caller. Dev mode creates its user with the starter credit on
-        first sight; a Cognito user or booth guest was created at sign-in / pass redemption."""
+        first sight; a Cognito user or visitor guest was created at sign-in / pass redemption."""
         user_id, email = auth.current_user()
-        if cognito or billing.is_booth_guest(user_id):
+        if cognito or billing.is_visitor_guest(user_id):
             return user_id, email
         with known_lock:
             known = user_id in known_users
@@ -362,12 +362,12 @@ def create_app(
                 known_users.add(user_id)
         return user_id, email
 
-    def _sign_booth_pass(pass_id):
+    def _sign_visitor_pass(pass_id):
         key = str(app.secret_key).encode("utf-8")
         sig = hmac.new(key, pass_id.encode("utf-8"), hashlib.sha256).hexdigest()[:16]
         return f"{pass_id}.{sig}"
 
-    def _verify_booth_pass(token):
+    def _verify_visitor_pass(token):
         if not isinstance(token, str) or "." not in token:
             return None
         pass_id, sig = token.rsplit(".", 1)
@@ -437,7 +437,7 @@ def create_app(
     @app.route("/logout", methods=["POST"])
     def logout():
         caller = auth.current_user()
-        is_guest = caller is not None and billing.is_booth_guest(caller[0])
+        is_guest = caller is not None and billing.is_visitor_guest(caller[0])
         auth.end_session(db)
         return auth.clear_signed_in_hint(
             jsonify(
@@ -484,38 +484,40 @@ def create_app(
 
     @app.route("/api/wake", methods=["POST"])
     def wake():
-        """Start Aurora's resume from the landing page's first interaction, or redeem a booth QR
-        pass when `{"booth": token}` is sent."""
+        """Start Aurora's resume from the landing page's first interaction, or redeem a visitor QR
+        pass when `{"visitor": token}` is sent."""
         data = request.get_json(silent=True) if request.is_json else None
-        if isinstance(data, dict) and "booth" in data:
+        if isinstance(data, dict) and "visitor" in data:
             if db is None:
                 return _not_configured()
-            pass_id = _verify_booth_pass(data.get("booth"))
+            pass_id = _verify_visitor_pass(data.get("visitor"))
             if pass_id is None:
-                return _error("invalid_booth_pass", "This booth QR pass is not valid.", status=400)
+                return _error(
+                    "invalid_visitor_pass", "This visitor QR pass is not valid.", status=400
+                )
             caller = auth.current_user()
             current_uid = caller[0] if caller else None
             is_scan = bool(data.get("scan"))
             try:
-                guest_id = billing.redeem_booth_pass(
+                guest_id = billing.redeem_visitor_pass(
                     db, pass_id, current_user_id=current_uid, is_scan=is_scan
                 )
-            except billing.BoothLimitReached:
+            except billing.VisitorLimitReached:
                 return _error(
-                    "booth_limit_reached",
-                    "All booth passes have been claimed for now. Ask the booth team for more!",
+                    "visitor_limit_reached",
+                    "All visitor passes have been claimed. Ask the organiser for a new one.",
                     status=409,
                 )
-            except billing.BoothPassEnded:
+            except billing.VisitorPassEnded:
                 return _error(
-                    "booth_pass_ended",
-                    "This booth session has ended. Scan a new QR code at the booth.",
+                    "visitor_pass_ended",
+                    "This visitor session has ended. Scan a new QR code to continue.",
                     status=410,
                 )
             auth.start_session(db, guest_id)
             actual_pass_id = guest_id.removeprefix(billing.GUEST_PREFIX)
             return auth.set_signed_in_hint(
-                jsonify({"user_id": guest_id, "booth": _sign_booth_pass(actual_pass_id)})
+                jsonify({"user_id": guest_id, "visitor": _sign_visitor_pass(actual_pass_id)})
             )
         if db is not None:
             try:
@@ -538,23 +540,23 @@ def create_app(
                 "request": access.request_status(db, user_id),
             },
         }
-        if is_booth_admin(email, admin_emails):
-            payload["booth_admin"] = True
+        if is_admin(email, admin_emails):
+            payload["admin"] = True
         return jsonify(payload)
 
-    @app.route("/api/booth/pass", methods=["POST"])
-    def booth_pass():
+    @app.route("/api/visitor/pass", methods=["POST"])
+    def visitor_pass():
         if db is None:
             return _not_configured()
         _, email = signed_in_user()
-        if not is_booth_admin(email, admin_emails):
-            return _error("forbidden", "Booth QR is only available to booth admins.", status=403)
+        if not is_admin(email, admin_emails):
+            return _error("forbidden", "Visitor QR is only available to admins.", status=403)
         data = request.get_json(silent=True) if request.is_json else None
         prefetch = isinstance(data, dict) and bool(data.get("prefetch"))
         pass_id = str(uuid.uuid4())
-        token = _sign_booth_pass(pass_id)
+        token = _sign_visitor_pass(pass_id)
         base_url = auth_cfg.get("public_base_url") or request.host_url.rstrip("/")
-        url = f"{base_url}/app?booth={token}&scan=1"
+        url = f"{base_url}/app?visitor={token}&scan=1"
         payload = {
             "pass_id": pass_id,
             "token": token,
@@ -562,24 +564,24 @@ def create_app(
             "qr_svg": qr.svg(url),
         }
         if not prefetch:
-            stats = billing.booth_stats(db)
+            stats = billing.visitor_stats(db)
             if request.args.get("gpu") == "1":
                 stats["gpu"] = _gpu_status()
             payload["stats"] = stats
         return jsonify(payload)
 
-    def _with_booth_limits(stats):
-        """Add the booth's configured choices to a stats response."""
+    def _with_visitor_limits(stats):
+        """Add the admin panel's configured choices to a stats response."""
         stats["gpu_max_instances"] = max_gpus
-        stats["gpu_warm_hours"] = billing.BOOTH_GPU_WARM_HOURS
-        stats["pass_minutes"] = billing.booth_pass_minutes()
-        stats["initial_passes"] = billing.BOOTH_INITIAL_PASSES
-        stats["adjust_deltas"] = list(billing.BOOTH_ADJUST_DELTAS)
-        stats["grant_minutes"] = list(billing.BOOTH_GRANT_MINUTES)
+        stats["gpu_warm_hours"] = billing.VISITOR_GPU_WARM_HOURS
+        stats["pass_minutes"] = billing.visitor_pass_minutes()
+        stats["initial_passes"] = billing.VISITOR_INITIAL_PASSES
+        stats["adjust_deltas"] = list(billing.VISITOR_ADJUST_DELTAS)
+        stats["grant_minutes"] = list(billing.VISITOR_GRANT_MINUTES)
         return stats
 
     def _sync_gpu_capacity(stats, *, allow_error=False):
-        """Reconcile SageMaker's desired capacity with the saved booth warm target (0 for
+        """Reconcile SageMaker's desired capacity with the saved admin warm target (0 for
         auto-scale, or a positive count) without interrupting active jobs or throwing an error
         while SageMaker is mid-update."""
         gpu = _gpu_status()
@@ -616,36 +618,32 @@ def create_app(
                 return gpu, None
             if allow_error:
                 return gpu, _error("gpu_update_failed", msg, status=409)
-            logger.exception("Could not reconcile booth GPU warm target")
+            logger.exception("Could not reconcile admin GPU warm target")
         return gpu, None
 
-    @app.route("/api/booth/stats")
-    def booth_stats_route():
+    @app.route("/api/visitor/stats")
+    def visitor_stats_route():
         if db is None:
             return _not_configured()
         _, email = signed_in_user()
-        if not is_booth_admin(email, admin_emails):
-            return _error(
-                "forbidden", "Booth stats are only available to booth admins.", status=403
-            )
+        if not is_admin(email, admin_emails):
+            return _error("forbidden", "Visitor stats are only available to admins.", status=403)
         pass_id = request.args.get("pass_id")
         if pass_id is not None and not _is_uuid(pass_id):
             pass_id = None
-        stats = _with_booth_limits(billing.booth_stats(db, check_pass_id=pass_id))
+        stats = _with_visitor_limits(billing.visitor_stats(db, check_pass_id=pass_id))
         if request.args.get("gpu") == "1":
             gpu, _ = _sync_gpu_capacity(stats)
             stats["gpu"] = gpu
         return jsonify(stats)
 
-    @app.route("/api/booth/passes", methods=["POST"])
-    def booth_passes_adjust():
+    @app.route("/api/visitor/passes", methods=["POST"])
+    def visitor_passes_adjust():
         if db is None:
             return _not_configured()
         _, email = signed_in_user()
-        if not is_booth_admin(email, admin_emails):
-            return _error(
-                "forbidden", "Booth passes can only be changed by booth admins.", status=403
-            )
+        if not is_admin(email, admin_emails):
+            return _error("forbidden", "Visitor passes can only be changed by admins.", status=403)
         data = request.get_json(silent=True)
         if not isinstance(data, dict):
             return _error("invalid_request", "The request body must be a JSON object.")
@@ -653,7 +651,7 @@ def create_app(
             desired = data.get("gpu_desired")
             if type(desired) is not int or not 0 <= desired <= max_gpus:
                 return _error("invalid_request", f"gpu_desired must be between 0 and {max_gpus}.")
-            stats = billing.set_booth_gpu_warm(db, desired)
+            stats = billing.set_visitor_gpu_warm(db, desired)
             gpu, err_resp = _sync_gpu_capacity(stats, allow_error=True)
             if err_resp is not None:
                 return err_resp
@@ -662,8 +660,8 @@ def create_app(
         if "grant_email" in data:
             target_email = (data.get("grant_email") or "").strip() or email
             minutes = data.get("minutes")
-            if type(minutes) is not int or minutes not in billing.BOOTH_GRANT_MINUTES:
-                choices = ", ".join(str(value) for value in billing.BOOTH_GRANT_MINUTES)
+            if type(minutes) is not int or minutes not in billing.VISITOR_GRANT_MINUTES:
+                choices = ", ".join(str(value) for value in billing.VISITOR_GRANT_MINUTES)
                 return _error("invalid_request", f"minutes must be one of {choices}.")
             cents = minutes * 60 * pricing.CENTS_PER_BLOCK // pricing.BLOCK_SECONDS
             try:
@@ -677,7 +675,7 @@ def create_app(
                     f"No account found for {target_email}. Have them sign in first.",
                     status=404,
                 )
-            stats = billing.booth_stats(db)
+            stats = billing.visitor_stats(db)
             stats["granted"] = {
                 "email": target_email,
                 "minutes": minutes,
@@ -685,10 +683,10 @@ def create_app(
             }
             return jsonify(stats)
         delta = data.get("delta")
-        if type(delta) is not int or delta not in billing.BOOTH_ADJUST_DELTAS:
-            choices = ", ".join(str(value) for value in billing.BOOTH_ADJUST_DELTAS)
+        if type(delta) is not int or delta not in billing.VISITOR_ADJUST_DELTAS:
+            choices = ", ".join(str(value) for value in billing.VISITOR_ADJUST_DELTAS)
             return _error("invalid_request", f"delta must be one of {choices}.")
-        return jsonify(billing.adjust_booth_passes(db, delta))
+        return jsonify(billing.adjust_visitor_passes(db, delta))
 
     @app.route("/api/access-request", methods=["POST"])
     def access_request():
@@ -783,7 +781,7 @@ def create_app(
                 )
 
         user_id, _ = signed_in_user()
-        if billing.is_booth_guest(user_id):
+        if billing.is_visitor_guest(user_id):
             research_consent = False
         if research_consent and data.get("consent_version") != billing.CONSENT_VERSION:
             return _error("consent_outdated", "Please refresh the page.", status=409)

@@ -1,4 +1,4 @@
-"""Booth admins come from the NEUROLENS_ADMIN_EMAILS deployment setting, not from code."""
+"""Admins come from the NEUROLENS_ADMIN_EMAILS deployment setting, not from code."""
 
 import pytest
 from neurolens import settings
@@ -36,7 +36,7 @@ def make_client(aws, db, make_cfg, tmp_path, *, admin_emails=None, email="visito
     return app.test_client()
 
 
-def test_a_listed_admin_gets_the_flag_and_can_use_the_booth_routes(aws, db, make_cfg, tmp_path):
+def test_a_listed_admin_gets_the_flag_and_can_use_the_visitor_routes(aws, db, make_cfg, tmp_path):
     client = make_client(
         aws,
         db,
@@ -46,10 +46,10 @@ def test_a_listed_admin_gets_the_flag_and_can_use_the_booth_routes(aws, db, make
         email=" Admin@Example.COM ",
     )
 
-    assert client.get("/api/me").get_json()["booth_admin"] is True
-    assert client.post("/api/booth/pass", json={}).status_code == 200
-    assert client.get("/api/booth/stats").status_code == 200
-    assert client.post("/api/booth/passes", json={"delta": 5}).status_code == 200
+    assert client.get("/api/me").get_json()["admin"] is True
+    assert client.post("/api/visitor/pass", json={}).status_code == 200
+    assert client.get("/api/visitor/stats").status_code == 200
+    assert client.post("/api/visitor/passes", json={"delta": 5}).status_code == 200
 
 
 def test_an_unlisted_user_gets_no_flag_and_is_forbidden(aws, db, make_cfg, tmp_path):
@@ -57,10 +57,10 @@ def test_an_unlisted_user_gets_no_flag_and_is_forbidden(aws, db, make_cfg, tmp_p
         aws, db, make_cfg, tmp_path, admin_emails=[ADMIN_EMAIL], email="visitor@example.com"
     )
 
-    assert "booth_admin" not in client.get("/api/me").get_json()
-    assert client.post("/api/booth/pass", json={}).status_code == 403
-    assert client.get("/api/booth/stats").status_code == 403
-    assert client.post("/api/booth/passes", json={"delta": 5}).status_code == 403
+    assert "admin" not in client.get("/api/me").get_json()
+    assert client.post("/api/visitor/pass", json={}).status_code == 403
+    assert client.get("/api/visitor/stats").status_code == 403
+    assert client.post("/api/visitor/passes", json={"delta": 5}).status_code == 403
 
 
 @pytest.mark.parametrize("admin_emails", [None, []], ids=["missing", "empty"])
@@ -69,11 +69,11 @@ def test_a_missing_or_empty_admin_setting_makes_nobody_admin(
 ):
     client = make_client(aws, db, make_cfg, tmp_path, admin_emails=admin_emails, email=ADMIN_EMAIL)
 
-    assert "booth_admin" not in client.get("/api/me").get_json()
-    assert client.post("/api/booth/pass", json={}).status_code == 403
-    assert client.get("/api/booth/stats").status_code == 403
-    assert client.post("/api/booth/passes", json={"delta": 5}).status_code == 403
+    assert "admin" not in client.get("/api/me").get_json()
+    assert client.post("/api/visitor/pass", json={}).status_code == 403
+    assert client.get("/api/visitor/stats").status_code == 403
+    assert client.post("/api/visitor/passes", json={"delta": 5}).status_code == 403
 
 
 def test_the_app_no_longer_hard_codes_admin_hashes():
-    assert not hasattr(web_app, "BOOTH_ADMIN_HASHES")
+    assert not hasattr(web_app, "ADMIN_HASHES")

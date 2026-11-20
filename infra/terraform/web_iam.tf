@@ -64,8 +64,8 @@ locals {
         Resource = "*"
       },
       {
-        # Booth admin GPU status and warm/stop controls.
-        Sid    = "BoothEndpointStatusAndWarmth"
+        # Admin GPU status and warm/stop controls.
+        Sid    = "AdminEndpointStatusAndWarmth"
         Effect = "Allow"
         Action = [
           "sagemaker:DescribeEndpoint",

@@ -36,15 +36,15 @@ CONSENT_VERSION = "2026-11-03"
 SESSION_DAYS = 30
 # A dispatched request that has not been claimed this long after its GPU wait is over is refunded.
 GPU_WAIT_GRACE_S = 300
-# STePS booth guest passes: 2 minutes ($4 / 400 cents) per visitor pass, 10 passes initially.
-BOOTH_POOL_USER_ID = "booth-pool"
-BOOTH_POOL_EMAIL = "booth-pool@booth.local"
-BOOTH_PASS_CENTS = 400
-BOOTH_INITIAL_PASSES = 10
-BOOTH_GPU_WARM_HOURS = 6
+# Visitor passes: 2 minutes ($4 / 400 cents) per visitor pass, 10 passes initially.
+VISITOR_POOL_USER_ID = "visitor-pool"
+VISITOR_POOL_EMAIL = "visitor-pool@visitor.local"
+VISITOR_PASS_CENTS = 400
+VISITOR_INITIAL_PASSES = 10
+VISITOR_GPU_WARM_HOURS = 6
 # The pass, grant and GPU choices the admin panel offers through the API.
-BOOTH_ADJUST_DELTAS = (0, 5, 10)
-BOOTH_GRANT_MINUTES = (0, 2, 5, 10)
+VISITOR_ADJUST_DELTAS = (0, 5, 10)
+VISITOR_GRANT_MINUTES = (0, 2, 5, 10)
 GUEST_PREFIX = "guest-"
 
 CURVE_REMOVED_MESSAGES = {
@@ -53,11 +53,11 @@ CURVE_REMOVED_MESSAGES = {
 }
 
 
-class BoothLimitReached(Exception):
-    """All available booth passes in the pool have been claimed."""
+class VisitorLimitReached(Exception):
+    """All available visitor passes in the pool have been claimed."""
 
 
-class BoothPassEnded(Exception):
+class VisitorPassEnded(Exception):
     """A guest account that was already deleted cannot be re-opened."""
 
 
@@ -1358,76 +1358,78 @@ def add_curve(
     return {"rewarded_cents": reward, "quality": list(quality_flags), "reason": reason}
 
 
-# ---------------------------------------------------------------- STePS booth guest passes
+# ---------------------------------------------------------------- Visitor passes
 
 
-def booth_pass_minutes():
-    """The minutes one booth pass buys, from its cents and the shared price formula."""
-    return BOOTH_PASS_CENTS * pricing.BLOCK_SECONDS / (pricing.CENTS_PER_BLOCK * 60)
+def visitor_pass_minutes():
+    """The minutes one visitor pass buys, from its cents and the shared price formula."""
+    return VISITOR_PASS_CENTS * pricing.BLOCK_SECONDS / (pricing.CENTS_PER_BLOCK * 60)
 
 
-def is_booth_guest(user_id):
-    """True when `user_id` is an ephemeral booth guest account."""
+def is_visitor_guest(user_id):
+    """True when `user_id` is an ephemeral visitor guest account."""
     return isinstance(user_id, str) and user_id.startswith(GUEST_PREFIX)
 
 
-def _ensure_booth_pool(tx):
-    """Create the booth pass pool once with the initial 10 passes."""
-    _create_user(tx, BOOTH_POOL_USER_ID, BOOTH_POOL_EMAIL, BOOTH_INITIAL_PASSES * BOOTH_PASS_CENTS)
+def _ensure_visitor_pool(tx):
+    """Create the visitor pass pool once with the initial 10 passes."""
+    _create_user(
+        tx, VISITOR_POOL_USER_ID, VISITOR_POOL_EMAIL, VISITOR_INITIAL_PASSES * VISITOR_PASS_CENTS
+    )
 
 
-def _read_booth_gpu_warm(tx):
-    """Return the active booth GPU keep-warm target (0 for auto-scale, or a positive count),
-    expiring BOOTH_GPU_WARM_HOURS after the click."""
+def _read_visitor_gpu_warm(tx):
+    """Return the active admin GPU keep-warm target (0 for auto-scale, or a positive count),
+    expiring VISITOR_GPU_WARM_HOURS after the click."""
     rows = tx.execute(
         "SELECT session_hash, "
         "(last_seen_at < now() - make_interval(hours => CAST(:hours AS integer))) AS expired "
         "FROM sessions WHERE user_id = :user_id LIMIT 1",
-        {"user_id": BOOTH_POOL_USER_ID, "hours": BOOTH_GPU_WARM_HOURS},
+        {"user_id": VISITOR_POOL_USER_ID, "hours": VISITOR_GPU_WARM_HOURS},
     )
     if not rows:
         return 0
     sh = rows[0]["session_hash"]
-    prefix = "booth-gpu-warm-"
+    prefix = "visitor-gpu-warm-"
     suffix = sh[len(prefix) :] if isinstance(sh, str) and sh.startswith(prefix) else ""
     target = int(suffix) if suffix.isdigit() else 0
     if target == 0 or rows[0]["expired"]:
         tx.execute(
             "DELETE FROM sessions WHERE user_id = :user_id",
-            {"user_id": BOOTH_POOL_USER_ID},
+            {"user_id": VISITOR_POOL_USER_ID},
         )
         return 0
     return target
 
 
-def set_booth_gpu_warm(db, target):
-    """Set the booth GPU keep-warm target (0 for auto-scale, or a positive count to hold warm)."""
+def set_visitor_gpu_warm(db, target):
+    """Set the admin GPU keep-warm target (0 for auto-scale, or a positive count to hold warm)."""
     if type(target) is not int or target < 0:
         raise ValueError(f"target must be a non-negative integer, not {target!r}")
     with db.transaction() as tx:
-        _ensure_booth_pool(tx)
+        _ensure_visitor_pool(tx)
         tx.execute(
             "DELETE FROM sessions WHERE user_id = :user_id",
-            {"user_id": BOOTH_POOL_USER_ID},
+            {"user_id": VISITOR_POOL_USER_ID},
         )
         if target > 0:
             tx.execute(
                 "INSERT INTO sessions (session_hash, user_id, last_seen_at) "
                 "VALUES (:session_hash, :user_id, now())",
                 {
-                    "session_hash": f"booth-gpu-warm-{target}",
-                    "user_id": BOOTH_POOL_USER_ID,
+                    "session_hash": f"visitor-gpu-warm-{target}",
+                    "user_id": VISITOR_POOL_USER_ID,
                 },
             )
-        return _read_booth_stats(tx)
+        return _read_visitor_stats(tx)
 
 
-def _read_booth_stats(tx, *, check_pass_id=None):
+def _read_visitor_stats(tx, *, check_pass_id=None):
     pool = tx.execute(
         "SELECT available_cents FROM balances WHERE user_id = :user_id",
-        {"user_id": BOOTH_POOL_USER_ID},
+        {"user_id": VISITOR_POOL_USER_ID},
     )
-    remaining = (pool[0]["available_cents"] if pool else 0) // BOOTH_PASS_CENTS
+    remaining = (pool[0]["available_cents"] if pool else 0) // VISITOR_PASS_CENTS
     prefix = f"{GUEST_PREFIX}%"
     pass_days = tx.execute(
         "SELECT CAST((created_at AT TIME ZONE :tz) AS date) AS day, count(*) AS n "
@@ -1518,36 +1520,36 @@ def _read_booth_stats(tx, *, check_pass_id=None):
         "reports_ready": reports_ready,
         "comparisons_ready": comparisons_ready,
         "days": days,
-        "gpu_warm_target": _read_booth_gpu_warm(tx),
+        "gpu_warm_target": _read_visitor_gpu_warm(tx),
         "pass_claimed": pass_claimed,
     }
 
 
-def booth_stats(db, *, check_pass_id=None):
-    """Anonymous booth pass and job totals across `guest-*` accounts."""
+def visitor_stats(db, *, check_pass_id=None):
+    """Anonymous visitor pass and job totals across `guest-*` accounts."""
     with db.transaction() as tx:
-        _ensure_booth_pool(tx)
-        return _read_booth_stats(tx, check_pass_id=check_pass_id)
+        _ensure_visitor_pool(tx)
+        return _read_visitor_stats(tx, check_pass_id=check_pass_id)
 
 
-def adjust_booth_passes(db, delta_passes):
-    """Add `delta_passes` (> 0) to the booth pool, or clear remaining passes when 0."""
+def adjust_visitor_passes(db, delta_passes):
+    """Add `delta_passes` (> 0) to the visitor pool, or clear remaining passes when 0."""
     if not isinstance(delta_passes, int) or isinstance(delta_passes, bool) or delta_passes < 0:
         raise ValueError(f"delta_passes must be a non-negative integer, not {delta_passes!r}")
     with db.transaction() as tx:
-        _ensure_booth_pool(tx)
-        pool = _lock_balance(tx, BOOTH_POOL_USER_ID)
+        _ensure_visitor_pool(tx)
+        pool = _lock_balance(tx, VISITOR_POOL_USER_ID)
         avail = pool["available_cents"] if pool else 0
         if delta_passes == 0:
             if avail > 0:
-                _move(tx, BOOTH_POOL_USER_ID, None, "grant", -avail, 0)
+                _move(tx, VISITOR_POOL_USER_ID, None, "grant", -avail, 0)
         else:
-            _move(tx, BOOTH_POOL_USER_ID, None, "grant", delta_passes * BOOTH_PASS_CENTS, 0)
-        return _read_booth_stats(tx)
+            _move(tx, VISITOR_POOL_USER_ID, None, "grant", delta_passes * VISITOR_PASS_CENTS, 0)
+        return _read_visitor_stats(tx)
 
 
-def redeem_booth_pass(db, pass_id, *, current_user_id=None, is_scan=False):
-    """Redeem one booth QR pass into an isolated `guest-<pass_id>` user with 2 min of credit.
+def redeem_visitor_pass(db, pass_id, *, current_user_id=None, is_scan=False):
+    """Redeem one visitor QR pass into an isolated `guest-<pass_id>` user with 2 min of credit.
 
     Idempotent for the same device or shared link (`is_scan=False`): opening a copied URL without
     `&scan=1` joins the existing guest user without consuming a second pass. If two strangers scan
@@ -1558,17 +1560,17 @@ def redeem_booth_pass(db, pass_id, *, current_user_id=None, is_scan=False):
     """
     guest_id = f"{GUEST_PREFIX}{pass_id}"
     with db.transaction() as tx:
-        _ensure_booth_pool(tx)
+        _ensure_visitor_pool(tx)
         existing = tx.execute(
             "SELECT deleted_at FROM users WHERE user_id = :user_id FOR UPDATE",
             {"user_id": guest_id},
         )
         if existing:
             if existing[0]["deleted_at"] is not None:
-                raise BoothPassEnded(f"booth pass {pass_id!r} was deleted")
+                raise VisitorPassEnded(f"visitor pass {pass_id!r} was deleted")
             if current_user_id == guest_id or not is_scan:
                 return guest_id
-        if is_booth_guest(current_user_id) and current_user_id != guest_id:
+        if is_visitor_guest(current_user_id) and current_user_id != guest_id:
             active_current = tx.execute(
                 "SELECT deleted_at FROM users WHERE user_id = :user_id",
                 {"user_id": current_user_id},
@@ -1578,9 +1580,9 @@ def redeem_booth_pass(db, pass_id, *, current_user_id=None, is_scan=False):
         if existing:
             pass_id = str(uuid.uuid4())
             guest_id = f"{GUEST_PREFIX}{pass_id}"
-        pool = _lock_balance(tx, BOOTH_POOL_USER_ID)
-        if not pool or pool["available_cents"] < BOOTH_PASS_CENTS:
-            raise BoothLimitReached("no booth passes remaining")
-        _move(tx, BOOTH_POOL_USER_ID, None, "grant", -BOOTH_PASS_CENTS, 0)
-        _create_user(tx, guest_id, f"{guest_id}@booth.local", BOOTH_PASS_CENTS)
+        pool = _lock_balance(tx, VISITOR_POOL_USER_ID)
+        if not pool or pool["available_cents"] < VISITOR_PASS_CENTS:
+            raise VisitorLimitReached("no visitor passes remaining")
+        _move(tx, VISITOR_POOL_USER_ID, None, "grant", -VISITOR_PASS_CENTS, 0)
+        _create_user(tx, guest_id, f"{guest_id}@visitor.local", VISITOR_PASS_CENTS)
     return guest_id
