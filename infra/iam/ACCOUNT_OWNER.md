@@ -39,7 +39,7 @@ Tip: if a red error appears after pasting, the copy missed part of the text. Cop
 
 This is what lets the deployer's user do the NeuroLens setup.
 
-Open https://us-east-1.console.aws.amazon.com/iam/home#/users and click the user you created for the deployer.
+Open https://us-east-1.console.aws.amazon.com/iam/home#/users, choose **Create user**, name it `neurolens-deploy` and leave console access off. Then click that user.
 
 1. Open the **Permissions** tab.
 2. Click **Add permissions**, then **Add permissions** again.

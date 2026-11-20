@@ -13,16 +13,10 @@ from botocore.exceptions import ClientError
 from neurolens import storage
 
 # The files each experiment must have before its manifest may be written.
+# Experiment 3 is a local cost comparison (exp3_tco.csv, exp3_tco.md), so it has no S3 run.
 EXPERIMENT_FILES = {
     "experiment-1": ["runs.csv"],
-    "experiment-2": [
-        "jobs.csv",
-        "cloudwatch.csv",
-        "locust_stats.csv",
-        "reliability.csv",
-        "cold_start.csv",
-    ],
-    "experiment-3": ["runs.csv"],
+    "experiment-2": ["jobs.csv", "cloudwatch.csv", "locust_stats.csv", "cold_start.csv"],
 }
 # Experiment 1's runs.csv (latency_run writes it, latency_breakdown summarises its *_ms columns).
 EXPERIMENT_1_COLUMNS = [

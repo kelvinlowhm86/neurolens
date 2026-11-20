@@ -12,10 +12,13 @@ import argparse
 
 from neurolens.experiment_runs import EXPERIMENT_FILES
 
+# Experiment 3 is a local cost comparison (exp3_tco.csv, exp3_tco.md): no S3 run to finish.
+LOCAL_EXPERIMENTS = {"experiment-3"}
+
 
 def main():
     parser = argparse.ArgumentParser(description="Write a run's manifest.json.")
-    parser.add_argument("experiment", choices=sorted(EXPERIMENT_FILES))
+    parser.add_argument("experiment", choices=sorted(set(EXPERIMENT_FILES) | LOCAL_EXPERIMENTS))
     parser.add_argument("run_id")
     parser.add_argument("--series", required=True, help="name grouping runs that belong together")
     parser.add_argument("--started", required=True, help="UTC, e.g. 2026-10-14T03:00:00Z")
@@ -23,6 +26,12 @@ def main():
     parser.add_argument("--instance-type", required=True)
     parser.add_argument("--image-digest", required=True)
     args = parser.parse_args()
+
+    if args.experiment in LOCAL_EXPERIMENTS:
+        parser.error(
+            f"{args.experiment} is a local cost comparison (exp3_tco.csv, exp3_tco.md); "
+            "it has no S3 run or manifest"
+        )
 
     import boto3
 

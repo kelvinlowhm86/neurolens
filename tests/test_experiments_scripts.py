@@ -82,6 +82,43 @@ def test_finish_run_takes_an_image_digest_not_an_ami_id():
     assert "--ami-id" not in proc.stdout
 
 
+def test_experiment_files_match_the_scripts():
+    """Only files a script writes are required: no reliability.csv, and no experiment-3 run."""
+    from neurolens.experiment_runs import EXPERIMENT_FILES
+
+    assert EXPERIMENT_FILES == {
+        "experiment-1": ["runs.csv"],
+        "experiment-2": ["jobs.csv", "cloudwatch.csv", "locust_stats.csv", "cold_start.csv"],
+    }
+
+
+def test_finish_run_refuses_experiment_3_as_a_local_experiment():
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(EXPERIMENTS / "finish_run.py"),
+            "experiment-3",
+            "run-1",
+            "--series",
+            "s",
+            "--started",
+            "2026-10-14T03:00:00Z",
+            "--finished",
+            "2026-10-14T04:00:00Z",
+            "--instance-type",
+            "ml.g6e.xlarge",
+            "--image-digest",
+            "sha256:0",
+        ],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+    )
+    assert proc.returncode != 0
+    assert "local cost comparison" in proc.stderr
+    assert "no S3 run" in proc.stderr
+
+
 # ---------------------------------------------------------------- latency_breakdown.summarise
 
 

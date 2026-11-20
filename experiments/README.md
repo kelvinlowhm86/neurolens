@@ -4,7 +4,7 @@ This folder holds the report experiments. Each script's docstring lists its colu
 
 ## Report experiments
 
-The Experiment 1 and 2 scripts write `experiments/<experiment>/<run_id>/` in the S3 bucket; Locust writes its per-job times to the local `JOBS_CSV`. `finish_run.py` writes a run's `manifest.json` once every required file is in S3.
+The Experiment 1 and 2 scripts write `experiments/<experiment>/<run_id>/` in the S3 bucket. Locust writes its per-job times to the local `JOBS_CSV` and its request stats to its `--csv` files; you upload both to the run folder (below). `finish_run.py` writes a run's `manifest.json` once every required file is in S3. Experiment 3 runs locally and writes local files only.
 
 ### Experiment 1: latency ([Final report, section 4](../docs/course/Final_report.pdf))
 
@@ -18,10 +18,18 @@ The Experiment 1 and 2 scripts write `experiments/<experiment>/<run_id>/` in the
   CLIP=data/videos/<clip>.mp4 BURST_SIZE=5 JOBS_CSV=jobs.csv locust -f experiments/locustfile.py \
       --headless -u 5 -r 5 --host http://localhost:5003 --csv locust --run-time 3h
   ```
+  With `--csv locust`, Locust writes `locust_stats.csv` (plus its history, failures and exceptions files). After the run, upload the per-job times and the stats to the run folder:
+  ```bash
+  BUCKET=$(terraform -chdir=infra/terraform output -raw bucket_name)
+  aws s3 cp jobs.csv "s3://$BUCKET/experiments/experiment-2/<run_id>/jobs.csv"
+  aws s3 cp locust_stats.csv "s3://$BUCKET/experiments/experiment-2/<run_id>/locust_stats.csv"
+  ```
 - `export_cloudwatch.py <run_id> --start ... --end ...`: writes the one-minute backlog and instance-count series to `experiment-2/<run_id>/cloudwatch.csv`.
 - `cold_start.py --since ... --run-id ... --instance-type ...`: joins the workers' boot records with scaling history into `experiment-2/<run_id>/cold_start.csv`.
 
 ### Experiment 3: cloud vs on-premise cost ([Final report, section 4](../docs/course/Final_report.pdf))
+
+This experiment runs locally and writes local files only: it has no S3 run and no manifest.
 
 - `tco_benchmark.py CLIP [CLIP ...] [--runs N] [--out PATH]`: times the worker pipeline on a GPU machine; `tco_benchmark.sbatch` runs it on Slurm. Writes a CSV with `clip`, `video_seconds`, `run`, `total_seconds` and `gpu_name`.
 - `tco_compare.py --cloud-csv ... --onprem-csv ... [--assumptions experiments/tco_assumptions.json] [--out-dir .]`: combines Experiment 1's rows and the on-prem CSV with the assumptions; writes `exp3_tco.csv` and `exp3_tco.md`.
@@ -30,4 +38,4 @@ The Experiment 1 and 2 scripts write `experiments/<experiment>/<run_id>/` in the
 
 ## All report experiments
 
-- `finish_run.py <experiment> <run_id> --series ... --started ... --finished ... --instance-type ... --image-digest ...`: writes a run's `manifest.json`, refusing if a required file is missing.
+- `finish_run.py <experiment> <run_id> --series ... --started ... --finished ... --instance-type ... --image-digest ...`: writes an Experiment 1 or 2 run's `manifest.json`, refusing if a required file is missing. It refuses `experiment-3`, which has no S3 run.

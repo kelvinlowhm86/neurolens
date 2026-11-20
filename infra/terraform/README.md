@@ -45,7 +45,7 @@ $2.80/h for `ml.g6e.2xlarge` (SageMaker prices, us-east-1), and it stops itself 
 `idle_stop_minutes` (7 idle minutes). A deploy starts one instance for about 7 minutes
 (roughly $0.50-0.80).
 
-From an empty account: the human-only steps in section 0, then `infra/setup.sh`; it does section 1,
+From an empty account: the account-owner steps in `infra/iam/ACCOUNT_OWNER.md` and the human-only steps in section 0, then `infra/setup.sh`; it does section 1,
 section 2, section 2e (database tables), section 2f and section 2b. Then section 5 for each work
 session and section 6 to tear down.
 
@@ -284,7 +284,7 @@ infra/stop_work.sh                      # emergency pause; prints ALL STOPPED on
 
 `stop_work.sh` deletes any keep-warm action, sets the endpoint's scaling maximum and minimum to 0
 and checks both, sets the desired count to 0 and waits until the endpoint shows 0.
-A running job dies and is refunded. `start_work.sh` puts the maximum back to 1.
+A running job dies and is refunded. `start_work.sh` puts the maximum back to `max_instances` (1 by default).
 
 ## 5b. Demo routine
 

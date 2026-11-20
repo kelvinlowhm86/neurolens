@@ -3,7 +3,7 @@
 NeuroLens predicts brain activity for a video (TRIBE v2) and turns it into a signed, second-by-second brain response (7 signals in 3 groups, a 3D map), served by a Flask web app. Course project: not for commercial use (the model is CC BY-NC).
 
 ## Layout
-- `neurolens/` the package: `settings.py` (config + paths), `response.py` (signals from the brain-area map, pure maths, numpy only), `inference.py` (model + atlas loading, `build_events`, `without_audio`, `predict`, fake mode), `media.py` (ffprobe duration), `pricing.py`, `qr.py` (SVG QR codes), `storage.py` (S3 helpers), `db.py` (Aurora/Postgres access), `billing.py` (credits, ledger, sign-in users, booth passes), `results.py`, `experiment_runs.py`, `worker.py` (the SageMaker container: `/ping`, `/invocations`, claim, charge/refund), `lambdas/` (dispatcher, SageMaker error handler, GPU guard, reaper, dead-letter handler), `web/` (`app.py` `create_app()` and Flask routes, `auth.py`, `lambda_handler.py`).
+- `neurolens/` the package: `settings.py` (config + paths), `response.py` (signals from the brain-area map, pure maths, numpy only), `inference.py` (model + atlas loading, `build_events`, `without_audio`, `predict`, fake mode), `media.py` (ffprobe duration), `pricing.py`, `qr.py` (SVG QR codes), `storage.py` (S3 helpers), `db.py` (Aurora/Postgres access), `billing.py` (credits, ledger, sign-in users, booth passes), `results.py`, `experiment_runs.py`, `worker.py` (the SageMaker container: `/ping`, `/invocations`, claim, charge/refund), `lambdas/` (dispatcher, SageMaker error handler, GPU guard, reaper, dead-letter handler, AI report), `web/` (`app.py` `create_app()` and Flask routes, `auth.py`, `lambda_handler.py`).
 - `app.py` and `worker.py` at the root are thin launchers (`python app.py`, port 5003). `static/` the page. `data/` samples, videos, thumbnails (`data/videos/README.md`).
 - `prototype/` the two `.ipynb` files (a laptop prototype needing its own GPU; `prototype/README.md`). `requirements/` per-machine dependency lists. `infra/` Terraform, IAM, worker image, deploy and start/stop scripts, migrations, operator scripts (`infra/README.md`). `experiments/` report experiments and `locustfile.py` (`experiments/README.md`). `tests/` pytest. `docs/` evidence and submitted `course/` documents (`docs/README.md`).
 
@@ -11,7 +11,7 @@ NeuroLens predicts brain activity for a video (TRIBE v2) and turns it into a sig
 - Set up: `python3.12 -m venv .venv && source .venv/bin/activate && pip install -e . -r requirements/dev.txt`
 - Test: `pytest`. Lint: `ruff check .`. Format: `ruff format .`
 - CI (`.github/workflows/ci.yml`) runs pytest and both ruff checks; `trailer/` is excluded.
-- Laptop, whole product with no real AWS: `python infra/local_stack.py` (the local PostgreSQL from README "Quick start"; `--grant <email> <minutes>` adds credit). `python app.py` runs only against it.
+- Laptop, whole product with no real AWS: `python infra/local_stack.py` (the local PostgreSQL from README "Run it on a laptop"; `--grant <email> <minutes>` adds credit). `python app.py` runs only against it.
 
 ## Rules
 - Heavy imports (`torch`, `tribev2`, `nilearn`, `huggingface_hub`) only inside functions, never at module top of `neurolens/`.

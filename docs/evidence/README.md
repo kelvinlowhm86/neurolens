@@ -94,7 +94,7 @@ One run per clip per type, in us-east-1. "Warm" leaves out the one-time WhisperX
 | Peak GPU memory (`gpu` field) | 19.94 GB of 45.8 | 19.94 of 22.9 | 19.94 of 22.9 |
 | Results vs `g6e` | reference | within 0.0003 | within 0.0001 |
 | `g6e.2xlarge` (fallback, same L40S, $2.24/h) | 119 s loop 485 s (code `b1fb933`, image v1): 1-3% faster than `xlarge`, about $0.30 a job (17-19% more) | | |
-| First job of a worker (119 s) | | 1,528 s | 1,880 s (over the 1,800 s queue timeout) |
+| First job of a worker (119 s) | | 1,528 s | 1,880 s (over the 1,800 s queue timeout then in use) |
 
 First-job warm-up (2026-10-03). The one-time WhisperX environment set-up on a worker's first job took 5 min 41 s on the v2 image (8 min 3 s on v1); later jobs on the same worker take about 14 s. It is included in the first-job and cold-start figures, not in the warm job times above.
 
@@ -102,7 +102,7 @@ Decision: `g6e.xlarge` stays. When it is unavailable the endpoint tries the next
 
 What limits the job: video encoding on the A10G (same 32-bit compute as the L4, twice its memory bandwidth) was 2.4 times slower than on the L40S, close to the compute ratio (2.9) and far from the bandwidth ratio (1.4), so encoding is mainly limited by compute. The L4 alone could not show this: it trails the L40S by about 3 times on both.
 
-As fallbacks when `g6e` is sold out: the endpoint's pools are, in order, `ml.g6.2xlarge`, `ml.g5.2xlarge` and `ml.g6e.2xlarge` (`infra/terraform/sagemaker.tf`). They fit and give the same results, but the two cheaper GPUs are slower and dearer per video; they are kept because they keep the service working when L40S capacity is unavailable (28 Oct, below). The L4's first 119 s job also took longer than the queue's 1,800 s visibility timeout.
+As fallbacks when `g6e` is sold out: the endpoint's pools are, in order, `ml.g6.2xlarge`, `ml.g5.2xlarge` and `ml.g6e.2xlarge` (`infra/terraform/sagemaker.tf`). They fit and give the same results, but the two cheaper GPUs are slower and dearer per video; they are kept because they keep the service working when L40S capacity is unavailable (28 Oct, below). The L4's first 119 s job also took longer than the 1,800 s visibility timeout then in use.
 
 ## GPU availability on 28 Oct (SageMaker endpoint, us-east-1)
 Saved on 2026-10-28, because Application Auto Scaling keeps activity history for only 6 weeks.

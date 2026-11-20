@@ -82,7 +82,7 @@ Subsequent runs take approximately 5-10 minutes (inference only, models cached).
 After running all cells, you'll have two files in `data/output/`:
 
 - `neurolens_output.png`: a 6-panel dark-theme chart showing overall engagement, per-ROI activation, and audio contribution over the video timeline
-- `neurolens_output.json`: the prototype's JSON, with per-second engagement scores for all five regions (the app's own result format is in `docs/M3d_spec.md`)
+- `neurolens_output.json`: the prototype's JSON, with per-second engagement scores for all five regions (the app's own result format is in [docs/architecture.md](../docs/architecture.md#brain-signals-and-result-files))
 
 ### GPU notes
 

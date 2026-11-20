@@ -4,7 +4,7 @@ A 75-second, 1920 × 1080, 30 fps Remotion film (2,250 frames). No voice-over. F
 
 ## Render
 
-The footage, mesh, fonts, music and sound effects live in `public/` (about 50 MB), which is not in git; the render needs a copy of that folder from the person who made the trailer. Renders land in `out/`, also not in git.
+The footage, mesh, fonts, music and sound effects live in `public/` (about 215 MB), which is not in git; the render needs a copy of that folder from the person who made the trailer. Renders land in `out/`, also not in git.
 
 From this directory:
 

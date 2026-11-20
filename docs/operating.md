@@ -49,7 +49,7 @@ These are the commands you use after the first deploy.
 These commands change how many GPUs the endpoint keeps ready.
 
 ```bash
-infra/start_work.sh                         # normal: maximum 1; an upload starts a GPU
+infra/start_work.sh                         # normal: maximum max_instances; an upload starts a GPU
 infra/start_work.sh --keep-warm --hours 3   # hold one GPU for 1-5 hours, then auto-scale
 infra/stop_work.sh                          # emergency pause
 ```

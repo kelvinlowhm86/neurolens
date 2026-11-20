@@ -95,7 +95,7 @@ While working, run the file for the part you changed (`pytest tests/test_respons
 
 ### Deploy on AWS
 
-The operator guide is [docs/operating.md](docs/operating.md); the human-only first steps are in [infra/terraform/README.md](infra/terraform/README.md). From an empty account, the first deploy is one command:
+The operator guide is [docs/operating.md](docs/operating.md); the human-only first steps are in [infra/iam/ACCOUNT_OWNER.md](infra/iam/ACCOUNT_OWNER.md) and [infra/terraform/README.md](infra/terraform/README.md). From an empty account, the first deploy is one command:
 
 ```bash
 infra/setup.sh
