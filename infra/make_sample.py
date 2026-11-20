@@ -53,6 +53,37 @@ def video_in_data(video):
     return target
 
 
+def phone_playback_problem(video):
+    """Why the video would not play on every phone, or None. Only H.264 in 8-bit 4:2:0 plays
+    everywhere (an iPhone 12 cannot play AV1; some Android phones cannot play HEVC)."""
+    probe = subprocess.run(
+        [
+            "ffprobe",
+            "-v",
+            "error",
+            "-select_streams",
+            "v:0",
+            "-show_entries",
+            "stream=codec_name,pix_fmt",
+            "-of",
+            "json",
+            str(video),
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    streams = json.loads(probe).get("streams") or [{}]
+    codec, pix_fmt = streams[0].get("codec_name"), streams[0].get("pix_fmt")
+    if codec == "h264" and pix_fmt in ("yuv420p", "yuvj420p"):
+        return None
+    return (
+        f"{video.name} is {codec or 'not a video'} {pix_fmt or ''}; samples must be H.264 so "
+        "every phone plays them. Convert it: ffmpeg -i IN -c:v libx264 -crf 20 -pix_fmt yuv420p "
+        "-c:a copy -movflags +faststart OUT"
+    )
+
+
 def make_thumbnail(video, target, seconds):
     subprocess.run(
         [
@@ -126,6 +157,9 @@ def add_sample(args):
     from neurolens import report_pdf, results
     from neurolens.lambdas import report
 
+    problem = phone_playback_problem(Path(args.video))
+    if problem:
+        raise SystemExit(problem)
     video = video_in_data(args.video)
     sample_id = video.stem
     output = DATA / "output" / sample_id

@@ -78,3 +78,19 @@ def test_a_sample_csv_file_matches_its_result(sample):
     if not csv_file.exists():
         return
     assert csv_file.read_text() == results.to_csv(sample["result"])
+
+
+def _make_sample_module():
+    import importlib.util
+
+    path = DATA_DIR.parent / "infra" / "make_sample.py"
+    spec = importlib.util.spec_from_file_location("make_sample", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+@pytest.mark.parametrize("sample", SAMPLES, ids=[s["id"] for s in SAMPLES])
+def test_sample_video_plays_on_every_phone(sample):
+    problem = _make_sample_module().phone_playback_problem(DATA_DIR / sample["video_file"])
+    assert problem is None, problem
