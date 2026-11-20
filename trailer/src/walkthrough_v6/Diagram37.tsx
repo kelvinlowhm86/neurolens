@@ -1186,7 +1186,8 @@ const statusOpacity = (f: number) =>
   ease(f, word('5b', 'month') - 2, word('5b', 'month') + 12) * (1 - ease(f, CUE('5c').start - 10, CUE('5c').start + 2));
 
 const clockOpacity = (f: number) =>
-  ease(f, CUE('5c').start - 2, CUE('5c').start + 10) * (1 - ease(f, CUE('7a').start - 10, CUE('7a').start + 4));
+  ease(f, CUE('5c').start - 2, CUE('5c').start + 10) *
+  (1 - ease(f, CUE('7a').start - RING_FULL_BEFORE_7A - 8, CUE('7a').start - RING_FULL_BEFORE_7A)); // gone by the time the GPU lights
 
 
 // The TRIBE panel opens only once the job card has landed on the GPU ("...wakes a GPU").
@@ -1842,8 +1843,8 @@ const JobArrival: React.FC<{f: number; check: Pt; gpu: Pt}> = ({f, check, gpu}) 
   );
 };
 
-const badgeCenter = (pos: Pt): Pt => ({x: pos.x + 50, y: pos.y - 50});
-const BADGE_SIZE = 80; // about 60% of a node icon: readable in the wide 7a shot without outweighing the icon
+const badgeCenter = (pos: Pt): Pt => ({x: pos.x + 58, y: pos.y - 58});
+const BADGE_SIZE = 64; // sits on the icon ring's corner, clear of the symbol in the middle
 const badgeBoxAt = (pos: Pt): Box => {
   const center = badgeCenter(pos);
   return {
@@ -1886,7 +1887,7 @@ const RingBadge: React.FC<{pos: Pt; opacity: number}> = ({pos, opacity}) => {
         transform: `scale(${0.8 + 0.2 * opacity})`,
       }}
     >
-      <Icon name="cross" size={46} />
+      <Icon name="cross" size={36} />
     </div>
   );
 };
@@ -2523,10 +2524,8 @@ export const DIAGRAM_SFX: Sfx[] = [
   {frame: word('4', 'trusting'), sound: 'scribble'}, // 0:25 struck out
   {frame: word('4', 'credit'), sound: 'scribble'}, // 0.5 min struck out
   {frame: beat('4r', 0.34), sound: 'denied'}, // the bad file's cross
-  {frame: CUE('7a').start - RING_FULL_BEFORE_7A, sound: 'ready'}, // the GPU finishes starting and lights
   {frame: word('7a', 'once'), sound: 'stamp'}, // the "charged" stamp
   {frame: word('7a', 'twice'), sound: 'skipped'}, // the duplicate job #42: "already charged · skipped"
-  {frame: word('7b', 'running'), sound: 'powerdown'}, // the watchdog stops the stuck GPU
   {frame: RETURN_BROWSER_LIT, sound: 'chime'}, // the result reaches the Browser
 ];
 
