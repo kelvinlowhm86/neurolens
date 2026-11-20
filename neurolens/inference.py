@@ -198,8 +198,8 @@ class PlayCopy:
 
     def _start(self):
         # `nice` rather than preexec_fn: the worker runs a heartbeat thread, and preexec_fn is
-        # Unsafe in a process with threads. stderr goes to a file, not a pipe nobody reads until
-        # The end: a corrupt stream can print an error per frame, fill a pipe and stall the encode.
+        # unsafe in a process with threads. stderr goes to a file, not a pipe nobody reads until
+        # the end: a corrupt stream can print an error per frame, fill a pipe and stall the encode.
         self.log_path = self.dst_path.with_suffix(".log")
         with open(self.log_path, "wb") as log:
             self.process = subprocess.Popen(
@@ -231,7 +231,7 @@ class PlayCopy:
                     "-profile:v",
                     "high",
                     # A keyframe every second, so a click on the chart lands at once (libx264's
-                    # Default gap is up to 10 s, and a seek decodes from the keyframe before it).
+                    # default gap is up to 10 s, and a seek decodes from the keyframe before it).
                     "-force_key_frames",
                     "expr:gte(t,n_forced*1)",
                     "-movflags",

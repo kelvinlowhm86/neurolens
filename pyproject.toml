@@ -22,7 +22,7 @@ extend-exclude = ["*.ipynb", "*.md"]
 select = ["E", "F", "I", "B"]
 
 [tool.ruff.lint.per-file-ignores]
-# Tests are locked (written before the package existed); skip import-order there.
+# Tests: skip import-order checks.
 "tests/*" = ["I001"]
 
 [tool.pytest.ini_options]

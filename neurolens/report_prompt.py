@@ -7,7 +7,7 @@ import copy
 from neurolens import results
 
 # How long the prompt asks the answer to be. Guidance only: the report
-# Lambda checks that the answer makes sense, never its length or counts.
+# lambda checks that the answer makes sense, never its length or counts.
 MAX_HEADLINE = 120
 MIN_MOMENTS, MAX_MOMENTS = 1, 8
 MAX_DIFFERENCES = 3

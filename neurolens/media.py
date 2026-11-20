@@ -92,7 +92,7 @@ def probe_duration(path, timeout_s=30):
     if not starts:
         raise UnreadableVideo(f"ffprobe found no timestamped packets in {path}")
     # A negative start (AAC encoder priming) counts as 0, so an honest file measures what its
-    # Header says.
+    # header says.
     duration = max(ends) - max(min(starts), 0.0)
     if not math.isfinite(duration):
         raise UnreadableVideo(f"ffprobe gave a non-finite duration for {path}")

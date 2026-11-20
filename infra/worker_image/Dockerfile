@@ -14,7 +14,7 @@ ENV NEUROLENS_ROOT=/opt/neurolens \
     UV_OFFLINE=0 \
     UV_TOOL_DIR=/opt/uv-tools
 
-# Every package is resolved as PyPI stood at the day-B build that passed real jobs, so a
+# Every package is resolved as PyPI stood at the build that passed real GPU jobs, so a
 # rebuild installs the same tested versions. Move it forward only together with a real GPU job.
 ARG PACKAGES_AS_OF=2026-10-23T13:26:00Z
 

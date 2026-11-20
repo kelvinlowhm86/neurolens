@@ -1323,7 +1323,7 @@ def create_app(
             views, published = None, None
         else:
             # Training weights only, never reward rules: optional, so a lookup that failed after
-            # The check (which hid these questions) still saves.
+            # the check (which hid these questions) still saves.
             views = data.get("views")
             if views is not None and (not isinstance(views, str) or views not in RETENTION_VIEWS):
                 return _error("invalid_request", "views must be one of the listed choices.")

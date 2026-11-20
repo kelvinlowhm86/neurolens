@@ -46,15 +46,15 @@ $2.80/h for `ml.g6e.2xlarge` (SageMaker prices, us-east-1), and it stops itself 
 (roughly $0.50-0.80).
 
 From an empty account: the account-owner steps in `infra/iam/ACCOUNT_OWNER.md` and the human-only steps in section 0, then `infra/setup.sh`; it does section 1,
-section 2, section 2e (database tables), section 2f and section 2b. Then section 5 for each work
+section 2, section 2c (database tables), section 2a and section 2b. Then section 5 for each work
 session and section 6 to tear down.
 
 ## 0. Before you start (once)
 
 1. Terraform 1.10 or newer: `brew tap hashicorp/tap && brew install hashicorp/tap/terraform`.
 2. The AWS command-line tool (`aws --version`).
-3. A named AWS profile in `~/.aws` (`aws configure --profile neurolens`). For the live account,
-   use its named profile. **Never paste keys into chat, git or a Docker image.**
+3. A named AWS profile in `~/.aws` (`aws configure --profile neurolens`). **Never paste keys into
+   chat, git or a Docker image.**
 4. Python 3.12 for the repo (`AGENTS.md`) and `git`. Set up the repo's virtual environment (the
    operator scripts `apply_schema.py`, `access_requests.py` and the others use it), from the repo
    root:
@@ -69,7 +69,7 @@ session and section 6 to tear down.
    - A Google OAuth client for sign-in: in the Google Cloud console, set up the OAuth consent
      screen first if asked, then APIs & Services > Credentials > Create OAuth client ID > type
      "Web application". This gives `google_client_id`; its secret is stored in item 6. The
-     redirect URI is added after the first apply (section 2f).
+     redirect URI is added after the first apply (section 2a).
    - A YouTube Data API v3 key: in the same Google Cloud project, enable "YouTube Data API v3",
      then Credentials > Create API key and restrict the key to that API. No billing is needed.
      The key is stored in item 6.
@@ -104,7 +104,7 @@ Every command runs with these three variables exported. `AWS_PROFILE` is read by
 `.env`); `AWS_REGION` is the region. Use the same profile name for the first two:
 
 ```bash
-export AWS_PROFILE=neurolens              # e.g. the profile named for the live account
+export AWS_PROFILE=neurolens
 export NEUROLENS_AWS_PROFILE=neurolens    # the same value: infra/*.sh read only this
 export AWS_REGION=us-east-1
 aws sts get-caller-identity      # check the account ID before anything else
@@ -156,9 +156,9 @@ database values. Put them in the git-ignored `.env` at the repo root as `NEUROLE
 `NEUROLENS_DB_CLUSTER_ARN`, `NEUROLENS_DB_SECRET_ARN` and `NEUROLENS_DB_NAME`
 (see `.env.example`).
 
-## 2f. Sign-in
+## 2a. Sign-in
 
-Run section 2e first: sign-in writes to its tables.
+Run section 2c first: sign-in writes to its tables.
 
 After the first apply:
 
@@ -167,10 +167,8 @@ After the first apply:
 2. `infra/setup.sh` reads the Cognito app client's secret and stores it in Parameter Store as
    the SecureString `/neurolens/web/cognito_client_secret`, only when it is not there yet. It
    then runs `infra/deploy_web.sh` for you; run that again only after changing the page or
-   samples. It also publishes the public samples, whose videos and `data/output/<id>/` files are
-   git-ignored: on a fresh clone, copy them in first from a checkout that has them
-   (`data/videos/README.md`), or the script stops at the missing file. Then open `sign_in_test_url`
-   and sign in once with Google and once with email and password.
+   samples. It also publishes the committed public samples (`data/videos/README.md`). Then open
+   `sign_in_test_url` and sign in once with Google and once with email and password.
 
 ## 2b. The GPU image and endpoint
 
@@ -202,7 +200,7 @@ The bucket exists only after the first apply, so the first apply must have `work
 three encoders and the Whisper model from HuggingFace with `HF_TOKEN`, fetches the alignment
 weights and Destrieux files, fetches the maps with their SHA-256 checks, uploads the folder layout,
 checks the object count and total size, and deletes its temporary folder. The HuggingFace token
-needs the LLaMA licence accepted first (`README.md`, "Gated Model Access"). `setup.sh` refuses to
+needs the LLaMA licence accepted first (`README.md`, "Gated model access"). `setup.sh` refuses to
 build the image and apply the endpoint while the prefix is empty: a failed SageMaker start bills
 for about 30 minutes and cannot be cancelled.
 
@@ -221,7 +219,7 @@ instance type, so the first checks run on the GPU with the real model.
 The container's logs are in CloudWatch at `/aws/sagemaker/Endpoints/neurolens`; the build's at
 `/aws/codebuild/neurolens-worker-image`.
 
-## 2e. The database
+## 2c. The database
 
 `database.tf` creates Aurora PostgreSQL (Serverless v2, 0-1 ACU): users, credit and job state. It
 pauses 5 minutes after its last use and wakes in about 15 s on the next call. Everything reaches it
@@ -239,7 +237,7 @@ python infra/apply_schema.py --backend data_api
 python infra/check_aurora.py --backend data_api     # PASS expected
 ```
 
-## 2c. Applying a saved plan
+## 2d. Applying a saved plan
 
 From the repo root:
 
@@ -288,7 +286,7 @@ A running job dies and is refunded. `start_work.sh` puts the maximum back to `ma
 
 ## 5b. Demo routine
 
-1. The day before (a week before for the TA demo): one full dry run.
+1. The day before: one full dry run.
 2. 45-60 minutes before: `infra/start_work.sh --keep-warm --hours 3`.
 3. One short warm-up job, so the first-job costs are paid before the audience arrives.
 4. Demo. If it overruns, run step 2 again (it moves the end).

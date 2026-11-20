@@ -156,7 +156,7 @@ def _span_problem(span, duration, name):
 
 _MARKER = re.compile(r"\[[AB]\]")
 # A bare B, but not one that is part of a word such as "B-roll"; A only in the forms that
-# Betray a missed marker ("A 12 s", "A's"), never the article or an initial.
+# betray a missed marker ("A 12 s", "A's"), never the article or an initial.
 _BARE_B = re.compile(r"(?<![\w-])B(?![\w-])")
 _BARE_A = re.compile(r"(?<![\w-])A(?: \d|['’]s\b)")
 

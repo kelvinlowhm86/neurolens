@@ -79,8 +79,8 @@ def stored(aws, job_id):
 
 # ---------------------------------------------------------------- put_result
 # The installed moto implements put_object(IfNoneMatch="*") (checked: the second write fails
-# With PreconditionFailed), so these run against moto's real behaviour. The 409/500 cases use
-# A wrapped client because moto cannot be made to raise them.
+# with PreconditionFailed), so these run against moto's real behaviour. The 409/500 cases use
+# a wrapped client because moto cannot be made to raise them.
 
 
 def test_put_result_writes_results_job_id_json_and_returns_true(aws):

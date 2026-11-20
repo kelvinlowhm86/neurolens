@@ -169,12 +169,12 @@ def configure_env(cfg, paths):
     data = Path(paths["data"])
 
     # The token is optional here: it normally arrives through the environment (.env), and fake
-    # Mode needs none.
+    # mode needs none.
     if cfg.get("hf_token"):
         os.environ["HF_TOKEN"] = cfg["hf_token"]
 
     # HF_HOME is the root the other HF caches derive from; the rest are set explicitly
-    # So they survive anyone overriding HF_HOME downstream.
+    # so they survive anyone overriding HF_HOME downstream.
     os.environ["HF_HOME"] = str(models)
     os.environ["HF_HUB_CACHE"] = str(models / "hub")
     os.environ["HUGGINGFACE_HUB_CACHE"] = str(models / "hub")  # legacy alias
@@ -193,11 +193,11 @@ def configure_env(cfg, paths):
 
 
 # The max duration reflects the target use case (short-form pre-roll / social ad
-# Creative). The GPU was chosen for it: memory and job time grow with video length
-# And were measured only up to 120 s. A 120 s 4K video takes about 40-47 minutes, so
-# A running job must never be stopped as idle. This is a hard
-# Product constraint, independent of billing — it must be enforced
-# Regardless of credit balance (see `verify_queued`, which must check this
+# creative). The GPU was chosen for it: memory and job time grow with video length
+# and were measured only up to 120 s. A 120 s 4K video takes about 40-47 minutes, so
+# a running job must never be stopped as idle. This is a hard
+# product constraint, independent of billing — it must be enforced
+# regardless of credit balance (see `verify_queued`, which must check this
 # BEFORE any credit-adjustment logic, not instead of it).
 def max_duration(cfg):
     """Longest accepted video in seconds (120 when unset or when there is no config)."""

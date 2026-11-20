@@ -376,7 +376,7 @@ def _analyse(
         stage("extracting_roi")
         result = extract_response(preds_full, preds_noaudio, roi_masks)
         # Cast and check before any write: an overflowing or non-finite value must fail the job
-        # Before the dataset copy or the result exists.
+        # before the dataset copy or the result exists.
         storage.brain_bytes(preds_full)
 
         # Frames are for the optional report: cutting or storing them never fails the paid job.
@@ -407,7 +407,7 @@ def _analyse(
             storage.put_dataset(s3, bucket, job_id, object_key)
 
         # The phone copy is only for playback, so it never fails the paid job. Waited for before
-        # The stage, so the claim is checked again after a long wait and before any result write.
+        # the stage, so the claim is checked again after a long wait and before any result write.
         play_copied = play_copy.wait(inference.PLAY_COPY_WAIT_SECONDS)
         stage("saving_result")
         if play_copied:
@@ -570,8 +570,8 @@ def serve():
     aws = cfg["aws"]
     db = dbmod.from_config(cfg)
     # Tribev2 writes each job's extracted features here. In the container ./models is the copy of
-    # The weights SageMaker downloads, which must stay untouched, so use /tmp. Never empty it
-    # While the process runs: exca creates each subfolder once and remembers it.
+    # the weights SageMaker downloads, which must stay untouched, so use /tmp. Never empty it
+    # while the process runs: exca creates each subfolder once and remembers it.
     feature_cache = tempfile.mkdtemp(prefix="neurolens-features-")
     inference.load_model(cfg, feature_cache=feature_cache)
     gpu = inference.gpu_info()

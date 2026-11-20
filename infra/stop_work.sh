@@ -19,8 +19,8 @@ ENDPOINT=$(terraform -chdir="$TERRAFORM_DIR" output -raw gpu_endpoint) || {
   echo "Cannot read gpu_endpoint from Terraform. Is the deployment initialised?" >&2
   exit 1
 }
-# Read the variant from Terraform. TEMPORARY: a state from before the gpu_variant output has
-# no such value, so ask the endpoint; remove this fallback once every stack has been applied.
+# Read the variant from Terraform. If the state has no gpu_variant output (a stack applied
+# before it existed), ask the endpoint.
 VARIANT_MAIN=$(terraform -chdir="$TERRAFORM_DIR" output -raw gpu_variant 2>/dev/null || true)
 if [ -z "$VARIANT_MAIN" ] || [ "$VARIANT_MAIN" = "None" ]; then
   VARIANT_MAIN=$(aws sagemaker describe-endpoint --endpoint-name "$ENDPOINT" \

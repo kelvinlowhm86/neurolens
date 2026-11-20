@@ -127,7 +127,7 @@ def dispatch(
     try:
         billing.record_gpu_wait(db, job_id, datetime.now(UTC) + timedelta(seconds=ttl))
     except Exception:
-        # The dispatch stands: without a recorded wait the job follows the old deadline path.
+        # The dispatch stands: without a recorded wait the job falls back to the plain job deadline.
         logger.exception(f"Could not record the GPU wait for {job_id}")
     logger.info(f"Invoked {job_id} with a {int(ttl)}s queue TTL")
     return "invoked"

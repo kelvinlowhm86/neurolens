@@ -322,8 +322,7 @@ def test_reserve_refuses_a_deleted_account_and_creates_nothing(db, pg):
 def test_account_delete_works_in_cognito_mode_but_is_404_in_dev_mode(
     dev_client, cognito_client, idp, pg, cognito_admin
 ):
-    # SPEC-AMBIGUITY: "404 in dev mode" may be a registered route that refuses or no route at
-    # All; only the answer is asserted.
+    # Dev mode answers 404, whether by refusing or by having no route; only the status is asserted.
     assert delete_account(dev_client, confirm="DELETE").status_code == 404
     user_id = signed_in_user_id(cognito_client, idp, pg)
     assert delete_account(cognito_client, confirm="DELETE").status_code == 200

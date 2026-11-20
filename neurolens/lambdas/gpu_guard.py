@@ -54,7 +54,7 @@ def check(db, *, sagemaker, appscaling, endpoint):
     variant = variants[0] if variants else {}
     instances = variant.get("CurrentInstanceCount", 0)
     # A desired count with no instance yet is a start AWS has not filled (no GPU free); it keeps
-    # Trying, and the GPU would arrive later with nobody waiting for it.
+    # trying, and the GPU would arrive later with nobody waiting for it.
     desired = variant.get("DesiredInstanceCount", 0)
     if instances < 1 and desired < 1:
         return False
@@ -71,7 +71,7 @@ def check(db, *, sagemaker, appscaling, endpoint):
         return False
 
     # Logged before the call: the stuck alarm counts decisions to stop, and a stop still in
-    # Progress from the last run refuses this one.
+    # progress from the last run refuses this one.
     logger.warning(f"GPU_GUARD_STOPPED {instances} {desired}")
     try:
         sagemaker.update_endpoint_weights_and_capacities(

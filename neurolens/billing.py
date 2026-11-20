@@ -30,7 +30,7 @@ OK = "ok"
 # job older than this is dead.
 STALE_AFTER_S = 90
 # The wording of the research-consent box. A wording change needs a new value here and
-# The new text on the page together; old jobs keep the version they agreed to.
+# the new text on the page together; old jobs keep the version they agreed to.
 CONSENT_VERSION = "2026-11-03"
 # A session row older than this (by its last use) no longer signs anybody in.
 SESSION_DAYS = 30
@@ -394,7 +394,7 @@ def _curve_reward(
         return cents, None
     if facts is not None:
         # The server's own measured length only; the page's figure is the user's word. A job
-        # With no measured length cannot prove the match, so it is not paid.
+        # with no measured length cannot prove the match, so it is not paid.
         analysed_ms = job["verified_duration_ms"]
         if analysed_ms is None or abs(facts.duration_s - analysed_ms / 1000) > length_tolerance_s:
             return refuse("length_mismatch")
@@ -844,8 +844,8 @@ def verify_queued(db, job_id, verified_duration_ms, max_duration_s):
         if job is None or job["status"] != QUEUED:
             return "not_queued"
         # The length limit is a product rule, checked before any credit logic, whatever the
-        # Balance (settings.max_duration). Also before recording the duration: a crafted file
-        # Can claim more hours than the INTEGER column holds.
+        # balance (settings.max_duration). Also before recording the duration: a crafted file
+        # can claim more hours than the INTEGER column holds.
         if verified_duration_ms > max_duration_s * 1000:
             reason = "duration_exceeds_max_verified"
             _refund(tx, job_id, job, reason, None)

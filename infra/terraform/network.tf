@@ -3,7 +3,7 @@
 # Only the database lives here: its subnet group needs subnets in at least two availability
 # zones. Nothing else uses the VPC. SageMaker runs in AWS's own network, and the container
 # reaches S3 and the Data API over their public HTTPS endpoints, so there is no NAT Gateway,
-# internet gateway, route table or S3 gateway endpoint any more.
+# internet gateway, route table or S3 gateway endpoint.
 
 resource "aws_vpc" "main" {
   cidr_block           = "10.20.0.0/16"

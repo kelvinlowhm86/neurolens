@@ -55,7 +55,7 @@ def header_duration(path):
 CONTAINERS = {b"moov", b"trak", b"mdia"}
 # Byte offset of the 32-bit duration inside each full box's payload (version 0 layout):
 # Mvhd/mdhd: version+flags, creation, modification, timescale, duration; tkhd: version+flags,
-# Creation, modification, track_ID, reserved, duration.
+# creation, modification, track_ID, reserved, duration.
 DURATION_OFFSET = {b"mvhd": 16, b"mdhd": 16, b"tkhd": 20}
 
 

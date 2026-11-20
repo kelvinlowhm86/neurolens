@@ -80,14 +80,14 @@ Check the region at the top right says **United States (N. Virginia)**; if not, 
 https://us-east-1.console.aws.amazon.com/bedrock/home?region=us-east-1#/model-catalog, search
 `Claude Sonnet 4.6` (made by Anthropic) and open it.
 
-If it asks for use-case details, fill the short form: company/use = university course project
-(NUS); use case = writes a short text summary of a video analysis; internal users only.
+If it asks for use-case details, fill the short form: describe your use (for example: writes a
+short text summary of a video analysis).
 
 Then click **Open in playground** (or Playground, then Chat, and pick Claude Sonnet 4.6), type
 `hi`, and send. Why: the first message switches the model on for the whole account, and the deployer's
 limited user is not allowed to do that switch.
 
-## 5. When the course ends
+## 5. Removing the deployer's access
 
 Once NeuroLens has been taken down, delete the deployer's user (IAM, Users) and the five `neurolens-`
 policies (IAM, Policies, search `neurolens`).

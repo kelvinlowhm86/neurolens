@@ -73,7 +73,7 @@ def _config(dsn):
     cfg["server"] = {"host": "127.0.0.1", "port": WEB_PORT}
     cfg["auth"] = {"mode": "dev", "dev_user_id": "dev-user", "dev_email": "dev@localhost"}
     # Public, read-only YouTube lookups; without the variable, links fall back as on a
-    # Failed lookup.
+    # failed lookup.
     if os.environ.get("NEUROLENS_YOUTUBE_API_KEY"):
         cfg["youtube_api_key"] = os.environ["NEUROLENS_YOUTUBE_API_KEY"]
     return cfg
@@ -171,7 +171,7 @@ def _canned_report(result):
 
 def _canned_comparison(result_a, result_b):
     """A valid comparison for the local stack, built from the two results alone. The
-    model now writes [A]/[B] markers; the routes orient the answer before it is shown."""
+    model writes [A]/[B] markers; the routes orient the answer before it is shown."""
     end_a = min(2, result_a["duration_seconds"] - 1)
     end_b = min(2, result_b["duration_seconds"] - 1)
     return {

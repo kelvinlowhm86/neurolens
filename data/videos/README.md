@@ -23,5 +23,4 @@ tiktok_ZSg5tbDx8.mp4
 tiktok_ZSg5tvxY9.mp4
 ```
 
-`_test_clips/` holds test clips, such as `sintel_loop_119s_480p.mp4` (the 119 s clip) and short
-clips like `ok_27s.mp4`. The folder is local (git-ignored).
+Optional local test clips can go in `_test_clips/` (git-ignored).

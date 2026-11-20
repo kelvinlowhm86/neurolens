@@ -200,7 +200,7 @@ resource "aws_cognito_user_pool_domain" "users" {
 # It runs outside the VPC: it reaches Cognito, Parameter Store, S3 and the Data API over AWS's
 # public endpoints, so it never depends on a NAT Gateway. Its role is in web_iam.tf. The zip is
 # too large for a direct Terraform upload with the PDF code, so it lives in the bucket and the
-# Function reads it from there. Build it first with infra/build_web_lambda.sh; after
+# function reads it from there. Build it first with infra/build_web_lambda.sh; after
 # that infra/deploy_web.sh ships code to the same key, so an apply for anything else never needs
 # a build and never changes the running code.
 
@@ -231,7 +231,7 @@ locals {
   }
 }
 
-# Someone asked for free minutes: the database holds the request, this topic only emails
+# Someone asked for free minutes: the database holds the request, this topic only emails.
 # The operator confirms the subscription email once after apply. No standing cost.
 resource "aws_sns_topic" "access_requests" {
   name = "neurolens-access-requests"

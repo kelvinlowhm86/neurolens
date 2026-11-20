@@ -34,8 +34,8 @@ These are the steps only a person can do. After them, one command creates the st
    ```bash
    infra/setup.sh
    ```
-   It lists every missing prerequisite first and changes nothing if one is missing. Then it creates the Amazon S3 (object storage) state bucket and `backend.hcl` (section 1), builds the web zip and both layers, initialises Terraform and applies (section 2), uploads the model files to `model-data/` when that prefix is empty (section 2b), applies the database schema (section 2e), stores the Cognito client secret when missing and deploys the site (section 2f), then builds the GPU image, puts its digest in `terraform.tfvars` and applies again (section 2b). It refuses the endpoint apply while `model-data/` is empty, because a failed GPU start bills for about 30 minutes and cannot be cancelled. Confirm both Amazon Simple Notification Service (SNS, AWS's notification service) confirmation emails (`alert_email`). A second run skips what is already done.
-4. Sign-in. The first apply creates the Amazon Cognito (AWS's sign-in service) client; add `google_redirect_uri` to the Google OAuth client (section 2f). `setup.sh` has already stored the client secret and deployed the site. Open `sign_in_test_url` and test Google and email sign-in.
+   It lists every missing prerequisite first and changes nothing if one is missing. Then it creates the Amazon S3 (object storage) state bucket and `backend.hcl` (section 1), builds the web zip and both layers, initialises Terraform and applies (section 2), uploads the model files to `model-data/` when that prefix is empty (section 2b), applies the database schema (section 2c), stores the Cognito client secret when missing and deploys the site (section 2a), then builds the GPU image, puts its digest in `terraform.tfvars` and applies again (section 2b). It refuses the endpoint apply while `model-data/` is empty, because a failed GPU start bills for about 30 minutes and cannot be cancelled. Confirm both Amazon Simple Notification Service (SNS, AWS's notification service) confirmation emails (`alert_email`). A second run skips what is already done.
+4. Sign-in. The first apply creates the Amazon Cognito (AWS's sign-in service) client; add `google_redirect_uri` to the Google OAuth client (section 2a). `setup.sh` has already stored the client secret and deployed the site. Open `sign_in_test_url` and test Google and email sign-in.
 5. Check. Do section 3: bucket lifecycle and browser upload rules, endpoint, scaling target, and the Amazon CloudWatch (AWS's monitoring service) dashboard named `neurolens`. Section 5 is a work session; section 6 is teardown.
 
 In the code: `infra/iam/ACCOUNT_OWNER.md`, `infra/iam/README.md`, `infra/terraform/README.md`, `infra/terraform/backend.hcl.example`, `infra/terraform/terraform.tfvars.example`, `infra/setup.sh`, `infra/upload_model_data.py`, `infra/apply_schema.py`, `infra/check_aurora.py`, `infra/deploy_web.sh`, `infra/build_image.sh`
@@ -159,15 +159,15 @@ In the code: `infra/terraform/README.md`, `infra/terraform/dashboard.tf`, `infra
 
 ## Teardown
 
-Run `infra/teardown.sh` in each account, in order, finishing one account before the next. Then do the steps it cannot do. Nothing is deleted on a date; do this only when the team decides.
+Run `infra/teardown.sh` with the deployment's profile, then do the steps it cannot do.
 
-1. Tear down the stack. From the repo root, with that account's profile:
+1. Tear down the stack. From the repo root, with the deployment's profile:
    ```bash
    infra/teardown.sh
    ```
    It asks you to type the account ID; a wrong or empty answer changes nothing. It refuses when the AWS caller and the Terraform state are different accounts, or when it cannot read Terraform's state. It stops the GPU and waits for `ALL STOPPED`, destroys the stack, deletes the four hand-made Parameter Store secrets, then checks for leftovers. A failed stop or destroy ends it before the next step. It prints `TEARDOWN COMPLETE` only when nothing is left; it never deletes the state bucket or the deploy user. If a run stopped after the destroy, run it again: when Terraform's state is empty it says the stack is already destroyed, asks for the same confirmation, and only deletes the four secrets and checks for leftovers.
 2. Clean the outside accounts. Once: delete the Google OAuth client, revoke the HuggingFace token, and delete the YouTube API key or its Google Cloud project.
-3. Remove the operator's access. In each account, the account owner deletes the deploy user and the five `neurolens-*` policies; the deploy user cannot delete itself. Then delete the Terraform state bucket: delete every object version and delete marker, then delete the bucket. It holds stored state, including secrets. Remove the operator's profile from every laptop that used it (`~/.aws/credentials` and `~/.aws/config`).
-4. Clean each laptop. Delete `.env`, `infra/terraform/backend.hcl`, `infra/terraform/terraform.tfvars` and `infra/terraform/.terraform/`. Remove the local test database with `docker rm -fv neurolens-test-pg`. Delete a stored HuggingFace token if one exists (`~/.cache/huggingface/token`). The team's sample videos and `data/output/` may stay.
+3. Remove the operator's access. The account owner deletes the deploy user and the five `neurolens-*` policies; the deploy user cannot delete itself. Then delete the Terraform state bucket: delete every object version and delete marker, then delete the bucket. It holds stored state, including secrets. Remove the operator's profile from every laptop that used it (`~/.aws/credentials` and `~/.aws/config`).
+4. Clean the laptop. Delete `.env`, `infra/terraform/backend.hcl`, `infra/terraform/terraform.tfvars` and `infra/terraform/.terraform/`. Remove the local test database with `docker rm -fv neurolens-test-pg`. Delete a stored HuggingFace token if one exists (`~/.cache/huggingface/token`). The team's sample videos and `data/output/` may stay.
 
 In the code: `infra/teardown.sh`, `infra/stop_work.sh`

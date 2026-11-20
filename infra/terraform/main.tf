@@ -171,7 +171,7 @@ resource "aws_sqs_queue" "jobs" {
   sqs_managed_sse_enabled = true
 
   # A message that fails twice goes to the dead-letter queue, whose handler refunds the job. No automatic retry on the GPU: the container and the error handler settle a
-  # Failed request.
+  # failed request.
   redrive_policy = jsonencode({
     deadLetterTargetArn = aws_sqs_queue.jobs_dlq.arn
     maxReceiveCount     = local.config.queue.max_receives

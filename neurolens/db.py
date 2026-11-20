@@ -78,7 +78,7 @@ class PostgresDatabase:
         from psycopg.rows import dict_row
 
         # The connection's context manager commits on normal exit, rolls back on an exception,
-        # And closes the connection either way.
+        # and closes the connection either way.
         with psycopg.connect(self._dsn, row_factory=dict_row) as conn:
             yield _PostgresTransaction(conn)
 
@@ -183,7 +183,7 @@ class DataApiDatabase:
                 return resp["transactionId"]
             except ClientError as exc:
                 # While resuming, Aurora answers either code. Retrying BeginTransaction is
-                # Safe: it runs no statement.
+                # safe: it runs no statement.
                 if exc.response.get("Error", {}).get("Code") not in _WAKING_CODES:
                     raise
                 remaining = deadline - time.monotonic()

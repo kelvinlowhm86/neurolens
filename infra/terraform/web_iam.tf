@@ -75,7 +75,7 @@ locals {
       },
       {
         # Deleting a video or the whole account removes its upload, result and research
-        # Prefix. Missing keys are fine.
+        # prefix. Missing keys are fine.
         Sid    = "DeleteJobFiles"
         Effect = "Allow"
         Action = "s3:DeleteObject"

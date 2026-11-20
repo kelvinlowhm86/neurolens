@@ -292,7 +292,7 @@ INVARIANT_QUERIES = {
             WHERE j.user_id = b.user_id AND j.status IN ('queued', 'processing')), 0)
     """,
     # 4. done: exactly one capture row and no refund; failed: exactly one refund row and no
-    #    Capture; a job still open has neither (only the two terminal functions write them)
+    #    capture; a job still open has neither (only the two terminal functions write them)
     "terminal job without exactly one outcome": """
         WITH c AS (
             SELECT j.job_id, j.status,
@@ -454,7 +454,7 @@ class RowLock:
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
             # A second waiter queues behind the first one's tuple lock, not the holder's, so
-            # Count every session of this database that waits on any lock (tests run serially).
+            # count every session of this database that waits on any lock (tests run serially).
             row = self._pg.one(
                 "SELECT count(*) AS n FROM pg_stat_activity "
                 "WHERE datname = current_database() AND cardinality(pg_blocking_pids(pid)) > 0"

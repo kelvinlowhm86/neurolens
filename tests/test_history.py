@@ -51,7 +51,7 @@ JOB_KEYS = {
 DAY = 24 * 3600
 
 # Format 2: three with-audio seconds, two no-audio seconds. The numbers are awkward on
-# Purpose (a float that is whole, an int, tiny and long decimals).
+# purpose (a float that is whole, an int, tiny and long decimals).
 SIGNALS = {
     "faces": [0.4306, 1e-05, -0.5],
     "bodies": [0.0, 0.148, 0.25],

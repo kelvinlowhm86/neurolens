@@ -25,7 +25,7 @@ Time-weighted monthly averages, across the four zones:
 Lowest price seen: $1.349 (`xlarge`) and $1.786 (`2xlarge`), each for short spells only.
 
 ## `worker_launch_attempts_us-east-1.tsv`
-Every launch the `neurolens-workers` Auto Scaling group recorded, with time (UTC), result, zone and AWS's message.
+Every launch the `neurolens-workers` Auto Scaling group (the earlier self-managed EC2 design, git tag `custom-gpu`) recorded, with time (UTC), result, zone and AWS's message.
 - The 4 successful launches on 2026-10-02 are the `t3.large` CPU wiring rehearsal (Spot).
 - Every `g6e.xlarge` Spot launch failed for lack of capacity: 11 attempts on 2026-10-02 22:13-22:22 UTC and 15 on 2026-10-03 05:59-06:16 UTC (13:59-14:16 in Singapore, about 2 a.m. in us-east-1). Each round of attempts covered all four zones.
 

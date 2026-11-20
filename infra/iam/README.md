@@ -37,7 +37,7 @@ Terraform sets `permissions_boundary` on every role it creates, or AWS refuses t
 3. IAM, Users, `neurolens-deploy` (or whatever the deploy user is called), Permissions, Add
    permissions, Attach policies directly: tick `neurolens-deploy-services`, `neurolens-deploy-compute`,
    `neurolens-deploy-web` and `neurolens-quota-requests`.
-4. Only then remove any other policy on the user (the old inline `neurolens-deploy-scoped`, or a broad
+4. Only then remove any other policy on the user (for example an older inline policy, or a broad
    one such as AdministratorAccess), so it can touch NeuroLens only.
 
 Edits later: open the policy, Edit, paste the new file. AWS keeps up to five versions.

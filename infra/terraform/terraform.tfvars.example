@@ -27,7 +27,7 @@ alert_email = "you@example.com"
 # idle_stop_minutes = 7       # idle time before the last GPU stops
 # log_retention_days = 90     # while developing; 14 once live
 
-# Required: sign-in (section 2f).
+# Required: sign-in (section 2a).
 # The Cognito page prefix (unique in the region, lowercase, no "aws", "amazon" or "cognito"),
 # e.g. "neurolens-<something of yours>":
 auth_domain_prefix = "neurolens-REPLACE-ME"

@@ -8,7 +8,7 @@ terraform {
       version = "~> 6.28"
     }
     # SageMaker instance pools cannot be expressed by the aws provider; the endpoint
-    # Configuration alone uses Cloud Control.
+    # configuration alone uses Cloud Control.
     awscc = {
       source  = "hashicorp/awscc"
       version = "~> 1.107"
@@ -34,7 +34,7 @@ terraform {
 
 # The region is one setting, and it is us-east-1: the hand-applied IAM policies, the role boundary
 # and the worker image's pinned base image name it explicitly, and the state bucket above stays
-# there. The g6e GPU family used here is not offered in Singapore.
+# there. Nearer regions such as Singapore do not offer g6e.
 provider "aws" {
   region = var.region
 

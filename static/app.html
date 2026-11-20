@@ -636,7 +636,6 @@
   <span class="header-meta" id="headerMeta"></span>
   <div class="spacer"></div>
   <a class="btn-ghost" id="boothFeedbackBtn" href="https://docs.google.com/forms/d/e/1FAIpQLSc-jfz7EDENV7lkHziErGTBtv7SsN9sda7_wnjoeIhs8LaP4Q/viewform" target="_blank" rel="noopener" hidden>Feedback</a>
-  <a class="btn-ghost" id="boothVoteBtn" href="https://tinyurl.com/steps29v" target="_blank" rel="noopener" hidden>Vote</a>
   <button class="btn-ghost" id="boothQrBtn" type="button" hidden>Admin</button>
   <span class="credit" id="balance"></span>
   <div class="account-wrap" id="accountWrap" hidden>
@@ -1899,7 +1898,6 @@ function showSignedOut() {
   $('accountWrap').hidden = true;
   $('boothQrBtn').hidden = true;
   $('boothFeedbackBtn').hidden = true;
-  $('boothVoteBtn').hidden = true;
   document.body.classList.remove('booth-guest');
   $('balance').textContent = '';
   $('topUpload').textContent = 'Sign in';
@@ -1920,7 +1918,6 @@ function showApp(meJson) {
   $('accountWrap').hidden = guest;
   $('boothQrBtn').hidden = !me.booth_admin;
   $('boothFeedbackBtn').hidden = !guest;
-  $('boothVoteBtn').hidden = !guest;
   document.body.classList.toggle('booth-guest', guest);
   if (me.booth_admin && !boothNextPass) prefetchNextBoothQr(true);
   $('topUpload').innerHTML = 'Upload <span class="bar-hide-sm">a video</span>';

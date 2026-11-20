@@ -48,7 +48,7 @@ resource "aws_rds_cluster" "db" {
   }
 
   # 1 day of automatic backups (free at this size). `terraform destroy` works without a manual step
-  # And really deletes the data (teardown relies on this).
+  # and really deletes the data (teardown relies on this).
   backup_retention_period  = 1
   skip_final_snapshot      = true
   delete_automated_backups = true

@@ -232,7 +232,7 @@ In the code: `infra/terraform/sagemaker.tf`, `docs/evidence/README.md`
 
 The page shows signed means, with zero meaning typical film or TV viewing. There is no absolute value and no rescaling, and the muted series are cut to the shared length of the two passes.
 
-Why: TRIBE v2's training data are fMRI responses standardised per cortical point, so zero is the model's built-in reference and two videos can be compared directly. The value rule is recorded in the repo's agent instructions, and the extraction is in the response module.
+Why: TRIBE v2's training data are fMRI responses standardised per cortical point, so zero is the model's built-in reference and two videos can be compared directly.
 
 The cost: The numbers are relative to typical viewing, not absolute brain activity, and they are not a forecast of views, retention or sales.
 

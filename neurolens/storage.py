@@ -14,7 +14,7 @@ from botocore.exceptions import ClientError
 logger = logging.getLogger("neurolens")
 
 # The extension of the stored object comes from the declared content type, never from the
-# User's filename.
+# user's filename.
 CONTENT_TYPE_EXTENSIONS = {
     "video/mp4": ".mp4",
     "video/quicktime": ".mov",
