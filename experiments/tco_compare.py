@@ -142,10 +142,13 @@ def onprem_per_video(assumptions, mean_run_seconds):
 
 
 def breakeven_videos(cloud_per_video_usd, onprem_per_video_usd, cloud_fixed_usd, onprem_fixed_usd):
-    """Videos per month where monthly costs meet, or None if cloud is never cheaper per video."""
-    if cloud_per_video_usd <= onprem_per_video_usd:
+    """The positive videos per month where monthly costs meet, or None when one option is
+    cheaper at every volume."""
+    per_video = cloud_per_video_usd - onprem_per_video_usd
+    if per_video == 0:
         return None
-    return (onprem_fixed_usd - cloud_fixed_usd) / (cloud_per_video_usd - onprem_per_video_usd)
+    breakeven = (onprem_fixed_usd - cloud_fixed_usd) / per_video
+    return breakeven if breakeven > 0 else None
 
 
 def onprem_capacity(assumptions, mean_run_seconds):
@@ -241,7 +244,13 @@ def write_markdown(path, rows, skipped, assumptions):
         notes = []
         if breakeven is None:
             breakeven_text = "none"
-            notes.append("cloud is not cheaper per video")
+            cheaper = (
+                "cloud"
+                if row["cloud_per_video_usd"] <= row["onprem_per_video_usd"]
+                and row["cloud_fixed_monthly_usd"] <= row["onprem_fixed_monthly_usd"]
+                else "on-premise"
+            )
+            notes.append(f"{cheaper} is cheaper at every volume")
         else:
             breakeven_text = f"{breakeven:,.0f}"
         if row["capacity_warning"]:

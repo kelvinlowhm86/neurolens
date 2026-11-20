@@ -1,7 +1,8 @@
 """Import hygiene for the database layer, billing and the Lambdas' modules.
 
 These modules import without numpy (the Lambda zip has none), psycopg (only the PostgreSQL
-backend needs it, imported lazily inside the class) or neurolens.inference.
+backend needs it, imported lazily inside the class) or the model stack (neurolens.inference,
+torch, nilearn, huggingface_hub).
 """
 
 import json
@@ -12,7 +13,14 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-FORBIDDEN = ["numpy", "psycopg", "neurolens.inference", "torch"]
+FORBIDDEN = [
+    "numpy",
+    "psycopg",
+    "neurolens.inference",
+    "torch",
+    "nilearn",
+    "huggingface_hub",
+]
 MODULES = [
     "neurolens.db",
     "neurolens.billing",
@@ -21,6 +29,10 @@ MODULES = [
     "neurolens.settings",
     "neurolens.lambdas.dlq_handler",
     "neurolens.lambdas.reaper",
+    "neurolens.lambdas.dispatcher",
+    "neurolens.lambdas.gpu_guard",
+    "neurolens.lambdas.gpu_failed",
+    "neurolens.lambdas.report",
 ]
 
 

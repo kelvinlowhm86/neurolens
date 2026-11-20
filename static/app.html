@@ -681,7 +681,7 @@
         </button>
         <div class="box" id="noCreditPanel">
           <div id="accessGuest" hidden>
-            <p>You've used your 2-minute demo pass. Ask the NeuroLens team if you'd like to try another clip.</p>
+            <p>You've used your demo pass. Ask the NeuroLens team if you'd like to try another clip.</p>
           </div>
           <div id="accessFunded" hidden>
             <p>You've used your credit. Add a shared video's retention curve to get its credit back, or ask the NeuroLens team for more.</p>
@@ -2608,7 +2608,7 @@ let batchItems = [], batchSeq = 0;
 
 function maxBatchFiles() {
   const n = limits && limits.max_batch_files;
-  return Number.isFinite(n) && n > 0 ? n : 5;
+  return Number.isFinite(n) && n > 0 ? n : Infinity;
 }
 
 function openBatchDialog(files) {
@@ -4142,13 +4142,19 @@ function videoLinkPlatform(text) {
     return null;
   }
   const host = url.hostname.toLowerCase();
-  if (/(^|\.)youtu\.be$/.test(host) || /(^|\.)youtube\.com$/.test(host)) {
-    return /(?:watch\?.*v=|youtu\.be\/|\/shorts\/|\/live\/|\/embed\/)/.test(url.pathname + url.search)
+  if (/(^|\.)youtu\.be$/.test(host)) {
+    return url.pathname.length > 1 ? 'youtube' : null;
+  }
+  if (/(^|\.)youtube\.com$/.test(host)) {
+    return /(?:watch\?.*v=|\/shorts\/|\/live\/|\/embed\/)/.test(url.pathname + url.search)
       ? 'youtube'
       : null;
   }
-  if (/(^|\.)facebook\.com$/.test(host) && !url.pathname.startsWith('/reel/')) {
-    return /(?:\/videos\/|\/watch\/?\?v=|\/video\.php\?v=)/.test(url.pathname + url.search)
+  if (/(^|\.)fb\.watch$/.test(host)) {
+    return 'facebook';
+  }
+  if (/(^|\.)facebook\.com$/.test(host)) {
+    return /(?:\/videos\/|\/watch\/?\?v=|\/video\.php\?v=|\/reel\/|\/share\/[rv]\/)/.test(url.pathname + url.search)
       ? 'facebook'
       : null;
   }
@@ -4868,7 +4874,7 @@ function drawChart(host, { lines, range, height = 200, axisLabels = false, dark 
   });
 
   if (scope === 'main' || scope === 'strips' || scope === 'strips-parts' || scope === 'retention-strip') {
-    // Linked hover (Chunk 3 C): the same time on the main chart, the strips and the brain.
+    // Linked hover: the same time on the main chart, the strips and the brain.
     const hoverLine = document.createElement('div');
     hoverLine.className = 'chart-hover-line';
     hoverLine.style.bottom = scope === 'main' ? '16px' : '0';
@@ -5263,7 +5269,7 @@ function scheduleFilmStrip() {
   });
 }
 
-// Chunk 3 E: show/hide the muted curve by fading the existing line in or out over 250ms;
+// Show/hide the muted curve by fading the existing line in or out over 250ms;
 // if the axis range would change, fall back to a full rebuild (returns false).
 function morphMutedToggle() {
   const rec = mainChartRecord;
@@ -5621,7 +5627,7 @@ function clearCompareChart() {
   $('compareDiffs').replaceChildren();
 }
 
-// Chunk 3 E: move the two curves to their new values over 250ms instead of rebuilding,
+// Move the two curves to their new values over 250ms instead of rebuilding,
 // when the layout is unchanged (same span, no diff bands). Any change in structure rebuilds.
 function morphCompareChart(lines, toRange, span, hasBands) {
   const rec = compareChartRecord;

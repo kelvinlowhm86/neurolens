@@ -346,35 +346,6 @@ def test_a_job_deleted_during_the_call_loses_the_report_object(aws, db, pg, make
 # ---------------------------------------------------------------- report_prompt.build_request
 
 
-def _walk(value):
-    yield value
-    if isinstance(value, dict):
-        for item in value.values():
-            yield from _walk(item)
-    elif isinstance(value, list):
-        for item in value:
-            yield from _walk(item)
-
-
-def _json_blocks(content):
-    for block in content:
-        if isinstance(block, dict) and block.get("type") == "text":
-            try:
-                yield json.loads(block["text"])
-            except (TypeError, ValueError):
-                continue
-
-
-def _numeric_lists(value):
-    return [
-        item
-        for item in _walk(value)
-        if isinstance(item, list)
-        and item
-        and all(isinstance(entry, int | float) and not isinstance(entry, bool) for entry in item)
-    ]
-
-
 def test_build_request_puts_each_image_after_its_second_label():
     from neurolens.report_prompt import build_request
 

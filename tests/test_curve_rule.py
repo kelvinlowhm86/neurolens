@@ -1,9 +1,8 @@
 """One curve rule.
 
-A curve pays when every other rule passes and the checked video has at least 1,000 views. There
-is no one-week wait any more: a young video with enough views pays at once, and a hidden or
-unknown count skips the views check as before. No answer carries a reward date, and the old
-`curve_reward_min_days` setting is gone. Money and snapshots are read directly from PostgreSQL.
+A curve pays when every other rule passes and the checked video has at least 1,000 views. A young
+video with enough views pays at once, and a hidden or unknown count skips the views check. No
+answer carries a reward date. Money and snapshots are read directly from PostgreSQL.
 """
 
 import json
@@ -390,12 +389,3 @@ def test_the_history_preview_still_ignores_the_view_count(db, pg):
 
     assert row["curve_reward_cents"] == PRICE_CENTS
     assert row["curve_rewarded"] is False
-
-
-def test_the_week_setting_is_gone():
-    from neurolens import settings
-
-    research = settings.load_settings().get("research", {})
-
-    assert "curve_reward_min_days" not in research
-    assert not hasattr(billing, "DEFAULT_REWARD_MIN_DAYS")

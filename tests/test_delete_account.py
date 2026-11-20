@@ -1,8 +1,9 @@
 """Account deletion.
 
-`billing.delete_account` (rows gone, other users intact, refused while active, the lock against a
-racing `reserve`) and `POST /api/account/delete` (confirmation, files and rows, one Cognito delete
-per Cognito identity, a missing user counts as done, failure logging, and the stale-session 401).
+`billing.delete_account` (user and jobs marked deleted, other users intact, refused while active,
+the lock against a racing `reserve`) and `POST /api/account/delete` (confirmation, files and rows,
+one Cognito delete per Cognito identity, a missing user counts as done, failure logging, and the
+stale-session 401).
 """
 
 import logging

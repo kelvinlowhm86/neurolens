@@ -107,7 +107,7 @@ def _first_transcribing_s(boot, jobs):
         return None
     starts = []
     for job in jobs:
-        text = job.get("transcribing_utc") or job.get("transcribing_start_utc")
+        text = job.get("transcribing_utc")
         moment = _parse(text) if text else None
         if moment is not None and moment >= ready:
             starts.append(moment)

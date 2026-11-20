@@ -2,9 +2,8 @@
 
 Covers where the cold-start rows come from: Application Auto Scaling's scaling activities,
 the container's boot records (`container_start_utc`, `model_loaded_utc`, `warmup_done_utc`,
-`ready_utc`) and the first job's `transcribing` stage. The CloudWatch export's series become the
-endpoint backlog and its instance count, and a run's manifest records the image digest instead
-of an AMI id. The unchanged latency scripts keep their pure-function tests.
+`ready_utc`) and the first job's `transcribing` stage. A run's manifest records the image digest
+instead of an AMI id. The unchanged latency scripts keep their pure-function tests.
 """
 
 import importlib.util
@@ -23,7 +22,6 @@ EXPERIMENTS = REPO_ROOT / "experiments"
 MS_COLUMNS = [
     "upload_ms",
     "queue_wait_ms",
-    "downloading_ms",
     "transcribing_ms",
     "inference_full_ms",
     "inference_noaudio_ms",
@@ -44,10 +42,6 @@ def at(hh, mm, ss, day=14):
     return datetime(2026, 10, day, hh, mm, ss, tzinfo=UTC)
 
 
-def text(name):
-    return (EXPERIMENTS / name).read_text()
-
-
 # ---------------------------------------------------------------- cold_start.py
 
 
@@ -64,7 +58,17 @@ def test_cold_start_command_line_takes_since_and_run_id():
     assert "--instance-type" in proc.stdout
 
 
-# ---------------------------------------------------------------- export_cloudwatch.py
+def test_cold_start_reads_the_transcribing_time_the_load_generator_writes():
+    cold_start = load("cold_start")
+    boot = {"ready_utc": "2026-10-14T03:20:00Z"}
+    jobs = [
+        {"transcribing_utc": "2026-10-14T03:20:30Z"},
+        {"transcribing_utc": "2026-10-14T03:19:00Z"},
+        {"transcribing_utc": ""},
+    ]
+
+    assert cold_start._first_transcribing_s(boot, jobs) == 30
+    assert '"transcribing_utc"' in (EXPERIMENTS / "locustfile.py").read_text()
 
 
 # ---------------------------------------------------------------- finish_run.py
@@ -206,7 +210,6 @@ OLD_STATUS_OBJECT = {
     "stage": "extracting_roi",
     "updated_at": "2026-10-14T03:26:40Z",
     "stages": [
-        {"stage": "downloading", "at": "2026-10-14T03:22:10Z"},
         {"stage": "transcribing", "at": "2026-10-14T03:22:12Z"},
         {"stage": "inference_full", "at": "2026-10-14T03:22:41Z"},
         {"stage": "inference_noaudio", "at": "2026-10-14T03:25:02Z"},
@@ -232,8 +235,7 @@ def test_latency_run_stage_durations_are_the_same_from_the_status_endpoint():
     from_endpoint = latency_run.stage_durations_ms(STATUS_ENDPOINT_RESPONSE, upload_end)
     assert from_endpoint == latency_run.stage_durations_ms(OLD_STATUS_OBJECT, upload_end)
     assert from_endpoint == {
-        "queue_wait_ms": 6000,
-        "downloading_ms": 2000,
+        "queue_wait_ms": 8000,
         "transcribing_ms": 29000,
         "inference_full_ms": 141000,
         "inference_noaudio_ms": 88000,

@@ -32,8 +32,9 @@ terraform {
   }
 }
 
-# The region is one setting: us-east-1 by default, because the g6e GPU family used here is
-# not offered in Singapore. The state bucket above stays in us-east-1 whatever this is.
+# The region is one setting, and it is us-east-1: the hand-applied IAM policies, the role boundary
+# and the worker image's pinned base image name it explicitly, and the state bucket above stays
+# there. The g6e GPU family used here is not offered in Singapore.
 provider "aws" {
   region = var.region
 

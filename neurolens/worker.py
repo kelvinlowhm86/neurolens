@@ -420,7 +420,10 @@ def _analyse(
         else:
             logger.error(f"PLAY_COPY_FAILED {job_id}: no phone copy")
         if thumbnail is not None:
-            storage.put_thumbnail(s3, bucket, job_id, thumbnail)
+            try:
+                storage.put_thumbnail(s3, bucket, job_id, thumbnail)
+            except Exception:
+                logger.exception(f"THUMBNAIL_FAILED {job_id}")
         storage.put_brain(s3, bucket, job_id, preds_full)
         published = storage.put_result(s3, bucket, job_id, result)
         try:

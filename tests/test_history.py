@@ -2,7 +2,7 @@
 rule and 30-day `result_available`, the CSV export and `neurolens.results.to_csv`, the result
 routes' exact not-available errors (ownership checked before any S3 call), the crash window,
 presign refused while GPU work is paused (reading the SageMaker scalable target, failing
-closed), 503 `database_waking` within the web app's 45 s budget, and /api/samples gone.
+closed) and 503 `database_waking` within the web app's 45 s budget.
 
 History, CSV and result tests run in dev mode, which is always signed in.
 """

@@ -11,10 +11,13 @@ Money and snapshots are read directly from PostgreSQL (`pg`); time moves by chan
 """
 
 import json
+import re
+import shutil
+import subprocess
 import uuid
 
 import pytest
-from conftest import MIGRATIONS, RESEARCH, REWARD, WEB_USER_ID
+from conftest import MIGRATIONS, REPO_ROOT, RESEARCH, REWARD, WEB_USER_ID
 from neurolens import billing, pricing, results, storage
 
 STARTER_CENTS = 10_000
@@ -559,6 +562,37 @@ def test_the_database_refuses_two_jobs_with_the_same_rewarded_link(db, pg):
     )
     assert pg.job(first)["curve_reward_ref"] is None
     assert pg.job(second)["curve_reward_ref"] is None
+
+
+# ---------------------------------------------------------------- the page's link gate
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="node is not installed")
+@pytest.mark.parametrize(
+    ("link", "platform"),
+    [
+        ("https://youtu.be/dQw4w9WgXcQ", "youtube"),
+        ("youtu.be/dQw4w9WgXcQ", "youtube"),
+        ("https://fb.watch/AbCdEf/", "facebook"),
+        ("https://www.facebook.com/reel/1234567890", "facebook"),
+        ("https://www.facebook.com/MyPage/videos/1234567890", "facebook"),
+    ],
+)
+def test_the_page_sends_these_links_to_the_server(link, platform, tmp_path):
+    html = (REPO_ROOT / "static" / "app.html").read_text()
+    match = re.search(r"function videoLinkPlatform\(text\) \{.*?\n\}", html, re.S)
+    assert match, "static/app.html has no videoLinkPlatform function"
+    script = tmp_path / "gate.mjs"
+    script.write_text(
+        match.group(0) + f"\nconsole.log(JSON.stringify(videoLinkPlatform({json.dumps(link)})));\n"
+    )
+
+    proc = subprocess.run(
+        [shutil.which("node"), str(script)], capture_output=True, text=True, check=False
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    assert json.loads(proc.stdout) == platform
 
 
 # ---------------------------------------------------------------- list_jobs: the reward date

@@ -16,7 +16,6 @@ from neurolens import billing, storage
 from neurolens.db import PostgresDatabase
 
 OTHER_USER = "other-user"
-OTHER_EMAIL = f"{OTHER_USER}@example.com"
 ENDPOINT = "neurolens-gpu"
 MAX_UPLOAD_BYTES = 300_000_000
 MAX_S = 120

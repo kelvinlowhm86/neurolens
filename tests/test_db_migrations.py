@@ -1,7 +1,5 @@
 """Database layer: neurolens.db's PostgreSQL backend and the migrations, on a real PostgreSQL 16
 through NEUROLENS_TEST_DSN.
-
-The Data API backend has no scripted-reply tests: infra/check_aurora.py checks it on Aurora.
 """
 
 import re

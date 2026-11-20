@@ -101,7 +101,7 @@ export function createBrainView(host, message) {
 
   let rows = null, rowCount = 0, second = 0, range = null;
   let ready = false, meshFailed = false, meshPromise = null;
-  let renderer, scene, camera, controls, geometry, colourAttr, baseColour, parents, cortexMask;
+  let renderer, scene, camera, controls, geometry, colourAttr, baseColour, parents, noCortex;
   let skeleton = null;
   let sweep = null, swept = false;
   let lastPaint = -1;
@@ -198,7 +198,7 @@ export function createBrainView(host, message) {
       const vb = rows[a0 * VERTICES + parentB] + (rows[b * VERTICES + parentB] - rows[a0 * VERTICES + parentB]) * u;
       const value = (va + vb) / 2;
       let r = baseColour[3 * i], g = baseColour[3 * i + 1], bl = baseColour[3 * i + 2];
-      if (!cortexMask[i]) {
+      if (!noCortex[i]) {
         const shade = Math.max(0, Math.min(1, value / heatRange));
         const w = Math.min(1, Math.max(0, (shade - 0.04) / 0.12));  // a short fade, so a hot area has a clear dark-red edge
         if (w > 0) {
@@ -233,7 +233,7 @@ export function createBrainView(host, message) {
       fetch(HEAD_URL).then(res => res.ok ? res.arrayBuffer() : null).catch(() => null),
     ]);
     const mesh = parseMesh(meshBuffer);
-    cortexMask = mesh.noCortex;
+    noCortex = mesh.noCortex;
     parents = mesh.parents;
 
     renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });

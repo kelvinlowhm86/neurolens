@@ -1,6 +1,6 @@
 # Sample videos
 
-This directory is gitignored except this file and `SOURCES.md`; the clips themselves are about 96 MB.
+This directory is gitignored except this file and `SOURCES.md`; the clips themselves are about 92 MB.
 `data/samples.json` holds the ten public samples (each with its inline result, summary and
 report) and four stored comparisons (two sample pairs, each in both orders), and the thumbnails under `data/output/` are pushed, so the dashboard renders its charts on
 a fresh clone.

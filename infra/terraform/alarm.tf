@@ -15,12 +15,6 @@ resource "aws_sns_topic_subscription" "alerts_email" {
   endpoint  = var.alert_email
 }
 
-# Forgotten-database alarm: awake in more than 30% of the minutes of each of 6 hours in a
-# row means something keeps it awake (a forgotten stop_work.sh, an open tab, a retrying Lambda):
-# about $2.90 a day at 1 ACU (estimate). The metric reads 0 while paused, so the hourly 70th percentile of
-# its per-minute values is above 0 exactly when it was awake for over 30% of the hour, whatever
-# capacity it ran at. A reaper wake (about 11 minutes, measured) stays below that; a caller every
-# 12 minutes (about 45%) and a held minimum (100%) are above it.
 # ─── GPU guard alarms ───────────────────────────────────────────
 
 # The guard logs GPU_GUARD_STOPPED only when scale-in did not stop the GPU. The alarm emails so a

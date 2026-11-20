@@ -306,6 +306,40 @@ def test_a_missing_or_bad_link_or_answer_is_400_and_stores_nothing(
     assert retention_keys(aws, job_id) == []
 
 
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"views": ["lt_1k"]},
+        {"views": {"lt_1k": 1}},
+        {"published": ["week"]},
+        {"published": {"week": 1}},
+        {"same_cut": ["same"]},
+        {"same_cut": {"same": 1}},
+    ],
+    ids=[
+        "views_list",
+        "views_dict",
+        "published_list",
+        "published_dict",
+        "same_cut_list",
+        "same_cut_dict",
+    ],
+)
+def test_a_structured_answer_value_is_400_and_stores_nothing(
+    db, aws, make_cfg, tmp_path, pg, change
+):
+    client = app_for(aws, db, make_cfg, tmp_path)
+    job_id, _ = make_job(db)
+    body = retention_body()
+    body.update(change)
+
+    resp = client.post(f"/api/jobs/{job_id}/retention", json=body)
+
+    assert resp.status_code == 400
+    assert snapshot_rows(pg, job_id) == []
+    assert retention_keys(aws, job_id) == []
+
+
 def test_a_facebook_report_for_another_video_is_refused(db, aws, make_cfg, tmp_path, pg):
     client = app_for(aws, db, make_cfg, tmp_path)
     job_id, _ = make_job(db)

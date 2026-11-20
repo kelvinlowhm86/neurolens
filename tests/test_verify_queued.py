@@ -1,8 +1,8 @@
 """Billing: `verify_queued` and the fields `job_state` gains.
 
-The dispatcher prices a job before any GPU runs, so the old attempt-guarded `verify` becomes a
-queued-only check under the job's row lock. Every test reads money and job state directly from
-PostgreSQL (`pg`), never through the code under test.
+The dispatcher prices a job before any GPU runs, so verification is a queued-only check under the
+job's row lock. Every test reads money and job state directly from PostgreSQL (`pg`), never through
+the code under test.
 
 Prices (neurolens.pricing): a started 30 s block with a half-second allowance costs
 CENTS_PER_BLOCK, so 27.4 s and 3 s cost one block, 61 s costs three, and 120 s costs four.
@@ -23,7 +23,7 @@ def queued(new_job, *, client_seconds=27.4, starter_cents=STARTER_CENTS):
     return job_id, key
 
 
-# ---------------------------------------------------------------- the old verify cases
+# ---------------------------------------------------------------- verify_queued cases
 
 
 def test_equal_price_changes_no_money(db, pg, new_job):

@@ -28,7 +28,7 @@ BURST_SIZE = os.environ.get("BURST_SIZE", "")
 JOBS_CSV = Path(os.environ.get("JOBS_CSV", "jobs.csv"))
 POLL_SECONDS = 5
 GIVE_UP_SECONDS = 4 * 60 * 60
-COLUMNS = ["burst_size", "job_label", "submitted_utc", "done_utc", "status"]
+COLUMNS = ["burst_size", "job_label", "submitted_utc", "transcribing_utc", "done_utc", "status"]
 
 _labels = itertools.count(1)
 _write_lock = threading.Lock()
@@ -97,6 +97,7 @@ class Uploader(HttpUser):
                     raise StopUser()
 
         status = "timeout"
+        transcribing = None
         deadline = time.monotonic() + GIVE_UP_SECONDS
         while time.monotonic() < deadline:
             time.sleep(POLL_SECONDS)
@@ -106,18 +107,25 @@ class Uploader(HttpUser):
                 if resp.status_code == 404:
                     resp.success()  # queued: no worker has taken it yet
                     continue
-                state = resp.json().get("status")
+                data = resp.json()
+                if transcribing is None:
+                    for stage in data.get("stages") or []:
+                        if stage.get("stage") == "transcribing":
+                            transcribing = stage.get("at")
+                            break
+                state = data.get("status")
                 if state in ("done", "failed"):
                     status = state
                     break
-        _record(self._row(label, submitted, status))
+        _record(self._row(label, submitted, status, transcribing))
 
     @staticmethod
-    def _row(label, submitted, status):
+    def _row(label, submitted, status, transcribing=None):
         return {
             "burst_size": BURST_SIZE,
             "job_label": label,
             "submitted_utc": submitted,
+            "transcribing_utc": transcribing,
             "done_utc": _now(),
             "status": status,
         }

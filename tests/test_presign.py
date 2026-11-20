@@ -1,9 +1,8 @@
 """Tests for POST /api/uploads/presign (Flask test client + moto).
 
-Updated for (a spec'd change): the app gets a PostgreSQL database (the route
-reserves credit first) and the key is under the development user's folder,
-uploads/{user_id}/{job_id}{ext}, retiring placeholder-user. A route without an S3 client answers
-500 `not_configured`. The reservation itself is tested in tests/test_presign_ownership.py.
+The route reserves credit in PostgreSQL first and keys the upload under
+uploads/{user_id}/{job_id}{ext}. A route without an S3 client answers 500 `not_configured`.
+The reservation itself is tested in tests/test_presign_ownership.py.
 """
 
 import base64
@@ -157,6 +156,14 @@ def test_unsupported_content_type(client, content_type):
     assert isinstance(data["message"], str) and data["message"]
 
 
+@pytest.mark.parametrize("content_type", [["video/mp4"], {"video/mp4": True}])
+def test_a_structured_content_type_is_400_not_500(client, content_type):
+    resp = client.post("/api/uploads/presign", json=body(content_type=content_type))
+
+    assert resp.status_code == 400
+    assert resp.get_json()["error"] == "unsupported_content_type"
+
+
 def test_duration_exceeds_max_estimated(client):
     resp = client.post("/api/uploads/presign", json=body(client_duration_seconds=120.5))
     assert resp.status_code == 400
@@ -198,8 +205,7 @@ def test_error_responses_do_not_hand_out_upload_fields(client):
 
 
 def test_no_s3_client_gives_not_configured_and_holds_no_money(client_for, pg):
-    """A route that needs an S3 client the app doesn't have returns 500 not_configured
-    (said presign_failed)."""
+    """A route that needs an S3 client the app doesn't have returns 500 not_configured."""
     client, _ = client_for(with_s3=False, with_aws=False)
     resp = client.post("/api/uploads/presign", json=body())
     assert resp.status_code == 500

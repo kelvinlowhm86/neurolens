@@ -1,9 +1,8 @@
 """Lambdas: the dead-letter handler and the reaper, called directly (moto S3 + PostgreSQL).
 
-On AWS both build a `DataApiDatabase` from environment variables set by Terraform. Here
-`neurolens.db.DataApiDatabase` is replaced by a factory returning the test's PostgreSQL database,
-so the handlers run unchanged against the real schema; the environment carries the same names as
-the worker's deployment values (NEUROLENS_DB_* and NEUROLENS_S3_BUCKET).
+`neurolens.lambdas.database` and `neurolens.lambdas.s3_client` are replaced by factories returning
+the test's PostgreSQL database and moto S3, so the handlers run unchanged against the real schema.
+The environment supplies the bucket name (NEUROLENS_S3_BUCKET) and region, as Terraform does on AWS.
 """
 
 import json
@@ -17,14 +16,6 @@ from neurolens import billing, pricing, storage
 
 @pytest.fixture
 def lambda_env(aws, db, monkeypatch):
-    monkeypatch.setenv(
-        "NEUROLENS_DB_CLUSTER_ARN", "arn:aws:rds:us-east-1:000000000000:cluster:neurolens-db"
-    )
-    monkeypatch.setenv(
-        "NEUROLENS_DB_SECRET_ARN",
-        "arn:aws:secretsmanager:us-east-1:000000000000:secret:rds!cluster-test",
-    )
-    monkeypatch.setenv("NEUROLENS_DB_NAME", "neurolens")
     monkeypatch.setenv("NEUROLENS_S3_BUCKET", aws.bucket)
     monkeypatch.setenv("AWS_REGION", "us-east-1")
     from neurolens import lambdas

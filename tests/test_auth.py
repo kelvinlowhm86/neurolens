@@ -21,6 +21,7 @@ from conftest import (
     SERVER_METADATA,
     UPLOAD,
     WEB_PARAMETERS,
+    WEB_USER_ID,
     sign_in,
 )
 from neurolens import billing, pricing, settings
@@ -343,6 +344,17 @@ def test_dev_mode_is_always_signed_in(aws, db, make_cfg, tmp_path):
     resp = client.get("/api/me")
     assert resp.status_code == 200
     assert resp.get_json()["user_id"] == "web-user"
+
+
+def test_a_config_without_a_starter_credit_grants_nothing(aws, db, make_cfg, tmp_path, pg):
+    cfg = make_cfg()
+    cfg.pop("billing", None)
+    app = create_app(cfg=cfg, data_dir=tmp_path / "data", db=db, s3_client=aws.s3)
+
+    resp = app.test_client().get("/api/me")
+
+    assert resp.status_code == 200
+    assert pg.balance(WEB_USER_ID) == (0, 0)
 
 
 # ---------------------------------------------------------------- cookies, CSRF, CORS

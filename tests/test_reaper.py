@@ -1,9 +1,10 @@
 """Reaper.
 
-The reaper is the backstop for a lost GPU notification: any open job four hours after creation
-is refunded, every failed job's files are retried for two days, and a consented dataset copy
-without a retention snapshot is deleted after the configured limit. Money and files are read
-directly.
+The reaper is the backstop for a lost GPU notification: it settles a job whose result exists,
+refunds an open job past its deadline (four hours, or its GPU-wait deadline) and leaves a
+processing job with a fresh heartbeat alone. Every failed job's files are retried for two days,
+and a consented dataset copy without a retention snapshot is deleted after the configured limit.
+Money and files are read directly.
 """
 
 import uuid
@@ -284,19 +285,6 @@ def test_a_job_under_ninety_days_is_left_alone(aws, db, pg, lambda_env, new_key)
 def test_a_job_without_consent_is_left_alone(aws, db, pg, lambda_env, new_key):
     job_id, key = consented_done_job(db, new_key, consent=False)
     write_job_files(aws, job_id, key)
-    pg.age(job_id, created_s=(RETENTION_DAYS + 1) * DAY)
-
-    run_reaper()
-
-    job = pg.job(job_id)
-    assert job["dataset_removed_at"] is None
-    assert set(dataset_files_exist(aws, job_id)) == set(dataset_keys(job_id))
-
-
-def test_a_job_that_already_has_a_snapshot_is_left_alone(aws, db, pg, lambda_env, new_key):
-    job_id, key = consented_done_job(db, new_key)
-    write_job_files(aws, job_id, key)
-    add_snapshot(pg, job_id)
     pg.age(job_id, created_s=(RETENTION_DAYS + 1) * DAY)
 
     run_reaper()

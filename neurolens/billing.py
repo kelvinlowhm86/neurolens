@@ -18,14 +18,13 @@ import logging
 import uuid
 from datetime import UTC, datetime
 
-from neurolens import storage
+from neurolens import pricing, storage
 from neurolens.pricing import estimate_cost_cents
 
 logger = logging.getLogger("neurolens")
 
 QUEUED, PROCESSING, DONE, FAILED = "queued", "processing", "done", "failed"
 TERMINAL = (DONE, FAILED)
-LOST_CLAIM = "lost_claim"
 OK = "ok"
 # A live worker refreshes its claim every worker.heartbeat_seconds (config.json); a processing
 # job older than this is dead.
@@ -1360,6 +1359,11 @@ def add_curve(
 
 
 # ---------------------------------------------------------------- STePS booth guest passes
+
+
+def booth_pass_minutes():
+    """The minutes one booth pass buys, from its cents and the shared price formula."""
+    return BOOTH_PASS_CENTS * pricing.BLOCK_SECONDS / (pricing.CENTS_PER_BLOCK * 60)
 
 
 def is_booth_guest(user_id):

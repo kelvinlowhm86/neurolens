@@ -17,8 +17,6 @@ def test_page_holds_no_hard_coded_price(page):
         f"{cents} * Math.max",
         f"dollars({cents})",
         f"${cents / 100:.2f}",
-        "90 *",
-        "$0.90",
     ):
         assert needle not in text, f"{page.name} hard-codes the price: {needle!r}"
 

@@ -80,7 +80,20 @@ fi
 if [ "$RESUME" = 0 ]; then
   # ---- 1. Stop the GPU and prove it ----------------------------------------------------------
   echo "1/5 Stopping the GPU..."
-  if ! "$INFRA/stop_work.sh"; then
+  ENDPOINT=$(terraform -chdir="$TF_DIR" output -raw gpu_endpoint) || {
+    echo "Teardown stopped: cannot read gpu_endpoint from Terraform. Nothing was deleted." >&2
+    exit 1
+  }
+  if ! DESCRIBE_ERR=$(aws sagemaker describe-endpoint --endpoint-name "$ENDPOINT" 2>&1 >/dev/null); then
+    case "$DESCRIBE_ERR" in
+      *ResourceNotFound*|*Could\ not\ find\ endpoint*)
+        echo "No SageMaker endpoint $ENDPOINT exists: there is no GPU to stop." ;;
+      *)
+        echo "Teardown stopped: cannot check the SageMaker endpoint $ENDPOINT: $DESCRIBE_ERR" >&2
+        echo "Nothing was deleted." >&2
+        exit 1 ;;
+    esac
+  elif ! "$INFRA/stop_work.sh"; then
     echo "Teardown stopped: the GPU stop was not proven. Nothing was deleted." >&2
     exit 1
   fi

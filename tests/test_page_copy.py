@@ -14,7 +14,6 @@ import pytest
 from conftest import ISSUER, REPO_ROOT
 from neurolens import billing, pricing, settings
 
-STARTER_CENTS = 10_000
 CHANNEL = "https://www.youtube.com/@anncreates"
 OTHER_CHANNEL = "https://www.facebook.com/anncreates"
 
@@ -165,6 +164,10 @@ def test_limits_publish_the_invite_seconds_from_the_configured_credit(aws, make_
     data = app.test_client().get("/api/limits").get_json()
 
     assert data["invite_seconds"] == invite_cents * pricing.BLOCK_SECONDS / pricing.CENTS_PER_BLOCK
+
+
+def test_the_page_does_not_type_in_the_demo_pass_length():
+    assert "2-minute demo pass" not in page_text("app.html")
 
 
 # ---------------------------------------------------------------- the admin GPU choices

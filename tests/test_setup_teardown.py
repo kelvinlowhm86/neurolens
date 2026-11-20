@@ -264,9 +264,15 @@ if key == "sagemaker update-endpoint-weights-and-capacities":
     out()
 
 if key == "sagemaker describe-endpoint":
+    if w.get("endpoint_missing"):
+        fail(
+            "An error occurred (ValidationException) when calling the DescribeEndpoint "
+            "operation: Could not find endpoint"
+        )
     if has_query("endpointstatus") or has_query("EndpointStatus"):
         status = w.get("status", "InService")
         out(f"{status}\t{w.get('desired', w.get('instances', 0))}\t{w.get('instances', 0)}")
+    out()
 
 print("fake aws: unexpected call: " + " ".join(args), file=sys.stderr)
 sys.exit(99)
@@ -334,6 +340,8 @@ if cmd == "output":
         "region": w.get("region", "us-east-1"),
         "account_id": w.get("terraform_account", w.get("account", "123456789012")),
         "bucket_name": w.get("bucket", "neurolens-data-123456789012"),
+        "gpu_endpoint": w.get("endpoint", "neurolens"),
+        "gpu_variant": w.get("variant", "main"),
         "max_instances": str(w.get("max_instances", 1)),
         "idle_stop_minutes": str(w.get("idle_stop_minutes", 7)),
         "worker_image": w.get("worker_image", ""),
@@ -473,7 +481,7 @@ def setup_world(**overrides):
         "terraform_state": True,
         "region": "us-east-1",
         "bucket": DATA_BUCKET,
-        "buckets": [STATE_BUCKET],
+        "buckets": [STATE_BUCKET, DATA_BUCKET],
         "ssm_parameters": list(SSM_SECRETS),
         "cognito_client_secret": "fake-cognito-secret",
         "objects": [
@@ -766,6 +774,21 @@ def test_teardown_clean_run_prints_complete_and_keeps_a_backup(sandbox):
     assert backups, "the experiments backup folder was not created"
 
 
+def test_teardown_skips_the_stop_when_the_endpoint_does_not_exist(sandbox):
+    r = sandbox.run(
+        "teardown.sh",
+        world=teardown_world(endpoint_missing=True),
+        input_text=ACCOUNT,
+        tty=True,
+    )
+    assert r.code == 0, r.err
+    assert r.find("sagemaker", "describe-endpoint")
+    assert r.find("application-autoscaling", "register-scalable-target") == []
+    assert r.find("application-autoscaling", "describe-scalable-targets") == []
+    assert r.find("terraform", "destroy")
+    assert "TEARDOWN COMPLETE" in r.out
+
+
 @pytest.mark.parametrize(
     "overrides,needle",
     [
@@ -871,6 +894,31 @@ def test_terraform_exposes_the_account_id():
     account = re.search(r'output\s+"account_id"\s*\{.*?\n\}', outputs, re.S)
     assert account, "outputs.tf has no account_id output"
     assert "account_id" in account.group(0)
+
+
+def test_deploy_policies_allow_every_teardown_leftover_read():
+    documents = [
+        json.loads(path.read_text())
+        for path in sorted((INFRA / "iam").glob("neurolens-deploy-*.json"))
+    ]
+    granted = {}
+    for document in documents:
+        for statement in document["Statement"]:
+            actions = statement.get("Action", [])
+            actions = [actions] if isinstance(actions, str) else actions
+            for action in actions:
+                granted.setdefault(action, []).append(statement.get("Resource"))
+    for action in (
+        "resourcegroupstaggingapi:GetResources",
+        "secretsmanager:ListSecrets",
+        "sagemaker:ListEndpointConfigs",
+        "sagemaker:ListModels",
+        "iam:ListRoles",
+    ):
+        assert "*" in granted.get(action, []), action
+    assert "arn:aws:ssm:us-east-1:*:parameter/neurolens/*" in granted.get(
+        "ssm:GetParametersByPath", []
+    )
 
 
 # ---------------------------------------------------------------- setup.sh
@@ -984,6 +1032,27 @@ def test_setup_refuses_the_endpoint_apply_when_model_data_is_still_empty(sandbox
     r = sandbox.run("setup.sh", world=setup_world(objects=[], upload_leaves_empty=True))
     assert r.code != 0
     assert "model-data" in r.text.lower()
+    assert len(r.find("terraform", "apply")) == 1
+    assert r.find("step", "build_image") == []
+
+
+@pytest.mark.parametrize("buckets", [[STATE_BUCKET], [STATE_BUCKET, DATA_BUCKET]])
+def test_setup_refuses_the_first_apply_when_worker_image_is_set_but_model_data_is_empty(
+    sandbox, buckets
+):
+    sandbox.seed(worker_image="sha256:" + "b" * 64)
+    r = sandbox.run("setup.sh", world=setup_world(buckets=buckets, objects=[]))
+    assert r.code != 0
+    assert "worker_image" in r.text
+    assert "model-data" in r.text.lower()
+    assert r.find("terraform", "apply") == []
+    assert r.find("step", "build_image") == []
+
+
+def test_setup_allows_the_first_apply_when_worker_image_is_set_and_model_data_exists(sandbox):
+    sandbox.seed(worker_image="sha256:" + "b" * 64)
+    r = sandbox.run("setup.sh", world=setup_world())
+    assert r.code == 0, r.err
     assert len(r.find("terraform", "apply")) == 1
     assert r.find("step", "build_image") == []
 

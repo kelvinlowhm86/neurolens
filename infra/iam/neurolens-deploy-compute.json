@@ -225,6 +225,24 @@
       "Effect": "Allow",
       "Action": "cloudtrail:LookupEvents",
       "Resource": "*"
+    },
+    {
+      "Sid": "TeardownLeftoverReadsAccountWide",
+      "Effect": "Allow",
+      "Action": [
+        "resourcegroupstaggingapi:GetResources",
+        "secretsmanager:ListSecrets",
+        "sagemaker:ListEndpointConfigs",
+        "sagemaker:ListModels",
+        "iam:ListRoles"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "TeardownLeftoverParametersRead",
+      "Effect": "Allow",
+      "Action": "ssm:GetParametersByPath",
+      "Resource": "arn:aws:ssm:us-east-1:*:parameter/neurolens/*"
     }
   ]
 }

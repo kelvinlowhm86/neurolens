@@ -194,6 +194,25 @@ def test_a_failed_thumbnail_does_not_fail_the_job(
     assert pg.balance() == (STARTER_CENTS - pricing.estimate_cost_cents(27.4), 0)
 
 
+def test_a_storage_failure_on_the_thumbnail_does_not_fail_the_job(
+    aws, db, pg, make_cfg, roi_masks_small, clip_path, patch_everywhere
+):
+    job_id, key = make_job(db)
+    aws.s3.upload_file(str(clip_path), aws.bucket, key)
+    verify(db, job_id)
+
+    def fail(*args, **kwargs):
+        raise RuntimeError("S3 is down")
+
+    patch_everywhere("put_thumbnail", fail, "neurolens.storage")
+
+    assert run_job(aws, db, job_id, clip_path, make_cfg(), roi_masks_small) is worker.Outcome.DONE
+
+    assert not object_exists(aws, f"results/{job_id}.jpg")
+    assert pg.job(job_id)["status"] == "done"
+    assert pg.balance() == (STARTER_CENTS - pricing.estimate_cost_cents(27.4), 0)
+
+
 # ---------------------------------------------------------------- deletion
 
 

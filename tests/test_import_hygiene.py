@@ -29,7 +29,7 @@ def test_import_pulls_in_no_heavy_modules(module):
     assert json.loads(proc.stdout.strip().splitlines()[-1]) == []
 
 
-# ---- Added : the new light modules stay light.
+# ---- the light modules stay light.
 M1_MODULES = ["neurolens.storage", "neurolens.pricing", "neurolens.worker"]
 
 
@@ -67,7 +67,7 @@ def test_storage_and_pricing_import_without_neurolens_inference(module):
     assert proc.stdout.strip().splitlines()[-1] == "False"
 
 
-# ---- Added in cleanup: the web tier never loads the model code.
+# ---- the web tier never loads the model code.
 CREATE_APP_CODE = """
 import json, sys, tempfile
 from pathlib import Path

@@ -24,7 +24,6 @@ EXPERIMENT_1_COLUMNS = [
     "job_label",
     "upload_ms",
     "queue_wait_ms",
-    "downloading_ms",
     "transcribing_ms",
     "inference_full_ms",
     "inference_noaudio_ms",

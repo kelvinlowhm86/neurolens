@@ -4,12 +4,12 @@ The scripts run under bash with stub `aws`, `terraform` and `sleep` first on PAT
 keeps the world in a JSON file (so a change is seen by later calls), logs every call, and fails
 loudly (exit 99) on any call it does not know, so nothing slips through unrecorded.
 
-start_work.sh sets the SageMaker variant's maximum to 1; --keep-warm (--hours N) also sets its
-minimum to 1 and records a one-time scheduled action that puts the minimum back; --keep-db is
-refused. stop_work.sh deletes keep-warm actions first, sets the scalable target's min and max to 0,
-reads them back, sets the endpoint's desired count to 0, waits for DescribeEndpoint to show 0 and
-prints ALL STOPPED. Uploads are refused while paused by the web app
-(tests/test_processing_pause.py).
+start_work.sh sets the SageMaker variant's maximum from Terraform's max_instances; --keep-warm
+(--hours N) also sets its minimum to 1 and records a one-time scheduled action that puts the
+minimum back; --keep-db is refused. stop_work.sh deletes keep-warm actions first, sets the
+scalable target's min and max to 0, reads them back, sets the endpoint's desired count to 0, waits
+for DescribeEndpoint to show 0 and prints ALL STOPPED. Uploads are refused while paused by the web
+app (tests/test_processing_pause.py).
 """
 
 import datetime
@@ -152,6 +152,8 @@ SH = "#!/usr/bin/env bash\n"
 
 TERRAFORM_STUB = r"""#!/usr/bin/env bash
 case "$*" in
+  *gpu_endpoint*) echo "${FAKE_ENDPOINT:-neurolens}" ;;
+  *gpu_variant*) echo "${FAKE_VARIANT:-main}" ;;
   *max_instances*) echo "${FAKE_MAX_INSTANCES:-1}" ;;
   *idle_stop_minutes*) echo "${FAKE_IDLE_MINUTES:-7}" ;;
   *) echo us-east-1 ;;
@@ -217,6 +219,8 @@ def sandbox(tmp_path):
             "HOME": str(tmp_path),
             "FAKE_WORLD": str(world_file),
             "FAKE_LOG": str(log),
+            "FAKE_ENDPOINT": world.get("endpoint", "neurolens"),
+            "FAKE_VARIANT": world.get("variant", "main"),
             "FAKE_MAX_INSTANCES": str(world.get("max_instances", 1)),
             "FAKE_IDLE_MINUTES": str(world.get("idle_stop_minutes", 7)),
             "AWS_ACCESS_KEY_ID": "x",
@@ -260,6 +264,14 @@ def test_start_takes_the_maximum_from_the_terraform_output(sandbox):
     call = r.only("application-autoscaling", "register-scalable-target")
     assert option(call, "--max-capacity") == "3"
     assert option(call, "--min-capacity") in (None, "0")
+
+
+@pytest.mark.parametrize("script", ["start_work.sh", "stop_work.sh"])
+def test_work_scripts_take_the_endpoint_and_variant_from_terraform(sandbox, script):
+    r = sandbox(script, healthy_world(endpoint="custom-endpoint", variant="custom-variant"))
+    assert r.code == 0, r.err
+    call = r.only("application-autoscaling", "register-scalable-target")
+    assert option(call, "--resource-id") == "endpoint/custom-endpoint/variant/custom-variant"
 
 
 def test_keep_warm_takes_the_maximum_from_the_terraform_output(sandbox):

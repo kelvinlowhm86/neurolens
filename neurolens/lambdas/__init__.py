@@ -55,17 +55,29 @@ def appscaling_client():
     return boto3.client("application-autoscaling")
 
 
+def _delete_job_files(s3, bucket, job_id, object_key):
+    """Delete every file of a refunded job; raise when S3 could not delete them all."""
+    storage.delete_job_prefixes(s3, bucket, job_id)
+    if not storage.delete_keys(s3, bucket, storage.job_keys(job_id, object_key)):
+        raise RuntimeError(f"{job_id}: refunded, but S3 could not delete all of its files")
+
+
 def finish_job(db, s3, bucket, job_id):
     """True when the job is finished (charged, refunded or already terminal); False while a
     live worker holds it.
 
     A result means the job is settled; otherwise a queued or stale job is refunded
     ``processing_failed`` and every file of the job is deleted. A delete that fails raises after
-    the refund, never undoing it.
+    the refund, never undoing it; a retry of a failed job finishes that delete.
     """
     state = None if job_id is None else billing.job_state(db, job_id)
-    if state is None or state["status"] in billing.TERMINAL:
-        logger.info(f"{job_id}: unknown or already finished, nothing to do")
+    if state is None:
+        logger.info(f"{job_id}: unknown, nothing to do")
+        return True
+    if state["status"] in billing.TERMINAL:
+        if state["status"] == billing.FAILED:
+            _delete_job_files(s3, bucket, job_id, state["object_key"])
+        logger.info(f"{job_id}: already finished, nothing to do")
         return True
     if storage.result_exists(s3, bucket, job_id):
         billing.settle_success(db, job_id)
@@ -73,9 +85,7 @@ def finish_job(db, s3, bucket, job_id):
         return True
     if billing.refund_if_gpu_wait_over(db, job_id):
         logger.warning(f"{job_id}: its GPU wait ran out, refunded")
-        storage.delete_job_prefixes(s3, bucket, job_id)
-        if not storage.delete_keys(s3, bucket, storage.job_keys(job_id, state["object_key"])):
-            raise RuntimeError(f"{job_id}: refunded, but S3 could not delete all of its files")
+        _delete_job_files(s3, bucket, job_id, state["object_key"])
         return True
     message = _last_error(db, job_id)
     if billing.issue_refund(
@@ -88,9 +98,7 @@ def finish_job(db, s3, bucket, job_id):
     ):
         logger.warning(f"{job_id}: failed on the GPU, refunded")
         # A failed delete raises after the refund, never undoing it; the run then fails loudly.
-        storage.delete_job_prefixes(s3, bucket, job_id)
-        if not storage.delete_keys(s3, bucket, storage.job_keys(job_id, state["object_key"])):
-            raise RuntimeError(f"{job_id}: refunded, but S3 could not delete all of its files")
+        _delete_job_files(s3, bucket, job_id, state["object_key"])
         return True
     state = billing.job_state(db, job_id)
     return state is not None and state["status"] in billing.TERMINAL

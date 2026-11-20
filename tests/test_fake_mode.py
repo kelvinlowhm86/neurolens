@@ -58,9 +58,9 @@ def test_probe_duration_returns_a_float(clip_path):
 
 
 # ---------------------------------------------------------------- fake build_events / predict
-# Run_inference and strip_audio are replaced by build_events, without_audio and
-# Predict. In fake mode predict gives seeded random numbers of shape (ceil(duration), 20484),
-# Seeded from the file's size (plus 1 for the no-audio pass).
+# In fake mode build_events, without_audio and predict stand in for the model: predict gives
+# seeded random numbers of shape (ceil(duration), 20484), seeded from the file's size (plus 1
+# for the no-audio pass).
 
 
 @pytest.fixture

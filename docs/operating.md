@@ -129,7 +129,7 @@ These settings control GPU capacity, the video length limit and the first-video 
 | Setting | What it controls |
 | --- | --- |
 | Most GPUs at once | `max_instances` in the Terraform variables defaults to 1. Raise it to run more videos at once, up to the account's GPU quota, then apply. The admin panel and `start_work.sh` read the same value. |
-| Longest video | `max_video_duration_seconds` in the config is 120. A longer limit costs more per video and waits longer: a 120-second 4K video already takes about 40 to 47 minutes on the GPU, and each job is capped at 55 minutes (`worker.max_job_minutes` in the config), so raise that cap with it. |
+| Longest video | `max_video_duration_seconds` in the config is 120. A longer limit costs more per video and waits longer: a clip near that limit takes about eight minutes on the GPU (491 s warm on `g6e.xlarge`; see `docs/evidence/README.md`), and each job is capped at 55 minutes (`worker.max_job_minutes` in the config), so raise that cap with it. |
 | First-video wait | With no GPU running, the first video waits while one starts, usually minutes. Keep a GPU warm from the admin panel before a busy period. |
 
 In the code: `infra/terraform/variables.tf`, `config.json`, `docs/evidence/README.md`

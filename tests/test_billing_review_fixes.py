@@ -1,6 +1,6 @@
-"""Fixes from the money-slice review: the Data API client never retries on its own, an upload
-name that is not a job id is an unknown job, and a crafted huge duration is refunded as too long
-by the dispatcher's `verify_queued`."""
+"""Money-slice guards: the Data API client never retries on its own, an upload name that is not a
+job id is an unknown job, and a crafted huge duration is refunded as too long by the dispatcher's
+`verify_queued`."""
 
 import json
 
@@ -12,11 +12,6 @@ from neurolens import db as dbmod
 
 CLUSTER = "arn:aws:rds:us-east-1:000000000000:cluster:neurolens-db"
 SECRET = "arn:aws:secretsmanager:us-east-1:000000000000:secret:rds!cluster-x"
-
-
-@pytest.fixture(autouse=True)
-def fake_on(monkeypatch):
-    monkeypatch.setenv("FAKE_INFERENCE", "1")
 
 
 # ---------------------------------------------------------------- 1. no botocore retries

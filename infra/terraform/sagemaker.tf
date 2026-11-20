@@ -17,8 +17,8 @@ locals {
   worker_image_uri    = "${aws_ecr_repository.worker.repository_url}@${local.image_digest}"
 
   # Fastest per dollar first; each fits the model's ~20 GB GPU peak with at least 32 GB of RAM.
-  # SageMaker tries the next pool when one has no capacity (28 Oct: g6e and g6 were both out),
-  # waiting up to 600 s per variant. Each type needs its own SageMaker "for endpoint usage" quota.
+  # SageMaker tries the next pool when one has no capacity, waiting up to 600 s per variant.
+  # Each type needs its own SageMaker "for endpoint usage" quota.
   # There is no CPU rehearsal: SageMaker refuses a CUDA image on a CPU type.
   instance_pools = [
     { instance_type = "ml.g6e.xlarge", priority = 1 },
@@ -231,8 +231,8 @@ resource "aws_sagemaker_endpoint" "main" {
 
   # An update SageMaker rolls back (for example no GPU capacity) ends InService on the old
   # configuration, and the provider reports success. Without this check Terraform would then
-  # delete the old configuration and model the endpoint still uses (30 Oct), leaving it unable
-  # to start or update. Failing here keeps them.
+  # delete the old configuration and model the endpoint still uses, leaving it unable to start
+  # or update. Failing here keeps them.
   lifecycle {
     postcondition {
       condition     = self.endpoint_config_name == awscc_sagemaker_endpoint_config.main[0].endpoint_config_name
@@ -242,7 +242,7 @@ resource "aws_sagemaker_endpoint" "main" {
 }
 
 # The endpoint resource can return while SageMaker is still updating it, and the scaling target is
-# refused until it is back in service (31 Oct). Wait for that whenever the configuration changes,
+# refused until it is back in service. Wait for that whenever the configuration changes,
 # then fail unless the endpoint runs the new configuration: an update SageMaker rolls back also
 # ends InService, and the old configuration and model must then be kept (see the postcondition).
 # Referencing the configuration directly makes Terraform delete the old one only after this passes.

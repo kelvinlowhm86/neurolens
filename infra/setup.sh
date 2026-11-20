@@ -30,6 +30,17 @@ tfvars_region() {
     && sed -n -E 's/^[[:space:]]*region[[:space:]]*=[[:space:]]*"([^"]+)".*/\1/p' "$TFVARS" \
       | tail -n 1
 }
+tfvars_bucket_name() {
+  sed -n -E 's/^[[:space:]]*bucket_name[[:space:]]*=[[:space:]]*"([^"]+)".*/\1/p' "$TFVARS" \
+    | tail -n 1
+}
+tfvars_worker_image() {
+  sed -n -E 's/^[[:space:]]*worker_image[[:space:]]*=[[:space:]]*"([^"]*)".*/\1/p' "$TFVARS" \
+    | tail -n 1
+}
+model_data_objects() {
+  aws s3 ls "$1" --recursive 2>/dev/null | head -n 1
+}
 AWS_REGION=$(tfvars_region) || true
 if [ -n "$AWS_REGION" ]; then
   export AWS_REGION
@@ -79,6 +90,25 @@ run_step() {
   fi
 }
 
+# A first apply with worker_image already set creates the GPU endpoint. Refuse it unless the
+# bucket Terraform will use already holds model-data/: an empty prefix makes the endpoint fail at
+# boot, and that failed SageMaker start bills for about 30 minutes.
+if [ -n "$(tfvars_worker_image)" ]; then
+  IMAGE_BUCKET=$(tfvars_bucket_name)
+  if [ -z "$IMAGE_BUCKET" ]; then
+    echo "Setup stopped: terraform.tfvars sets worker_image but has no bucket_name to check." >&2
+    exit 1
+  fi
+  if [ -z "$(model_data_objects "s3://$IMAGE_BUCKET/model-data/")" ]; then
+    echo "Setup stopped: terraform.tfvars sets worker_image, but s3://$IMAGE_BUCKET/model-data/ is" >&2
+    echo "empty or the bucket does not exist yet. The first apply would create the GPU endpoint" >&2
+    echo "against an empty prefix, and a failed SageMaker start bills for about 30 minutes." >&2
+    echo "Clear worker_image in terraform.tfvars and run setup.sh again: it creates the bucket," >&2
+    echo "uploads the model files, builds the image and applies the endpoint." >&2
+    exit 1
+  fi
+fi
+
 # ---- Terraform state bucket and backend ---------------------------------------------------
 if ! aws s3api head-bucket --bucket "$STATE_BUCKET" --region "$STATE_REGION" >/dev/null 2>&1; then
   echo "Creating the Terraform state bucket $STATE_BUCKET in $STATE_REGION..."
@@ -116,11 +146,7 @@ MODEL_DATA_URI="s3://$BUCKET/model-data/"
 
 # SageMaker copies model-data/ into every GPU instance at start and the container runs offline,
 # so an empty prefix makes the endpoint fail at boot.
-model_data_objects() {
-  aws s3 ls "$MODEL_DATA_URI" --recursive | head -n 1
-}
-
-if [ -z "$(model_data_objects)" ]; then
+if [ -z "$(model_data_objects "$MODEL_DATA_URI")" ]; then
   run_step "uploading the model files to $MODEL_DATA_URI" \
     python3 "$INFRA/upload_model_data.py" --bucket "$BUCKET"
 fi
@@ -155,11 +181,6 @@ run_step "storing the Cognito client secret" store_cognito_client_secret
 run_step "deploying the website" "$INFRA/deploy_web.sh"
 
 # ---- Worker image: build once, record its digest, then apply the endpoint ------------------
-tfvars_worker_image() {
-  sed -n -E 's/^[[:space:]]*worker_image[[:space:]]*=[[:space:]]*"([^"]*)".*/\1/p' "$TFVARS" \
-    | tail -n 1
-}
-
 set_tfvars_worker_image() {
   local digest=$1 tmp
   tmp=$(mktemp)
@@ -174,7 +195,7 @@ set_tfvars_worker_image() {
 }
 
 if [ -z "$(tfvars_worker_image)" ]; then
-  if [ -z "$(model_data_objects)" ]; then
+  if [ -z "$(model_data_objects "$MODEL_DATA_URI")" ]; then
     echo "Setup stopped: $MODEL_DATA_URI is empty, so the GPU endpoint would fail at start." >&2
     echo "A failed SageMaker start bills for about 30 minutes and cannot be cancelled." >&2
     echo "Run python3 $INFRA/upload_model_data.py, then run setup.sh again." >&2

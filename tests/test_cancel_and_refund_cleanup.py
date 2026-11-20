@@ -63,12 +63,6 @@ def object_exists(aws, key):
     return storage.object_exists(aws.s3, aws.bucket, key)
 
 
-def dataset_keys(aws, job_id):
-    prefix = f"dataset/{job_id}/"
-    resp = aws.s3.list_objects_v2(Bucket=aws.bucket, Prefix=prefix)
-    return [obj["Key"] for obj in resp.get("Contents", [])]
-
-
 class DeleteFails:
     """A boto3 S3 client whose delete calls for one key raise, as S3 may."""
 

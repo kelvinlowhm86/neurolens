@@ -6,9 +6,10 @@ Only step 4's test message costs money, a fraction of a cent.
 
 The deployer's user can only create or change things named `neurolens-...`. It cannot
 open or change anything else in the account, start ordinary servers, or change billing. It can read
-a few account-wide lists: service limits, GPU availability, and the activity log, which also lists
-other projects' events. You can remove their access at any time by deleting their access key (step 3's
-Security credentials page).
+a few account-wide lists: service limits, GPU availability, the activity log, and the tag, secret,
+SageMaker and role names the teardown checks for leftovers, which also show other projects' names.
+You can remove their access at any time by deleting their access key (step 3's Security credentials
+page).
 
 ## 1. Create the five policies
 

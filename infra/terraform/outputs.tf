@@ -8,8 +8,13 @@ output "bucket_name" {
 }
 
 output "gpu_endpoint" {
-  description = "The SageMaker endpoint's name (the web app and the GPU scripts use it)."
+  description = "The SageMaker endpoint's name (written to .env as NEUROLENS_GPU_ENDPOINT; infra/start_work.sh and stop_work.sh read it from here)."
   value       = local.endpoint_name
+}
+
+output "gpu_variant" {
+  description = "The endpoint's production variant (infra/start_work.sh and stop_work.sh read it)."
+  value       = local.variant_name
 }
 
 output "max_instances" {

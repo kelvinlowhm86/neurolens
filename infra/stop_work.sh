@@ -6,9 +6,7 @@
 # Prints ALL STOPPED only when every step succeeded; otherwise NOT CONFIRMED and exit 1.
 set -uo pipefail
 
-VARIANT_MAIN=main
 KEEP_WARM_END=neurolens-keep-warm-end
-ENDPOINT=neurolens
 PROBLEMS=""
 problem() {
   PROBLEMS="$PROBLEMS  - $*"$'\n'
@@ -16,6 +14,22 @@ problem() {
 }
 
 source "$(dirname "$0")/aws_env.sh"
+TERRAFORM_DIR="$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)/infra/terraform"
+ENDPOINT=$(terraform -chdir="$TERRAFORM_DIR" output -raw gpu_endpoint) || {
+  echo "Cannot read gpu_endpoint from Terraform. Is the deployment initialised?" >&2
+  exit 1
+}
+# Read the variant from Terraform. TEMPORARY: a state from before the gpu_variant output has
+# no such value, so ask the endpoint; remove this fallback once every stack has been applied.
+VARIANT_MAIN=$(terraform -chdir="$TERRAFORM_DIR" output -raw gpu_variant 2>/dev/null || true)
+if [ -z "$VARIANT_MAIN" ] || [ "$VARIANT_MAIN" = "None" ]; then
+  VARIANT_MAIN=$(aws sagemaker describe-endpoint --endpoint-name "$ENDPOINT" \
+    --query 'ProductionVariants[0].VariantName' --output text 2>/dev/null || true)
+fi
+if [ -z "$VARIANT_MAIN" ] || [ "$VARIANT_MAIN" = "None" ]; then
+  echo "Cannot read gpu_variant from Terraform or the endpoint. Is the deployment initialised?" >&2
+  exit 1
+fi
 RESOURCE="endpoint/$ENDPOINT/variant/$VARIANT_MAIN"
 DIMENSION=sagemaker:variant:DesiredInstanceCount
 

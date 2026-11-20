@@ -29,8 +29,8 @@ The head is the outer surface of the MNI152 2009 template bundled with nilearn (
 extracted with scikit-image and reduced to its largest connected component. Its permissive
 licence notice is static/brain/LICENSE.txt.
 
-Uses the fsaverage6 and Destrieux data already in data/nilearn. It makes no network call: if
-either is missing, it stops and tells the operator to fetch it.
+Uses the fsaverage5 and fsaverage6 surface data and the Destrieux atlas already in data/nilearn.
+It makes no network call: if any is missing, it stops and tells the operator to fetch it.
 """
 
 import struct
@@ -59,6 +59,7 @@ def _check_cached():
         for surface in ("pial", "sphere", "sulc")
         for side in HEMISPHERES
     ]
+    required += [DATA_DIR / "fsaverage5" / f"sphere_{side}.gii.gz" for side in HEMISPHERES]
     required += [
         DATA_DIR / "destrieux_surface" / "left.aparc.a2009s.annot",
         DATA_DIR / "destrieux_surface" / "right.aparc.a2009s.annot",
@@ -68,7 +69,8 @@ def _check_cached():
         names = ", ".join(str(path.relative_to(ROOT)) for path in missing)
         raise RuntimeError(
             f"Required data is not cached (missing {names}). This script makes no network call: "
-            'fetch it first with nilearn.datasets.fetch_surf_fsaverage("fsaverage6", '
+            'fetch it first with nilearn.datasets.fetch_surf_fsaverage("fsaverage5", '
+            'data_dir="data/nilearn"), nilearn.datasets.fetch_surf_fsaverage("fsaverage6", '
             'data_dir="data/nilearn") and fetch_atlas_surf_destrieux(data_dir="data/nilearn").'
         )
 
@@ -179,7 +181,11 @@ def main():
 
     from nilearn import datasets, surface
 
-    fs5 = datasets.fetch_surf_fsaverage("fsaverage5")
+    # Read fsaverage5's sphere files straight from the repo cache: fetch_surf_fsaverage would
+    # download anything missing into nilearn's default cache, outside the repo.
+    fs5 = {
+        f"sphere_{side}": DATA_DIR / "fsaverage5" / f"sphere_{side}.gii.gz" for side in HEMISPHERES
+    }
     fs6 = datasets.fetch_surf_fsaverage("fsaverage6", data_dir=str(DATA_DIR))
     atlas = datasets.fetch_atlas_surf_destrieux(data_dir=str(DATA_DIR), verbose=0)
     label_names = np.array(atlas["labels"], dtype=object)

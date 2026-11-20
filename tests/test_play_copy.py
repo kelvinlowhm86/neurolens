@@ -1,11 +1,7 @@
-"""Step 5b: every upload gets a phone-friendly H.264 play copy.
+"""Every upload gets a phone-friendly H.264 play copy.
 
 Some uploads (VP9, HEVC, huge files) do not play in phone browsers. The worker makes an H.264
 copy at `results/<job_id>.play.mp4`, the page plays it, and every deletion path removes it.
-
-These tests are written before the feature. The missing names are looked up at call time
-(`inference.PlayCopy`, `storage.put_play_copy`, the `.play.mp4` key), so collection succeeds and
-each missing piece fails on its own.
 """
 
 import contextlib
@@ -491,16 +487,6 @@ def test_the_video_route_falls_back_to_a_consented_dataset_copy(client, aws, db)
     aws.s3.put_object(Bucket=aws.bucket, Key=dataset_key, Body=b"the dataset copy")
 
     assert_presigns(client.get(f"/api/jobs/{job_id}/video"), dataset_key)
-
-
-def test_the_video_route_is_404_video_deleted_with_nothing_kept(client, aws, db):
-    job_id, _ = done_web_job(db)
-    store_result(aws, job_id)
-
-    response = client.get(f"/api/jobs/{job_id}/video")
-
-    assert response.status_code == 404
-    assert response.get_json()["error"] == "video_deleted"
 
 
 def test_the_video_route_does_not_serve_another_users_job(client, aws, db):

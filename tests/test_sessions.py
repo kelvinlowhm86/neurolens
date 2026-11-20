@@ -126,11 +126,10 @@ def test_migration_adds_the_sessions_table(pg):
     )
 
 
-def test_the_session_lifetime_is_30_days_and_the_12_hour_rule_is_gone():
+def test_the_session_lifetime_is_30_days():
     from neurolens.web import auth
 
     assert auth.SESSION_DAYS == SESSION_DAYS
-    assert not hasattr(auth, "SESSION_HOURS")
 
 
 # ---------------------------------------------------------------- the cookie and the row

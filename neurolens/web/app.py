@@ -3,8 +3,9 @@
 The database owns users, credit and job state: presign reserves
 credit before handing out the upload form, and status and result answer only the job's owner,
 checked in the database before any S3 request. Cognito
-sign-in on AWS, every /api/* route needs a signed-in user, POSTs take JSON only, no CORS, job
-history and CSV export, uploads refused while GPU work is paused.
+sign-in on AWS, every /api/* route needs a signed-in user except GET /api/limits and POST
+/api/wake, POSTs take JSON only, no CORS, job history and CSV export, uploads refused while GPU
+work is paused.
 """
 
 import hashlib
@@ -43,7 +44,6 @@ from neurolens.web import auth
 
 logger = logging.getLogger("neurolens")
 
-DEFAULT_STARTER_CENTS = 500
 MIN_DURATION_SECONDS = 1  # a zero-length job would cost nothing yet start a GPU
 MAX_FILENAME_CHARS = 255  # the filename is display only
 OPEN = (billing.QUEUED, billing.PROCESSING)
@@ -265,7 +265,7 @@ def create_app(
     if db is None and cfg.get("db"):
         db = dbmod.from_config(cfg, resume_wait_s=WEB_RESUME_WAIT_S)
     bucket = (cfg.get("aws") or {}).get("s3_bucket")
-    starter_cents = (cfg.get("billing") or {}).get("starter_cents", DEFAULT_STARTER_CENTS)
+    starter_cents = (cfg.get("billing") or {}).get("starter_cents", 0)
     invite_cents = (cfg.get("billing") or {}).get("invite_cents", 0)
     max_bytes = cfg.get("max_upload_bytes")
     max_seconds = settings.max_duration(cfg or None)
@@ -572,9 +572,7 @@ def create_app(
         """Add the booth's configured choices to a stats response."""
         stats["gpu_max_instances"] = max_gpus
         stats["gpu_warm_hours"] = billing.BOOTH_GPU_WARM_HOURS
-        stats["pass_minutes"] = (
-            billing.BOOTH_PASS_CENTS * pricing.BLOCK_SECONDS // (pricing.CENTS_PER_BLOCK * 60)
-        )
+        stats["pass_minutes"] = billing.booth_pass_minutes()
         stats["initial_passes"] = billing.BOOTH_INITIAL_PASSES
         stats["adjust_deltas"] = list(billing.BOOTH_ADJUST_DELTAS)
         stats["grant_minutes"] = list(billing.BOOTH_GRANT_MINUTES)
@@ -734,7 +732,7 @@ def create_app(
             return _error("invalid_request", "research_consent must be true or false.")
 
         content_type = data.get("content_type")
-        if content_type not in storage.CONTENT_TYPE_EXTENSIONS:
+        if not isinstance(content_type, str) or content_type not in storage.CONTENT_TYPE_EXTENSIONS:
             return _error(
                 "unsupported_content_type",
                 "Only MP4, MOV or WebM videos are accepted.",
@@ -1327,14 +1325,16 @@ def create_app(
             # Training weights only, never reward rules: optional, so a lookup that failed after
             # The check (which hid these questions) still saves.
             views = data.get("views")
-            if views is not None and views not in RETENTION_VIEWS:
+            if views is not None and (not isinstance(views, str) or views not in RETENTION_VIEWS):
                 return _error("invalid_request", "views must be one of the listed choices.")
             published = data.get("published")
-            if published is not None and published not in RETENTION_PUBLISHED:
+            if published is not None and (
+                not isinstance(published, str) or published not in RETENTION_PUBLISHED
+            ):
                 return _error("invalid_request", "published must be one of the listed choices.")
 
         same_cut = data.get("same_cut")
-        if same_cut not in {"same", "light_edit", "recut"}:
+        if not isinstance(same_cut, str) or same_cut not in {"same", "light_edit", "recut"}:
             return _error("invalid_request", "same_cut must be one of the listed choices.")
         promoted = data.get("promoted")
         if not isinstance(promoted, bool):

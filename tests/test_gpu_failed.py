@@ -139,6 +139,19 @@ def test_an_already_terminal_job_is_a_noop(aws, db, pg, gpu_env, new_job, termin
     assert pg.snapshot() == before
 
 
+def test_a_retry_of_a_failed_job_deletes_its_remaining_files(aws, db, pg, gpu_env, new_job):
+    job_id, key = new_job()
+    upload(aws, key)
+    aws.s3.put_object(Bucket=aws.bucket, Key=f"results/{job_id}.brain", Body=b"brain")
+    assert billing.issue_refund(db, job_id, "processing_failed", queued=True) is True
+    assert storage.object_exists(aws.s3, aws.bucket, key)
+
+    gpu_failed()(sns_event(job_id), None)
+
+    assert pg.refund_reason(job_id) == "processing_failed"
+    assert_files_deleted(aws, job_id, key)
+
+
 def test_an_unparseable_notification_is_logged_and_dropped(aws, db, pg, gpu_env, caplog):
     before = pg.snapshot()
     event = {"Records": [{"Sns": {"Message": "this is not json", "MessageId": "m1"}}]}

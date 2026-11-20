@@ -1,9 +1,9 @@
 """GPU guard.
 
 The guard reads SageMaker and Application Auto Scaling through small recording clients, and the
-jobs table through PostgreSQL. It stops the endpoint only when an instance is running, no
-keep-warm holds it, and neither a live claim, a dispatched request, nor any recent job activity
-says work is still coming.
+jobs table through PostgreSQL. It stops the endpoint when no instance is running and no start is
+waiting to be filled (an unfilled start is stopped as well), no keep-warm holds it, and neither a
+live claim, a dispatched request, nor any recent job activity says work is still coming.
 """
 
 import logging

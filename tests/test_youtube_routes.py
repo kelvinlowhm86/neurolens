@@ -1,9 +1,9 @@
-"""Web changes.
+"""YouTube reward routes and copy.
 
 The check route looks the video up before any work and names every reward reason; the save route
 does its own lookup and stores the checked facts instead of the questions. The launcher reads the
-YouTube key from Parameter Store and fails to start without it. The pages carry the new wording,
-and the worker stops writing the course-study copy.
+YouTube key from Parameter Store and fails to start without it. A consented job's video is written
+under `dataset/`, with no separate academic copy.
 """
 
 import contextlib

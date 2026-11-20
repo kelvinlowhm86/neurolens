@@ -1,12 +1,14 @@
 # Permissions for the `neurolens-deploy` IAM user
 
-The deploy user can only touch NeuroLens resources, so it cannot see or change anything else in the
-AWS account (other projects' buckets or machines, for example). Five policy files:
+The deploy user can change only NeuroLens resources, so it cannot delete or reconfigure another
+project's buckets or machines. It can read a few account-wide lists (service limits, GPU
+availability, the activity log and the teardown checks), which also show other projects' names.
+Five policy files:
 
 | File | Attached to | What it allows |
 |---|---|---|
 | `neurolens-deploy-services.json` | the deploy user | S3 buckets and SQS queues named `neurolens-*`; alarms (and their history) and email topics named `neurolens-*`; Lambda functions, EventBridge rules and Lambda log groups named `neurolens-*` and the queue trigger of a `neurolens-*` function; the SageMaker endpoint, endpoint configurations and models named `neurolens-*`; the `neurolens-*` ECR repository and CodeBuild project; the Cloud Control actions the awscc provider uses for the endpoint configuration; the `neurolens-*` Aurora database, its RDS-created password secret and the Data API; Parameter Store under `/neurolens/` |
-| `neurolens-deploy-compute.json` | the deploy user | VPC, subnets and security groups, all tagged `Project=neurolens`; roles named `neurolens-*`; handing roles only to SageMaker, CodeBuild, Lambda (and only inside the boundary, below); service-linked roles for SageMaker, CodeBuild, SageMaker endpoint scaling and RDS; Application Auto Scaling only on scaling targets tagged `Project=neurolens` (their ARNs carry a random id, so a name cannot scope them). It cannot launch EC2 instances. Decoding an access-denied error (read-only). Reading GPU spare-capacity scores and service quotas in any region (read-only, for choosing a region). Reading the account's CloudTrail event history (read-only; it cannot be scoped to NeuroLens, so it also shows other projects' events). |
+| `neurolens-deploy-compute.json` | the deploy user | VPC, subnets and security groups, all tagged `Project=neurolens`; roles named `neurolens-*`; handing roles only to SageMaker, CodeBuild, Lambda (and only inside the boundary, below); service-linked roles for SageMaker, CodeBuild, SageMaker endpoint scaling and RDS; Application Auto Scaling only on scaling targets tagged `Project=neurolens` (their ARNs carry a random id, so a name cannot scope them). It cannot launch EC2 instances. Decoding an access-denied error (read-only). Reading GPU spare-capacity scores and service quotas in any region (read-only, for choosing a region). Reading the account's CloudTrail event history (read-only; it cannot be scoped to NeuroLens, so it also shows other projects' events). The reads `infra/teardown.sh` needs to prove nothing is left: tagged resources, Secrets Manager names, SageMaker endpoint configurations and models, `/neurolens/` parameters, and IAM role names (read-only; the list calls cannot be scoped, so they also show other projects' names). |
 | `neurolens-deploy-web.json` | the deploy user | The website: Cognito user pools and CloudFront distributions may be created only tagged `Project=neurolens` and changed only when so tagged; CloudFront's origin signing settings and AWS's managed cache policies (untaggable, harmless alone); reading the account's Lambda limits |
 | `neurolens-quota-requests.json` | the deploy user | Asking AWS for higher SageMaker and Lambda quotas in us-east-1, and seeing those requests' status; on the first request, creating the AWS helper role through which Service Quotas opens the support case. A quota is only a ceiling and costs nothing; the other policies still limit what may run |
 | `neurolens-role-boundary.json` | nobody directly (a *permissions boundary*) | The most any `neurolens-*` role may ever do, whatever is written into it |
@@ -59,5 +61,8 @@ with the `neurolens-quota-requests` policy.
 - Application Auto Scaling's `DescribeScalableTargets` and Cloud Control's operations cannot be
   limited to one resource, so those read/Cloud-Control actions are account-wide. The write actions
   (registering targets, policies, scheduled actions) are limited to the `neurolens` endpoint.
+- The teardown's leftover reads in `neurolens-deploy-compute.json` cannot be limited to one
+  resource either: they list tags, secrets, SageMaker endpoint configurations and models, and IAM
+  role names account-wide (read-only). The `/neurolens/` parameters stay path-scoped.
 - The policies are managed policies: each stays under IAM's 6,144-character limit (without
   whitespace). Adding many more actions needs another policy file.

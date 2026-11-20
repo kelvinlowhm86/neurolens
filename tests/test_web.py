@@ -1,7 +1,5 @@
-"""Tests for neurolens.web.app via create_app. From.
-
- retired `/api/samples` (the page reads /data/samples.json), and with it the test that
-the route equals data/samples.json.
+"""Tests for neurolens.web.app via create_app: the index, sample thumbnails and the /data
+path-traversal guard.
 """
 
 from pathlib import Path

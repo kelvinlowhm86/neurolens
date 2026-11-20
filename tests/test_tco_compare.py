@@ -124,6 +124,38 @@ def test_no_breakeven_when_cloud_is_cheaper_per_video(tco):
     assert rows[0]["breakeven_videos_per_month"] is None
 
 
+def test_a_positive_breakeven_when_cloud_costs_more_fixed_but_less_per_video(tco):
+    assert tco.breakeven_videos(0.05, 0.06, 100, 10) == pytest.approx(9000)
+
+
+def test_a_negative_breakeven_is_none(tco):
+    assert tco.breakeven_videos(0.06, 0.05, 100, 10) is None
+
+
+def test_markdown_names_the_option_cheaper_at_every_volume(tco, tmp_path):
+    assumptions = {
+        "cloud": {"gpu_usd_per_hour": {"value": 1, "unit": "USD/h", "source": "test"}},
+        "on_prem": {"gpu_name": {"value": "NVIDIA A100 40GB", "unit": "", "source": "test"}},
+    }
+    row = {
+        "clip_seconds": 60,
+        "cloud_per_video_usd": 0.05,
+        "onprem_per_video_usd": 0.06,
+        "cloud_fixed_monthly_usd": 10,
+        "onprem_fixed_monthly_usd": 100,
+        "breakeven_videos_per_month": None,
+        "onprem_capacity_videos_per_month": 1000,
+        "capacity_warning": False,
+    }
+    path = tmp_path / "exp3_tco.md"
+
+    tco.write_markdown(path, [row], [], assumptions)
+
+    text = path.read_text()
+    assert "cloud is cheaper at every volume" in text
+    assert "cloud is not cheaper per video" not in text
+
+
 def test_capacity_warning_when_breakeven_exceeds_one_gpu(tco):
     assumptions = {
         "cloud": {

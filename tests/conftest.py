@@ -31,7 +31,7 @@ import numpy as np
 import pytest
 
 BUCKET = "neurolens-test-bucket"
-# The 7 signals of; these stand in for response.SIGNALS so light tests need no atlas.
+# The 7 response signals; these stand in for the atlas-built ROI masks so light tests need no atlas.
 ROI_NAMES = ["faces", "bodies", "scenes", "visual", "sound", "speech", "social"]
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -59,7 +59,6 @@ def write_config(root, **overrides):
 
 # The user that owns the worker tests' jobs (uploads/{user_id}/{job_id}.mp4).
 USER_ID = "test-user"
-USER_EMAIL = "test-user@example.com"
 STARTER_CENTS = 500  # default
 # The web app's development user in make_cfg, distinct from create_app's built-in one.
 WEB_USER_ID = "web-user"
@@ -507,17 +506,11 @@ def patch_everywhere(monkeypatch):
 
 
 class SpyS3:
-    """Wraps a boto3 client: records every call and refuses the listed ones.
+    """Wraps a boto3 client: records every call and refuses the listed ones."""
 
-    `forbid_on_uploads` refuses a call only when it targets an uploaded video (a key under
-    uploads/). The worker also reads results/ objects (result_exists), so "never
-    download the video" cannot be checked by refusing get_object altogether.
-    """
-
-    def __init__(self, inner, forbid=(), forbid_on_uploads=()):
+    def __init__(self, inner, forbid=()):
         self._inner = inner
         self._forbid = set(forbid)
-        self._forbid_on_uploads = set(forbid_on_uploads)
         self.calls = []
 
     def __getattr__(self, name):
@@ -529,9 +522,6 @@ class SpyS3:
             self.calls.append((name, args, kwargs))
             if name in self._forbid:
                 raise AssertionError(f"s3.{name} must not be called here")
-            key = kwargs.get("Key", args[1] if len(args) > 1 else None)
-            if name in self._forbid_on_uploads and str(key).startswith("uploads/"):
-                raise AssertionError(f"s3.{name} must not be called on {key} here")
             return attr(*args, **kwargs)
 
         return wrapper
@@ -542,8 +532,8 @@ class SpyS3:
 
 @pytest.fixture
 def spy_s3(aws):
-    def make(forbid=(), forbid_on_uploads=()):
-        return SpyS3(aws.s3, forbid=forbid, forbid_on_uploads=forbid_on_uploads)
+    def make(forbid=()):
+        return SpyS3(aws.s3, forbid=forbid)
 
     return make
 
@@ -571,7 +561,7 @@ MISSING = object()  # a claim left out of the ID token
 
 @pytest.fixture
 def ssm(aws):
-    """Moto's Parameter Store holding the five /neurolens/web/* SecureStrings."""
+    """Moto's Parameter Store holding the /neurolens/web/* SecureStrings."""
     import boto3
 
     client = boto3.client("ssm", region_name="us-east-1")

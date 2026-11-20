@@ -36,7 +36,6 @@ GOLDEN_AREAS = {
     "social": [15],
 }
 SIGNAL_ORDER = ["faces", "bodies", "scenes", "visual", "sound", "speech", "social"]
-EXPECTED_SERIES = [*SIGNAL_ORDER, "see", "hear", "understand", "overall"]
 
 
 def tiny_masks():

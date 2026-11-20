@@ -4,8 +4,9 @@ This creates everything NeuroLens needs on AWS: the S3 bucket and SQS queue, the
 database, the website and sign-in, and a SageMaker asynchronous GPU
 endpoint, its image repository and build, the job Lambdas and their alarms. Terraform keeps a
 record of what it created, so running `apply` twice is safe (the second run reports no changes)
-and `destroy` removes everything it created. The region is one setting (`region` in
-`terraform.tfvars`, default `us-east-1`).
+and `destroy` removes everything it created. Everything runs in `us-east-1` (`region` in
+`terraform.tfvars`): the hand-applied IAM policies, the role boundary and the worker image's pinned
+base image name it explicitly, and the state bucket lives there, so another region fails.
 
 What it creates
 

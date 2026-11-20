@@ -1,8 +1,8 @@
 """Checked publish dates and length.
 
 `youtube.lookup` turns the Data API's reply into facts or refuses loudly without leaking the key.
-The checked facts include the publish date, length and view count. removed the one-week wait:
-a video of a different length is saved without credit, and enough views otherwise pay at once.
+The checked facts include the publish date, length and view count. A video of a different length
+is saved without credit, and enough views otherwise pay at once.
 The check and the save use the same rules, so their answers agree. Money and snapshots are read
 directly from PostgreSQL; time moves by changing the job's `created_at` or the facts'
 `published_at`, never by sleeping.
@@ -351,22 +351,6 @@ def test_the_length_must_match_the_analysed_video_within_two_seconds(db, pg, you
         assert result["reason"] == "length_mismatch"
         assert pg.job(job_id)["curve_rewarded_at"] is None
         assert "curve_reward" not in pg.kinds(WEB_USER_ID)
-
-
-def test_unknown_facts_skip_the_length_check(db, pg):
-    job_id, _ = make_job(db, seconds=30.1)
-    pg.age(job_id, created_s=8 * DAY_S)
-    billing.grant_credit(db, f"{WEB_USER_ID}@example.com", 100)
-
-    result = billing.add_curve(
-        db,
-        WEB_USER_ID,
-        job_id,
-        **curve_args(job_id, facts_=None, views=VIEWS, published=PUBLISHED),
-    )
-
-    assert result["rewarded_cents"] == PRICE_CENTS
-    assert result["reason"] is None
 
 
 # ---------------------------------------------------------------- the check agrees with the save

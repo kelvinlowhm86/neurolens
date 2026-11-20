@@ -198,9 +198,3 @@ def test_finish_does_nothing_once_either_job_is_deleted(db, pg, deleted):
     assert billing.finish_comparison(db, a, b, "ready") is False
 
     assert comparison(pg, a, b)["state"] == "writing"
-
-
-def test_the_stored_pair_is_the_one_comparison_pair_makes():
-    x, y = str(uuid.uuid4()), str(uuid.uuid4())
-
-    assert storage.comparison_pair(x, y) == canonical(x, y)

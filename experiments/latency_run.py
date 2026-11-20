@@ -22,7 +22,7 @@ from neurolens import experiment_runs
 from neurolens.storage import EXTENSION_CONTENT_TYPES, utc_parse
 
 COLUMNS = experiment_runs.EXPERIMENT_1_COLUMNS
-STAGES = ["downloading", "transcribing", "inference_full", "inference_noaudio", "extracting_roi"]
+STAGES = ["transcribing", "inference_full", "inference_noaudio", "extracting_roi"]
 POLL_SECONDS = 2
 GIVE_UP_SECONDS = 60 * 60
 
@@ -44,9 +44,7 @@ def stage_durations_ms(status, upload_end):
     starts = {s["stage"]: utc_parse(s["at"]) for s in status["stages"]}
     done = utc_parse(status["updated_at"])
     ends = [starts[s] for s in STAGES[1:]] + [done]
-    out = {
-        "queue_wait_ms": max(0, round((starts["downloading"] - upload_end).total_seconds() * 1000))
-    }
+    out = {"queue_wait_ms": max(0, round((starts[STAGES[0]] - upload_end).total_seconds() * 1000))}
     for stage, start, end in zip(STAGES, [starts[s] for s in STAGES], ends, strict=True):
         out[f"{stage}_ms"] = round((end - start).total_seconds() * 1000)
     return out

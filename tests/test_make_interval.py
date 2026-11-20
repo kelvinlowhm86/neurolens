@@ -1,4 +1,4 @@
-"""Review fixes.
+"""RDS Data API bigint days.
 
 The RDS Data API sends an integer as a bigint (`longValue`); PostgreSQL's `make_interval`
 needs an integer argument, so every `make_interval(days => ...)` must cast its parameter.
@@ -30,9 +30,6 @@ class _BigIntDaysTransaction:
     def execute(self, sql, params=None):
         sql = _DAYS_INTERVAL.sub(r"make_interval(days => CAST(:\1 AS bigint))", sql)
         return self._tx.execute(sql, params)
-
-    def execute_unchecked(self, sql):
-        return self._tx.execute_unchecked(sql)
 
 
 class BigIntDaysDatabase:

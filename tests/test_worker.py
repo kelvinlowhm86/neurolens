@@ -1,14 +1,12 @@
-"""The GPU container's job logic (`worker.handle_job`), from the merged,, and
-worker tests ("Container").
+"""The GPU container's job logic (`worker.handle_job`).
 
 SageMaker has already downloaded the upload, so handle_job gets a local path and takes the object
 key and verified duration from the job row. A test that runs the pipeline therefore verifies the
 job first, exactly as the dispatcher does. Fake inference, moto S3 and PostgreSQL; money and job
 state are read directly through `pg`.
 
-Checks that moved to the dispatcher (size, duration, credit) or that no longer exist (SQS polling,
-release for retry, a missing upload) are gone; the SageMaker server's HTTP contract lives in
-tests/test_container.py.
+The dispatcher owns the size, duration and credit checks; the SageMaker server's HTTP contract
+lives in tests/test_container.py.
 """
 
 import contextlib
@@ -105,12 +103,8 @@ def has_audio(path):
 
 @pytest.fixture
 def calls(patch_everywhere):
-    """Spies on the inference-side functions. Each wraps the real (fake-mode) function.
-
-    `order` records every call by name, in the order the worker made them.
-    """
+    """Spies on the inference-side functions. Each wraps the real (fake-mode) function."""
     log = {
-        "order": [],
         "build_events": [],
         "without_audio": [],
         "predict": [],
@@ -128,19 +122,16 @@ def calls(patch_everywhere):
     real_extract = response.extract_response
 
     def build(path, *a, **kw):
-        log["order"].append("build_events")
         events = real_build(path, *a, **kw)
         log["build_events"].append((str(path), has_audio(path), Path(path).read_bytes(), events))
         return events
 
     def without(events, *a, **kw):
-        log["order"].append("without_audio")
         out = real_without(events, *a, **kw)
         log["without_audio"].append((events, out))
         return out
 
     def predict(events, duration, *a, **kw):
-        log["order"].append("predict")
         preds = real_predict(events, duration, *a, **kw)
         log["predict"].append((events, duration, preds))
         return preds
@@ -150,7 +141,6 @@ def calls(patch_everywhere):
         return real_probe(path, *a, **kw)
 
     def extract(*a, **kw):
-        log["order"].append("extract_response")
         bound = inspect.signature(real_extract).bind(*a, **kw)
         log["extract_args"].append(list(bound.arguments.values()))
         if log["build_events"]:
@@ -392,8 +382,6 @@ def test_result_is_written_before_the_job_is_settled(
         return real(s3, bucket, jid, result)
 
     monkeypatch.setattr(storage, "put_result", spy)
-    if hasattr(worker, "put_result"):
-        monkeypatch.setattr(worker, "put_result", spy)
     assert run_job(aws, db, job_id, clip_path, make_cfg, roi_masks_small) is Outcome.DONE
     assert len(at_put_result) == 1
     assert at_put_result[0] != "done"
