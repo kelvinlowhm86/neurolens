@@ -39,7 +39,9 @@ You sign in, upload a video, and the browser sends the file straight to S3. A qu
 
 The full design is in [docs/architecture.md](docs/architecture.md).
 
-`neurolens/response.py` reads 7 signals from the areas the TRIBE v2 paper tested, in 3 groups:
+### What the signals measure
+
+NeuroLens reads 7 signals from the brain areas the TRIBE v2 paper tested, in 3 groups:
 
 | Signal | Brain areas (Glasser HCP-MMP1) | Group |
 |---|---|---|
@@ -51,34 +53,25 @@ The full design is in [docs/architecture.md](docs/architecture.md).
 | speech | A5, STSva, STSvp, 45 (left only) | understand |
 | social | PGi, TE1a | understand |
 
-Each signal is the mean over its area's points; each group is the mean of its signals, and overall is the mean of the three groups. The worker also runs the video with its sound removed and computes the same 11 series from that pass (muted), cut to the shared length of the two passes.
+Each signal is the average over its brain area, each group averages its signals, and overall averages the three groups. 0 means typical film or TV viewing, so two videos can be compared directly. A second run with the sound removed shows how much of the response depends on the soundtrack.
 
-### Under the hood
-
-The model outputs one row per second of video over 20,484 points of the cortex (the fsaverage5 surface: indices 0-10,241 left hemisphere, 10,242-20,483 right). TRIBE v2 was trained on fMRI responses standardised per point, so 0 means typical film/TV viewing. Values are signed and unscaled, so two videos can be compared directly.
-
-The brain-area map comes from the Glasser HCP-MMP1 parcellation (360 areas; Glasser et al. 2016, *Nature*). The two map files live in the weights prefix (`model-data/data/hcp_mmp/`, uploaded once by `infra/upload_model_data.py`); the container checks their SHA-256, so it never runs on a changed map. The map is Human Connectome Project data under the WU-Minn HCP Open Access Data Use Terms (see License).
-
-Result format 2 (`results/<job_id>.json`):
-
-```
-{"format": 2, "duration_seconds": T,
- "signals": {"faces": [T numbers], ..., "overall": [T numbers]},
- "muted":   {"faces": [M numbers], ..., "overall": [M numbers]},
- "job_id": ..., "processing_time_seconds": ..., "gpu"?: ..., "fake_inference"?: true}
-```
-
-Series order: faces, bodies, scenes, visual, sound, speech, social, see, hear, understand, overall. Values are rounded to 3 decimals. The web app adds a `summary` (`audio_dependence`) when it serves a result; it is never stored. Results without `"format": 2` are answered with 410 ("upload the video again").
-
-The raw brain file (`results/<job_id>.brain`) holds the with-audio predictions as float16, shape (T, 20484), with no header. The 3D map reads it, and later changes to the signals need no GPU rerun.
+The values, the brain-area map and the result files are described in [Brain signals and result files](docs/architecture.md#brain-signals-and-result-files).
 
 ## CS5224 write-up
 
 [Final report](docs/course/Final_report.pdf) · [Final slides](docs/course/Final_slides.pdf)
 
-## Quick start
+## Limits
 
-No GPU, model or AWS account needed. Python 3.12 and Docker (for the database).
+NeuroLens predicts an average viewer's perception, not views, retention, sales or emotion; the full list is under [Known limitations](docs/architecture.md#known-limitations).
+
+## For developers
+
+### Run it on a laptop
+
+The real model needs a GPU with about 20 GB of memory, gated LLaMA access and AWS. To work on everything around it for free, the local stack runs the whole product on a laptop (sign-in, upload, credit, queue, result page) with fake S3 and SQS and a stand-in model that returns made-up numbers. To see real results, use the [live site](https://df6girqyykyfa.cloudfront.net).
+
+You need Python 3.12 and Docker (for the database).
 
 ```bash
 python3.12 -m venv .venv && source .venv/bin/activate
@@ -90,13 +83,13 @@ export NEUROLENS_TEST_DSN=postgresql://postgres:test@localhost:55432/postgres
 
 python infra/local_stack.py                     # whole product, fake S3/SQS and fake analysis: http://127.0.0.1:5003 (--grant <email> <minutes> adds credit)
 
-# or run only the GPU container with a fake model:
+# or only the GPU container, with the stand-in model:
 FAKE_INFERENCE=1 python worker.py serve
 ```
 
 While working, run the file for the part you changed (`pytest tests/test_response.py`); it takes seconds. The whole suite (`pytest && ruff check . && ruff format --check .`) runs on GitHub on every push and pull request (`.github/workflows/ci.yml`). Without `NEUROLENS_TEST_DSN` the database tests are skipped, not failed, so set it before trusting a local run.
 
-## Deploy on AWS
+### Deploy on AWS
 
 The operator guide is [docs/operating.md](docs/operating.md); the human-only first steps are in [infra/terraform/README.md](infra/terraform/README.md). From an empty account, the first deploy is one command:
 
@@ -106,7 +99,7 @@ infra/setup.sh
 
 It lists every missing prerequisite before changing anything, and a second run skips finished work. `infra/teardown.sh` stops the GPU, backs up `experiments/`, destroys the stack and checks for leftovers.
 
-### Gated model access
+#### Gated model access
 
 The TRIBE v2 text encoder depends on LLaMA 3.2-3B, which is a gated model on Hugging Face. Before first run:
 
@@ -116,7 +109,7 @@ The TRIBE v2 text encoder depends on LLaMA 3.2-3B, which is a gated model on Hug
 
 TRIBE v2 itself (`facebook/tribev2`) is freely downloadable under CC BY-NC 4.0.
 
-### Hardware
+#### Hardware
 
 | Machine | What it needs |
 |---|---|
@@ -124,7 +117,7 @@ TRIBE v2 itself (`facebook/tribev2`) is freely downloadable under CC BY-NC 4.0.
 | Laptop | No GPU and no model: `python infra/local_stack.py` runs the whole product with fake analysis. Tests and lint need only Python. |
 | Python | 3.12 (`pyproject.toml`: `requires-python >=3.12,<3.14`). |
 
-### Dependencies
+#### Dependencies
 
 The dependency lists live in `requirements/`, one file per machine type:
 
@@ -141,7 +134,7 @@ The dependency lists live in `requirements/`, one file per machine type:
 
 `ffmpeg`/`ffprobe` are system tools (the worker image installs `ffmpeg`; the dispatcher Lambda uses a static `ffprobe` layer).
 
-## Where things live
+### Where things live
 
 - [`neurolens/`](neurolens/): the Python package for settings, inference, response maths, storage, database, billing, the web app and the SageMaker container.
 - [`app.py`](app.py), [`worker.py`](worker.py): thin launchers (`python app.py`, port 5003; `python worker.py serve`).
@@ -154,10 +147,6 @@ The dependency lists live in `requirements/`, one file per machine type:
 - [`tests/`](tests/): pytest; [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs them on every push.
 - [`docs/`](docs/): [architecture.md](docs/architecture.md) (design), [operating.md](docs/operating.md) (running it), `evidence/`, `course/`, `images/` and [tribev2_reference.md](docs/tribev2_reference.md). See [`docs/README.md`](docs/README.md).
 - [`trailer/`](trailer/): the launch video, made with Remotion; separate from the product. See [`trailer/README.md`](trailer/README.md).
-
-## Limits
-
-NeuroLens predicts an average viewer's perception, not views, retention, sales or emotion; the full list is under [Known limitations](docs/architecture.md#known-limitations).
 
 ## License
 

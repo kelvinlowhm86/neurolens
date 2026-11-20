@@ -34,6 +34,29 @@ A video goes through these steps from sign-in to the page that shows the result.
 
 In the code: `neurolens/web/auth.py`, `neurolens/web/app.py`, `neurolens/billing.py`, `neurolens/pricing.py`, `neurolens/storage.py`, `infra/terraform/main.tf`, `neurolens/lambdas/dispatcher.py`, `neurolens/worker.py`, `config.json`, `infra/migrations/004_one_ending_per_job.sql`, `neurolens/lambdas/report.py`, `neurolens/results.py`
 
+## Brain signals and result files
+
+The model outputs one row per second of video over 20,484 points of the cortex (the fsaverage5 surface: indices 0-10,241 left hemisphere, 10,242-20,483 right). TRIBE v2 was trained on fMRI responses standardised per point, so 0 means typical film/TV viewing. Values are signed and unscaled, so two videos can be compared directly.
+
+The brain-area map comes from the Glasser HCP-MMP1 parcellation (360 areas; Glasser et al. 2016, *Nature*). The two map files live in the weights prefix (`model-data/data/hcp_mmp/`, uploaded once by `infra/upload_model_data.py`); the container checks their SHA-256, so it never runs on a changed map. The map is Human Connectome Project data under the WU-Minn HCP Open Access Data Use Terms (see the README's License).
+
+Result format 2 (`results/<job_id>.json`):
+
+```
+{"format": 2, "duration_seconds": T,
+ "signals": {"faces": [T numbers], ..., "overall": [T numbers]},
+ "muted":   {"faces": [M numbers], ..., "overall": [M numbers]},
+ "job_id": ..., "processing_time_seconds": ..., "gpu"?: ..., "fake_inference"?: true}
+```
+
+Each signal is the mean over its area's points; each group is the mean of its signals, and overall is the mean of the three groups. The worker also runs the video with its sound removed and computes the same 11 series from that pass (muted), cut to the shared length of the two passes.
+
+Series order: faces, bodies, scenes, visual, sound, speech, social, see, hear, understand, overall. Values are rounded to 3 decimals. The web app adds a `summary` (`audio_dependence`) when it serves a result; it is never stored. Results without `"format": 2` are answered with 410 ("upload the video again").
+
+The raw brain file (`results/<job_id>.brain`) holds the with-audio predictions as float16, shape (T, 20484), with no header. The 3D map reads it, and later changes to the signals need no GPU rerun.
+
+In the code: `neurolens/response.py`, `neurolens/inference.py`, `neurolens/worker.py`
+
 ## Data
 
 This part covers where state lives: the database tables, the S3 key prefixes, and the rules that delete old data.
