@@ -71,7 +71,9 @@
   style.textContent = ".nl-demo-closed{opacity:.55;cursor:default;pointer-events:none;"
     + "text-decoration:none}"
     // Parts that only make sense with a server: early access, feedback form, the upload call to action.
+    // With those gone, "How it works" sits right above the footer, so its footer link is dropped too.
     + "a[href='#access'],#access,.footer-feedback,section.closing,#signInPanel .actions,"
+    + ".footer-links a[href='#how'],"
     + "#signedOutNote{display:none!important}";
   (document.head || document.documentElement).append(style);
 
