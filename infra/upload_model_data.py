@@ -3,7 +3,8 @@
 
 SageMaker copies that prefix into /opt/ml/model at instance start, and the container runs with
 HF_HUB_OFFLINE=1. The prefix therefore mirrors the repo's paths: models/hub/ holds the HuggingFace
-cache and data/hcp_mmp/ the two Glasser maps the worker verifies at start.
+cache, models/torch/ the torchaudio alignment weights, data/hcp_mmp/ the two Glasser maps the
+worker verifies at start, and data/nilearn/ the Destrieux atlas the brain mesh is built from.
 
 The main model repository comes from config.json and the map names and SHA-256s from response.py,
 so those are not repeated here. Everything is downloaded into a temporary folder on this laptop,
@@ -36,6 +37,41 @@ ENCODER_REPOS = {
     "facebook/vjepa2-vitg-fpc64-256": None,
 }
 
+# WhisperX transcribes speech with faster-whisper's large-v3 model (the worker image installs
+# WhisperX; the model itself is not in the image, so it must be in this offline cache).
+WHISPER_REPO = "Systran/faster-whisper-large-v3"
+
+# WhisperX aligns words with torchaudio's WAV2VEC2_ASR_LARGE_LV60K_960H pipeline. torch.hub keeps
+# downloaded checkpoints under $TORCH_HOME/hub/checkpoints; this is the URL and file from that
+# pipeline (torchaudio.pipelines), with the published size used as the integrity check.
+ALIGNMENT_WEIGHTS = (
+    "wav2vec2_fairseq_large_lv60k_asr_ls960.pth",
+    "https://download.pytorch.org/torchaudio/models/wav2vec2_fairseq_large_lv60k_asr_ls960.pth",
+    1_262_046_195,
+)
+
+# nilearn.datasets.fetch_atlas_surf_destrieux writes these under NILEARN_DATA/destrieux_surface,
+# named after the left/right hemispheres, and adds NILEARN_README at NILEARN_DATA itself. The
+# worker's mesh maker reads the annot files; the README is what nilearn would have written.
+DESTRIEUX_FILES = {
+    "left.aparc.a2009s.annot": (
+        "https://www.nitrc.org/frs/download.php/9343/lh.aparc.a2009s.annot",
+        85_260,
+    ),
+    "right.aparc.a2009s.annot": (
+        "https://www.nitrc.org/frs/download.php/9342/rh.aparc.a2009s.annot",
+        85_260,
+    ),
+}
+NILEARN_README = """# Nilearn data folder
+
+This directory is used by Nilearn to store datasets
+and atlases downloaded from the internet.
+It can be safely deleted.
+If you delete it, previously downloaded data will be downloaded again."""
+
+DOWNLOAD_TIMEOUT_SECONDS = 3600  # the alignment weights are 1.26 GB
+
 
 def terraform_output(name):
     result = subprocess.run(
@@ -47,21 +83,53 @@ def terraform_output(name):
     return result.stdout.strip()
 
 
-def download_repos(cfg, token):
+def download_huggingface(repo_id, cache_dir, token, allow_patterns):
     from huggingface_hub import snapshot_download
 
-    repo_id = cfg["model"]["repo_id"]
-    cache_dir = os.environ["HF_HUB_CACHE"]
-    print(f"Downloading {repo_id}...")
-    snapshot_download(repo_id=repo_id, cache_dir=cache_dir, token=token)
-    for encoder, allow_patterns in ENCODER_REPOS.items():
-        print(f"Downloading {encoder}...")
-        snapshot_download(
-            repo_id=encoder,
-            cache_dir=cache_dir,
-            token=token,
-            allow_patterns=allow_patterns,
-        )
+    snapshot_download(
+        repo_id=repo_id,
+        cache_dir=str(cache_dir),
+        token=token,
+        allow_patterns=allow_patterns,
+    )
+
+
+def download_repos(cfg, token, cache_dir):
+    repositories = {
+        cfg["model"]["repo_id"]: None,
+        **ENCODER_REPOS,
+        WHISPER_REPO: None,
+    }
+    for repo_id, allow_patterns in repositories.items():
+        print(f"Downloading {repo_id}...")
+        download_huggingface(repo_id, cache_dir, token, allow_patterns)
+
+
+def download_file(url, target, expected_size):
+    """Download one file atomically and check its size, so a partial file is never uploaded."""
+    target.parent.mkdir(parents=True, exist_ok=True)
+    print(f"Downloading {target.name}...")
+    fd, temporary = tempfile.mkstemp(dir=target.parent, prefix=f"{target.name}.", suffix=".tmp")
+    os.close(fd)
+    temporary = Path(temporary)
+    replaced = False
+    try:
+        with urllib.request.urlopen(url, timeout=DOWNLOAD_TIMEOUT_SECONDS) as response:
+            with temporary.open("wb") as handle:
+                shutil.copyfileobj(response, handle)
+        actual = temporary.stat().st_size
+        if actual != expected_size:
+            raise RuntimeError(f"{target.name} is {actual} bytes, expected {expected_size}.")
+        temporary.replace(target)
+        replaced = True
+    finally:
+        if not replaced:
+            temporary.unlink(missing_ok=True)
+
+
+def download_torch_weights(models_dir):
+    filename, url, expected_size = ALIGNMENT_WEIGHTS
+    download_file(url, models_dir / "torch" / "hub" / "checkpoints" / filename, expected_size)
 
 
 def download_maps(data_dir):
@@ -73,6 +141,31 @@ def download_maps(data_dir):
         with urllib.request.urlopen(url, timeout=MAP_DOWNLOAD_TIMEOUT_SECONDS) as response:
             target.write_bytes(response.read())
         verify_sha256(target, expected)
+
+
+def download_nilearn(data_dir):
+    nilearn_dir = data_dir / "nilearn"
+    nilearn_dir.mkdir(parents=True, exist_ok=True)
+    (nilearn_dir / "README.md").write_text(NILEARN_README)
+    for filename, (url, expected_size) in DESTRIEUX_FILES.items():
+        download_file(url, nilearn_dir / "destrieux_surface" / filename, expected_size)
+
+
+def prepare_model_data(cfg, token, hub_cache, models_dir, data_dir):
+    download_repos(cfg, token, hub_cache)
+    download_torch_weights(models_dir)
+    download_maps(data_dir)
+    download_nilearn(data_dir)
+
+
+def stage_model_data(temp, hub_cache, models_dir, data_dir):
+    """The upload tree: only the files the offline worker reads, without HuggingFace's blobs/."""
+    stage = temp / "upload"
+    copy_tree(hub_cache, stage / "models" / "hub")
+    copy_tree(models_dir / "torch", stage / "models" / "torch")
+    copy_tree(data_dir / "hcp_mmp", stage / "data" / "hcp_mmp")
+    copy_tree(data_dir / "nilearn", stage / "data" / "nilearn")
+    return stage
 
 
 def copy_tree(src, dst):
@@ -124,12 +217,9 @@ def main():
             path.mkdir(parents=True)
         settings.configure_env(cfg, paths)
 
-        download_repos(cfg, token)
-        download_maps(paths["data"])
-
-        stage = temp / "upload"
-        copy_tree(Path(os.environ["HF_HUB_CACHE"]), stage / "models" / "hub")
-        copy_tree(paths["data"] / "hcp_mmp", stage / "data" / "hcp_mmp")
+        hub_cache = Path(os.environ["HF_HUB_CACHE"])
+        prepare_model_data(cfg, token, hub_cache, paths["models"], paths["data"])
+        stage = stage_model_data(temp, hub_cache, paths["models"], paths["data"])
         files = [path for path in stage.rglob("*") if path.is_file()]
         local = totals(files)
         if local[0] == 0 or local[1] == 0:

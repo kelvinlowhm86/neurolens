@@ -188,17 +188,23 @@ aws ecr batch-get-image --region us-east-1 --registry-id 763104351884 \
 ### Model files (once per deployment)
 
 SageMaker copies `s3://<bucket>/model-data/` into `/opt/ml/model` whenever an instance starts, and
-the container runs with `HF_HUB_OFFLINE=1`. The prefix holds the HuggingFace cache under
-`models/hub/` and the two Glasser brain maps under `data/hcp_mmp/`.
+the container runs with `HF_HUB_OFFLINE=1`. The prefix holds:
+
+- the HuggingFace cache under `models/hub/`: the TRIBE v2 model, its three encoders, and WhisperX's
+  `faster-whisper-large-v3` speech model;
+- WhisperX's torchaudio alignment weights under `models/torch/hub/checkpoints/`;
+- the two Glasser brain maps under `data/hcp_mmp/`;
+- nilearn's Destrieux atlas under `data/nilearn/` (the two annot files and nilearn's README).
 
 The bucket exists only after the first apply, so the first apply must have `worker_image` empty
 (no endpoint; `sagemaker.tf`). `infra/setup.sh` then checks the prefix: when it is empty it runs
-`infra/upload_model_data.py`, which downloads the model repository from `config.json` and TRIBE
-v2's three encoders from HuggingFace with `HF_TOKEN`, fetches the maps with their SHA-256 checks,
-uploads the folder layout, checks the object count and total size, and deletes its temporary
-folder. The HuggingFace token needs the LLaMA licence accepted first (`README.md`, "Gated Model
-Access"). `setup.sh` refuses to build the image and apply the endpoint while the prefix is empty:
-a failed SageMaker start bills for about 30 minutes and cannot be cancelled.
+`infra/upload_model_data.py`, which downloads the model repository from `config.json`, TRIBE v2's
+three encoders and the Whisper model from HuggingFace with `HF_TOKEN`, fetches the alignment
+weights and Destrieux files, fetches the maps with their SHA-256 checks, uploads the folder layout,
+checks the object count and total size, and deletes its temporary folder. The HuggingFace token
+needs the LLaMA licence accepted first (`README.md`, "Gated Model Access"). `setup.sh` refuses to
+build the image and apply the endpoint while the prefix is empty: a failed SageMaker start bills
+for about 30 minutes and cannot be cancelled.
 
 To do it by hand, from the repo root after the first apply:
 

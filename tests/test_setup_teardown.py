@@ -11,6 +11,8 @@ the human-only work: it lists every missing prerequisite before changing anythin
 steps in order and skips finished work on a second run.
 """
 
+import importlib.util
+import io
 import json
 import os
 import pty
@@ -1012,3 +1014,67 @@ def test_setup_does_not_overwrite_an_existing_cognito_client_secret(sandbox):
     names = [option(r.calls[i], "--name") for i in r.find("ssm", "put-parameter")]
     assert "/neurolens/web/cognito_client_secret" not in names
     assert r.find("step", "deploy_web")
+
+
+# ---------------------------------------------------------------- model data layout
+
+
+def load_upload_model_data():
+    path = INFRA / "upload_model_data.py"
+    spec = importlib.util.spec_from_file_location("upload_model_data", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_upload_model_data_prepares_the_full_offline_layout(tmp_path, monkeypatch):
+    module = load_upload_model_data()
+    models = tmp_path / "models"
+    data = tmp_path / "data"
+    hub_cache = models / "hub"
+    hub_cache.mkdir(parents=True)
+    data.mkdir()
+    downloaded = []
+
+    def fake_snapshot_download(repo_id, cache_dir, token, allow_patterns):
+        root = Path(cache_dir) / f"models--{repo_id.replace('/', '--')}"
+        snapshot = root / "snapshots" / "rev"
+        snapshot.mkdir(parents=True)
+        (snapshot / "config.json").write_text("{}")
+        (root / "blobs").mkdir()
+        (root / "blobs" / "duplicate").write_text("blob")
+        return str(snapshot)
+
+    def fake_download_file(url, target, expected_size):
+        downloaded.append((url, target.relative_to(tmp_path).as_posix(), expected_size))
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(b"fake")
+
+    monkeypatch.setattr(module, "download_huggingface", fake_snapshot_download)
+    monkeypatch.setattr(module, "download_file", fake_download_file)
+    monkeypatch.setattr(module.urllib.request, "urlopen", lambda url, timeout: io.BytesIO(b"map"))
+    monkeypatch.setattr(module, "verify_sha256", lambda path, expected: None)
+
+    module.prepare_model_data(
+        {"model": {"repo_id": "facebook/tribev2"}}, "token", hub_cache, models, data
+    )
+    stage = module.stage_model_data(tmp_path / "tmp", hub_cache, models, data)
+    files = {path.relative_to(stage).as_posix() for path in stage.rglob("*") if path.is_file()}
+
+    hub = "models/hub/models--"
+    assert files == {
+        f"{hub}facebook--tribev2/snapshots/rev/config.json",
+        f"{hub}facebook--vjepa2-vitg-fpc64-256/snapshots/rev/config.json",
+        f"{hub}facebook--w2v-bert-2.0/snapshots/rev/config.json",
+        f"{hub}meta-llama--Llama-3.2-3B/snapshots/rev/config.json",
+        f"{hub}Systran--faster-whisper-large-v3/snapshots/rev/config.json",
+        "models/torch/hub/checkpoints/wav2vec2_fairseq_large_lv60k_asr_ls960.pth",
+        "data/hcp_mmp/lh.HCPMMP1.annot",
+        "data/hcp_mmp/rh.HCPMMP1.annot",
+        "data/nilearn/destrieux_surface/left.aparc.a2009s.annot",
+        "data/nilearn/destrieux_surface/right.aparc.a2009s.annot",
+        "data/nilearn/README.md",
+    }
+
+    destrieux_urls = {url for url, _ in module.DESTRIEUX_FILES.values()}
+    assert {url for url, _, _ in downloaded} == {module.ALIGNMENT_WEIGHTS[1]} | destrieux_urls
