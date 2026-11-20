@@ -4,7 +4,9 @@ The deployer gets their own login (an AWS "user") inside your account, allowed t
 and nothing else. Do it once, about 20 minutes, signed in as the account owner (root) or an admin.
 Only step 4's test message costs money, a fraction of a cent.
 
-The deployer's user can only create or change things named `neurolens-...`. It cannot
+The deployer's user can only create or change things named `neurolens-...`. One exception: it can
+create, change and delete CloudFront origin access controls and read AWS's cache and
+origin-request policies, because AWS does not let these be limited to a name. It cannot
 open or change anything else in the account, start ordinary servers, or change billing. It can read
 a few account-wide lists: service limits, GPU availability, the activity log, and the tag, secret,
 SageMaker and role names the teardown checks for leftovers, which also show other projects' names.

@@ -38,12 +38,12 @@ What it creates
 The endpoint only exists once `worker_image` is set: build the image first (section 2b).
 
 Cost: with everything stopped, the running cost is the stored image, the ECR repository,
-Aurora storage and the S3 files, a few dollars a month (the reaper waking Aurora every
-`reaper_schedule_hours` (3 hours) is about $3). A GPU bills only while it runs: about $2.61/h for
-`ml.g6e.xlarge`, $1.22/h for `ml.g6.2xlarge` (L4), $1.52/h for `ml.g5.2xlarge` (A10G) and
-$2.80/h for `ml.g6e.2xlarge` (SageMaker prices, us-east-1), and it stops itself after
-`idle_stop_minutes` (7 idle minutes). A deploy starts one instance for about 7 minutes
-(roughly $0.50-0.80).
+Aurora storage and the S3 files, a few dollars a month (estimated for us-east-1 in October 2026;
+the reaper waking Aurora every `reaper_schedule_hours` (3 hours) is about $3). A GPU bills only
+while it runs, at on-demand prices in us-east-1 (October 2026): about $2.61/h for `ml.g6e.xlarge`,
+$1.22/h for `ml.g6.2xlarge` (L4), $1.52/h for `ml.g5.2xlarge` (A10G) and $2.80/h for
+`ml.g6e.2xlarge`, and it stops itself after `idle_stop_minutes` (7 idle minutes). A deploy starts
+one instance for about 7 minutes (roughly $0.50-0.80).
 
 From an empty account: the account-owner steps in `infra/iam/ACCOUNT_OWNER.md` and the human-only steps in section 0, then `infra/setup.sh`; it does section 1,
 section 2, section 2c (database tables), section 2a and section 2b. Then section 5 for each work
@@ -284,16 +284,16 @@ infra/stop_work.sh                      # emergency pause; prints ALL STOPPED on
 and checks both, sets the desired count to 0 and waits until the endpoint shows 0.
 A running job dies and is refunded. `start_work.sh` puts the maximum back to `max_instances` (1 by default).
 
-## 5b. Demo routine
+## 5b. Preparing for a live demonstration
 
 1. The day before: one full dry run.
 2. 45-60 minutes before: `infra/start_work.sh --keep-warm --hours 3`.
-3. One short warm-up job, so the first-job costs are paid before the audience arrives.
+3. One short warm-up job to warm the GPU and remove the first-job wait.
 4. Demo. If it overruns, run step 2 again (it moves the end).
 5. Straight after: `infra/stop_work.sh`, and wait for **ALL STOPPED**.
 
 ## 6. Tear down
 
 `infra/teardown.sh` runs the guarded teardown: stop the GPU, destroy the stack, delete the
-hand-made secrets and check for leftovers. The steps it cannot do are in
+secrets you create by hand in Parameter Store and check for leftovers. The steps it cannot do are in
 `docs/operating.md` ("Teardown").

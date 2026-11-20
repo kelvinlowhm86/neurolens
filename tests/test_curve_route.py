@@ -412,7 +412,7 @@ def test_the_landing_page_offers_five_minutes_from_the_configured_credit():
 
     assert "Creators and marketers get 5 free minutes" in text
     assert "For channels with 1,000+ followers." in text
-    assert "Add a video's retention curve and earn its credit back." in text
+    assert "Add a video's retention curve; an eligible curve can earn its credit back." in text
 
 
 def _section_text(html, anchor):

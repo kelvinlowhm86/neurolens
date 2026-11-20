@@ -80,15 +80,13 @@ The brain heatmap on the left updates in real time as the video plays. Much more
 - Does not show any timeseries charts, graphs, or quantitative metrics
 - No timeline annotations or per-second numerical engagement scores
 
-### What we take from it for NeuroLens
-
-Borrow:
+### What NeuroLens borrows from the demo
 
 - The synchronised playback pattern: a 3D brain map that updates as the video plays, on one timeline with the video.
 - The transport controls: play/pause, scrubber, mute.
 - The toggle concept: our chart can overlay the muted (no-audio) response on the normal one, as Meta toggles between real fMRI and predicted.
 
-Add:
+### What NeuroLens adds
 
 - Numbers next to the map: 7 labelled signals in 3 groups (see, hear, understand) and an overall line, second by second on a chart anyone can read, plus the strongest and weakest moments.
 - User video upload: the demo only works with pre-loaded clips.
@@ -109,7 +107,7 @@ tribev2/
 ├── main.py              # Experiment pipeline: Data, TribeExperiment
 ├── model.py             # FmriEncoder: Transformer-based multimodal→fMRI model
 ├── pl_module.py         # PyTorch Lightning training module
-├── demo_utils.py        # TribeModel and helpers for inference — THIS IS OUR MAIN ENTRY POINT
+├── demo_utils.py        # TribeModel and helpers for inference — model-loading entry point
 ├── eventstransforms.py  # Custom event transforms (word extraction, chunking, …)
 ├── utils.py             # Multi-study loading, splitting, subject weighting
 ├── utils_fmri.py        # Surface projection (MNI / fsaverage) and ROI analysis
@@ -120,7 +118,9 @@ tribev2/
 └── studies/             # Dataset definitions (Algonauts2025, Lahner2024, …)
 ```
 
-### Code patterns we use
+### Code patterns from the demo notebook
+
+These are the notebook's patterns; the deployed worker builds events with its own `build_events()` in `neurolens/inference.py`.
 
 **1. Loading the model**
 

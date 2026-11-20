@@ -1,4 +1,4 @@
-# Evidence: Spot versus on-demand for the GPU workers
+# Evidence: EC2 Spot behind the choice of on-demand GPU workers
 
 Raw data behind the choice of on-demand `g6e` workers. Saved on 2026-10-03, because AWS keeps Spot price history for only 90 days and Auto Scaling activity for only 6 weeks.
 
@@ -36,7 +36,7 @@ aws autoscaling describe-scaling-activities --auto-scaling-group-name neurolens-
 The zone comes from the `Details` field. The group's ARN, which contains the account ID, was left out.
 
 ## Conclusion
-Spot saved 1-9% a month and was often unavailable. Spot capacity is AWS's unused on-demand capacity, so for a GPU in this much demand there is little spare, which keeps both the discount and the availability low. On-demand is never taken back mid-job and costs about the same. If on-demand is sold out as well, Spot is too, so the group has no Spot fallback: it tries `g6e.xlarge`, then `g6e.2xlarge`, and keeps retrying.
+Spot saved 1-9% a month and was often unavailable. Spot capacity is AWS's unused on-demand capacity, so for a GPU in this much demand there is little spare, which keeps both the discount and the availability low. On-demand is never taken back mid-job and costs about the same. Spot failed in both saved test windows, so the group has no Spot fallback: it tries `g6e.xlarge`, then `g6e.2xlarge`, and keeps retrying.
 
 # Evidence: choice of GPU
 
@@ -135,8 +135,8 @@ What it means: L40S GPUs were scarce everywhere that day, us-east-1 was no worse
 
 ## First real GPU jobs (2026-10-03)
 
-Before the ghost-word timeline fix, a 52.2 s clip returned 53 rows and a 119.01 s clip returned 239 rows (the
-ghost-word timeline bug); after the fix the 119.01 s clip returns 120 rows. The video was encoded
+Before a timeline bug was fixed, a 52.2 s clip returned 53 rows and a 119.01 s clip returned 239 rows
+instead of about one row per second; after the fix the 119.01 s clip returns 120 rows. The video was encoded
 twice per job before the fix and once after. Peak GPU memory was 19.8 GB before the fix and
 19.94 GB after (the text model); video encoding used 13.5 GB.
 

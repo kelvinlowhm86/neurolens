@@ -1,10 +1,10 @@
 # Notebooks
 
-These are a teammate's original local prototype (Destrieux atlas, five regions and engagement
+These notebooks are the project's early local prototype (Destrieux atlas, five regions and engagement
 scores rescaled to 0-1). They need their own GPU and model weights and are not part of the AWS app.
 
-The prototype is not maintained and is kept for reference only. Some parts (for example some input
-videos) were only on the original author's machine, so it may not run as it is.
+They are kept as a record of the early design and are not maintained. To run them, supply your own
+input videos.
 
 - `explore.ipynb`: loads TRIBE v2, runs one clip with and without audio, extracts per-region
   engagement, plots the charts and writes `data/output/neurolens_output.png` and
@@ -40,7 +40,7 @@ source .venv/bin/activate
 #    (requirements/ has one file per machine type; NumPy is pinned in base.txt)
 pip install -e . -r requirements/prototype.txt
 
-# 4. Put your secrets in .env (git-ignored): HuggingFace token, and later the AWS bucket name.
+# 4. Put your secrets in .env (git-ignored): HuggingFace token.
 #    Shared settings live in the committed config.json.
 cp .env.example .env    # then edit .env
 
@@ -55,7 +55,7 @@ jupyter notebook prototype/explore.ipynb
 
 ### What the notebook does
 
-The notebook runs 21 code cells in sequence (the last one is empty):
+Run the working cells in order:
 
 | Cell | What it does | Time |
 |------|-------------|------|
@@ -75,7 +75,6 @@ The notebook runs 21 code cells in sequence (the last one is empty):
 | 18 | Plot 6-panel engagement chart, save PNG | instant |
 | 19 | Export structured JSON output | instant |
 | 20 | Print per-GPU VRAM use | instant |
-| 21 | (empty) | - |
 
 Total first-run time: approximately 15-20 minutes, mostly model downloads.
 Subsequent runs take approximately 5-10 minutes (inference only, models cached).

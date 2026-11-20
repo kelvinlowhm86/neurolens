@@ -109,13 +109,13 @@ These rules decide when data is deleted, either by an S3 lifecycle rule or by th
 | User deletion | A user can stop sharing a copy or delete a job immediately. The job is marked first and the files are deleted; the reaper finishes anything a failed delete leaves. |
 | Account deletion | Account deletion marks the account, removes its sign-ins, deletes its files and then its rows. Deleting an account is refused while one of its jobs is queued or processing. |
 | Sessions and reports | Sign-in sessions expire after `billing.SESSION_DAYS` (30 days) from last use. A report that stays `writing` for `report.stale_minutes` (16 minutes) is treated as stale. |
-| Logs | Amazon CloudWatch (AWS's monitoring and log service) keeps the logs 14 days by default. |
+| Logs | Amazon CloudWatch (AWS's monitoring and log service) keeps the Lambda, web and GPU logs for `log_retention_days` (14 days) and the image-build (CodeBuild) logs for `codebuild_log_retention_days` (30 days), both in `infra/terraform/variables.tf`. |
 
 In the code: `infra/terraform/main.tf`, `neurolens/web/app.py`, `config.json`, `neurolens/lambdas/reaper.py`, `neurolens/billing.py`, `infra/terraform/variables.tf`
 
 ## Safety nets
 
-Scheduled Lambdas, alarms and deadlines catch stuck work and runaway spend, so a failure ends in a refund or an email, with no GPU left running.
+Scheduled Lambdas, alarms and deadlines catch stuck work and runaway spend: they refund or flag stuck work and catch a GPU that fails to stop.
 
 | Safety net | What it does |
 | --- | --- |
@@ -244,7 +244,7 @@ What NeuroLens cannot do, or cannot yet check.
 
 | Limitation | Detail |
 | --- | --- |
-| Audience-curve rewards rely on manual checks. | A reward needs an account that has had credit beyond the starter, so the invite step limits who can earn one, and the operator screens requests by hand. YouTube's public length and view count can be gamed, and the site does not verify that the signed-in account owns the channel. Facebook gets no automatic length or view check at all: the user pastes a retention report, and only full Facebook page addresses are accepted (no Reels or short links). The proper fix is owner sign-in through YouTube Analytics or Facebook Page Insights, so the site reads the numbers itself; that needs app review by Google or Meta. |
+| Audience-curve rewards rely on manual checks. | A reward needs an account that has had credit beyond the starter, so the invite step limits who can earn one, and the operator screens requests by hand. YouTube's public length and view count can be gamed, and the site does not verify that the signed-in account owns the channel. Facebook gets no automatic length or view check at all: the user pastes a retention report, and only full Facebook page addresses are accepted (no Reels or short links). Closing this gap needs owner sign-in through YouTube Analytics or Facebook Page Insights, which requires app review by Google or Meta. |
 | The AI report cannot hear the soundtrack. | It reads frames and spoken words plus the predicted signals; the prompt says so. |
 | The model predicts perception, not persuasion. | TRIBE v2 predicts how an average viewer's brain responds to what is seen and heard, on the brain's surface. It is not a real brain scan, and it does not measure emotion, reward or intent to buy, so NeuroLens reports attention to sights, sounds and speech, not whether an ad will sell. |
 | Non-commercial use only. | The TRIBE v2 model is licensed CC BY-NC, so NeuroLens cannot be sold as is. |

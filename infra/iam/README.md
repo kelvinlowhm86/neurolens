@@ -1,7 +1,9 @@
 # Permissions for the `neurolens-deploy` IAM user
 
 The deploy user can change only NeuroLens resources, so it cannot delete or reconfigure another
-project's buckets or machines. It can read a few account-wide lists (service limits, GPU
+project's buckets or machines. One exception: it can create, change and delete CloudFront origin
+access controls and read AWS's cache and origin-request policies, because AWS does not let these be
+limited to a name. It can read a few account-wide lists (service limits, GPU
 availability, the activity log and the teardown checks), which also show other projects' names.
 Five policy files:
 
@@ -56,7 +58,7 @@ with the `neurolens-quota-requests` policy.
 - `aws iam get-role --role-name neurolens-does-not-exist` says `NoSuchEntity`, not `AccessDenied`.
 - The real check is `terraform plan` and `apply` running without `AccessDenied`.
 
-## Known limitations (accepted)
+## Permission-scope limitations
 
 - Application Auto Scaling's `DescribeScalableTargets` and Cloud Control's operations cannot be
   limited to one resource, so those read/Cloud-Control actions are account-wide. The write actions

@@ -21,9 +21,9 @@ NeuroLens is built on Meta's TRIBE v2 (TRImodal Brain Encoder) and predicts, sec
 - Analysis charts and a 3D brain, synced to the video.
 - An AI-written report with timed advice on what to keep and what to change.
 - A written comparison of two videos, including two cuts of one.
-- Real audience retention beside the prediction once a shared video reaches 1,000 views on YouTube or Facebook.
-- Production-style billing: credit is reserved at upload, charged only when a result is ready and refunded on any failure.
-- Scale-to-zero GPU on AWS.
+- Real audience retention from YouTube or Facebook beside the prediction; once the video reaches 1,000 views, an eligible curve earns the analysis credit back.
+- Production-style billing: credit is reserved at upload, charged only when the result is ready and refunded if the analysis fails.
+- A GPU on AWS that starts on demand and stops when idle.
 
 ![NeuroLens analysis view](docs/images/neurolens_app.png)
 
@@ -65,7 +65,7 @@ Each signal is the average over its brain area, each group averages its signals,
 
 The values, the brain-area map and the result files are described in [Brain signals and result files](docs/architecture.md#brain-signals-and-result-files).
 
-## CS5224 write-up
+## Course report
 
 [Final report](docs/course/Final_report.pdf) · [Final slides](docs/course/Final_slides.pdf)
 
@@ -77,7 +77,7 @@ NeuroLens predicts an average viewer's perception, not views, retention, sales o
 
 ### Run it on a laptop
 
-The real model needs a GPU with about 20 GB of memory, gated LLaMA access and AWS. To work on everything around it for free, the local stack runs the whole product on a laptop (sign-in, upload, credit, queue, result page) with fake S3 and SQS and a stand-in model that returns made-up numbers. To see real results, use the [live site](https://df6girqyykyfa.cloudfront.net).
+The real model needs a suitable GPU with about 20 GB of memory and gated model access; the deployed service also uses AWS. To work on everything around it for free, the local stack runs the whole product on a laptop (sign-in, upload, credit, queue, result page) with fake S3 and SQS and a stand-in model that returns made-up numbers. To see real results, use the [live site](https://df6girqyykyfa.cloudfront.net).
 
 You need Python 3.12 and Docker (for the database).
 
@@ -105,7 +105,7 @@ The operator guide is [docs/operating.md](docs/operating.md); the human-only fir
 infra/setup.sh
 ```
 
-It lists every missing prerequisite before changing anything, and a second run skips finished work. The first run downloads the model files (about 18 GB) to the laptop to upload them, so it needs that much free disk. `infra/teardown.sh` stops the GPU, destroys the stack and checks for leftovers.
+It checks its required Terraform variables, the model token and the secrets before changing anything, and a second run skips finished work. The first run downloads the model files (about 18 GB) to the laptop to upload them, so it needs that much free disk. `infra/teardown.sh` stops the GPU, destroys the stack and checks for leftovers.
 
 #### Gated model access
 

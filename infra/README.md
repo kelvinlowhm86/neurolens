@@ -13,13 +13,14 @@ Operator scripts and the AWS resources they drive. AWS commands run with the pro
 - `start_work.sh`: starts processing: normal on-demand state, or `--keep-warm [--hours 1-5]` for one GPU now.
 - `stop_work.sh`: emergency pause: no GPU may start or stay on; prints ALL STOPPED only when proven.
 - `access_requests.py list --backend data_api`: lists waiting early-access requests; `access_requests.py decline --backend data_api` declines one by email. Grant credit in the web admin panel (+5 min is the invite credit).
-- `check_aurora.py`: checks the database code on the real database with throwaway jobs and sign-ins.
+- `check_aurora.py`: checks the database code on the real database with temporary test jobs and sign-ins.
 - `aws_env.sh`: sourced by the AWS scripts; sets the profile and region from Terraform.
 
 ## Deploy
 
-- `setup.sh`: first deploy in one command after the human-only steps: lists every missing
-  prerequisite before changing anything, then creates the state bucket and backend, builds the
+- `setup.sh`: first deploy in one command after the human-only steps: checks its required
+  Terraform variables, the model token and the secrets before changing anything, then creates the
+  state bucket and backend, builds the
   artifacts, applies, uploads the model files when their prefix is empty, applies the schema,
   stores the Cognito client secret when missing, deploys the site, builds the image and applies
   again; a second run skips finished work.
@@ -32,8 +33,9 @@ Operator scripts and the AWS resources they drive. AWS commands run with the pro
 - `deploy_web.sh`: ships the last commit as the website: code, page, public samples and a CloudFront cache clear.
 - `apply_schema.py`: applies `migrations/*.sql` once each and records them.
 - `terraform/`: creates all AWS resources; see `terraform/README.md`.
-- `teardown.sh`: guarded teardown: stops the GPU, destroys the stack, deletes the hand-made
-  secrets and checks for leftovers; it never deletes the state bucket or the deploy user (see
+- `teardown.sh`: guarded teardown: stops the GPU, destroys the stack, deletes the secrets you
+  create by hand in Parameter Store and checks for leftovers; it never deletes the state bucket or
+  the deploy user (see
   `docs/operating.md`, "Teardown").
 
 ## Laptop

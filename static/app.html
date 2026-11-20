@@ -688,7 +688,7 @@
             <p>Request received. We'll look at your channel and add your minutes here.</p>
           </div>
           <div id="accessDeclined" hidden>
-            <p>Thanks for asking. Free minutes are for channels with 1,000+ followers for now.</p>
+            <p>Thanks for asking. Free minutes are for channels with 1,000+ followers.</p>
           </div>
           <div id="accessRequest" hidden>
             <h2 id="accessTitle">Get free minutes</h2>
@@ -851,7 +851,7 @@
               <div class="report-list" id="reportImprovementsWrap"><h3>Improvements</h3><ul id="reportImprovements"></ul></div>
             </div>
             <div class="report-moments" id="reportMoments"></div>
-            <p class="note">Written by Claude from predicted brain responses.</p>
+            <p class="note">Written by Claude from the video's frames, spoken words and predicted brain response.</p>
           </div>
           <div class="report-actions" id="reportActions" hidden>
             <button class="btn-white" id="reportWrite" type="button">Write report</button>
@@ -918,7 +918,7 @@
               <div class="report-list" id="compareStrengthsWrap"><h3></h3><ul id="compareStrengths"></ul></div>
               <div class="report-list" id="compareImprovementsWrap"><h3></h3><ul id="compareImprovements"></ul></div>
               <div class="report-list" id="compareSuggestionsWrap"><h3>Suggestions</h3><ul id="compareSuggestions"></ul></div>
-              <span class="ai-note">Written by Claude from predicted brain responses.</span>
+              <span class="ai-note">Written by Claude from each video's frames, spoken words and predicted brain response.</span>
             </div>
           </details>
         </div>
@@ -983,7 +983,7 @@
   </div>
   <div class="visitor-help" id="visitorHelp" hidden>
     <p id="visitorPassHelp"><strong>QR &amp; Passes:</strong> Each QR pass grants demo credit and auto-rotates as soon as a device claims it. Copying the phone link to a laptop opens the same session. <strong>Stop passes</strong> sets remaining passes to 0.</p>
-    <p id="visitorGpuHelp"><strong>GPU endpoint:</strong> <strong>0 (Auto-scale)</strong> scales to 0 ($0/hr) when idle and wakes a GPU (~4–5 min cold start) on upload. Keeping GPUs warm holds them for a set time (~30–60s per video, no cold start) before auto-reverting to 0.</p>
+    <p id="visitorGpuHelp"><strong>GPU endpoint:</strong> <strong>0 (Auto-scale)</strong> scales to 0 ($0/hr) when idle and wakes a GPU (~4–5 min cold start) on upload. Keeping GPUs warm holds them for a set time (no cold start) before auto-reverting to 0.</p>
     <p><strong>Account credit:</strong> Adds permanent minutes or resets available credit to 0 for any signed-in email (leave blank for your own account).</p>
   </div>
   <p id="visitorPassLead">Live demo pass — scan with phone camera:</p>
@@ -1461,7 +1461,7 @@ function renderVisitorConfig(stats) {
   visitorConfigKey = key;
   const { maxGpus, warmHours, passMinutes, adjustDeltas, grantMinutes } = visitorConfig;
   $('visitorPassHelp').innerHTML = `<strong>QR &amp; Passes:</strong> Each QR pass grants ${passMinutes} min credit and auto-rotates as soon as a device claims it. Copying the phone link to a laptop opens the same session. <strong>Stop passes</strong> sets remaining passes to 0.`;
-  $('visitorGpuHelp').innerHTML = `<strong>GPU endpoint:</strong> <strong>0 (Auto-scale)</strong> scales to 0 ($0/hr) when idle and wakes a GPU (~4–5 min cold start) on upload. <strong>Keep ${gpuWords(maxGpus)}</strong> starts and holds up to ${gpuWords(maxGpus)} warm for ${warmHours} hours (~30–60s per video, no cold start) before auto-reverting to 0.`;
+  $('visitorGpuHelp').innerHTML = `<strong>GPU endpoint:</strong> <strong>0 (Auto-scale)</strong> scales to 0 ($0/hr) when idle and wakes a GPU (~4–5 min cold start) on upload. <strong>Keep ${gpuWords(maxGpus)}</strong> starts and holds up to ${gpuWords(maxGpus)} warm for ${warmHours} hours (no cold start) before auto-reverting to 0.`;
   $('visitorPassLead').textContent = `Live demo pass (${passMinutes} min) — scan with phone camera:`;
   $('visitorPassControls').innerHTML = (adjustDeltas || []).map(delta => {
     const danger = delta === 0;
@@ -3923,8 +3923,8 @@ function showRetention(jobId, title) {
     const reward = cached && (cached.curve_reward_cents || 0) > 0
       ? creditWords(cached.curve_reward_cents) : null;
     $('retentionCardText').textContent = reward
-      ? `Once it reaches 1,000 views, add its retention curve: see real viewers beside the prediction and get ${reward} back.`
-      : "Once it reaches 1,000 views, add its retention curve: see real viewers beside the prediction.";
+      ? `Add its retention curve to see real viewers beside the prediction; once it reaches 1,000 views, an eligible curve can earn ${reward} back.`
+      : "Add its retention curve to see real viewers beside the prediction.";
   }
 }
 function showSampleRetention(ctx) {

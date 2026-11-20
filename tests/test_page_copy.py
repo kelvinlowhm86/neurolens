@@ -55,7 +55,7 @@ def test_the_landing_page_names_the_three_ways_in():
         "Free to try",
         "Shared",
         "Keep going",
-        "Add a video's retention curve and earn its credit back.",
+        "Add a video's retention curve; an eligible curve can earn its credit back.",
         "Get free minutes",
         "For channels with 1,000+ followers.",
     ):
@@ -137,9 +137,8 @@ def test_the_panel_tells_a_requester_they_are_waiting():
 
 
 def test_the_panel_explains_a_decline():
-    assert (
-        "Thanks for asking. Free minutes are for channels with 1,000+ followers for now."
-        in page_text("app.html")
+    assert "Thanks for asking. Free minutes are for channels with 1,000+ followers." in page_text(
+        "app.html"
     )
 
 
