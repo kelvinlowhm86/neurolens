@@ -2,7 +2,7 @@
 
 See how a viewer's brain would respond to your video, second by second, before you publish it.
 
-[![CI](https://github.com/kelvinlowhm86/neurolens/actions/workflows/ci.yml/badge.svg)](https://github.com/kelvinlowhm86/neurolens/actions/workflows/ci.yml) [![Live site](https://img.shields.io/badge/live-try%20it-orange)](https://df6girqyykyfa.cloudfront.net) [![Non-commercial](https://img.shields.io/badge/use-non--commercial-lightgrey)](#license)
+[![CI](https://github.com/kelvinlowhm86/neurolens/actions/workflows/ci.yml/badge.svg)](https://github.com/kelvinlowhm86/neurolens/actions/workflows/ci.yml) [![Samples](https://img.shields.io/badge/samples-explore-orange)](https://joshualumzy.github.io/neurolens-samples/) [![Live site](https://img.shields.io/badge/live-try%20it-orange)](https://df6girqyykyfa.cloudfront.net) [![Non-commercial](https://img.shields.io/badge/use-non--commercial-lightgrey)](#license)
 
 
 https://github.com/user-attachments/assets/0d59224b-2cf4-4b03-8ae3-85f9da411cef
@@ -77,7 +77,7 @@ NeuroLens predicts an average viewer's perception, not views, retention, sales o
 
 ### Run it on a laptop
 
-The real model needs a suitable GPU with about 20 GB of memory and gated model access; the deployed service also uses AWS. To work on everything around it for free, the local stack runs the whole product on a laptop (sign-in, upload, credit, queue, result page) with fake S3 and SQS and a stand-in model that returns made-up numbers. To see real results, use the [live site](https://df6girqyykyfa.cloudfront.net).
+The real model needs a suitable GPU with about 20 GB of memory and gated model access; the deployed service also uses AWS. To work on everything around it for free, the local stack runs the whole product on a laptop (sign-in, upload, credit, queue, result page) with fake S3 and SQS and a stand-in model that returns made-up numbers. To see real results, browse the [samples site](https://joshualumzy.github.io/neurolens-samples/).
 
 You need Python 3.12 and Docker (for the database).
 
