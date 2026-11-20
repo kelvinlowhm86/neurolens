@@ -277,6 +277,46 @@ def test_a_reserve_racing_delete_account_cannot_leave_a_job_behind(db, pg, row_l
         assert user_row["deleted_at"] is not None
 
 
+def test_remove_deleted_account_needs_the_mark_and_a_finished_purge(aws, db, pg):
+    unmarked = "unmarked"
+    billing.ensure_user(db, unmarked, "unmarked@example.com", STARTER_CENTS)
+    assert billing.remove_deleted_account(db, unmarked) is False
+    assert pg.one("SELECT * FROM users WHERE user_id = %s", unmarked) is not None
+
+    user = billing.sign_in(db, ISSUER, "sub-purge", EMAIL, STARTER_CENTS)
+    job_id, key = reserve_job(db, user)
+    seed_files(aws, job_id, key)
+    billing.delete_account(db, user)
+
+    assert billing.remove_deleted_account(db, user) is False
+    assert pg.one("SELECT * FROM users WHERE user_id = %s", user) is not None
+    assert pg.job(job_id) is not None
+
+    billing.purge_job_files(db, aws.s3, aws.bucket, job_id)
+    assert pg.job(job_id)["dataset_purged_at"] is not None
+
+    assert billing.remove_deleted_account(db, user) is True
+    assert pg.one("SELECT * FROM users WHERE user_id = %s", user) is None
+    assert pg.balance(user) is None
+    assert pg.rows("SELECT * FROM ledger WHERE user_id = %s", user) == []
+    assert pg.rows("SELECT * FROM jobs WHERE user_id = %s", user) == []
+    assert pg.one("SELECT * FROM users WHERE user_id = %s", unmarked) is not None
+
+
+def test_reserve_refuses_a_deleted_account_and_creates_nothing(db, pg):
+    user = billing.sign_in(db, ISSUER, "sub-reserve-deleted", EMAIL, STARTER_CENTS)
+    billing.delete_account(db, user)
+    job_id = str(uuid.uuid4())
+    key = storage.object_key(user, job_id, "video/mp4")
+    before = pg.snapshot()
+
+    with pytest.raises(billing.AccountDeleted):
+        billing.reserve(db, user, job_id, key, "clip.mp4", 3000)
+
+    assert pg.job(job_id) is None
+    assert pg.snapshot() == before
+
+
 # ---------------------------------------------------------------- the route
 
 
@@ -455,6 +495,26 @@ def test_a_stale_session_after_deletion_is_401_not_500(cognito_client, idp, db, 
         assert "user_id" not in sess
 
 
+def test_presign_answers_not_signed_in_for_a_deleted_account(cognito_client, idp, pg):
+    assert sign_in(cognito_client, idp, email=EMAIL).status_code in (302, 303)
+    user_id = pg.one("SELECT user_id FROM users WHERE lower(email) = lower(%s)", EMAIL)["user_id"]
+    pg.conn.execute("UPDATE users SET deleted_at = now() WHERE user_id = %s", (user_id,))
+
+    resp = cognito_client.post(
+        "/api/uploads/presign",
+        json={
+            "filename": "ad.mp4",
+            "content_type": "video/mp4",
+            "client_duration_seconds": 27.4,
+            "research_consent": False,
+        },
+    )
+
+    assert resp.status_code == 401
+    assert resp.get_json()["error"] == "not_signed_in"
+    assert pg.rows("SELECT * FROM jobs WHERE user_id = %s", user_id) == []
+
+
 def test_account_delete_is_409_while_a_job_is_active(cognito_client, idp, db, pg):
     user_id = signed_in_user_id(cognito_client, idp, pg)
     job_id, _ = reserve_job(db, user_id, done=False)
@@ -463,6 +523,92 @@ def test_account_delete_is_409_while_a_job_is_active(cognito_client, idp, db, pg
     assert resp.get_json()["error"] == "job_active"
     assert pg.one("SELECT * FROM users WHERE user_id = %s", user_id) is not None
     assert pg.job(job_id) is not None
+
+
+# ---------------------------------------------------------------- signing in after a delete
+
+
+def test_signing_in_after_a_delete_with_a_new_identity_creates_a_new_user(db, pg):
+    user = billing.sign_in(db, ISSUER, "sub-after-delete-new", EMAIL, STARTER_CENTS)
+    billing.delete_account(db, user)
+
+    new_user = billing.sign_in(db, ISSUER, "sub-after-delete-new-2", EMAIL, STARTER_CENTS)
+
+    assert new_user != user
+    assert pg.one("SELECT * FROM users WHERE user_id = %s", new_user)["deleted_at"] is None
+    assert pg.balance(new_user) == (STARTER_CENTS, 0)
+    assert pg.one("SELECT * FROM users WHERE user_id = %s", new_user)["email"] == EMAIL
+    assert pg.one("SELECT * FROM users WHERE user_id = %s", user)["email"] == f"deleted:{user}"
+    assert pg.rows("SELECT * FROM identities WHERE user_id = %s", user) == []
+    assert billing.remove_deleted_account(db, user) is True
+    assert pg.one("SELECT * FROM users WHERE user_id = %s", user) is None
+
+
+def test_signing_in_after_a_delete_with_the_old_identity_creates_a_new_user(db, pg):
+    user = billing.sign_in(db, ISSUER, "sub-after-delete-old", EMAIL, STARTER_CENTS)
+    billing.delete_account(db, user)
+
+    new_user = billing.sign_in(db, ISSUER, "sub-after-delete-old", EMAIL, STARTER_CENTS)
+
+    assert new_user != user
+    assert pg.one("SELECT * FROM users WHERE user_id = %s", new_user)["deleted_at"] is None
+    assert pg.balance(new_user) == (STARTER_CENTS, 0)
+    assert pg.rows("SELECT * FROM jobs WHERE user_id = %s", new_user) == []
+    assert pg.one("SELECT * FROM users WHERE user_id = %s", user)["email"] == f"deleted:{user}"
+    assert pg.rows("SELECT * FROM identities WHERE user_id = %s", user) == []
+    assert pg.one("SELECT * FROM identities WHERE user_id = %s", new_user)["subject"] == (
+        "sub-after-delete-old"
+    )
+    assert billing.remove_deleted_account(db, user) is True
+    assert pg.one("SELECT * FROM users WHERE user_id = %s", user) is None
+
+
+def test_a_sign_in_racing_a_delete_account_leaves_no_identity_on_the_marked_user(db, pg, row_lock):
+    user = billing.sign_in(db, ISSUER, "sub-sign-in-race", EMAIL, STARTER_CENTS)
+    lock = row_lock()
+    lock.execute("SELECT 1 FROM users WHERE user_id = %s FOR UPDATE", user)
+    signed, sign_errors, delete_errors = [], [], []
+
+    def do_sign_in():
+        try:
+            signed.append(billing.sign_in(db, ISSUER, "sub-sign-in-race-new", EMAIL, STARTER_CENTS))
+        except Exception as err:  # reported below
+            sign_errors.append(err)
+
+    def do_delete():
+        try:
+            billing.delete_account(db, user)
+        except Exception as err:  # reported below
+            delete_errors.append(err)
+
+    threads = [threading.Thread(target=do_sign_in), threading.Thread(target=do_delete)]
+    for thread in threads:
+        thread.start()
+    lock.wait_for_blocked(2, timeout=5)
+    lock.release()
+    for thread in threads:
+        thread.join(20)
+    assert not any(thread.is_alive() for thread in threads)
+    assert not sign_errors, sign_errors
+    assert not delete_errors, delete_errors
+    assert len(signed) == 1
+    assert pg.one("SELECT * FROM users WHERE user_id = %s", user)["deleted_at"] is not None
+
+    new_user = signed[0]
+    if new_user == user:
+        assert (
+            pg.rows(
+                "SELECT * FROM identities WHERE issuer = %s AND subject = %s",
+                ISSUER,
+                "sub-sign-in-race-new",
+            )
+            == []
+        ), "a sign-in racing the delete left an identity on the marked account"
+    else:
+        assert pg.one("SELECT * FROM users WHERE user_id = %s", new_user)["deleted_at"] is None
+    assert pg.rows("SELECT * FROM identities WHERE user_id = %s", user) == []
+    assert billing.remove_deleted_account(db, user) is True
+    assert pg.one("SELECT * FROM users WHERE user_id = %s", user) is None
 
 
 # ---------------------------------------------------------------- payment removal

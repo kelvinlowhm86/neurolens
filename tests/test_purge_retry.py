@@ -10,10 +10,13 @@ user's own result.
 import json
 
 import pytest
+from conftest import WEB_USER_ID
+from neurolens import billing, storage
 
 from test_sharing import (
     DeleteReportsErrors,
     app_for,
+    curve_kwargs,
     make_job,
     object_exists,
     run_reaper,
@@ -114,3 +117,73 @@ def test_a_removed_copy_loses_only_its_prefixes_and_keeps_the_users_own_files(
     assert job["dataset_purged_at"] is not None
     assert not any(object_exists(aws, name) for name in dataset)
     assert all(object_exists(aws, name) for name in own)
+
+
+def test_the_reaper_finishes_a_stopped_and_deleted_copys_own_files(
+    aws, db, pg, make_cfg, tmp_path, reaper_env
+):
+    reaper_env(90)
+    job_id, key = make_job(db)
+    _, own = seed_research(aws, job_id, key)
+    client = app_for(aws, db, make_cfg, tmp_path)
+
+    assert client.post(f"/api/jobs/{job_id}/stop-sharing").status_code == 200
+    failing = app_for(aws, db, make_cfg, tmp_path, s3_client=DeleteReportsErrors(aws.s3))
+    resp = failing.delete(f"/api/jobs/{job_id}")
+
+    assert resp.status_code == 200
+    job = pg.job(job_id)
+    assert job["deleted_at"] is not None
+    assert job["dataset_purged_at"] is None
+    assert all(object_exists(aws, name) for name in own)
+
+    run_reaper()
+
+    job = pg.job(job_id)
+    assert job["dataset_purged_at"] is not None
+    assert all(not object_exists(aws, name) for name in own)
+
+
+def test_purging_a_job_deletes_its_retention_snapshots(aws, db, pg):
+    job_id, key = make_job(db)
+    seed_research(aws, job_id, key)
+    assert billing.add_curve(db, WEB_USER_ID, job_id, **curve_kwargs(job_id))["rewarded_cents"] == 0
+    assert len(pg.rows("SELECT * FROM retention_snapshots WHERE job_id = %s::uuid", job_id)) == 1
+
+    assert billing.delete_job(db, WEB_USER_ID, job_id) is True
+    billing.purge_job_files(db, aws.s3, aws.bucket, job_id)
+
+    assert pg.rows("SELECT * FROM retention_snapshots WHERE job_id = %s::uuid", job_id) == []
+
+
+def test_a_purge_racing_a_job_delete_does_not_mark_the_own_files_purged(
+    aws, db, pg, monkeypatch, reaper_env
+):
+    reaper_env(90)
+    job_id, key = make_job(db)
+    research, own = seed_research(aws, job_id, key)
+    assert billing.mark_dataset_removed(db, job_id, "stopped") is True
+    real = storage.delete_job_prefixes
+
+    def delete_after_mark(s3, bucket, job):
+        assert billing.delete_job(db, WEB_USER_ID, job_id) is True
+        return real(s3, bucket, job)
+
+    monkeypatch.setattr(storage, "delete_job_prefixes", delete_after_mark)
+
+    billing.purge_job_files(db, aws.s3, aws.bucket, job_id)
+
+    job = pg.job(job_id)
+    assert job["deleted_at"] is not None
+    assert job["dataset_purged_at"] is None, (
+        "purge marked the copy purged although the job was deleted after it read the row"
+    )
+    assert not any(object_exists(aws, name) for name in research)
+    assert all(object_exists(aws, name) for name in own)
+
+    monkeypatch.setattr(storage, "delete_job_prefixes", real)
+    run_reaper()
+
+    job = pg.job(job_id)
+    assert job["dataset_purged_at"] is not None
+    assert all(not object_exists(aws, name) for name in own)

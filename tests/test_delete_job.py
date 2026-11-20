@@ -74,12 +74,20 @@ def content_type(request):
     return request.param
 
 
-def make_job(db, *, content_type="video/mp4", done=True, processing=False, user_id=WEB_USER_ID):
+def make_job(
+    db,
+    *,
+    content_type="video/mp4",
+    done=True,
+    processing=False,
+    user_id=WEB_USER_ID,
+    consent=False,
+):
     billing.ensure_user(db, user_id, f"{user_id}@example.com", STARTER_CENTS)
     job_id = str(uuid.uuid4())
     key = storage.object_key(user_id, job_id, content_type)
     ext = PurePosixPath(key).suffix
-    billing.reserve(db, user_id, job_id, key, f"clip{ext}", 3000)
+    billing.reserve(db, user_id, job_id, key, f"clip{ext}", 3000, research_consent=consent)
     if processing:
         assert billing.claim(db, job_id) == 1
     if done:
@@ -244,6 +252,19 @@ def test_billing_delete_job_only_touches_the_owners_job(db, pg, content_type):
     job = pg.job(job_id)
     assert job["deleted_at"] is None
     assert job["filename"] == filename
+
+
+def test_deleting_a_stopped_copy_marks_its_own_files_for_purging_again(db, pg):
+    job_id, _ = make_job(db, consent=True)
+    assert billing.mark_dataset_removed(db, job_id, "stopped", user_id=WEB_USER_ID) is True
+    billing.mark_dataset_purged(db, job_id)
+    assert pg.job(job_id)["dataset_purged_at"] is not None
+
+    assert billing.delete_job(db, WEB_USER_ID, job_id) is True
+
+    job = pg.job(job_id)
+    assert job["deleted_at"] is not None
+    assert job["dataset_purged_at"] is None
 
 
 def test_list_jobs_skips_deleted_jobs_but_job_state_still_sees_them(db, content_type):

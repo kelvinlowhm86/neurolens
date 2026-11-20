@@ -134,6 +134,23 @@ class PutFails:
         return getattr(self._inner, name)
 
 
+class SecondPutFails:
+    """An S3 client whose second write fails, as S3 may, so the first is left orphaned."""
+
+    def __init__(self, inner):
+        self._inner = inner
+        self.puts = 0
+
+    def put_object(self, **kwargs):
+        self.puts += 1
+        if self.puts == 2:
+            raise RuntimeError("S3 write failed")
+        return self._inner.put_object(**kwargs)
+
+    def __getattr__(self, name):
+        return getattr(self._inner, name)
+
+
 @pytest.fixture(autouse=True)
 def youtube_falls_back(monkeypatch):
     """The save route looks the link up; these tests keep the unknown-facts fallback."""
@@ -329,6 +346,30 @@ def test_a_video_already_rewarded_on_another_account_is_not_rewarded_again(db, p
     assert result["rewarded_cents"] == 0
     assert pg.balance(OTHER_USER) == balance
     assert pg.job(second)["curve_rewarded_at"] is None
+
+
+def test_a_purged_stopped_videos_hash_still_blocks_another_reward(aws, db, pg):
+    video = "5" * 64
+    first, _ = make_job(db, sha=video)
+    billing.grant_credit(db, f"{WEB_USER_ID}@example.com", 500)
+    pg.age(first, created_s=8 * DAY_S)
+    assert (
+        billing.add_curve(db, WEB_USER_ID, first, **curve_args(first, sha="6" * 64))[
+            "rewarded_cents"
+        ]
+        > 0
+    )
+    assert billing.mark_dataset_removed(db, first, "stopped", user_id=WEB_USER_ID) is True
+    billing.purge_job_files(db, aws.s3, aws.bucket, first)
+
+    second, _ = make_job(db, sha=video)
+
+    assert (
+        billing.add_curve(db, WEB_USER_ID, second, **curve_args(second, sha="7" * 64))[
+            "rewarded_cents"
+        ]
+        == 0
+    )
 
 
 def test_a_user_at_the_cap_is_not_rewarded_until_the_window_passes(db, pg):
@@ -574,6 +615,32 @@ def test_an_s3_failure_records_nothing(db, aws, make_cfg, tmp_path, pg):
     assert pg.job(job_id)["retention_added_at"] is None
     assert pg.balance(WEB_USER_ID) == balance
     assert "curve_reward" not in pg.kinds(WEB_USER_ID)
+
+
+def test_a_failed_second_retention_write_deletes_the_first_and_records_nothing(
+    db, aws, make_cfg, tmp_path, pg
+):
+    s3 = SecondPutFails(aws.s3)
+    client = app_for(aws, db, make_cfg, tmp_path, s3_client=s3)
+    job_id, _ = make_job(db)
+
+    resp = client.post(
+        f"/api/jobs/{job_id}/retention",
+        json={
+            "report": report_text(curve()),
+            "video_url": YOUTUBE_LINK,
+            "same_cut": "same",
+            "views": VIEWS,
+            "published": PUBLISHED,
+            "promoted": False,
+        },
+    )
+
+    assert resp.status_code == 500
+    assert snapshot_rows(pg, job_id) == []
+    assert not aws.s3.list_objects_v2(Bucket=aws.bucket, Prefix=f"dataset/{job_id}/retention/").get(
+        "Contents"
+    )
 
 
 @pytest.mark.parametrize(

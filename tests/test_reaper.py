@@ -7,6 +7,7 @@ directly.
 """
 
 import json
+import uuid
 
 import pytest
 from botocore.exceptions import ClientError
@@ -320,6 +321,29 @@ def test_a_dataset_already_removed_without_a_purge_is_finished(aws, db, pg, lamb
     assert dataset_files_exist(aws, job_id) == []
     for kept in user_keys(job_id, key):
         assert object_exists(aws, kept)
+
+
+def test_the_reaper_deletes_snapshots_older_than_1095_days(aws, db, pg, lambda_env, new_key):
+    job_id, _ = consented_done_job(db, new_key)
+    old = str(uuid.uuid4())
+    recent = str(uuid.uuid4())
+    pg.conn.execute(
+        "INSERT INTO retention_snapshots (snapshot_id, job_id, added_at, curve_sha256) "
+        "VALUES (%s::uuid, %s::uuid, now() - make_interval(days => 1096), %s), "
+        "(%s::uuid, %s::uuid, now() - make_interval(days => 1094), %s)",
+        (old, job_id, "3" * 64, recent, job_id, "4" * 64),
+    )
+
+    run_reaper()
+
+    remaining = {
+        str(row["snapshot_id"])
+        for row in pg.rows(
+            "SELECT snapshot_id FROM retention_snapshots WHERE job_id = %s::uuid", job_id
+        )
+    }
+    assert old not in remaining
+    assert recent in remaining
 
 
 def test_a_failed_dataset_delete_marks_the_row_and_raises(

@@ -35,6 +35,7 @@ SERIES = [
     "overall",
 ]
 PRICE_CENTS = pricing.estimate_cost_cents(27.4)
+DAY = 24 * 60 * 60
 REFUSAL = (
     "python app.py runs only against the local fake stack: python infra/local_stack.py. "
     "The real .env is for the admin scripts."
@@ -129,6 +130,11 @@ def add_curve(db, job_id, *, sha="curve-sha"):
     )
 
 
+def preview(db, job_id, *, cap=5, window=30):
+    rows = billing.list_jobs(db, WEB_USER_ID, 20, reward_cap=cap, reward_window_days=window)
+    return next(row for row in rows if str(row["job_id"]) == job_id)
+
+
 # ---------------------------------------------------------------- claimed_at
 
 
@@ -197,6 +203,47 @@ def test_a_removed_job_is_not_sharing(db, pg):
 
     assert row["sharing"] is False
     assert row["curve_reward_cents"] == 0
+
+
+def test_sharing_is_true_only_for_a_done_job(db):
+    done, _ = make_job(db, consent=True)
+    queued, _ = make_job(db, consent=True, state="queued")
+    failed, _ = make_job(db, consent=True, state="failed")
+
+    rows = {str(row["job_id"]): row for row in billing.list_jobs(db, WEB_USER_ID, 20)}
+
+    assert rows[done]["sharing"] is True
+    assert rows[queued]["sharing"] is False
+    assert rows[failed]["sharing"] is False
+
+
+def test_curve_reward_preview_is_zero_with_only_starter_credit(db, pg):
+    job_id, _ = make_job(db, consent=True, sha="a" * 64)
+
+    assert preview(db, job_id)["curve_reward_cents"] == 0
+
+
+def test_curve_reward_preview_matches_what_add_curve_pays(db, pg):
+    job_id, _ = make_job(db, consent=True, sha="b" * 64)
+    billing.grant_credit(db, f"{WEB_USER_ID}@example.com", 500)
+    pg.age(job_id, created_s=8 * DAY)
+
+    shown = preview(db, job_id)["curve_reward_cents"]
+    assert shown > 0
+    paid = add_curve(db, job_id, sha="c" * 64)
+
+    assert paid["rewarded_cents"] == shown
+
+
+def test_curve_reward_preview_is_zero_at_the_reward_cap(db, pg):
+    rewarded, _ = make_job(db, consent=True, sha="d" * 64)
+    billing.grant_credit(db, f"{WEB_USER_ID}@example.com", 500)
+    pg.age(rewarded, created_s=8 * DAY)
+    assert add_curve(db, rewarded, sha="e" * 64)["rewarded_cents"] > 0
+
+    next_job, _ = make_job(db, consent=True, sha="f" * 64)
+
+    assert preview(db, next_job, cap=1, window=30)["curve_reward_cents"] == 0
 
 
 # ---------------------------------------------------------------- cancelled jobs
@@ -324,7 +371,7 @@ def test_app_py_refuses_without_a_local_endpoint(tmp_path, endpoint):
     assert REFUSAL in result.stdout + result.stderr
 
 
-def run_app_with_environment(tmp_path, env_updates):
+def run_app_with_environment(tmp_path, env_updates, *, dotenv=None):
     root = tmp_path / f"root-guard-{uuid.uuid4().hex}"
     (root / "data").mkdir(parents=True)
     (root / "models").mkdir()
@@ -336,6 +383,8 @@ def run_app_with_environment(tmp_path, env_updates):
         "max_upload_bytes": 1000,
     }
     (root / "config.json").write_text(json.dumps(config))
+    if dotenv is not None:
+        (root / ".env").write_text(dotenv)
     env = os.environ.copy()
     for name in list(env):
         if name.startswith("AWS_ENDPOINT_URL") or name == "AWS_IGNORE_CONFIGURED_ENDPOINT_URLS":
@@ -375,6 +424,17 @@ def run_app_with_environment(tmp_path, env_updates):
 )
 def test_app_py_refuses_a_remote_service_endpoint_or_the_ignore_flag(tmp_path, env_updates):
     result = run_app_with_environment(tmp_path, env_updates)
+
+    assert result.returncode != 0
+    assert REFUSAL in result.stdout + result.stderr
+
+
+def test_app_py_refuses_a_remote_service_endpoint_set_only_in_dotenv(tmp_path):
+    result = run_app_with_environment(
+        tmp_path,
+        {"AWS_ENDPOINT_URL": "http://127.0.0.1:5005"},
+        dotenv="AWS_ENDPOINT_URL_S3=https://s3.us-east-1.amazonaws.com\n",
+    )
 
     assert result.returncode != 0
     assert REFUSAL in result.stdout + result.stderr
@@ -425,6 +485,54 @@ def test_local_stack_child_environment_holds_no_inherited_aws_variable(monkeypat
     assert "AWS_IGNORE_CONFIGURED_ENDPOINT_URLS" not in env
     assert "AWS_PROFILE" not in env
     assert "AWS_CUSTOM_INHERITED" not in env
+
+
+class StopLoop(Exception):
+    """Ends the local stack's endless dispatch loop after the message under test."""
+
+
+class OneMessageQueue:
+    def __init__(self, body):
+        self.body = body
+        self.deleted = []
+        self.receives = 0
+
+    def receive_message(self, **kwargs):
+        self.receives += 1
+        if self.receives > 1:
+            raise StopLoop
+        return {"Messages": [{"Body": self.body, "ReceiptHandle": "receipt-1"}]}
+
+    def delete_message(self, **kwargs):
+        self.deleted.append(kwargs)
+
+
+def test_local_stack_leaves_a_dispatch_error_on_the_queue(monkeypatch):
+    local_stack = load_local_stack()
+    from neurolens.lambdas import dispatcher
+
+    def fail(*args, **kwargs):
+        raise RuntimeError("dispatch failed")
+
+    monkeypatch.setattr(dispatcher, "dispatch", fail)
+    event = {
+        "Records": [
+            {
+                "s3": {
+                    "bucket": {"name": "neurolens-local"},
+                    "object": {"key": "uploads/u/1234.mp4"},
+                }
+            }
+        ]
+    }
+    sqs = OneMessageQueue(json.dumps(event))
+
+    with pytest.raises(StopLoop):
+        local_stack._dispatch_loop(
+            sqs, "queue-url", None, None, None, {"max_upload_bytes": 300_000_000}
+        )
+
+    assert sqs.deleted == [], "the local stack deleted a message whose dispatch failed"
 
 
 # ---------------------------------------------------------------- consent version

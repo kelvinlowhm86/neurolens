@@ -508,6 +508,22 @@ def test_no_consent_leaves_the_version_and_time_empty(db, pg):
 # ---------------------------------------------------------------- job and account deletion
 
 
+def test_deleting_a_stopped_copy_purges_its_own_files(aws, db, pg, make_cfg, tmp_path):
+    job_id, key = make_job(db)
+    research, own = seed_research(aws, job_id, key)
+    client = app_for(aws, db, make_cfg, tmp_path)
+
+    assert client.post(f"/api/jobs/{job_id}/stop-sharing").status_code == 200
+    assert not any(object_exists(aws, name) for name in research)
+    assert all(object_exists(aws, name) for name in own)
+
+    resp = client.delete(f"/api/jobs/{job_id}")
+
+    assert resp.status_code == 200
+    assert all(not object_exists(aws, name) for name in own)
+    assert pg.job(job_id)["dataset_purged_at"] is not None
+
+
 def test_job_delete_removes_the_dataset_prefix(aws, db, pg, make_cfg, tmp_path):
     client = app_for(aws, db, make_cfg, tmp_path)
     job_id, key = make_job(db)

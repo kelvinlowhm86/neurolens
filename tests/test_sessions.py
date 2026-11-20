@@ -172,6 +172,17 @@ def test_the_landing_hint_follows_the_session_lifetime(cognito_client, idp):
     assert abs(lifetime(line) - SESSION_DAYS * DAY) < 120
 
 
+def test_app_sets_the_signed_in_hint_for_its_full_lifetime(cognito_client, idp):
+    assert sign_in(cognito_client, idp).status_code in (302, 303)
+
+    resp = cognito_client.get("/app")
+
+    assert resp.status_code == 200
+    line = cookie(resp, HINT_COOKIE)
+    assert line is not None, "/app did not renew the signed-in hint cookie"
+    assert abs(lifetime(line) - billing.SESSION_DAYS * DAY) < 120
+
+
 # ---------------------------------------------------------------- the 30-day window
 
 
