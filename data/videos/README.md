@@ -1,15 +1,12 @@
 # Sample videos
 
-This directory is gitignored except this file and `SOURCES.md`; the clips themselves are about 92 MB.
-`data/samples.json` holds the ten public samples (each with its inline result, summary and
-report) and four stored comparisons (two sample pairs, each in both orders), and the thumbnails under `data/output/` are pushed, so the dashboard renders its charts on
-a fresh clone.
+The ten public sample clips (about 92 MB) live here and are committed, with their outputs under
+`data/output/<id>/` (brain file, CSV, PDF, thumbnail), so a fresh clone plays every sample and
+serves every download. `data/samples.json` holds each sample's inline result, summary and report,
+and four stored comparisons (two sample pairs, each in both orders).
 
-Everything else is git-ignored. On a fresh clone, a sample's video file, brain file,
-CSV and PDF (under `data/output/<id>/`) are missing, so video playback and the brain map, CSV and
-PDF downloads need the files restored. `infra/make_sample.py` rebuilds one sample's output folder
-from a finished job; `infra/deploy_web.sh` publishes the samples it finds here to the site. Drop
-the .mp4s back in here to restore playback. `SOURCES.md` records the sources and licences.
+`infra/make_sample.py` rebuilds one sample's output folder from a finished job;
+`infra/deploy_web.sh` publishes the samples to the site. `SOURCES.md` records the sources and licences.
 
 ## Expected filenames
 

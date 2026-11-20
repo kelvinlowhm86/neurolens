@@ -29,23 +29,14 @@ hub/
 # Glasser HCP-MMP1 map files, downloaded once by load_model (~2.6 MB, SHA-256 checked).
 /data/hcp_mmp/
 
-# ─── Sample media (large, re-obtainable) ───────────────────────────────────
-# 155 MB of source ads. Ignore the contents, but keep the manifest README --
-# a negation cannot rescue a file from inside an excluded *directory*, so the
-# directory itself must stay un-excluded.
-/data/videos/*
-!/data/videos/README.md
-!/data/videos/SOURCES.md
-
-# ─── Generated output ──────────────────────────────────────────────────────
-/data/output/**/*.json
-/data/output/**/*.csv
-/data/output/**/*.pdf
+# ─── Sample media and outputs ─────────────────────────────────────────────
+# The ten public samples (videos, brain maps, CSVs, PDFs) are committed so a fresh
+# clone is complete. Sub-folders (_test_clips/ and other local clips) stay local.
+/data/videos/*/
+# make_sample.py's intermediate result (samples.json holds the published copy):
+/data/output/**/result.json
 /data/output/**/*.npy
 /data/output/**/*.png
-/data/output/**/brain
-# ...but keep the thumbnails the dashboard renders:
-!/data/output/**/thumb.jpg
 
 # ─── Logs & temp ───────────────────────────────────────────────────────────
 *.log
