@@ -122,7 +122,7 @@ def fill_pages(static_dir, cfg, contact_email):
     remaining = [
         path
         for path in sorted(static_dir.rglob("*.html"))
-        if path.is_file() and re.search(rb"\{\{[^}]+\}\}", path.read_bytes())
+        if path.is_file() and re.search(rb"\{\{[A-Z_]+\}\}", path.read_bytes())
     ]
     if remaining:
         names = ", ".join(str(path.relative_to(static_dir)) for path in remaining)
