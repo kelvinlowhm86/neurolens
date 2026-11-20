@@ -28,18 +28,24 @@ ROOT = Path(__file__).resolve().parent.parent
 TF_DIR = ROOT / "infra" / "terraform"
 PREFIX = "model-data/"
 
+# Each repository is downloaded with the file patterns the offline worker reads, never whole:
+# several also publish large files it never opens (the video encoder's original/model.pth alone
+# is 16 GB), which would bloat the download, S3 and every instance start.
+# The TRIBE v2 checkpoint and its config (the repository itself comes from config.json).
+MODEL_FILES = ["*.ckpt", "*.yaml"]
+
 # TRIBE v2's three frozen encoders, named in the model's config.yaml on HuggingFace. They are
 # pinned with the model, not deployment settings. LLaMA is gated: the token needs an accepted
-# licence. The text encoder only needs its tokenizer and weights, not the original .bin files.
+# licence. Each needs only its configs, tokenizer and safetensors weights.
 ENCODER_REPOS = {
-    "meta-llama/Llama-3.2-3B": ["*.json", "*.safetensors", "tokenizer*"],
-    "facebook/w2v-bert-2.0": None,
-    "facebook/vjepa2-vitg-fpc64-256": None,
+    "meta-llama/Llama-3.2-3B": ["*.json", "*.safetensors"],
+    "facebook/w2v-bert-2.0": ["*.json", "*.safetensors"],
+    "facebook/vjepa2-vitg-fpc64-256": ["*.json", "*.safetensors"],
 }
 
 # WhisperX transcribes speech with faster-whisper's large-v3 model (the worker image installs
 # WhisperX; the model itself is not in the image, so it must be in this offline cache).
-WHISPER_REPO = "Systran/faster-whisper-large-v3"
+WHISPER_REPO = {"Systran/faster-whisper-large-v3": ["*.json", "model.bin"]}
 
 # WhisperX aligns words with torchaudio's WAV2VEC2_ASR_LARGE_LV60K_960H pipeline. torch.hub keeps
 # downloaded checkpoints under $TORCH_HOME/hub/checkpoints; this is the URL and file from that
@@ -96,9 +102,9 @@ def download_huggingface(repo_id, cache_dir, token, allow_patterns):
 
 def download_repos(cfg, token, cache_dir):
     repositories = {
-        cfg["model"]["repo_id"]: None,
+        cfg["model"]["repo_id"]: MODEL_FILES,
         **ENCODER_REPOS,
-        WHISPER_REPO: None,
+        **WHISPER_REPO,
     }
     for repo_id, allow_patterns in repositories.items():
         print(f"Downloading {repo_id}...")
