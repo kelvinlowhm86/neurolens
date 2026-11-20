@@ -300,6 +300,8 @@ if "terraform" in w.get("fail", []) or "terraform " + (cmd or "") in w.get("fail
 if cmd == "output":
     if not w.get("terraform_state", True):
         fail("No state file was found!")
+    if w.get("terraform_state_empty", False):
+        fail("No outputs found!")
     name = None
     j = args.index("output") + 1
     while j < len(args):
@@ -330,11 +332,20 @@ if cmd == "output":
         sys.exit(0)
     out(data.get(name, ""))
 
-if cmd in ("init", "plan", "apply", "destroy", "validate", "fmt", "import", "state"):
+if cmd == "state":
+    if not w.get("terraform_state", True):
+        fail("No state file was found!")
+    if w.get("terraform_state_empty", False):
+        out("")
+    out("aws_s3_bucket.main")
+
+if cmd in ("init", "plan", "apply", "destroy", "validate", "fmt", "import"):
     if cmd == "apply":
         w["terraform_state"] = True
+        w["terraform_state_empty"] = False
     if cmd == "destroy":
-        w["terraform_state"] = False
+        w["terraform_state"] = True
+        w["terraform_state_empty"] = True
     save()
     out("Terraform " + cmd + " complete.")
 
@@ -402,6 +413,7 @@ def teardown_world(**overrides):
         "account": ACCOUNT,
         "terraform_account": ACCOUNT,
         "terraform_state": True,
+        "terraform_state_empty": False,
         "region": "us-east-1",
         "bucket": DATA_BUCKET,
         "buckets": [STATE_BUCKET],
@@ -466,7 +478,7 @@ class Run:
             if call[0] == "step":
                 result.append(call)
             elif call[0] == "terraform":
-                if len(call) > 1 and call[1] not in ("output", "validate", "plan"):
+                if len(call) > 1 and call[1] not in ("output", "validate", "plan", "state"):
                     result.append(call)
             elif len(call) > 1 and call[1].startswith(("describe-", "get-", "list-", "head-")):
                 continue
@@ -731,6 +743,62 @@ def test_teardown_reports_a_leftover_and_is_not_complete(sandbox, overrides, nee
     assert r.code != 0
     assert "TEARDOWN COMPLETE" not in r.out
     assert needle in r.text
+
+
+def test_teardown_ignores_unrelated_secrets_models_and_configs(sandbox):
+    world = teardown_world(
+        secrets=["other-app"],
+        endpoint_configs=["other-config"],
+        models=["other-model"],
+    )
+    r = sandbox.run("teardown.sh", world=world, input_text=ACCOUNT, tty=True)
+    assert r.code == 0, r.err
+    assert "TEARDOWN COMPLETE" in r.out
+
+
+def test_teardown_rerun_after_destroy_resumes_at_secrets_and_check(sandbox):
+    sandbox.seed()
+    first = sandbox.run("teardown.sh", world=teardown_world(), input_text=ACCOUNT, tty=True)
+    assert first.code == 0, first.err
+    assert first.world["terraform_state_empty"] is True
+
+    second = sandbox.run("teardown.sh", world=first.world, input_text=ACCOUNT, tty=True)
+    assert second.code == 0, second.err
+    assert second.find("application-autoscaling", "describe-scalable-targets") == []
+    assert second.find("sagemaker", "describe-endpoint") == []
+    assert second.find("s3", "cp") == []
+    assert second.find("s3", "sync") == []
+    assert second.find("terraform", "destroy") == []
+    assert deleted_parameters(second) == set(SSM_SECRETS)
+    assert second.find("ssm", "get-parameters-by-path")
+    assert "TEARDOWN COMPLETE" in second.out
+
+
+def test_teardown_empty_state_wrong_confirmation_changes_nothing(sandbox):
+    sandbox.seed()
+    r = sandbox.run(
+        "teardown.sh",
+        world=teardown_world(terraform_state_empty=True),
+        input_text="999999999999",
+        tty=True,
+    )
+    assert r.code != 0
+    assert "Type the AWS account ID" in r.text
+    assert r.changes() == []
+    assert r.find("ssm", "delete-parameter") == []
+
+
+def test_teardown_refuses_when_terraform_state_cannot_be_read(sandbox):
+    r = sandbox.run(
+        "teardown.sh",
+        world=teardown_world(fail=["terraform state"]),
+        input_text=ACCOUNT,
+        tty=True,
+    )
+    assert r.code != 0
+    assert "state" in r.text.lower()
+    assert r.changes() == []
+    assert r.find("terraform", "destroy") == []
 
 
 def test_teardown_never_deletes_the_state_bucket_or_the_deploy_user(sandbox):
