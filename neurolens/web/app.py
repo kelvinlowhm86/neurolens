@@ -1235,6 +1235,8 @@ def create_app(
                 "reason": reason,
                 "checked_views": facts.views if facts else None,
                 "min_views": curve_min_views,
+                "reward_cap": reward_cap,
+                "reward_window_days": reward_window_days,
                 "published_on": facts.published_at.date().isoformat() if facts else None,
                 "video_seconds": facts.duration_s if facts else None,
                 "analysed_seconds": round(job["verified_duration_ms"] / 1000)

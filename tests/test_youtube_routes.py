@@ -309,8 +309,11 @@ def test_the_check_reports_the_window_cap(db, aws, make_cfg, tmp_path, monkeypat
     resp = client.post(f"/api/jobs/{job_id}/retention/check", json=check_body())
 
     assert resp.status_code == 200
-    assert resp.get_json()["reason"] == "cap_reached"
-    assert resp.get_json()["reward_cents"] == 0
+    data = resp.get_json()
+    assert data["reason"] == "cap_reached"
+    assert data["reward_cents"] == 0
+    assert data["reward_cap"] == 0
+    assert data["reward_window_days"] == 30
 
 
 def test_a_video_we_cannot_see_is_400_and_writes_nothing(

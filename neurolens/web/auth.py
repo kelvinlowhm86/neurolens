@@ -4,7 +4,7 @@ Two modes. "dev" (laptop and tests): a fixed development user, allowed only on a
 address and never on AWS, so it can never be exposed publicly; every request is signed in as it.
 "cognito" (AWS): sign-in through Amazon Cognito's hosted pages (Google or email and password).
 The signed cookie holds only a random session token; the server stores its SHA-256 and reads the
-user id and email from the database. A session lasts 30 days from its last use.
+user id and email from the database. A session lasts `billing.SESSION_DAYS` from its last use.
 """
 
 import hashlib

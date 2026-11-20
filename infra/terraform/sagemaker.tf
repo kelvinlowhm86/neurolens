@@ -1,6 +1,6 @@
 # ─── SageMaker asynchronous GPU endpoint ────────────────────
 #
-# SageMaker starts a GPU when a request is waiting and stops it after 7 idle minutes. The
+# SageMaker starts a GPU when a request is waiting and stops it after `idle_stop_minutes`. The
 # container does the bookkeeping (claim, charge, refund); SageMaker only runs and stops machines.
 # The endpoint configuration alone uses the awscc provider because instance pools cannot be
 # expressed by the aws provider.
