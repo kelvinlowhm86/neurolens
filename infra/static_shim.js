@@ -74,7 +74,14 @@
     // With those gone, "How it works" sits right above the footer, so its footer link is dropped too.
     + "a[href='#access'],#access,.footer-feedback,section.closing,#signInPanel .actions,"
     + ".footer-links a[href='#how'],"
-    + "#signedOutNote{display:none!important}";
+    + "#signedOutNote{display:none!important}"
+    // The home hero already says uploads are closed; a second disabled button in the top bar looks broken.
+    + "#topSignIn{display:none!important}"
+    // On the samples list the side column would hold only the closed notice: give the grid the full
+    // width, say it once in the heading, and show the page-end privacy link instead.
+    + "#appShell.view-chooser{grid-template-columns:minmax(0,1fr)}"
+    + "#appShell.view-chooser .side{display:none}"
+    + "body:has(#appShell.view-chooser) .privacy-note.page-end{display:block}";
   (document.head || document.documentElement).append(style);
 
   function isLoginAnchor(anchor) {
@@ -116,6 +123,7 @@
   function apply() {
     setText("#signInPanel h2", "Uploads are closed");
     setText("#signInPanel p:not([id])", "This is a demo. Explore the samples.");
+    setText(".samples-free", "Uploads closed · free to explore");
     document.querySelectorAll("a[href]").forEach(anchor => {
       if (isLoginAnchor(anchor)) closeAnchor(anchor);
     });

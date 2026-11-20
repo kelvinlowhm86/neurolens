@@ -2,7 +2,7 @@
 
 See how a viewer's brain would respond to your video, second by second, before you publish it.
 
-[![CI](https://github.com/kelvinlowhm86/neurolens/actions/workflows/ci.yml/badge.svg)](https://github.com/kelvinlowhm86/neurolens/actions/workflows/ci.yml) [![Samples](https://img.shields.io/badge/samples-explore-orange)](https://joshualumzy.github.io/neurolens-samples/) [![Live site](https://img.shields.io/badge/live-try%20it-orange)](https://df6girqyykyfa.cloudfront.net) [![Non-commercial](https://img.shields.io/badge/use-non--commercial-lightgrey)](#license)
+[![CI](https://github.com/kelvinlowhm86/neurolens/actions/workflows/ci.yml/badge.svg)](https://github.com/kelvinlowhm86/neurolens/actions/workflows/ci.yml) [![Samples](https://img.shields.io/badge/samples-explore-orange)](https://joshualumzy.github.io/neurolens-samples/) [![Non-commercial](https://img.shields.io/badge/use-non--commercial-lightgrey)](#license)
 
 
 https://github.com/user-attachments/assets/0d59224b-2cf4-4b03-8ae3-85f9da411cef
@@ -10,7 +10,7 @@ https://github.com/user-attachments/assets/0d59224b-2cf4-4b03-8ae3-85f9da411cef
 
 [🏆 Best Project – Platinum, CS5224 track, 29th NUS STEPS (Nov 2026)](https://uvents.nus.edu.sg/event/29th-steps)
 
-**Try it live:** https://df6girqyykyfa.cloudfront.net (the samples open without signing in).
+**See it in action:** https://joshualumzy.github.io/neurolens-samples/ (real results for ten sample videos; uploads are closed).
 
 ## What it does
 
