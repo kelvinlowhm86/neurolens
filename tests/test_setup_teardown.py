@@ -1058,8 +1058,9 @@ def test_upload_model_data_prepares_the_full_offline_layout(tmp_path, monkeypatc
     module.prepare_model_data(
         {"model": {"repo_id": "facebook/tribev2"}}, "token", hub_cache, models, data
     )
-    stage = module.stage_model_data(tmp_path / "tmp", hub_cache, models, data)
-    files = {path.relative_to(stage).as_posix() for path in stage.rglob("*") if path.is_file()}
+    plan = module.upload_plan(hub_cache, models, data)
+    files = {key.removeprefix(module.PREFIX) for key in plan}
+    assert all(path.is_relative_to(tmp_path) and path.is_file() for path in plan.values())
 
     hub = "models/hub/models--"
     assert files == {

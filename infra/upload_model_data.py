@@ -164,31 +164,26 @@ def prepare_model_data(cfg, token, hub_cache, models_dir, data_dir):
     download_nilearn(data_dir)
 
 
-def stage_model_data(temp, hub_cache, models_dir, data_dir):
-    """The upload tree: only the files the offline worker reads, without HuggingFace's blobs/."""
-    stage = temp / "upload"
-    copy_tree(hub_cache, stage / "models" / "hub")
-    copy_tree(models_dir / "torch", stage / "models" / "torch")
-    copy_tree(data_dir / "hcp_mmp", stage / "data" / "hcp_mmp")
-    copy_tree(data_dir / "nilearn", stage / "data" / "nilearn")
-    return stage
-
-
-def copy_tree(src, dst):
-    """Copy files and folders, following links, without HuggingFace's duplicated blobs/."""
-    for path in src.rglob("*"):
-        relative = path.relative_to(src)
-        if "blobs" in relative.parts:
-            continue
-        if path.is_dir():
-            (dst / relative).mkdir(parents=True, exist_ok=True)
-        elif path.is_file():
-            target = dst / relative
-            target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(path, target)
+def upload_plan(hub_cache, models_dir, data_dir):
+    """S3 key -> local file for every file the offline worker reads, uploaded in place (no
+    second copy on disk). Links are followed and HuggingFace's duplicated blobs/ are skipped."""
+    trees = {
+        "models/hub": hub_cache,
+        "models/torch": models_dir / "torch",
+        "data/hcp_mmp": data_dir / "hcp_mmp",
+        "data/nilearn": data_dir / "nilearn",
+    }
+    plan = {}
+    for prefix, src in trees.items():
+        for path in sorted(src.rglob("*")):
+            relative = path.relative_to(src)
+            if "blobs" not in relative.parts and path.is_file():
+                plan[f"{PREFIX}{prefix}/{relative.as_posix()}"] = path
+    return plan
 
 
 def totals(files):
+    files = list(files)
     return len(files), sum(path.stat().st_size for path in files)
 
 
@@ -225,9 +220,8 @@ def main():
 
         hub_cache = Path(os.environ["HF_HUB_CACHE"])
         prepare_model_data(cfg, token, hub_cache, paths["models"], paths["data"])
-        stage = stage_model_data(temp, hub_cache, paths["models"], paths["data"])
-        files = [path for path in stage.rglob("*") if path.is_file()]
-        local = totals(files)
+        plan = upload_plan(hub_cache, paths["models"], paths["data"])
+        local = totals(plan.values())
         if local[0] == 0 or local[1] == 0:
             raise SystemExit("The downloaded model files are empty; nothing to upload.")
 
@@ -237,12 +231,11 @@ def main():
         uploaded = []
         try:
             print(f"Uploading {local[0]} files ({local[1]} bytes) to s3://{bucket}/{PREFIX}...")
-            for index, path in enumerate(files, 1):
-                key = PREFIX + path.relative_to(stage).as_posix()
+            for index, (key, path) in enumerate(plan.items(), 1):
                 s3.upload_file(str(path), bucket, key)
                 uploaded.append(key)
-                if index % 100 == 0 or index == len(files):
-                    print(f"  {index}/{len(files)}")
+                if index % 100 == 0 or index == len(plan):
+                    print(f"  {index}/{len(plan)}")
             remote = remote_totals(s3, bucket)
             if remote != local:
                 raise SystemExit(

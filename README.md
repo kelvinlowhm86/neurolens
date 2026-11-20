@@ -101,7 +101,7 @@ The operator guide is [docs/operating.md](docs/operating.md); the human-only fir
 infra/setup.sh
 ```
 
-It lists every missing prerequisite before changing anything, and a second run skips finished work. `infra/teardown.sh` stops the GPU, backs up `experiments/`, destroys the stack and checks for leftovers.
+It lists every missing prerequisite before changing anything, and a second run skips finished work. The first run downloads the model files (about 18 GB) to the laptop to upload them, so it needs that much free disk. `infra/teardown.sh` stops the GPU, backs up `experiments/`, destroys the stack and checks for leftovers.
 
 #### Gated model access
 
