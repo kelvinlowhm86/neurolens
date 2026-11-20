@@ -30,6 +30,12 @@
     "heartbeat_seconds": 50,
     "max_job_minutes": 55
   },
+  "queue": {
+    "cancel_seconds": 15,
+    "visibility_seconds": 1080,
+    "dlq_visibility_seconds": 720,
+    "max_receives": 2
+  },
   "report": {
     "model": "us.anthropic.claude-sonnet-4-6",
     "max_tokens": 20000,

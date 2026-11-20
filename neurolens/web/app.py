@@ -270,21 +270,20 @@ def create_app(
     max_bytes = cfg.get("max_upload_bytes")
     max_seconds = settings.max_duration(cfg or None)
     max_gpus = settings.max_instances(cfg or None)
-    result_days = settings.result_retention_days(cfg or None)
-    no_curve_days = settings.no_curve_days(cfg or None)
-    cancel_s = settings.cancel_seconds(cfg or None)
+    result_days = settings.result_retention_days(cfg) if cfg else None
+    no_curve_days = settings.no_curve_days(cfg) if cfg else None
+    cancel_s = settings.cancel_seconds(cfg) if cfg else None
     upload_cfg = cfg.get("upload") or {}
     max_batch_files = upload_cfg.get("max_batch_files")
     max_waiting_jobs = upload_cfg.get("max_waiting_jobs")
     research_cfg = cfg.get("research") or {}
-    reward_cap = research_cfg.get("curve_rewards_per_window", billing.DEFAULT_REWARD_CAP)
-    reward_window_days = research_cfg.get(
-        "curve_reward_window_days", billing.DEFAULT_REWARD_WINDOW_DAYS
-    )
-    length_tolerance_s = research_cfg.get(
-        "curve_length_tolerance_s", billing.DEFAULT_LENGTH_TOLERANCE_S
-    )
-    curve_min_views = research_cfg.get("curve_min_views", billing.DEFAULT_MIN_VIEWS)
+    if cfg:
+        reward_cap = research_cfg["curve_rewards_per_window"]
+        reward_window_days = research_cfg["curve_reward_window_days"]
+        length_tolerance_s = research_cfg["curve_length_tolerance_s"]
+        curve_min_views = research_cfg["curve_min_views"]
+    else:
+        reward_cap = reward_window_days = length_tolerance_s = curve_min_views = None
     static_dir = root / "static"
     contact_email = (cfg.get("contact_email") or "").strip()
     autoscaling = None

@@ -78,16 +78,9 @@ create_app(data_dir=data, cfg=cfg)
 print(json.dumps([m for m in ("neurolens.inference", "torch") if m in sys.modules]))
 """
 
-CFG_WITHOUT_AWS = {
-    "paths": {"models": "m", "data": "d"},
-    "max_video_duration_seconds": 120,
-    "max_upload_bytes": 300000000,
-    "response": {"colour_range": 0.5},
-    # Config.json's development identity and local-only address
-    "auth": {"mode": "dev", "dev_user_id": "dev-user", "dev_email": "dev@localhost"},
-    "billing": {"starter_cents": 500},
-    "server": {"host": "127.0.0.1", "port": 5003},
-}
+CFG_WITHOUT_AWS = json.loads((REPO_ROOT / "config.json").read_text())
+CFG_WITHOUT_AWS.pop("aws", None)
+CFG_WITHOUT_AWS.pop("db", None)
 
 
 @pytest.mark.parametrize("cfg", [None, CFG_WITHOUT_AWS], ids=["cfg_none", "cfg_without_aws"])

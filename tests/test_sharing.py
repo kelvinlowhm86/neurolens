@@ -7,14 +7,13 @@ job that has any snapshot. Job and account deletion use the same prefix. Consent
 version and time only when it is given.
 """
 
-import json
 import re
 import uuid
 from pathlib import Path, PurePosixPath
 
 import pytest
 from botocore.client import BaseClient
-from conftest import STARTER_CENTS, WEB_USER_ID, sign_in
+from conftest import RESEARCH, REWARD, STARTER_CENTS, WEB_USER_ID, sign_in, write_config
 from neurolens import billing, results, settings, storage
 from neurolens.web.app import create_app
 
@@ -24,13 +23,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
 def app_for(aws, db, make_cfg, tmp_path, s3_client=None):
-    cfg = make_cfg(
-        research={
-            "curve_rewards_per_window": 5,
-            "curve_reward_window_days": 30,
-            "no_curve_days": 90,
-        }
-    )
+    cfg = make_cfg()
     app = create_app(
         cfg=cfg,
         data_dir=tmp_path / "data",
@@ -118,13 +111,13 @@ def curve_kwargs(job_id, *, sha="review-curve"):
         "views": "lt_1k",
         "published": "week",
         "promoted": False,
-        "reward_cap": 5,
-        "reward_window_days": 30,
+        **REWARD,
         "video_ref": f"youtube:{job_id.replace('-', '')[:11]}",
         "same_cut": "same",
         "source": "youtube_api",
         "facts": None,
-        "length_tolerance_s": 2,
+        "length_tolerance_s": RESEARCH["curve_length_tolerance_s"],
+        "min_views": RESEARCH["curve_min_views"],
     }
 
 
@@ -363,8 +356,7 @@ def reaper_env(aws, db, monkeypatch, tmp_path, patch_everywhere):
     def install(no_curve_days):
         root = tmp_path / f"root-{no_curve_days}"
         (root / "data").mkdir(parents=True)
-        config = {"research": {"no_curve_days": no_curve_days}}
-        (root / "config.json").write_text(json.dumps(config))
+        write_config(root, research={"no_curve_days": no_curve_days})
         monkeypatch.setenv("NEUROLENS_ROOT", str(root))
 
     return install

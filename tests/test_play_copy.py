@@ -17,7 +17,7 @@ from urllib.parse import unquote, urlparse
 
 import pytest
 from botocore.exceptions import ClientError
-from conftest import STARTER_CENTS, USER_ID, WEB_USER_ID
+from conftest import STARTER_CENTS, USER_ID, WEB_USER_ID, write_config
 from neurolens import billing, inference, pricing, settings, storage, worker
 from neurolens.web.app import create_app
 
@@ -545,7 +545,7 @@ def reaper_env(aws, db, monkeypatch, tmp_path, patch_everywhere):
     monkeypatch.setenv("AWS_REGION", "us-east-1")
     root = tmp_path / "root"
     (root / "data").mkdir(parents=True)
-    (root / "config.json").write_text(json.dumps({"research": {"no_curve_days": 90}}))
+    write_config(root)
     monkeypatch.setenv("NEUROLENS_ROOT", str(root))
 
     def data_api_database(*args, **kwargs):

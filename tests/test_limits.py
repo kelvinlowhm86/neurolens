@@ -1,6 +1,7 @@
 """Tests for GET /api/limits (Flask test client)."""
 
 import pytest
+from conftest import UPLOAD
 from neurolens import pricing
 from neurolens.web.app import create_app
 
@@ -34,6 +35,7 @@ def test_returns_the_upload_limits_and_the_colour_range(get_limits, make_cfg):
         "result_retention_days": 30,
         "cancel_seconds": 15,
         "invite_seconds": 0.0,
+        "max_batch_files": UPLOAD["max_batch_files"],
         "price": _price(),
     }
 
@@ -51,6 +53,7 @@ def test_changing_the_config_changes_the_answer(get_limits, make_cfg):
         "result_retention_days": 30,
         "cancel_seconds": 15,
         "invite_seconds": 0.0,
+        "max_batch_files": UPLOAD["max_batch_files"],
         "price": _price(),
     }
 
@@ -68,6 +71,7 @@ def test_upload_bytes_is_null_when_config_has_none(get_limits, make_cfg):
         "result_retention_days",
         "cancel_seconds",
         "invite_seconds",
+        "max_batch_files",
         "price",
     }
     assert data["max_upload_bytes"] is None
@@ -94,6 +98,7 @@ def test_needs_no_aws_block(get_limits, make_cfg):
         "result_retention_days": 30,
         "cancel_seconds": 15,
         "invite_seconds": 0.0,
+        "max_batch_files": UPLOAD["max_batch_files"],
         "price": _price(),
     }
 

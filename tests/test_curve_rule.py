@@ -11,14 +11,14 @@ import uuid
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from conftest import WEB_USER_ID
+from conftest import RESEARCH, REWARD, WEB_USER_ID
 from neurolens import billing, pricing, storage
 from neurolens.web.app import create_app
 
 STARTER_CENTS = 10_000
 PRICE_CENTS = pricing.estimate_cost_cents(30.1)
-LENGTH_TOLERANCE_S = 2
-MIN_VIEWS = 1000
+LENGTH_TOLERANCE_S = RESEARCH["curve_length_tolerance_s"]
+MIN_VIEWS = RESEARCH["curve_min_views"]
 VIEWS = "lt_1k"
 PUBLISHED = "week"
 DAY_S = 24 * 60 * 60
@@ -85,8 +85,7 @@ def curve_args(
         "views": views,
         "published": published,
         "promoted": False,
-        "reward_cap": 5,
-        "reward_window_days": 30,
+        **REWARD,
         "video_ref": video_ref if video_ref is not None else video_ref_for(job_id),
         "same_cut": "same",
         "source": "youtube_api",
@@ -104,8 +103,7 @@ def snapshot_rows(pg, job_id):
 
 def offer(db, user_id, job_id, *, video_ref, facts_, min_views=MIN_VIEWS):
     args = {
-        "reward_cap": 5,
-        "reward_window_days": 30,
+        **REWARD,
         "length_tolerance_s": LENGTH_TOLERANCE_S,
         "min_views": min_views,
     }
@@ -120,14 +118,9 @@ def patch_lookup(monkeypatch, result):
 
 
 def app_client(aws, db, make_cfg, tmp_path, *, curve_min_views=MIN_VIEWS):
-    research = {
-        "curve_rewards_per_window": 5,
-        "curve_reward_window_days": 30,
-        "curve_length_tolerance_s": LENGTH_TOLERANCE_S,
-        "curve_min_views": curve_min_views,
-        "no_curve_days": 90,
-    }
-    cfg = make_cfg(research=research, youtube_api_key="test-youtube-key")
+    cfg = make_cfg(
+        research={"curve_min_views": curve_min_views}, youtube_api_key="test-youtube-key"
+    )
     app = create_app(
         cfg=cfg,
         data_dir=tmp_path / "data",
@@ -278,9 +271,9 @@ def test_the_check_and_the_save_answer_with_only_cents_and_reason(db, pg):
         job_id,
         video_ref,
         facts_,
-        reward_cap=5,
-        reward_window_days=30,
+        **REWARD,
         length_tolerance_s=LENGTH_TOLERANCE_S,
+        min_views=MIN_VIEWS,
     )
     saved = billing.add_curve(db, WEB_USER_ID, job_id, **curve_args(job_id, facts_=facts_))
 
@@ -393,7 +386,7 @@ def test_the_history_preview_still_ignores_the_view_count(db, pg):
         **curve_args(job_id, facts_=facts(days_ago(30), views=640)),
     )
 
-    [row] = billing.list_jobs(db, WEB_USER_ID, 50)
+    [row] = billing.list_jobs(db, WEB_USER_ID, 50, **REWARD)
 
     assert row["curve_reward_cents"] == PRICE_CENTS
     assert row["curve_rewarded"] is False

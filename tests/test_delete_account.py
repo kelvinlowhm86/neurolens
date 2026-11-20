@@ -5,7 +5,6 @@ racing `reserve`) and `POST /api/account/delete` (confirmation, files and rows, 
 per Cognito identity, a missing user counts as done, failure logging, and the stale-session 401).
 """
 
-import json
 import logging
 import re
 import threading
@@ -15,7 +14,7 @@ from pathlib import PurePosixPath
 import pytest
 from botocore.client import BaseClient
 from botocore.exceptions import ClientError
-from conftest import ISSUER, STARTER_CENTS, check_invariants, sign_in
+from conftest import ISSUER, STARTER_CENTS, check_invariants, sign_in, write_config
 from neurolens import billing, storage
 from neurolens.web.app import create_app
 from test_delete_job import DeleteReportsError
@@ -106,8 +105,7 @@ def reaper_env(aws, db, monkeypatch, tmp_path, patch_everywhere):
     def install(no_curve_days):
         root = tmp_path / f"root-{no_curve_days}"
         (root / "data").mkdir(parents=True)
-        config = {"research": {"no_curve_days": no_curve_days}}
-        (root / "config.json").write_text(json.dumps(config))
+        write_config(root, research={"no_curve_days": no_curve_days})
         monkeypatch.setenv("NEUROLENS_ROOT", str(root))
 
     return install

@@ -10,7 +10,7 @@ import re
 import uuid
 
 import pytest
-from conftest import REPO_ROOT, WEB_USER_ID
+from conftest import REPO_ROOT, RESEARCH, REWARD, WEB_USER_ID
 from neurolens import billing, pricing, settings, storage
 from neurolens.web.app import create_app
 
@@ -83,13 +83,13 @@ def curve_args(job_id, *, sha="a" * 64, points=None, video_ref=None):
         "views": VIEWS,
         "published": PUBLISHED,
         "promoted": False,
-        "reward_cap": 5,
-        "reward_window_days": 30,
+        **REWARD,
         "video_ref": video_ref if video_ref is not None else video_ref_for(job_id),
         "same_cut": "same",
         "source": "youtube_api",
         "facts": None,
-        "length_tolerance_s": 2,
+        "length_tolerance_s": RESEARCH["curve_length_tolerance_s"],
+        "min_views": RESEARCH["curve_min_views"],
     }
 
 
@@ -125,13 +125,7 @@ def snapshot_rows(pg, job_id):
 
 
 def app_for(aws, db, make_cfg, tmp_path):
-    cfg = make_cfg(
-        research={
-            "curve_rewards_per_window": 5,
-            "curve_reward_window_days": 30,
-            "no_curve_days": 90,
-        }
-    )
+    cfg = make_cfg()
     app = create_app(
         cfg=cfg,
         data_dir=tmp_path / "data",

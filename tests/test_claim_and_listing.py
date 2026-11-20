@@ -17,7 +17,7 @@ import uuid
 from pathlib import Path
 
 import pytest
-from conftest import REPO_ROOT, STARTER_CENTS, WEB_USER_ID
+from conftest import COMMITTED_CONFIG, REPO_ROOT, RESEARCH, REWARD, STARTER_CENTS, WEB_USER_ID
 from neurolens import billing, pricing, storage
 from neurolens.web.app import create_app
 
@@ -43,13 +43,7 @@ REFUSAL = (
 
 
 def app_for(aws, db, make_cfg, tmp_path, s3_client=None):
-    cfg = make_cfg(
-        research={
-            "curve_rewards_per_window": 5,
-            "curve_reward_window_days": 30,
-            "no_curve_days": 90,
-        }
-    )
+    cfg = make_cfg()
     app = create_app(
         cfg=cfg,
         data_dir=tmp_path / "data",
@@ -120,17 +114,23 @@ def add_curve(db, job_id, *, sha="curve-sha"):
         views="lt_1k",
         published="week",
         promoted=False,
-        reward_cap=5,
-        reward_window_days=30,
+        **REWARD,
         video_ref=f"youtube:{job_id.replace('-', '')[:11]}",
         same_cut="same",
         source="youtube_api",
         facts=None,
-        length_tolerance_s=2,
+        length_tolerance_s=RESEARCH["curve_length_tolerance_s"],
+        min_views=RESEARCH["curve_min_views"],
     )
 
 
-def preview(db, job_id, *, cap=5, window=30):
+def preview(
+    db,
+    job_id,
+    *,
+    cap=RESEARCH["curve_rewards_per_window"],
+    window=RESEARCH["curve_reward_window_days"],
+):
     rows = billing.list_jobs(db, WEB_USER_ID, 20, reward_cap=cap, reward_window_days=window)
     return next(row for row in rows if str(row["job_id"]) == job_id)
 
@@ -154,7 +154,7 @@ def test_claim_sets_claimed_at_on_every_successful_claim(db, pg):
 def test_list_jobs_returns_claimed_at_as_utc_text(db, pg):
     job_id, _ = make_job(db, state="processing")
 
-    [row] = billing.list_jobs(db, WEB_USER_ID, 50)
+    [row] = billing.list_jobs(db, WEB_USER_ID, 50, **REWARD)
 
     assert row["cancellable"] is False
     assert isinstance(row["claimed_at"], str)
@@ -168,7 +168,7 @@ def test_list_jobs_returns_the_sharing_and_curve_fields(db, pg):
     job_id, _ = make_job(db, consent=True, sha="a-video")
     pg.age(job_id, created_s=8 * 24 * 60 * 60)
     billing.grant_credit(db, f"{WEB_USER_ID}@example.com", 100)
-    [row] = billing.list_jobs(db, WEB_USER_ID, 50)
+    [row] = billing.list_jobs(db, WEB_USER_ID, 50, **REWARD)
     assert row["sharing"] is True
     assert row["curve_count"] == 0
     assert row["curve_reward_cents"] == PRICE_CENTS
@@ -176,7 +176,7 @@ def test_list_jobs_returns_the_sharing_and_curve_fields(db, pg):
 
     assert add_curve(db, job_id)["rewarded_cents"] == PRICE_CENTS
 
-    [row] = billing.list_jobs(db, WEB_USER_ID, 50)
+    [row] = billing.list_jobs(db, WEB_USER_ID, 50, **REWARD)
     assert row["sharing"] is True
     assert row["curve_count"] == 1
     assert row["curve_reward_cents"] == 0
@@ -185,7 +185,7 @@ def test_list_jobs_returns_the_sharing_and_curve_fields(db, pg):
 
 def test_an_unshared_job_is_not_sharing(db):
     job_id, _ = make_job(db, consent=False)
-    [row] = billing.list_jobs(db, WEB_USER_ID, 50)
+    [row] = billing.list_jobs(db, WEB_USER_ID, 50, **REWARD)
     assert row["sharing"] is False
     assert row["curve_reward_cents"] == 0
     assert job_id
@@ -199,7 +199,7 @@ def test_a_removed_job_is_not_sharing(db, pg):
         (job_id,),
     )
 
-    [row] = billing.list_jobs(db, WEB_USER_ID, 50)
+    [row] = billing.list_jobs(db, WEB_USER_ID, 50, **REWARD)
 
     assert row["sharing"] is False
     assert row["curve_reward_cents"] == 0
@@ -210,7 +210,7 @@ def test_sharing_is_true_only_for_a_done_job(db):
     queued, _ = make_job(db, consent=True, state="queued")
     failed, _ = make_job(db, consent=True, state="failed")
 
-    rows = {str(row["job_id"]): row for row in billing.list_jobs(db, WEB_USER_ID, 20)}
+    rows = {str(row["job_id"]): row for row in billing.list_jobs(db, WEB_USER_ID, 20, **REWARD)}
 
     assert rows[done]["sharing"] is True
     assert rows[queued]["sharing"] is False
@@ -256,7 +256,7 @@ def test_list_jobs_and_the_jobs_api_leave_out_cancelled_jobs(aws, db, make_cfg, 
     failed, _ = make_job(db, state="failed")
     done, _ = make_job(db, state="done")
 
-    listed = {str(row["job_id"]) for row in billing.list_jobs(db, WEB_USER_ID, 50)}
+    listed = {str(row["job_id"]) for row in billing.list_jobs(db, WEB_USER_ID, 50, **REWARD)}
     api = {row["job_id"] for row in client.get("/api/jobs").get_json()}
 
     assert cancelled not in listed and cancelled not in api
@@ -528,9 +528,7 @@ def test_local_stack_leaves_a_dispatch_error_on_the_queue(monkeypatch):
     sqs = OneMessageQueue(json.dumps(event))
 
     with pytest.raises(StopLoop):
-        local_stack._dispatch_loop(
-            sqs, "queue-url", None, None, None, {"max_upload_bytes": 300_000_000}
-        )
+        local_stack._dispatch_loop(sqs, "queue-url", None, None, None, COMMITTED_CONFIG)
 
     assert sqs.deleted == [], "the local stack deleted a message whose dispatch failed"
 

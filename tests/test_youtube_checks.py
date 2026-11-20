@@ -17,14 +17,14 @@ import uuid
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from conftest import WEB_USER_ID
+from conftest import RESEARCH, REWARD, WEB_USER_ID
 from neurolens import billing, pricing, storage
 
 STARTER_CENTS = 10_000
 PRICE_CENTS = pricing.estimate_cost_cents(30.1)
 VIEWS = "lt_1k"
 PUBLISHED = "week"
-LENGTH_TOLERANCE_S = 2
+LENGTH_TOLERANCE_S = RESEARCH["curve_length_tolerance_s"]
 DAY_S = 24 * 60 * 60
 
 YOUTUBE_ID = "dQw4w9WgXcQ"
@@ -209,13 +209,13 @@ def curve_args(
         "views": views,
         "published": published,
         "promoted": False,
-        "reward_cap": 5,
-        "reward_window_days": 30,
+        **REWARD,
         "video_ref": video_ref if video_ref is not None else video_ref_for(job_id),
         "same_cut": "same",
         "source": "youtube_api",
         "facts": facts_,
         "length_tolerance_s": LENGTH_TOLERANCE_S,
+        "min_views": RESEARCH["curve_min_views"],
     }
     args.update(overrides)
     return args
@@ -260,9 +260,9 @@ def snapshot_rows(pg, job_id):
 def offer(db, user_id, job_id, *, video_ref, facts_, **overrides):
     """The check's answer as (cents, reason)."""
     args = {
-        "reward_cap": 5,
-        "reward_window_days": 30,
+        **REWARD,
         "length_tolerance_s": LENGTH_TOLERANCE_S,
+        "min_views": RESEARCH["curve_min_views"],
     }
     args.update(overrides)
     cents, reason = billing.curve_offer(db, user_id, job_id, video_ref, facts_, **args)
@@ -494,7 +494,7 @@ def test_list_jobs_no_longer_promises_a_reward_date(db, pg):
     pg.age(job_id, created_s=5 * DAY_S)
     billing.grant_credit(db, f"{WEB_USER_ID}@example.com", 100)
 
-    [row] = billing.list_jobs(db, WEB_USER_ID, 50)
+    [row] = billing.list_jobs(db, WEB_USER_ID, 50, **REWARD)
 
     assert row["curve_reward_cents"] == PRICE_CENTS
     assert "curve_reward_from" not in row

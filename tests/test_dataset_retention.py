@@ -9,7 +9,7 @@ import json
 import uuid
 
 import pytest
-from conftest import WEB_USER_ID
+from conftest import REWARD, WEB_USER_ID
 from neurolens import billing, storage
 from neurolens.web.app import create_app
 
@@ -145,7 +145,7 @@ def test_list_jobs_marks_sharing_and_curve_count_only_when_needed(db, pg):
     failed, _ = make_job(db, consent=True, done=False)
     assert billing.issue_refund(db, failed, "processing_failed", queued=True) is True
 
-    rows = billing.list_jobs(db, WEB_USER_ID, 50)
+    rows = billing.list_jobs(db, WEB_USER_ID, 50, **REWARD)
     by_id = {
         str(row["job_id"]): row["sharing"] and row["status"] == "done" and row["curve_count"] == 0
         for row in rows

@@ -35,11 +35,6 @@ STALE_AFTER_S = 90
 CONSENT_VERSION = "2026-11-03"
 # A session row older than this (by its last use) no longer signs anybody in.
 SESSION_DAYS = 30
-# The reward preview's defaults when a caller does not supply config.json's research limits.
-DEFAULT_REWARD_CAP = 5
-DEFAULT_REWARD_WINDOW_DAYS = 30
-DEFAULT_LENGTH_TOLERANCE_S = 2
-DEFAULT_MIN_VIEWS = 1000
 # A dispatched request that has not been claimed this long after its GPU wait is over is refunded.
 GPU_WAIT_GRACE_S = 300
 # STePS booth guest passes: 2 minutes ($4 / 400 cents) per visitor pass, 10 passes initially.
@@ -367,8 +362,8 @@ def _curve_reward(
     same_link_rewarded=False,
     valid=True,
     facts=None,
-    length_tolerance_s=DEFAULT_LENGTH_TOLERANCE_S,
-    min_views=DEFAULT_MIN_VIEWS,
+    length_tolerance_s,
+    min_views,
     preview=False,
 ):
     """The reward a curve would pay and the first refusal.
@@ -414,8 +409,8 @@ def list_jobs(
     user_id,
     limit,
     *,
-    reward_cap=DEFAULT_REWARD_CAP,
-    reward_window_days=DEFAULT_REWARD_WINDOW_DAYS,
+    reward_cap,
+    reward_window_days,
 ):
     """The user's jobs, newest first, at most `limit`.
 
@@ -463,6 +458,8 @@ def list_jobs(
                 funded=funded,
                 under_cap=under_cap,
                 same_video_rewarded=row["same_video_rewarded"],
+                length_tolerance_s=None,
+                min_views=None,
                 preview=True,
             )
         else:
@@ -1233,7 +1230,7 @@ def curve_offer(
     reward_cap,
     reward_window_days,
     length_tolerance_s,
-    min_views=DEFAULT_MIN_VIEWS,
+    min_views,
     no_curve_days=None,
 ):
     """What `add_curve` would pay for this link, without writing anything.
@@ -1276,9 +1273,9 @@ def add_curve(
     video_ref,
     same_cut,
     source,
+    length_tolerance_s,
+    min_views,
     facts=None,
-    length_tolerance_s=DEFAULT_LENGTH_TOLERANCE_S,
-    min_views=DEFAULT_MIN_VIEWS,
     no_curve_days=None,
 ):
     """Store one retention snapshot and reward the analysis when all the rules allow it.

@@ -8,14 +8,13 @@ hint lasts as long as the session. Identity always comes from the database, neve
 """
 
 import hashlib
-import json
 import secrets
 import time
 from email.utils import parsedate_to_datetime
 
 import pytest
 from botocore.client import BaseClient
-from conftest import sign_in
+from conftest import sign_in, write_config
 from neurolens import billing
 
 SESSION_DAYS = 30
@@ -358,7 +357,7 @@ def reaper_env(aws, db, monkeypatch, tmp_path, patch_everywhere):
     )
     root = tmp_path / "root"
     (root / "data").mkdir(parents=True)
-    (root / "config.json").write_text(json.dumps({"research": {"no_curve_days": 90}}))
+    write_config(root)
     monkeypatch.setenv("NEUROLENS_ROOT", str(root))
 
 

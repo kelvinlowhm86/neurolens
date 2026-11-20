@@ -7,10 +7,8 @@ copy that was only removed (Stop sharing, the 90-day rule) loses its two prefixe
 user's own result.
 """
 
-import json
-
 import pytest
-from conftest import WEB_USER_ID
+from conftest import WEB_USER_ID, write_config
 from neurolens import billing, storage
 
 from test_sharing import (
@@ -50,8 +48,7 @@ def reaper_env(aws, db, monkeypatch, tmp_path, patch_everywhere):
     def install(no_curve_days):
         root = tmp_path / f"root-{no_curve_days}"
         (root / "data").mkdir(parents=True)
-        config = {"research": {"no_curve_days": no_curve_days}}
-        (root / "config.json").write_text(json.dumps(config))
+        write_config(root, research={"no_curve_days": no_curve_days})
         monkeypatch.setenv("NEUROLENS_ROOT", str(root))
 
     return install

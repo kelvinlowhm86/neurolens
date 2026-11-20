@@ -6,13 +6,12 @@ four-hour deadline, and the person sees that reason as soon as they look at thei
 money are read directly through PostgreSQL; SageMaker and S3 are fakes.
 """
 
-import json
 import threading
 import uuid
 from datetime import UTC, datetime
 
 import pytest
-from conftest import STARTER_CENTS, USER_ID, WEB_USER_ID
+from conftest import STARTER_CENTS, USER_ID, WEB_USER_ID, write_config
 from neurolens import billing, storage
 from neurolens.db import PostgresDatabase
 
@@ -185,7 +184,7 @@ def reaper_env(aws, db, monkeypatch, tmp_path, patch_everywhere):
     monkeypatch.setenv("AWS_REGION", "us-east-1")
     root = tmp_path / "root"
     (root / "data").mkdir(parents=True)
-    (root / "config.json").write_text(json.dumps({"research": {"no_curve_days": 90}}))
+    write_config(root)
     monkeypatch.setenv("NEUROLENS_ROOT", str(root))
 
     def data_api_database(*args, **kwargs):

@@ -11,7 +11,7 @@ from pathlib import PurePosixPath
 
 import pytest
 from botocore.exceptions import ClientError
-from conftest import WEB_USER_ID
+from conftest import REWARD, WEB_USER_ID
 from neurolens import billing, storage
 from neurolens.web.app import create_app
 
@@ -271,6 +271,6 @@ def test_list_jobs_skips_deleted_jobs_but_job_state_still_sees_them(db, content_
     deleted, _ = make_job(db, content_type=content_type)
     kept, _ = make_job(db, content_type=content_type)
     billing.delete_job(db, WEB_USER_ID, deleted)
-    assert {job["job_id"] for job in billing.list_jobs(db, WEB_USER_ID, 50)} == {kept}
+    assert {job["job_id"] for job in billing.list_jobs(db, WEB_USER_ID, 50, **REWARD)} == {kept}
     state = billing.job_state(db, deleted)
     assert state is not None and state["status"] == "done"

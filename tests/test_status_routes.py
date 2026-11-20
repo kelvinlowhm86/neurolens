@@ -210,16 +210,9 @@ class EmptyDatabase:
 with mock_aws():
     boto3.client("s3", region_name="us-east-1").create_bucket(Bucket="neurolens-hygiene")
     from neurolens.web.app import create_app
-    cfg = {
-        "paths": {"models": "m", "data": "d"},
-        "aws": {"region": "us-east-1", "s3_bucket": "neurolens-hygiene"},
-        "max_video_duration_seconds": 120,
-        "max_upload_bytes": 300000000,
-        "response": {"colour_range": 0.5},
-        "auth": {"mode": "dev", "dev_user_id": "dev-user", "dev_email": "dev@localhost"},
-        "billing": {"starter_cents": 500},
-        "server": {"host": "127.0.0.1", "port": 5003},
-    }
+    cfg = json.loads(Path("config.json").read_text())
+    cfg.pop("db", None)
+    cfg["aws"] = {"region": "us-east-1", "s3_bucket": "neurolens-hygiene"}
     app = create_app(data_dir=Path(tempfile.mkdtemp()), cfg=cfg, db=EmptyDatabase())
     client = app.test_client()
     job_id = str(uuid.uuid4())

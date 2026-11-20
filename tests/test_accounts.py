@@ -12,7 +12,7 @@ import threading
 import uuid
 
 import pytest
-from conftest import ISSUER, STARTER_CENTS
+from conftest import ISSUER, REWARD, STARTER_CENTS
 from neurolens import billing, pricing, storage
 
 GOOGLE = "https://accounts.google.example"  # a second issuer, for identities across providers
@@ -259,7 +259,7 @@ def test_list_jobs_returns_only_the_users_jobs_newest_first(db, pg):
     pg.age(old, created_s=300)
     pg.age(middle, created_s=200)
     pg.age(new, created_s=100)
-    jobs = billing.list_jobs(db, "u-1", 50)
+    jobs = billing.list_jobs(db, "u-1", 50, **REWARD)
     assert [j["job_id"] for j in jobs] == [new, middle, old]
-    assert [j["job_id"] for j in billing.list_jobs(db, "u-1", 2)] == [new, middle]
-    assert billing.list_jobs(db, "nobody", 50) == []
+    assert [j["job_id"] for j in billing.list_jobs(db, "u-1", 2, **REWARD)] == [new, middle]
+    assert billing.list_jobs(db, "nobody", 50, **REWARD) == []

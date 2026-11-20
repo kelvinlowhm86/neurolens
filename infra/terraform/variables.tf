@@ -80,40 +80,6 @@ variable "idle_stop_minutes" {
   }
 }
 
-variable "queue_delay_seconds" {
-  description = "Seconds an upload waits before the dispatcher sees it, so the user can still cancel."
-  type        = number
-  default     = 15
-
-  validation {
-    condition     = var.queue_delay_seconds >= 0
-    error_message = "queue_delay_seconds must be zero or more."
-  }
-}
-
-variable "queue_visibility_seconds" {
-  description = "Seconds the dispatcher has to process one message before SQS redelivers it."
-  type        = number
-  default     = 1080
-}
-
-variable "dlq_visibility_seconds" {
-  description = "Seconds a message waits in the dead-letter queue before the handler retries it."
-  type        = number
-  default     = 720
-}
-
-variable "queue_max_receives" {
-  description = "Failed receives before SQS moves a message to the dead-letter queue."
-  type        = number
-  default     = 2
-
-  validation {
-    condition     = var.queue_max_receives >= 1
-    error_message = "queue_max_receives must be at least 1."
-  }
-}
-
 variable "reaper_schedule_hours" {
   description = "Hours between reaper runs."
   type        = number

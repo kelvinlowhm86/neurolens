@@ -14,10 +14,10 @@ What it creates
   `results/` after `result_retention_days`, both 30; `dataset/` after
   `research.dataset_retention_days` (1095), `sagemaker-output/` after 1, `build/` after 7,
   `experiments/` never).
-- One SQS queue (visibility `queue_visibility_seconds` (1080 s), a `queue_delay_seconds`
+- One SQS queue (visibility `queue.visibility_seconds` (1080 s), a `queue.cancel_seconds`
   (15 s) delivery delay) and the wiring that sends a message whenever a file lands under
   `uploads/`. A second queue (`neurolens-jobs-dlq`) receives a job that failed
-  `queue_max_receives` (twice).
+  `queue.max_receives` (twice).
 - A VPC with private subnets for Aurora only. No NAT Gateway, no internet gateway, no S3 endpoint:
   Aurora is reached through the Data API, and S3 through its public HTTPS endpoint.
 - Roles: the SageMaker execution role, the CodeBuild role, the dispatcher, the SageMaker error

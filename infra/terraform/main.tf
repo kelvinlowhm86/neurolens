@@ -160,11 +160,11 @@ resource "aws_sqs_queue" "jobs" {
   name = var.queue_name
 
   # The cancel window: the message waits before the dispatcher starts a GPU.
-  delay_seconds = var.queue_delay_seconds
+  delay_seconds = local.config.queue.cancel_seconds
 
   # The dispatcher's time per message (AWS asks for six times the function timeout), so a slow
   # dispatch is not redelivered while it is still invoking.
-  visibility_timeout_seconds = var.queue_visibility_seconds
+  visibility_timeout_seconds = local.config.queue.visibility_seconds
 
   sqs_managed_sse_enabled = true
 
@@ -172,7 +172,7 @@ resource "aws_sqs_queue" "jobs" {
   # Failed request.
   redrive_policy = jsonencode({
     deadLetterTargetArn = aws_sqs_queue.jobs_dlq.arn
-    maxReceiveCount     = var.queue_max_receives
+    maxReceiveCount     = local.config.queue.max_receives
   })
 }
 
@@ -184,7 +184,7 @@ resource "aws_sqs_queue" "jobs" {
 resource "aws_sqs_queue" "jobs_dlq" {
   name                       = "${var.queue_name}-dlq"
   message_retention_seconds  = 1209600
-  visibility_timeout_seconds = var.dlq_visibility_seconds
+  visibility_timeout_seconds = local.config.queue.dlq_visibility_seconds
   sqs_managed_sse_enabled    = true
 }
 

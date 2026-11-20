@@ -79,8 +79,7 @@ def apply_env(cfg):
     NEUROLENS_PUBLIC_BASE_URL -> public_base_url, NEUROLENS_ADMIN_EMAILS ->
     auth.admin_emails (a comma-separated list, lowercased, stripped, empty entries dropped),
     NEUROLENS_CONTACT_EMAIL -> contact_email (stripped; blank means unset),
-    NEUROLENS_MAX_INSTANCES -> gpu.max_instances, NEUROLENS_CANCEL_SECONDS ->
-    queue.cancel_seconds, and NEUROLENS_DEPLOYED -> deployed: true.
+    NEUROLENS_MAX_INSTANCES -> gpu.max_instances, and NEUROLENS_DEPLOYED -> deployed: true.
     NEUROLENS_YOUTUBE_API_KEY -> youtube_api_key.
     Only variables that are set and non-empty change anything, except
     NEUROLENS_ADMIN_EMAILS: set but blank means no admins. The input is never modified.
@@ -109,13 +108,9 @@ def apply_env(cfg):
         value = os.environ.get(var)
         if value:
             out.setdefault(section, {})[key] = value
-    for var, section, key in (
-        ("NEUROLENS_MAX_INSTANCES", "gpu", "max_instances"),
-        ("NEUROLENS_CANCEL_SECONDS", "queue", "cancel_seconds"),
-    ):
-        value = os.environ.get(var)
-        if value:
-            out.setdefault(section, {})[key] = int(value)
+    max_instances_value = os.environ.get("NEUROLENS_MAX_INSTANCES")
+    if max_instances_value:
+        out.setdefault("gpu", {})["max_instances"] = int(max_instances_value)
     if os.environ.get("NEUROLENS_PUBLIC_BASE_URL"):
         out["public_base_url"] = os.environ["NEUROLENS_PUBLIC_BASE_URL"]
     admin_emails = os.environ.get("NEUROLENS_ADMIN_EMAILS")
@@ -216,26 +211,36 @@ def max_instances(cfg):
     return int(((cfg or {}).get("gpu") or {}).get("max_instances", 1))
 
 
+def _required(cfg, *keys):
+    """A value from config.json, or an error that names the missing key."""
+    value = cfg
+    for key in keys:
+        if not isinstance(value, dict) or key not in value:
+            raise KeyError(f"Missing required setting {'.'.join(keys)} in config.json")
+        value = value[key]
+    return value
+
+
 def result_retention_days(cfg):
-    """Days a result stays viewable and the results/ prefix lives (30 by default)."""
-    return int((cfg or {}).get("result_retention_days", 30))
+    """Days a result stays viewable and the results/ prefix lives."""
+    return int(_required(cfg, "result_retention_days"))
 
 
 def dataset_retention_days(cfg):
-    """Days shared research copies and snapshots are kept (1095 by default)."""
-    return int(((cfg or {}).get("research") or {}).get("dataset_retention_days", 1095))
+    """Days shared research copies and snapshots are kept."""
+    return int(_required(cfg, "research", "dataset_retention_days"))
 
 
 def no_curve_days(cfg):
-    """Days a shared copy without a retention curve is kept (90 by default)."""
-    return int(((cfg or {}).get("research") or {}).get("no_curve_days", 90))
+    """Days a shared copy without a retention curve is kept."""
+    return int(_required(cfg, "research", "no_curve_days"))
 
 
 def cancel_seconds(cfg):
-    """Seconds an upload can be cancelled before dispatch (15 by default)."""
-    return int(((cfg or {}).get("queue") or {}).get("cancel_seconds", 15))
+    """Seconds an upload can be cancelled before dispatch."""
+    return int(_required(cfg, "queue", "cancel_seconds"))
 
 
 def queue_visibility_seconds(cfg):
-    """Seconds the dispatcher has to process one message (1080 by default)."""
-    return int(((cfg or {}).get("queue") or {}).get("visibility_seconds", 1080))
+    """Seconds the dispatcher has to process one message."""
+    return int(_required(cfg, "queue", "visibility_seconds"))

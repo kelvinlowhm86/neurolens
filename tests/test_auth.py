@@ -19,6 +19,7 @@ from conftest import (
     MISSING,
     PUBLIC_BASE_URL,
     SERVER_METADATA,
+    UPLOAD,
     WEB_PARAMETERS,
     sign_in,
 )
@@ -320,6 +321,7 @@ def test_limits_answer_signed_out_and_signed_in(cognito_client, idp):
         "result_retention_days": 30,
         "cancel_seconds": 15,
         "invite_seconds": 0.0,
+        "max_batch_files": UPLOAD["max_batch_files"],
         "price": {
             "cents_per_block": pricing.CENTS_PER_BLOCK,
             "block_seconds": pricing.BLOCK_SECONDS,

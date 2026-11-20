@@ -15,6 +15,7 @@ nonce and signature checks run and nothing contacts Cognito or Google.
 """
 
 import base64
+import copy
 import importlib
 import json
 import os
@@ -35,6 +36,27 @@ ROI_NAMES = ["faces", "bodies", "scenes", "visual", "sound", "speech", "social"]
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 MIGRATIONS = REPO_ROOT / "infra" / "migrations"
+COMMITTED_CONFIG = json.loads((REPO_ROOT / "config.json").read_text())
+RESEARCH = COMMITTED_CONFIG["research"]
+UPLOAD = COMMITTED_CONFIG["upload"]
+REWARD = {
+    "reward_cap": RESEARCH["curve_rewards_per_window"],
+    "reward_window_days": RESEARCH["curve_reward_window_days"],
+}
+
+
+def write_config(root, **overrides):
+    """Write config.json into `root` from the committed one, overriding whole keys or sections."""
+    cfg = copy.deepcopy(COMMITTED_CONFIG)
+    for key, value in overrides.items():
+        if isinstance(value, dict):
+            cfg.setdefault(key, {}).update(value)
+        else:
+            cfg[key] = value
+    (Path(root) / "config.json").write_text(json.dumps(cfg))
+    return cfg
+
+
 # The user that owns the worker tests' jobs (uploads/{user_id}/{job_id}.mp4).
 USER_ID = "test-user"
 USER_EMAIL = "test-user@example.com"
@@ -69,7 +91,6 @@ ENV_SETTING_VARS = [
     "NEUROLENS_S3_BUCKET",
     "NEUROLENS_GPU_ENDPOINT",  # aws.gpu_endpoint
     "NEUROLENS_MAX_INSTANCES",  # gpu.max_instances (Terraform max_instances)
-    "NEUROLENS_CANCEL_SECONDS",  # queue.cancel_seconds (Terraform queue_delay_seconds)
     "NEUROLENS_DEPLOYED",  # marks a deployed (Cognito) web app
     "NEUROLENS_DB_CLUSTER_ARN",  # aws.db_cluster_arn
     "NEUROLENS_DB_SECRET_ARN",  # aws.db_secret_arn
@@ -113,38 +134,39 @@ def aws():
 
 @pytest.fixture
 def make_cfg(aws, tmp_path):
-    """Build a config dict like config.json plus the .env values, pointing at the moto resources."""
+    """The committed config.json plus the .env values, pointing at the moto resources.
+
+    Tests override only what they exercise; every other setting keeps its config.json value.
+    """
 
     def make(with_aws=True, **overrides):
-        cfg = {
-            "hf_token": "hf_not_a_real_token",
-            "paths": {
-                "models": str(tmp_path / "models"),
-                "data": str(tmp_path / "data"),
-            },
-            "model": {
-                "repo_id": "facebook/tribev2",
-            },
-            "aws": {
-                "region": "us-east-1",
-                "s3_bucket": aws.bucket,
-            },
-            "hf_download_timeout": 300,
-            "max_video_duration_seconds": 120,
-            "max_upload_bytes": 300000000,
-            # The response at which the 3D map's heat colour is full.
-            "response": {"colour_range": 0.5},
-            # The heartbeat settings config.json gains (same values).
-            "worker": {"heartbeat_seconds": 50, "max_job_minutes": 75},
-            # The development identity, starter credit and the address the app binds to.
-            # No `db` block: tests hand the database in (create_app(db=...), handle_job(db=...)).
-            "auth": {"mode": "dev", "dev_user_id": WEB_USER_ID, "dev_email": WEB_USER_EMAIL},
-            "billing": {"starter_cents": STARTER_CENTS},
-            "server": {"host": "127.0.0.1", "port": 5003},
+        cfg = copy.deepcopy(COMMITTED_CONFIG)
+        cfg.pop("db", None)
+        cfg["hf_token"] = "hf_not_a_real_token"
+        cfg["paths"] = {
+            "models": str(tmp_path / "models"),
+            "data": str(tmp_path / "data"),
         }
+        cfg["aws"] = {
+            "region": "us-east-1",
+            "s3_bucket": aws.bucket,
+        }
+        # The development identity and starter credit tests use; no invite credit.
+        # No `db` block: tests hand the database in (create_app(db=...), handle_job(db=...)).
+        cfg["auth"] = {
+            **cfg["auth"],
+            "mode": "dev",
+            "dev_user_id": WEB_USER_ID,
+            "dev_email": WEB_USER_EMAIL,
+        }
+        cfg["billing"] = {"starter_cents": STARTER_CENTS, "invite_cents": 0}
+        for key, value in overrides.items():
+            if isinstance(value, dict) and isinstance(cfg.get(key), dict):
+                cfg[key] = {**cfg[key], **value}
+            else:
+                cfg[key] = value
         if not with_aws:
             del cfg["aws"]
-        cfg.update(overrides)
         return cfg
 
     return make

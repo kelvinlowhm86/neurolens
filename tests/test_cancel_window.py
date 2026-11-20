@@ -8,7 +8,7 @@ it, so Cancel answers 409 and changes nothing. `list_jobs` says which is which.
 import uuid
 
 import pytest
-from conftest import STARTER_CENTS, WEB_USER_ID
+from conftest import REWARD, STARTER_CENTS, WEB_USER_ID
 from neurolens import billing, storage
 from neurolens.web.app import create_app
 
@@ -119,7 +119,8 @@ def test_list_jobs_cancellable_is_true_only_before_dispatch(db):
     processing, _ = make_job(db, processing=True)
 
     rows = {
-        str(row["job_id"]): row["cancellable"] for row in billing.list_jobs(db, WEB_USER_ID, 50)
+        str(row["job_id"]): row["cancellable"]
+        for row in billing.list_jobs(db, WEB_USER_ID, 50, **REWARD)
     }
 
     assert rows[undispatched] is True

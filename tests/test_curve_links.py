@@ -14,7 +14,7 @@ import json
 import uuid
 
 import pytest
-from conftest import MIGRATIONS, WEB_USER_ID
+from conftest import MIGRATIONS, RESEARCH, REWARD, WEB_USER_ID
 from neurolens import billing, pricing, results, storage
 
 STARTER_CENTS = 10_000
@@ -62,13 +62,13 @@ def curve_args(job_id, *, sha="a" * 64, points=None, flags=None, video_ref=None,
         "views": VIEWS,
         "published": PUBLISHED,
         "promoted": False,
-        "reward_cap": 5,
-        "reward_window_days": 30,
+        **REWARD,
         "video_ref": video_ref if video_ref is not None else video_ref_for(job_id),
         "same_cut": "same",
         "source": "youtube_api",
         "facts": None,
-        "length_tolerance_s": 2,
+        "length_tolerance_s": RESEARCH["curve_length_tolerance_s"],
+        "min_views": RESEARCH["curve_min_views"],
     }
     args.update(overrides)
     return args
@@ -461,9 +461,9 @@ def test_a_link_rewarded_before_stop_sharing_cannot_be_rewarded_again_on_a_reenc
         second,
         YOUTUBE_REF,
         None,
-        reward_cap=5,
-        reward_window_days=30,
-        length_tolerance_s=2,
+        **REWARD,
+        length_tolerance_s=RESEARCH["curve_length_tolerance_s"],
+        min_views=RESEARCH["curve_min_views"],
     )
     assert offer[1] == "already_rewarded"
 
@@ -500,9 +500,9 @@ def test_a_link_rewarded_before_the_job_is_deleted_cannot_be_rewarded_again_on_a
         second,
         YOUTUBE_REF,
         None,
-        reward_cap=5,
-        reward_window_days=30,
-        length_tolerance_s=2,
+        **REWARD,
+        length_tolerance_s=RESEARCH["curve_length_tolerance_s"],
+        min_views=RESEARCH["curve_min_views"],
     )
     assert offer[1] == "already_rewarded"
 
@@ -569,7 +569,7 @@ def test_list_jobs_previews_the_reward_without_a_date(db, pg):
     pg.age(job_id, created_s=5 * DAY_S)
     billing.grant_credit(db, f"{WEB_USER_ID}@example.com", 100)
 
-    [row] = billing.list_jobs(db, WEB_USER_ID, 50)
+    [row] = billing.list_jobs(db, WEB_USER_ID, 50, **REWARD)
 
     assert row["sharing"] is True
     assert row["curve_reward_cents"] == PRICE_CENTS
@@ -580,7 +580,7 @@ def test_list_jobs_previews_the_reward_without_a_date(db, pg):
 def test_list_jobs_has_no_reward_date_when_no_reward_is_possible(db, pg, consent):
     job_id, _ = make_job(db, consent=consent)
 
-    [row] = billing.list_jobs(db, WEB_USER_ID, 50)
+    [row] = billing.list_jobs(db, WEB_USER_ID, 50, **REWARD)
 
     assert row["curve_reward_cents"] == 0
     assert "curve_reward_from" not in row

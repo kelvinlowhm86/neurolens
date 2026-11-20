@@ -14,7 +14,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 from botocore.exceptions import ClientError
-from conftest import REPO_ROOT, STARTER_CENTS, WEB_USER_ID, fresh_import
+from conftest import REPO_ROOT, RESEARCH, REWARD, STARTER_CENTS, WEB_USER_ID, fresh_import
 from neurolens import billing, pricing, settings, storage
 from neurolens.web.app import create_app
 
@@ -22,7 +22,7 @@ PRICE_CENTS = pricing.estimate_cost_cents(30.1)
 OTHER_USER = "other-user"
 VIEWS = "lt_1k"
 PUBLISHED = "week"
-LENGTH_TOLERANCE_S = 2
+LENGTH_TOLERANCE_S = RESEARCH["curve_length_tolerance_s"]
 DAY_S = 24 * 60 * 60
 YOUTUBE_ID = "dQw4w9WgXcQ"
 YOUTUBE_LINK = f"https://www.youtube.com/watch?v={YOUTUBE_ID}"
@@ -109,13 +109,13 @@ def curve_args(job_id, *, sha="a" * 64, points=None, video_ref=None, facts_=None
         "views": None if facts_ is not None else VIEWS,
         "published": None if facts_ is not None else PUBLISHED,
         "promoted": False,
-        "reward_cap": 5,
-        "reward_window_days": 30,
+        **REWARD,
         "video_ref": video_ref if video_ref is not None else video_ref_for(job_id),
         "same_cut": "same",
         "source": "youtube_api",
         "facts": facts_,
         "length_tolerance_s": LENGTH_TOLERANCE_S,
+        "min_views": RESEARCH["curve_min_views"],
     }
 
 
@@ -154,14 +154,7 @@ def snapshot_rows(pg, job_id):
 
 
 def app_for(aws, db, make_cfg, tmp_path, *, research=None, youtube_api_key="test-youtube-key"):
-    research_cfg = {
-        "curve_rewards_per_window": 5,
-        "curve_reward_window_days": 30,
-        "curve_length_tolerance_s": LENGTH_TOLERANCE_S,
-        "no_curve_days": 90,
-    }
-    research_cfg.update(research or {})
-    cfg = make_cfg(research=research_cfg, youtube_api_key=youtube_api_key)
+    cfg = make_cfg(research=research or {}, youtube_api_key=youtube_api_key)
     app = create_app(
         cfg=cfg,
         data_dir=tmp_path / "data",
