@@ -77,7 +77,7 @@ NeuroLens predicts an average viewer's perception, not views, retention, sales o
 
 ### Run it on a laptop
 
-The real model needs a suitable GPU with about 20 GB of memory and gated model access; the deployed service also uses AWS. To work on everything around it for free, the local stack runs the whole product on a laptop (sign-in, upload, credit, queue, result page) with fake S3 and SQS and a stand-in model that returns made-up numbers. To see real results, browse the [samples site](https://joshualumzy.github.io/neurolens-samples/).
+The real model needs a GPU with about 22 GB of usable memory and gated model access; the deployed service also uses AWS. To work on everything around it for free, the local stack runs the whole product on a laptop (sign-in, upload, credit, queue, result page) with fake S3 and SQS and a stand-in model that returns made-up numbers. To see real results, browse the [samples site](https://joshualumzy.github.io/neurolens-samples/).
 
 You need Python 3.12 and Docker (for the database).
 
@@ -121,7 +121,7 @@ TRIBE v2 itself (`facebook/tribev2`) is freely downloadable under CC BY-NC 4.0.
 
 | Machine | What it needs |
 |---|---|
-| Production GPU | AWS SageMaker asynchronous endpoint (`infra/terraform/sagemaker.tf` names the instance types). The model peaks at about 20 GB of GPU memory; every instance type leaves at least 32 GB of system memory. |
+| Production GPU | AWS SageMaker asynchronous endpoint (`infra/terraform/sagemaker.tf` names the instance types). The model peaks just under 20 GB of GPU memory and needs about 22 GB usable; every instance type leaves at least 32 GB of system memory. |
 | Laptop | No GPU and no model: `python infra/local_stack.py` runs the whole product with fake analysis. Tests and lint need only Python. |
 | Python | 3.12 (`pyproject.toml`: `requires-python >=3.12,<3.14`). |
 
