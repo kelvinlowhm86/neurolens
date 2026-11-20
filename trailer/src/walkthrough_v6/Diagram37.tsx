@@ -192,7 +192,9 @@ const CHECK: StateKey[] = [
   {at: CUE('5a').start - 30, state: 'idle'}, // done once it hands the job on; quiet before the camera moves (lit, its purpose line won't fit the frame)
 ];
 
-const RING_FULL_BEFORE_7A = 12; // frames: the cold-start ring completes this long before line 7a
+// Frames before line 7a that the cold-start ring completes and the GPU lights: the 30-frame camera
+// move into 7a (default `move`) plus a 24-frame hold, so the lit GPU is seen in the close-up.
+const RING_FULL_BEFORE_7A = 30 + 24;
 
 const GPU: StateKey[] = [
   {at: CUE('4r').start, state: 'off'},
@@ -2136,7 +2138,13 @@ const ProgressRing: React.FC<{f: number; gpu: Pt}> = ({f, gpu}) => {
   const opacity = ease(f, CUE('5c').start + 2, CUE('5c').start + 14) * (1 - ease(f, CUE('7a').start - 8, CUE('7a').start + 4));
   if (opacity <= 0.001) return null;
   const full = CUE('7a').start - RING_FULL_BEFORE_7A;
-  const progress = glide(f, CUE('5c').start + 10, full);
+  // Ease-in, not in-out: an in-out curve crawls through its last few percent, so the ring looked
+  // full ~2 s before the GPU lit. This one is still moving at `full`, so fill and light coincide.
+  const progress = interpolate(f, [CUE('5c').start + 10, full], [0, 1], {
+    extrapolateLeft: 'clamp',
+    extrapolateRight: 'clamp',
+    easing: Easing.in(Easing.sin),
+  });
   const flare = ease(f, full - 2, full + 3) * (1 - ease(f, full + 3, full + 14)); // one soft pulse as it fills
   const r = 70;
   const circumference = 2 * Math.PI * r;
