@@ -55,6 +55,9 @@ resource "aws_ecr_repository" "worker" {
     scan_on_push = true
   }
 
+  # Let terraform destroy remove the repository even while it still holds images; there is no
+  # image to keep once the endpoint is gone.
+  force_delete = true
 }
 
 # The image the endpoint runs carries the tag `live` and must never expire (SageMaker pulls it

@@ -26,18 +26,19 @@ In the code: `infra/aws_env.sh`, `infra/`, `infra/iam/ACCOUNT_OWNER.md`, `infra/
 
 ## First deploy from an empty account
 
-Follow the linked README sections for the exact commands. The order matters.
+These are the steps only a person can do. After them, one command creates the stack. Follow the linked README sections for the exact commands. The order matters.
 
 1. Account owner setup. Create the five IAM policies and the deploy user, attach the four deploy policies, make an access key and switch on the Bedrock model.
-2. Prerequisites. Do the terraform README section 0: quotas, `HF_TOKEN`, the Google OAuth client, the YouTube API key, the SSM SecureString values, the optional budget, and a working Bedrock playground reply.
-3. Terraform state bucket. Do section 1: create the versioned, private Amazon S3 (object storage) state bucket by hand and copy the backend example into place.
-4. First apply. Do section 2. Build the web zip, the `ffprobe` layer and the report SDK layer first, copy the terraform variables example into place, then `terraform -chdir=infra/terraform init -backend-config=backend.hcl`, `terraform -chdir=infra/terraform plan` and `terraform -chdir=infra/terraform apply`. Run `apply` twice; the second run reports "No changes". Confirm both Amazon Simple Notification Service (SNS, AWS's notification service) confirmation emails (`alert_email`). AWS Lambda (functions that run on demand) runs the web zip and the layers.
-5. Database. Do section 2e after the first apply: read the database outputs into the local environment file, then run `python infra/apply_schema.py --backend data_api` and `python infra/check_aurora.py --backend data_api`. Sign-in writes to these tables, so this step comes before sign-in.
-6. Sign-in and website. Do section 2f: add `google_redirect_uri` to the Google OAuth client, store the Amazon Cognito (AWS's sign-in service) client secret in Parameter Store, then run `infra/deploy_web.sh` and open `sign_in_test_url` to test Google and email sign-in.
-7. GPU image and endpoint. Do section 2b. In a new account, apply first with `worker_image` empty, copy `model-data/` from an existing deployment's bucket, then run `infra/build_image.sh`, put its digest in the terraform variables file as `worker_image`, and apply again. The endpoint exists only when `worker_image` is set.
-8. Check. Do section 3: bucket lifecycle and browser upload rules, endpoint, scaling target, and the Amazon CloudWatch (AWS's monitoring service) dashboard named `neurolens`. Section 5 is a work session; section 6 is teardown.
+2. Prerequisites. Do the terraform README section 0: quotas, `HF_TOKEN`, the Google OAuth client, the YouTube API key, the SSM SecureString values (the Google client secret, the Flask session key and the YouTube key), the optional budget, and a working Bedrock playground reply. Copy the terraform variables example into place.
+3. Set up the stack. From the repo root, run:
+   ```bash
+   infra/setup.sh
+   ```
+   It lists every missing prerequisite first and changes nothing if one is missing. Then it creates the Amazon S3 (object storage) state bucket and `backend.hcl` (section 1), builds the web zip and both layers, initialises Terraform and applies (section 2), applies the database schema (section 2e), deploys the site (section 2f), builds the GPU image, puts its digest in `terraform.tfvars` and applies again (section 2b). Confirm both Amazon Simple Notification Service (SNS, AWS's notification service) confirmation emails (`alert_email`). A second run skips what is already done.
+4. Sign-in. The first apply creates the Amazon Cognito (AWS's sign-in service) client; add `google_redirect_uri` to the Google OAuth client and store the Cognito client secret in Parameter Store (section 2f). Open `sign_in_test_url` and test Google and email sign-in.
+5. Check. Do section 3: bucket lifecycle and browser upload rules, endpoint, scaling target, and the Amazon CloudWatch (AWS's monitoring service) dashboard named `neurolens`. Section 5 is a work session; section 6 is teardown.
 
-In the code: `infra/iam/ACCOUNT_OWNER.md`, `infra/iam/README.md`, `infra/terraform/README.md`, `infra/terraform/backend.hcl.example`, `infra/terraform/terraform.tfvars.example`, `infra/apply_schema.py`, `infra/check_aurora.py`, `infra/deploy_web.sh`, `infra/build_image.sh`
+In the code: `infra/iam/ACCOUNT_OWNER.md`, `infra/iam/README.md`, `infra/terraform/README.md`, `infra/terraform/backend.hcl.example`, `infra/terraform/terraform.tfvars.example`, `infra/setup.sh`, `infra/apply_schema.py`, `infra/check_aurora.py`, `infra/deploy_web.sh`, `infra/build_image.sh`
 
 ## Day to day
 
@@ -158,14 +159,15 @@ In the code: `infra/terraform/README.md`, `infra/terraform/dashboard.tf`, `infra
 
 ## Teardown
 
-Run steps 1-5, 7 and 8 in each account, in order, finishing one account before the next. Run step 6 once, outside AWS, and step 9 on every laptop that deployed. Nothing is deleted on a date; do this only when the team decides.
+Run `infra/teardown.sh` in each account, in order, finishing one account before the next. Then do the steps it cannot do. Nothing is deleted on a date; do this only when the team decides.
 
-1. Stop the GPU. Run `infra/stop_work.sh` and wait for `ALL STOPPED`. Do this in your main account, then any backup account.
-2. Delete the worker images. In each account, delete every image in the `neurolens-worker` ECR repository, tagged and untagged, with `aws ecr list-images --repository-name neurolens-worker --filter tagStatus=ANY` and `aws ecr batch-delete-image`. Terraform cannot delete a repository that still holds images.
-3. Save and empty the bucket. Copy anything needed from `s3://<bucket>/experiments/` to a laptop. Abort incomplete multipart uploads, then empty the bucket. Do this just before `terraform destroy`; the site keeps writing until then.
-4. Destroy the stack. In each account, run `terraform -chdir=infra/terraform destroy`. This removes the database with no final snapshot, the sign-in user pool, the GPU endpoint, the Lambdas and the site.
-5. Delete the hand-made secrets and state. In each account, delete the Parameter Store entries made by hand: `/neurolens/terraform/google_client_secret`, `/neurolens/web/flask_secret_key`, `/neurolens/web/cognito_client_secret` and `/neurolens/web/youtube_api_key`. Check that nothing under `/neurolens/` is left. The Terraform state bucket holds stored state, including secrets: delete every object version and delete marker, then delete the bucket.
-6. Clean the outside accounts. Once: delete the Google OAuth client, revoke the HuggingFace token, and delete the YouTube API key or its Google Cloud project.
-7. Check for leftovers. In each account, check that no resource tagged `Project=neurolens` remains. Also check AWS Secrets Manager (AWS's secret store) for a leftover `rds!cluster-*` secret (delete it with force if it remains), no SageMaker endpoint configuration or model named `neurolens*`, nothing in Parameter Store under `/neurolens/`, and no `neurolens-*` IAM role.
-8. Remove the operator's access. In each account, the account owner deletes the deploy user and the five `neurolens-*` policies; the deploy user cannot delete itself. Remove the operator's profile from every laptop that used it (`~/.aws/credentials` and `~/.aws/config`).
-9. Clean each laptop. Delete `.env`, `infra/terraform/backend.hcl`, `infra/terraform/terraform.tfvars` and `infra/terraform/.terraform/`. Remove the local test database with `docker rm -fv neurolens-test-pg`. Delete a stored HuggingFace token if one exists (`~/.cache/huggingface/token`). The team's sample videos and `data/output/` may stay.
+1. Tear down the stack. From the repo root, with that account's profile:
+   ```bash
+   infra/teardown.sh
+   ```
+   It asks you to type the account ID; a wrong or empty answer changes nothing. It refuses when the AWS caller and the Terraform state are different accounts, or when Terraform has no state. It stops the GPU and waits for `ALL STOPPED`, backs up `experiments/` to `data/teardown_backup/`, destroys the stack, deletes the four hand-made Parameter Store secrets, then checks for leftovers. A failed stop, backup or destroy ends it before the next step. It prints `TEARDOWN COMPLETE` only when nothing is left; it never deletes the state bucket or the deploy user.
+2. Clean the outside accounts. Once: delete the Google OAuth client, revoke the HuggingFace token, and delete the YouTube API key or its Google Cloud project.
+3. Remove the operator's access. In each account, the account owner deletes the deploy user and the five `neurolens-*` policies; the deploy user cannot delete itself. Then delete the Terraform state bucket: delete every object version and delete marker, then delete the bucket. It holds stored state, including secrets. Remove the operator's profile from every laptop that used it (`~/.aws/credentials` and `~/.aws/config`).
+4. Clean each laptop. Delete `.env`, `infra/terraform/backend.hcl`, `infra/terraform/terraform.tfvars` and `infra/terraform/.terraform/`. Remove the local test database with `docker rm -fv neurolens-test-pg`. Delete a stored HuggingFace token if one exists (`~/.cache/huggingface/token`). The team's sample videos and `data/output/` may stay.
+
+In the code: `infra/teardown.sh`, `infra/stop_work.sh`

@@ -45,8 +45,9 @@ $2.80/h for `ml.g6e.2xlarge` (SageMaker prices, us-east-1), and it stops itself 
 `idle_stop_minutes` (7 idle minutes). A deploy starts one instance for about 7 minutes
 (roughly $0.50-0.80).
 
-From an empty account: section 0, section 1, section 2, section 2e (database tables), section 2f, section 2b; then section 5 for each work session and section 6 to tear
-down.
+From an empty account: the human-only steps in section 0, then `infra/setup.sh`; it does section 1,
+section 2, section 2e (database tables), section 2f and section 2b. Then section 5 for each work
+session and section 6 to tear down.
 
 ## 0. Before you start (once)
 
@@ -109,9 +110,10 @@ export AWS_REGION=us-east-1
 aws sts get-caller-identity      # check the account ID before anything else
 ```
 
-## 1. Create the state bucket (once, by hand)
+## 1. The Terraform state bucket
 
-From the repo root:
+`infra/setup.sh` creates the versioned, private state bucket when it is missing and writes
+`backend.hcl`. These are the same commands to do it by hand, from the repo root:
 
 ```bash
 ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
@@ -131,7 +133,7 @@ cp infra/terraform/backend.hcl.example infra/terraform/backend.hcl
 
 ## 2. Create the resources
 
-From the repo root:
+`infra/setup.sh` runs these build, init and apply steps. To do them by hand, from the repo root:
 
 ```bash
 cp infra/terraform/terraform.tfvars.example infra/terraform/terraform.tfvars
@@ -173,10 +175,11 @@ After the first apply:
    read -rs S && aws ssm put-parameter --name /neurolens/web/cognito_client_secret \
      --type SecureString --value "$S" --overwrite && unset S
    ```
-3. `infra/deploy_web.sh` publishes the site. It also publishes the public samples, whose videos and
-   `data/output/<id>/` files are git-ignored: on a fresh clone, copy them in first from a checkout
-   that has them (`data/videos/README.md`), or the script stops at the missing file. Then open `sign_in_test_url` and sign in once with Google
-   and once with email and password.
+3. `infra/setup.sh` runs `infra/deploy_web.sh` for you; run it again only after changing the page
+   or samples. It also publishes the public samples, whose videos and `data/output/<id>/` files are
+   git-ignored: on a fresh clone, copy them in first from a checkout that has them
+   (`data/videos/README.md`), or the script stops at the missing file. Then open `sign_in_test_url`
+   and sign in once with Google and once with email and password.
 
 ## 2b. The GPU image and endpoint
 
@@ -215,7 +218,11 @@ again with `worker_image` set.
    ```
 3. Remove the temporary statement at once.
 
-Then, from the repo root (an existing deployment, whose bucket already has `models/`):
+`infra/setup.sh` builds the image, writes its digest to `terraform.tfvars` and applies again. In a
+new account, copy `model-data/` as above after the setup and before the first upload.
+
+To do these steps by hand, from the repo root (an existing deployment, whose bucket already has
+`models/`):
 
 ```bash
 infra/make_model_data.sh        # once: copies models/ to model-data/ without blobs/, checks counts
@@ -236,7 +243,8 @@ The container's logs are in CloudWatch at `/aws/sagemaker/Endpoints/neurolens`; 
 pauses 5 minutes after its last use and wakes in about 15 s on the next call. Everything reaches it
 through the RDS Data API; the password lives in Secrets Manager.
 
-After the first apply, from the repo root:
+`infra/setup.sh` applies the schema for you. To do it by hand after the first apply, from the repo
+root:
 
 ```bash
 terraform -chdir=infra/terraform output -raw db_cluster_arn
@@ -304,4 +312,6 @@ A running job dies and is refunded. `start_work.sh` puts the maximum back to 1.
 
 ## 6. Tear down
 
-The full teardown, in order and per account, is in `docs/operating.md` ("Teardown").
+`infra/teardown.sh` runs the guarded teardown: stop the GPU, back up `experiments/`, destroy the
+stack, delete the hand-made secrets and check for leftovers. The steps it cannot do are in
+`docs/operating.md` ("Teardown").

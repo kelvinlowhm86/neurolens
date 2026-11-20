@@ -4,6 +4,10 @@ data "aws_caller_identity" "current" {}
 
 resource "aws_s3_bucket" "main" {
   bucket = var.bucket_name
+
+  # terraform destroy may empty this bucket first (the uploads/results inside it are disposable);
+  # the experiments/ backup is made by infra/teardown.sh before the destroy.
+  force_destroy = true
 }
 
 # Nothing in this bucket is ever public. Uploads use signed, time-limited forms.

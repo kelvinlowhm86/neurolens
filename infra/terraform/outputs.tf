@@ -50,6 +50,11 @@ output "region" {
   value       = var.region
 }
 
+output "account_id" {
+  description = "The AWS account this deployment is in (infra/teardown.sh checks the caller matches)."
+  value       = data.aws_caller_identity.current.account_id
+}
+
 output "contact_email" {
   description = "The address infra/deploy_web.sh fills into the privacy and retention pages."
   value       = var.contact_email

@@ -18,6 +18,10 @@ Operator scripts and the AWS resources they drive. AWS commands run with the pro
 
 ## Deploy
 
+- `setup.sh`: first deploy in one command after the human-only steps: lists every missing
+  prerequisite before changing anything, then creates the state bucket and backend, builds the
+  artifacts, applies, applies the schema, deploys the site, builds the image and applies again; a
+  second run skips finished work.
 - `build_image.sh`: builds the SageMaker container image in CodeBuild and prints its digest.
 - `build_web_lambda.sh`: builds `build/web_lambda.zip`, the code of the web Lambda functions.
 - `build_ffprobe_layer.sh`: builds the dispatcher's static ffprobe Lambda layer.
@@ -25,6 +29,9 @@ Operator scripts and the AWS resources they drive. AWS commands run with the pro
 - `deploy_web.sh`: ships the last commit as the website: code, page, public samples and a CloudFront cache clear.
 - `apply_schema.py`: applies `migrations/*.sql` once each and records them.
 - `terraform/`: creates all AWS resources; see `terraform/README.md`.
+- `teardown.sh`: guarded teardown: stops the GPU, backs up `experiments/`, destroys the stack,
+  deletes the hand-made secrets and checks for leftovers; it never deletes the state bucket or the
+  deploy user (see `docs/operating.md`, "Teardown").
 
 ## Laptop
 
