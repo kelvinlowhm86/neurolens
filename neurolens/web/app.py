@@ -48,16 +48,12 @@ MIN_DURATION_SECONDS = 1  # a zero-length job would cost nothing yet start a GPU
 MAX_FILENAME_CHARS = 255  # the filename is display only
 OPEN = (billing.QUEUED, billing.PROCESSING)
 WEB_RESUME_WAIT_S = 45  # under the Lambda's and CloudFront's 60 s timeouts
-RESULT_DAYS = 30  # the results/ lifecycle rule (Terraform)
 VIDEO_LINK_SECONDS = 3600  # a video is streamed in pieces; one hour outlives a paused viewer
 HISTORY_LIMIT, HISTORY_MAX = 50, 100
 RETENTION_MAX_BYTES = 64 * 1024
 RETENTION_VIEWS = {"lt_1k", "1k_10k", "10k_100k", "gt_100k"}
 RETENTION_PUBLISHED = {"week", "month", "older"}
-DEFAULT_REWARD_CAP = 5
-DEFAULT_REWARD_WINDOW_DAYS = 30
 JOB_ACTIVE_MESSAGE = "This video is still waiting or being processed. Try again when it finishes."
-BOOTH_ADJUST_DELTAS = (0, 5, 10)
 CONTACT_PLACEHOLDER = "{{CONTACT_EMAIL}}"
 GITHUB_REPO_URL = "https://github.com/kelvinlowhm86/neurolens"
 CONTACT_PAGES = ("privacy.html", "retention_guide.html")
@@ -273,12 +269,18 @@ def create_app(
     invite_cents = (cfg.get("billing") or {}).get("invite_cents", 0)
     max_bytes = cfg.get("max_upload_bytes")
     max_seconds = settings.max_duration(cfg or None)
+    max_gpus = settings.max_instances(cfg or None)
+    result_days = settings.result_retention_days(cfg or None)
+    no_curve_days = settings.no_curve_days(cfg or None)
+    cancel_s = settings.cancel_seconds(cfg or None)
     upload_cfg = cfg.get("upload") or {}
     max_batch_files = upload_cfg.get("max_batch_files")
     max_waiting_jobs = upload_cfg.get("max_waiting_jobs")
     research_cfg = cfg.get("research") or {}
-    reward_cap = research_cfg.get("curve_rewards_per_window", DEFAULT_REWARD_CAP)
-    reward_window_days = research_cfg.get("curve_reward_window_days", DEFAULT_REWARD_WINDOW_DAYS)
+    reward_cap = research_cfg.get("curve_rewards_per_window", billing.DEFAULT_REWARD_CAP)
+    reward_window_days = research_cfg.get(
+        "curve_reward_window_days", billing.DEFAULT_REWARD_WINDOW_DAYS
+    )
     length_tolerance_s = research_cfg.get(
         "curve_length_tolerance_s", billing.DEFAULT_LENGTH_TOLERANCE_S
     )
@@ -452,6 +454,8 @@ def create_app(
             "max_video_duration_seconds": max_seconds,
             "max_upload_bytes": max_bytes,
             "colour_range": (response_cfg or {}).get("colour_range"),
+            "result_retention_days": result_days,
+            "cancel_seconds": cancel_s,
             "invite_seconds": invite_cents * pricing.BLOCK_SECONDS / pricing.CENTS_PER_BLOCK,
             "price": {
                 "cents_per_block": pricing.CENTS_PER_BLOCK,
@@ -565,9 +569,22 @@ def create_app(
             payload["stats"] = stats
         return jsonify(payload)
 
+    def _with_booth_limits(stats):
+        """Add the booth's configured choices to a stats response."""
+        stats["gpu_max_instances"] = max_gpus
+        stats["gpu_warm_hours"] = billing.BOOTH_GPU_WARM_HOURS
+        stats["pass_minutes"] = (
+            billing.BOOTH_PASS_CENTS * pricing.BLOCK_SECONDS // (pricing.CENTS_PER_BLOCK * 60)
+        )
+        stats["initial_passes"] = billing.BOOTH_INITIAL_PASSES
+        stats["adjust_deltas"] = list(billing.BOOTH_ADJUST_DELTAS)
+        stats["grant_minutes"] = list(billing.BOOTH_GRANT_MINUTES)
+        return stats
+
     def _sync_gpu_capacity(stats, *, allow_error=False):
-        """Reconcile SageMaker's desired capacity with the saved booth warm target (`0`, `1`, `2`)
-        without interrupting active jobs or throwing an error while SageMaker is mid-update."""
+        """Reconcile SageMaker's desired capacity with the saved booth warm target (0 for
+        auto-scale, or a positive count) without interrupting active jobs or throwing an error
+        while SageMaker is mid-update."""
         gpu = _gpu_status()
         if sagemaker is None or not gpu_endpoint:
             return gpu, None
@@ -575,7 +592,7 @@ def create_app(
         videos_running = stats.get("videos_running", 0)
         desired = gpu.get("desired", 0)
         need_update = False
-        if warm_target in (1, 2):
+        if warm_target > 0:
             if desired != warm_target:
                 need_update = True
         elif warm_target == 0 and desired > 0 and videos_running == 0:
@@ -617,7 +634,7 @@ def create_app(
         pass_id = request.args.get("pass_id")
         if pass_id is not None and not _is_uuid(pass_id):
             pass_id = None
-        stats = billing.booth_stats(db, check_pass_id=pass_id)
+        stats = _with_booth_limits(billing.booth_stats(db, check_pass_id=pass_id))
         if request.args.get("gpu") == "1":
             gpu, _ = _sync_gpu_capacity(stats)
             stats["gpu"] = gpu
@@ -637,8 +654,8 @@ def create_app(
             return _error("invalid_request", "The request body must be a JSON object.")
         if "gpu_desired" in data:
             desired = data.get("gpu_desired")
-            if type(desired) is not int or desired not in (0, 1, 2):
-                return _error("invalid_request", "gpu_desired must be 0, 1 or 2.")
+            if type(desired) is not int or not 0 <= desired <= max_gpus:
+                return _error("invalid_request", f"gpu_desired must be between 0 and {max_gpus}.")
             stats = billing.set_booth_gpu_warm(db, desired)
             gpu, err_resp = _sync_gpu_capacity(stats, allow_error=True)
             if err_resp is not None:
@@ -648,8 +665,9 @@ def create_app(
         if "grant_email" in data:
             target_email = (data.get("grant_email") or "").strip() or email
             minutes = data.get("minutes")
-            if type(minutes) is not int or minutes not in (0, 2, 5, 10):
-                return _error("invalid_request", "minutes must be 0, 2, 5 or 10.")
+            if type(minutes) is not int or minutes not in billing.BOOTH_GRANT_MINUTES:
+                choices = ", ".join(str(value) for value in billing.BOOTH_GRANT_MINUTES)
+                return _error("invalid_request", f"minutes must be one of {choices}.")
             cents = minutes * 60 * pricing.CENTS_PER_BLOCK // pricing.BLOCK_SECONDS
             try:
                 if minutes == 0:
@@ -670,8 +688,9 @@ def create_app(
             }
             return jsonify(stats)
         delta = data.get("delta")
-        if type(delta) is not int or delta not in BOOTH_ADJUST_DELTAS:
-            return _error("invalid_request", "delta must be 0, 5 or 10.")
+        if type(delta) is not int or delta not in billing.BOOTH_ADJUST_DELTAS:
+            choices = ", ".join(str(value) for value in billing.BOOTH_ADJUST_DELTAS)
+            return _error("invalid_request", f"delta must be one of {choices}.")
         return jsonify(billing.adjust_booth_passes(db, delta))
 
     @app.route("/api/access-request", methods=["POST"])
@@ -829,7 +848,7 @@ def create_app(
         if db is None:
             return _not_configured()
         user_id, _ = signed_in_user()
-        cutoff = datetime.now(UTC) - timedelta(days=RESULT_DAYS)
+        cutoff = datetime.now(UTC) - timedelta(days=result_days)
 
         def load_jobs():
             return billing.list_jobs(
@@ -915,9 +934,7 @@ def create_app(
         if not job["research_consent"]:
             return None, _error("no_consent", "This video was not shared.", status=409)
         if job["dataset_removed_at"] is not None:
-            message = billing.CURVE_REMOVED_MESSAGES.get(
-                job["dataset_removed_reason"], billing.CURVE_REMOVED_MESSAGES["no_curve"]
-            )
+            message = billing.curve_removed_message(job["dataset_removed_reason"], no_curve_days)
             return None, _error("dataset_removed", message, status=409)
         return job, None
 
@@ -964,7 +981,7 @@ def create_app(
             return (
                 None,
                 None,
-                _error("result_expired", f"Results are kept {RESULT_DAYS} days.", status=404),
+                _error("result_expired", f"Results are kept {result_days} days.", status=404),
             )
         if result.get("format") != 2:
             return None, None, _old_result()
@@ -1206,6 +1223,7 @@ def create_app(
                 reward_window_days,
                 length_tolerance_s,
                 min_views=curve_min_views,
+                no_curve_days=no_curve_days,
             )
         except billing.CurveRefused as err:
             return _error(err.code, err.message, status=err.status)
@@ -1378,6 +1396,7 @@ def create_app(
                 facts=facts,
                 length_tolerance_s=length_tolerance_s,
                 min_views=curve_min_views,
+                no_curve_days=no_curve_days,
             )
         except (billing.DuplicateCurve, dbmod.DuplicateCurveViolation):
             _delete_curve_files(s3, bucket, [raw_key, csv_key], job["job_id"])

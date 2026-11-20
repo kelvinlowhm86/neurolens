@@ -24,7 +24,7 @@ A video goes through these steps from sign-in to the page that shows the result.
 1. Sign-in. The browser signs in on Cognito's hosted page with Google or an email and password. The callback accepts only a verified email, maps the sign-in's issuer and subject to a `users` row, and starts a server-side session. The browser cookie holds a random token; the server stores its hash.
 2. Credit check and reserve. `POST /api/uploads/presign` checks that GPU work is not paused, that the claimed length and size fit the limits, that the account has fewer than ten queued jobs, and that research consent is current. The app then moves the estimated price from available to reserved credit and creates a `queued` job.
 3. Upload to S3. The web function returns a presigned POST: a time-limited signed form that lets the browser write one object without AWS credentials. It expires after 300 seconds, and S3 enforces one key, one content type and the size cap. The object lands at `uploads/{user_id}/{job_id}{ext}`.
-4. Queue. S3 sends an object-created event to the `neurolens-jobs` SQS queue; SQS delivers it after a 15-second delay, so a user can still cancel. A message that keeps failing goes to the dead-letter queue, a queue for messages that cannot be processed.
+4. Queue. S3 sends an object-created event to the `neurolens-jobs` SQS queue; SQS delivers it after `queue_delay_seconds` (15 seconds), so a user can still cancel. A message that keeps failing goes to the dead-letter queue, a queue for messages that cannot be processed.
 5. Dispatcher Lambda. `neurolens-dispatcher` consumes one message at a time. It checks the object size, runs `ffprobe` from a Lambda layer (a zip of extra files loaded beside the function), re-prices the job by the measured duration, checks the job deadline and whether processing is paused, then calls SageMaker's asynchronous `InvokeEndpointAsync`. It also asks the endpoint for one instance, so the cold start does not wait for the scaling alarm.
 6. SageMaker asynchronous endpoint and worker container. SageMaker starts an instance from the first available pool. The container receives the video on `/invocations`, claims the job, runs TRIBE v2 with audio and again with the sound removed, and extracts the seven brain signals. A heartbeat runs while the job works, and a job that reaches 55 minutes ends the process so SageMaker replaces the container.
 7. Results to S3. The worker writes `results/<job_id>.json` with the signal series, `results/<job_id>.brain` with the raw predictions, and the thumbnail, frames and phone-playback copy beside them. A consented job also gets `dataset/<job_id>/video.*`.
@@ -63,9 +63,9 @@ Files in S3 are grouped under key prefixes (the start of a key, like a folder). 
 
 | Prefix | Holds | Expires |
 | --- | --- | --- |
-| `uploads/` | The input videos | After 30 days |
-| `results/` | Result JSON, brain file, thumbnail, frames, playback copy and reports | After 30 days |
-| `dataset/` | Consented shared videos and retention snapshots | After 1,095 days |
+| `uploads/` | The input videos | After `upload_retention_days` (30 days) |
+| `results/` | Result JSON, brain file, thumbnail, frames, playback copy and reports | After `result_retention_days` (30 days) |
+| `dataset/` | Consented shared videos and retention snapshots | After `research.dataset_retention_days` (1,095 days) |
 | `sagemaker-output/` | SageMaker's asynchronous success and failure answers | After 1 day |
 | `build/` | The source zip for an image build | After 7 days |
 | `model-data/` | The model weights and brain maps copied into the GPU container at start | No expiry rule |
@@ -81,12 +81,12 @@ These rules decide when data is deleted, either by an S3 lifecycle rule or by th
 
 | Rule | What happens |
 | --- | --- |
-| S3 lifecycle | S3 deletes `uploads/` and `results/` after 30 days, `sagemaker-output/` after 1 day, and `build/` after 7 days. `dataset/` lasts 1,095 days and `experiments/` never expires. |
-| Results | The page marks a result available only for 30 days, and a missing result answers `result_expired`. |
-| Shared copies | A shared copy with no retention curve is removed after 90 days. The number is `research.no_curve_days`, and the reaper applies it. |
+| S3 lifecycle | S3 deletes `uploads/` after `upload_retention_days` (30 days) and `results/` after `result_retention_days` (30 days), `sagemaker-output/` after 1 day, and `build/` after 7 days. `dataset/` lasts `research.dataset_retention_days` (1,095 days) and `experiments/` never expires. |
+| Results | The page marks a result available only for `result_retention_days` (30 days), and a missing result answers `result_expired`. |
+| Shared copies | A shared copy with no retention curve is removed after `research.no_curve_days` (90 days), and the reaper applies it. |
 | User deletion | A user can stop sharing a copy or delete a job immediately. The job is marked first and the files are deleted; the reaper finishes anything a failed delete leaves. |
 | Account deletion | Account deletion marks the account, removes its sign-ins, deletes its files and then its rows. Deleting an account is refused while one of its jobs is queued or processing. |
-| Sessions and reports | Sign-in sessions expire after 30 days from last use. A report that stays `writing` for 16 minutes is treated as stale. |
+| Sessions and reports | Sign-in sessions expire after `billing.SESSION_DAYS` (30 days) from last use. A report that stays `writing` for `report.stale_minutes` (16 minutes) is treated as stale. |
 | Logs | Amazon CloudWatch (AWS's monitoring and log service) keeps the logs 14 days by default. |
 
 In the code: `infra/terraform/main.tf`, `neurolens/web/app.py`, `config.json`, `neurolens/lambdas/reaper.py`, `neurolens/billing.py`, `infra/terraform/variables.tf`
@@ -98,7 +98,7 @@ Scheduled Lambdas, alarms and deadlines catch stuck work and runaway spend, so a
 | Safety net | What it does |
 | --- | --- |
 | GPU guard | A Lambda runs every 10 minutes and stops the endpoint when an instance is running or wanted, no keep-warm holds it, and no live claim, dispatched request or recent job activity says work is coming. It reads the database, not the backlog metric. |
-| Reaper | A Lambda runs every 3 hours. A job still open four hours after creation is settled if its result exists, otherwise refunded `deadline_passed`. It also retries recent failed file deletes, removes shared copies with no curve after 90 days, finishes marked purges, deletes marked accounts, removes snapshots older than 1,095 days and deletes expired sessions. |
+| Reaper | A Lambda runs every `reaper_schedule_hours` (3 hours). A job still open `deadlines.JOB_DEADLINE_S` (four hours) after creation is settled if its result exists, otherwise refunded `deadline_passed`. It also retries recent failed file deletes, removes shared copies with no curve after `research.no_curve_days` (90 days), finishes marked purges, deletes marked accounts, removes snapshots older than `research.dataset_retention_days` (1,095 days) and deletes expired sessions. |
 | Dead-letter handler | A message that keeps failing on the jobs queue goes to the dead-letter queue. Its Lambda settles the job if a result exists, otherwise refunds it `processing_failed` and deletes its files. If a worker still holds a fresh claim, the handler raises so the message is tried again. |
 | SageMaker error handler | The endpoint's error topic invokes a Lambda for each failed asynchronous request. It settles or refunds the job and ignores SageMaker's own start/stop test notification. A fresh claim makes it retry later; the reaper is the final backstop. |
 | Alarms | CloudWatch emails one Amazon Simple Notification Service (SNS, AWS's notification service) topic when the GPU guard stops a GPU, when the guard asks twice in 30 minutes, when the guard does not run for 30 minutes, when Aurora stays awake for much of six hours, and on any Lambda error. A failed Cognito login deletion has its own log-based alarm. |
@@ -109,12 +109,12 @@ In the code: `neurolens/lambdas/gpu_guard.py`, `infra/terraform/lambdas.tf`, `ne
 
 ## Credit and billing
 
-NeuroLens charges for GPU work in 30-second blocks. The price is one dollar per started 30-second block, with a half-second allowance and a minimum of one block.
+NeuroLens charges for GPU work in blocks sized by `neurolens.pricing` (30 seconds). The price is one dollar per started block, with a half-second allowance and a minimum of one block.
 
 | Step | What happens |
 | --- | --- |
 | Reserve | At upload, the web function estimates the price from the browser's duration and moves it from available to reserved. |
-| Verify | The dispatcher measures the real duration and re-prices the job. A longer video needs more available credit; if that is missing, the job is refunded before a GPU starts. A video above the 120-second limit is refunded first. |
+| Verify | The dispatcher measures the real duration and re-prices the job. A longer video needs more available credit; if that is missing, the job is refunded before a GPU starts. A video above the `max_video_duration_seconds` limit (120 seconds) is refunded first. |
 | Charge | A result settles the job once: reserved credit becomes captured credit. |
 | Refund | A failed, cancelled or expired job returns its reservation to available credit. A refund also deletes the job's files. |
 
@@ -157,7 +157,7 @@ The `Admin` button appears when the signed-in email is in the admin list: Terraf
 | --- | --- |
 | Delegated admins | Admin rights come from the email list. To delegate, add the person's email to `admin_emails` in Terraform and apply, or to `NEUROLENS_ADMIN_EMAILS` on a laptop and restart. The panel does not add or remove admins. |
 | Visitor passes | The panel makes a signed QR code for a two-minute guest pass. The pass pool starts at ten passes of 400 cents each; `+5 passes`, `+10 passes` and `Stop passes` change it. Each scan creates or joins a `guest-` account. A copied link joins the same guest session without spending a second pass; two different phones scanning the same code get separate guest accounts. Guest accounts never receive research consent. |
-| GPU warmth and credit | The panel sets the endpoint to auto-scale (`0`), or keeps one or two GPUs warm for six hours. It grants or resets credit for an email in `0`, `2`, `5` or `10` minute steps; `+5 min` is the invite credit. |
+| GPU warmth and credit | The panel sets the endpoint to auto-scale (`0`), or keeps up to `max_instances` GPUs warm for `billing.BOOTH_GPU_WARM_HOURS` (six hours). It grants or resets credit for an email in `billing.BOOTH_GRANT_MINUTES` (`0`, `2`, `5`, `10`) steps; `+5 min` is the invite credit. |
 | Access requests | A signed-in user asks for free minutes with a YouTube, Facebook, TikTok or Instagram channel link. The request row is the list; an SNS email notifies the operator. `infra/access_requests.py list --backend data_api` shows waiting requests, and `decline` turns one down. Granting credit in the panel marks the request granted. |
 
 In the code: `neurolens/web/auth.py`, `neurolens/settings.py`, `infra/terraform/web.tf`, `infra/terraform/README.md`, `static/app.html`, `neurolens/web/app.py`, `neurolens/billing.py`, `config.json`, `neurolens/access.py`, `neurolens/notify.py`

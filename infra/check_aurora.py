@@ -127,7 +127,7 @@ def check_sign_in(db, created):
     return problems
 
 
-def smoke(db):
+def smoke(db, max_duration_s):
     user_id = f"smoke-{uuid.uuid4()}"
     job_id = str(uuid.uuid4())
     problems = []
@@ -138,7 +138,7 @@ def smoke(db):
         print(f"first call (includes any wake-up): {time.monotonic() - started:.1f} s")
         key = f"uploads/{user_id}/{job_id}.mp4"
         price = billing.reserve(db, user_id, job_id, key, "smoke.mp4", 27400)
-        verdict = billing.verify_queued(db, job_id, 61000, 120)
+        verdict = billing.verify_queued(db, job_id, 61000, max_duration_s)
         if verdict != billing.OK:
             problems.append(f"verify_queued returned {verdict!r}")
         attempt = billing.claim(db, job_id)
@@ -181,7 +181,7 @@ def main(argv=None):
     args = parser.parse_args(argv)
     cfg = settings.load_settings()
     cfg.setdefault("db", {})["backend"] = args.backend
-    problems = smoke(dbmod.from_config(cfg))
+    problems = smoke(dbmod.from_config(cfg), settings.max_duration(cfg))
     for problem in problems:
         print(f"FAIL {problem}")
     print(

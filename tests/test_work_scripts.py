@@ -153,6 +153,7 @@ SH = "#!/usr/bin/env bash\n"
 TERRAFORM_STUB = r"""#!/usr/bin/env bash
 case "$*" in
   *max_instances*) echo "${FAKE_MAX_INSTANCES:-1}" ;;
+  *idle_stop_minutes*) echo "${FAKE_IDLE_MINUTES:-7}" ;;
   *) echo us-east-1 ;;
 esac
 """
@@ -217,6 +218,7 @@ def sandbox(tmp_path):
             "FAKE_WORLD": str(world_file),
             "FAKE_LOG": str(log),
             "FAKE_MAX_INSTANCES": str(world.get("max_instances", 1)),
+            "FAKE_IDLE_MINUTES": str(world.get("idle_stop_minutes", 7)),
             "AWS_ACCESS_KEY_ID": "x",
             "AWS_SECRET_ACCESS_KEY": "x",
         }

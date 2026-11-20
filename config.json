@@ -9,6 +9,8 @@
   "hf_download_timeout": 300,
   "max_video_duration_seconds": 120,
   "max_upload_bytes": 300000000,
+  "upload_retention_days": 30,
+  "result_retention_days": 30,
   "upload": {
     "max_batch_files": 5,
     "max_waiting_jobs": 10
@@ -17,6 +19,7 @@
     "curve_rewards_per_window": 5,
     "curve_reward_window_days": 30,
     "no_curve_days": 90,
+    "dataset_retention_days": 1095,
     "curve_length_tolerance_s": 2,
     "curve_min_views": 1000
   },

@@ -225,6 +225,8 @@ locals {
         NEUROLENS_GPU_ENDPOINT    = local.endpoint_name
         NEUROLENS_REPORT_FUNCTION = aws_lambda_function.report.function_name
         NEUROLENS_ADMIN_EMAILS    = join(",", var.admin_emails)
+        NEUROLENS_MAX_INSTANCES   = tostring(var.max_instances)
+        NEUROLENS_CANCEL_SECONDS  = tostring(var.queue_delay_seconds)
       }
     }
   }

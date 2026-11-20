@@ -7,7 +7,7 @@ Operator scripts and the AWS resources they drive. AWS commands run with the pro
 
 - `Admin` button in the web header (visible when signed in with an admin email):
   - Opens the **Admin controls** modal, which dispenses 2-minute QR demo passes (1 pass per phone, auto-rotating every 0.5 s when scanned, with `?booth=<token>` preserved in the URL bar so copying the link to a laptop opens the same guest session) with `+5 passes`, `+10 passes` and `Stop passes` controls, plus a built-in `?` help cheat-sheet.
-  - Controls GPU warmth (`Keep 1 GPU`, `Keep 2 GPUs` for 6 hours, or `0 (Auto-scale)`), grants or resets account credit by email (`+5 min`, `+10 min`, `Reset (0)`), and shows live SGT per-day funnel stats.
+  - Controls GPU warmth (`Keep N GPUs` up to `max_instances` for `billing.BOOTH_GPU_WARM_HOURS`, or `0 (Auto-scale)`), grants or resets account credit by email (`billing.BOOTH_GRANT_MINUTES`), and shows live SGT per-day funnel stats.
   - Admin emails come from the deployment setting `NEUROLENS_ADMIN_EMAILS` (a comma-separated list, lowercased; empty means nobody can open the panel). On AWS it is Terraform's `admin_emails`; on a laptop it is in `.env`.
   - The pages' contact address comes from `NEUROLENS_CONTACT_EMAIL` on a laptop and Terraform's `contact_email` on AWS, where `deploy_web.sh` fills it in (empty shows the GitHub repo link).
 - `start_work.sh`: starts processing: normal on-demand state, or `--keep-warm [--hours 1-5]` for one GPU now.

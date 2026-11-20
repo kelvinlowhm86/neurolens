@@ -12,16 +12,16 @@ from datetime import UTC, datetime, timedelta
 
 from botocore.exceptions import ClientError
 
-from neurolens import billing, lambdas, scaling, storage
+from neurolens import billing, deadlines, lambdas, scaling, storage
 from neurolens.media import UnreadableVideo, probe_duration
 
 logger = logging.getLogger(__name__)
 
 PROBE_TIMEOUT_S = 90
-QUEUE_TTL_MAX_S = 7200
-DEADLINE_S = 10800  # the reaper's 4-hour bound minus the 60-minute invocation timeout
+QUEUE_TTL_MAX_S = deadlines.QUEUE_TTL_MAX_S
+DEADLINE_S = deadlines.DISPATCH_DEADLINE_S
 MIN_TTL_S = 300
-INVOCATION_TIMEOUT_S = 3600
+INVOCATION_TIMEOUT_S = deadlines.INVOCATION_TIMEOUT_S
 PRESIGNED_GET_S = 600
 
 

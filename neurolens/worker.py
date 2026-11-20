@@ -36,7 +36,6 @@ REQUIRED_CONFIG = [
     (("worker", "max_job_minutes"), "worker.max_job_minutes"),
 ]
 MAX_ERROR_CHARS = 200  # the job's error_message is shown to the user as is
-MAX_HEARTBEAT_SECONDS = 50
 VIDEO_CHANGED_ALLOWANCE_MS = 1000  # slack between the dispatcher's and the local duration reading
 JOB_HEADER = "X-Amzn-SageMaker-Custom-Attributes"
 BODY_READ_TIMEOUT_S = 60  # a request body that stalls this long gives up and frees the slot
@@ -119,10 +118,10 @@ def validate_config(cfg):
                     "environment; behaviour settings from config.json."
                 )
             node = node[part]
-    if cfg["worker"]["heartbeat_seconds"] > MAX_HEARTBEAT_SECONDS:
+    if cfg["worker"]["heartbeat_seconds"] >= billing.STALE_AFTER_S:
         raise ValueError(
-            f"worker.heartbeat_seconds must be at most {MAX_HEARTBEAT_SECONDS} (a claim goes "
-            "stale after 90 s without a beat)."
+            f"worker.heartbeat_seconds must be under {billing.STALE_AFTER_S} s (a claim goes "
+            f"stale after {billing.STALE_AFTER_S} s without a beat)."
         )
 
 

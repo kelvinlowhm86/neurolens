@@ -75,9 +75,9 @@ resource "aws_s3_bucket_policy" "main" {
 }
 
 # Prefix-scoped expiry, not one blanket rule. Days are the smallest unit S3 lifecycle uses.
-#   uploads/              30 d   (S3 rounds to midnight UTC: 30-31 days) the input videos (job status lives in Aurora)
-#   results/              30 d   how long a result stays viewable / downloadable (product decision)
-#   dataset/             1095 d  shared videos and retention curves, kept for research
+#   uploads/   upload_retention_days   the input videos (job status lives in Aurora)
+#   results/   result_retention_days   how long a result stays viewable / downloadable
+#   dataset/   research.dataset_retention_days   shared videos and curves, kept for research
 #   sagemaker-output/     1 d    SageMaker's async answers; the job row and results/ are the record
 #   build/                7 d    source.zip for the image build; one build needs it only that day
 #   experiments/ never expire: the final report reads experiments/*.
@@ -91,7 +91,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "main" {
       prefix = "uploads/"
     }
     expiration {
-      days = 30
+      days = local.config.upload_retention_days
     }
   }
 
@@ -102,7 +102,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "main" {
       prefix = "results/"
     }
     expiration {
-      days = 30
+      days = local.config.result_retention_days
     }
   }
 
@@ -113,7 +113,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "main" {
       prefix = "dataset/"
     }
     expiration {
-      days = 1095
+      days = local.config.research.dataset_retention_days
     }
   }
 
@@ -159,12 +159,12 @@ resource "aws_s3_bucket_cors_configuration" "main" {
 resource "aws_sqs_queue" "jobs" {
   name = var.queue_name
 
-  # Every message waits 15 s, so the user can still cancel before the dispatcher starts a GPU.
-  delay_seconds = 15
+  # The cancel window: the message waits before the dispatcher starts a GPU.
+  delay_seconds = var.queue_delay_seconds
 
-  # The dispatcher gets at most 180 s per message (AWS asks for six times the function
-  # Timeout), so a slow dispatch is not redelivered while it is still invoking.
-  visibility_timeout_seconds = 1080
+  # The dispatcher's time per message (AWS asks for six times the function timeout), so a slow
+  # dispatch is not redelivered while it is still invoking.
+  visibility_timeout_seconds = var.queue_visibility_seconds
 
   sqs_managed_sse_enabled = true
 
@@ -172,7 +172,7 @@ resource "aws_sqs_queue" "jobs" {
   # Failed request.
   redrive_policy = jsonencode({
     deadLetterTargetArn = aws_sqs_queue.jobs_dlq.arn
-    maxReceiveCount     = 2
+    maxReceiveCount     = var.queue_max_receives
   })
 }
 
@@ -184,7 +184,7 @@ resource "aws_sqs_queue" "jobs" {
 resource "aws_sqs_queue" "jobs_dlq" {
   name                       = "${var.queue_name}-dlq"
   message_retention_seconds  = 1209600
-  visibility_timeout_seconds = 720
+  visibility_timeout_seconds = var.dlq_visibility_seconds
   sqs_managed_sse_enabled    = true
 }
 

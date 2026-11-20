@@ -78,8 +78,10 @@ def apply_env(cfg):
     auth.cognito_issuer / auth.cognito_client_id / auth.cognito_domain,
     NEUROLENS_PUBLIC_BASE_URL -> public_base_url, NEUROLENS_ADMIN_EMAILS ->
     auth.admin_emails (a comma-separated list, lowercased, stripped, empty entries dropped),
-    NEUROLENS_CONTACT_EMAIL -> contact_email (stripped; blank means unset), and
-    NEUROLENS_DEPLOYED -> deployed: true. NEUROLENS_YOUTUBE_API_KEY -> youtube_api_key.
+    NEUROLENS_CONTACT_EMAIL -> contact_email (stripped; blank means unset),
+    NEUROLENS_MAX_INSTANCES -> gpu.max_instances, NEUROLENS_CANCEL_SECONDS ->
+    queue.cancel_seconds, and NEUROLENS_DEPLOYED -> deployed: true.
+    NEUROLENS_YOUTUBE_API_KEY -> youtube_api_key.
     Only variables that are set and non-empty change anything, except
     NEUROLENS_ADMIN_EMAILS: set but blank means no admins. The input is never modified.
     """
@@ -107,6 +109,13 @@ def apply_env(cfg):
         value = os.environ.get(var)
         if value:
             out.setdefault(section, {})[key] = value
+    for var, section, key in (
+        ("NEUROLENS_MAX_INSTANCES", "gpu", "max_instances"),
+        ("NEUROLENS_CANCEL_SECONDS", "queue", "cancel_seconds"),
+    ):
+        value = os.environ.get(var)
+        if value:
+            out.setdefault(section, {})[key] = int(value)
     if os.environ.get("NEUROLENS_PUBLIC_BASE_URL"):
         out["public_base_url"] = os.environ["NEUROLENS_PUBLIC_BASE_URL"]
     admin_emails = os.environ.get("NEUROLENS_ADMIN_EMAILS")
@@ -200,3 +209,33 @@ def max_duration(cfg):
     if cfg is None:
         return 120
     return cfg.get("max_video_duration_seconds", 120)
+
+
+def max_instances(cfg):
+    """Most GPUs the endpoint may run (1 when unset or when there is no config)."""
+    return int(((cfg or {}).get("gpu") or {}).get("max_instances", 1))
+
+
+def result_retention_days(cfg):
+    """Days a result stays viewable and the results/ prefix lives (30 by default)."""
+    return int((cfg or {}).get("result_retention_days", 30))
+
+
+def dataset_retention_days(cfg):
+    """Days shared research copies and snapshots are kept (1095 by default)."""
+    return int(((cfg or {}).get("research") or {}).get("dataset_retention_days", 1095))
+
+
+def no_curve_days(cfg):
+    """Days a shared copy without a retention curve is kept (90 by default)."""
+    return int(((cfg or {}).get("research") or {}).get("no_curve_days", 90))
+
+
+def cancel_seconds(cfg):
+    """Seconds an upload can be cancelled before dispatch (15 by default)."""
+    return int(((cfg or {}).get("queue") or {}).get("cancel_seconds", 15))
+
+
+def queue_visibility_seconds(cfg):
+    """Seconds the dispatcher has to process one message (1080 by default)."""
+    return int(((cfg or {}).get("queue") or {}).get("visibility_seconds", 1080))

@@ -10,12 +10,14 @@ and `destroy` removes everything it created. The region is one setting (`region`
 What it creates
 
 - One S3 bucket: public access blocked, encrypted, HTTPS-only, ACLs disabled, browser upload
-  (CORS) from `allowed_origins`, and prefix-scoped expiry (`uploads/` and `results/` after 30 days,
-  `dataset/` after 1095, `sagemaker-output/` after 1, `build/` after 7,
+  (CORS) from `allowed_origins`, and prefix-scoped expiry (`uploads/` after `upload_retention_days`,
+  `results/` after `result_retention_days`, both 30; `dataset/` after
+  `research.dataset_retention_days` (1095), `sagemaker-output/` after 1, `build/` after 7,
   `experiments/` never).
-- One SQS queue (visibility 1080 s, a 15 s delivery delay) and the wiring that sends a message
-  whenever a file lands under `uploads/`. A second queue (`neurolens-jobs-dlq`) receives a job that
-  failed twice.
+- One SQS queue (visibility `queue_visibility_seconds` (1080 s), a `queue_delay_seconds`
+  (15 s) delivery delay) and the wiring that sends a message whenever a file lands under
+  `uploads/`. A second queue (`neurolens-jobs-dlq`) receives a job that failed
+  `queue_max_receives` (twice).
 - A VPC with private subnets for Aurora only. No NAT Gateway, no internet gateway, no S3 endpoint:
   Aurora is reached through the Data API, and S3 through its public HTTPS endpoint.
 - Roles: the SageMaker execution role, the CodeBuild role, the dispatcher, the SageMaker error
@@ -25,22 +27,23 @@ What it creates
   `neurolens-worker-image` (privileged Docker, 60-minute timeout).
 - The SageMaker model, endpoint configuration (instance pools `ml.g6e.xlarge`,
   `ml.g6.2xlarge`, `ml.g5.2xlarge`, `ml.g6e.2xlarge`, in that order) and the endpoint `neurolens`; its async error topic `neurolens-gpu-errors`.
-- Application Auto Scaling: min 0, max `max_instances`; a waiting request starts a GPU, seven
-  idle minutes stop it.
+- Application Auto Scaling: min 0, max `max_instances`; a waiting request starts a GPU,
+  `idle_stop_minutes` (seven idle minutes) stop it.
 - Lambda functions: the dispatcher (jobs queue, with the ffprobe layer), the SageMaker error
   handler (error topic), the GPU guard (every 10 minutes), the dead-letter handler, the reaper
-  (every 3 hours) and the report function (with the Anthropic SDK layer).
+  (every `reaper_schedule_hours`, 3) and the report function (with the Anthropic SDK layer).
 - Alarms on one SNS email topic: the GPU guard stopped a GPU, the GPU guard has not run, Aurora has
   been awake for much of 6 hours, and one error alarm per Lambda.
 
 The endpoint only exists once `worker_image` is set: build the image first (section 2b).
 
 Cost: with everything stopped, the running cost is the stored image, the ECR repository,
-Aurora storage and the S3 files, a few dollars a month (the reaper waking Aurora every 3 hours is
-about $3). A GPU bills only while it runs: about $2.61/h for `ml.g6e.xlarge`, $1.22/h for
-`ml.g6.2xlarge` (L4), $1.52/h for `ml.g5.2xlarge` (A10G) and $2.80/h for `ml.g6e.2xlarge` (SageMaker prices, us-east-1), and it stops
-itself 7 idle minutes after the last job. A deploy starts one
-instance for about 7 minutes (roughly $0.50-0.80).
+Aurora storage and the S3 files, a few dollars a month (the reaper waking Aurora every
+`reaper_schedule_hours` (3 hours) is about $3). A GPU bills only while it runs: about $2.61/h for
+`ml.g6e.xlarge`, $1.22/h for `ml.g6.2xlarge` (L4), $1.52/h for `ml.g5.2xlarge` (A10G) and
+$2.80/h for `ml.g6e.2xlarge` (SageMaker prices, us-east-1), and it stops itself after
+`idle_stop_minutes` (7 idle minutes). A deploy starts one instance for about 7 minutes
+(roughly $0.50-0.80).
 
 From an empty account: section 0, section 1, section 2, section 2e (database tables), section 2f, section 2b; then section 5 for each work session and section 6 to tear
 down.
@@ -221,7 +224,7 @@ infra/build_image.sh            # zips HEAD, builds in CodeBuild, prints the ima
 terraform -chdir=infra/terraform apply
 ```
 
-`max_instances` stays 1. There is no CPU rehearsal: SageMaker refuses a CUDA image on a CPU
+`max_instances` defaults to 1. There is no CPU rehearsal: SageMaker refuses a CUDA image on a CPU
 instance type, so the first checks run on the GPU with the real model.
 
 The container's logs are in CloudWatch at `/aws/sagemaker/Endpoints/neurolens`; the build's at
@@ -277,11 +280,12 @@ Add it to `allowed_origins` in `infra/terraform/terraform.tfvars` and run
 
 ## 5. A work session: start and stop
 
-Nothing runs between sessions. The endpoint's normal state is max 1; an upload starts a GPU by
-itself and it stops 7 idle minutes after the last job. From the repo root:
+Nothing runs between sessions. The endpoint's normal state is `max_instances` (1 by default);
+an upload starts a GPU by itself and it stops after `idle_stop_minutes` (7 idle minutes). From
+the repo root:
 
 ```bash
-infra/start_work.sh                     # normal state: max 1, scale out on demand
+infra/start_work.sh                     # normal state: max_instances, scale out on demand
 infra/start_work.sh --keep-warm --hours 3   # one GPU now, kept 3 hours (AWS ends it)
 infra/stop_work.sh                      # emergency pause; prints ALL STOPPED only when proven
 ```

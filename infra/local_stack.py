@@ -99,10 +99,13 @@ def _make_s3(s3):
     )
 
 
-def _make_queue(sqs, s3):
-    queue_url = sqs.create_queue(QueueName=LOCAL_QUEUE, Attributes={"DelaySeconds": "15"})[
-        "QueueUrl"
-    ]
+def _make_queue(sqs, s3, cfg):
+    from neurolens import settings
+
+    queue_url = sqs.create_queue(
+        QueueName=LOCAL_QUEUE,
+        Attributes={"DelaySeconds": str(settings.cancel_seconds(cfg))},
+    )["QueueUrl"]
     queue_arn = sqs.get_queue_attributes(QueueUrl=queue_url, AttributeNames=["QueueArn"])[
         "Attributes"
     ]["QueueArn"]
@@ -304,23 +307,26 @@ def _serve_web(app):
 
 
 class _NeverPaused:
-    """The local stack has no GPU scaling, so its only scalable target has a maximum of 1."""
+    """The local stack has no GPU scaling; its scalable target reports the configured maximum."""
+
+    def __init__(self, max_instances):
+        self.max_instances = max_instances
 
     def describe_scalable_targets(self, **kwargs):
-        return {"ScalableTargets": [{"MinCapacity": 0, "MaxCapacity": 1}]}
+        return {"ScalableTargets": [{"MinCapacity": 0, "MaxCapacity": self.max_instances}]}
 
 
 def _dispatch_loop(sqs, queue_url, s3, sagemaker, db, cfg):
-    from neurolens import storage
+    from neurolens import settings, storage
     from neurolens.lambdas import dispatcher
 
-    appscaling = _NeverPaused()
+    appscaling = _NeverPaused(settings.max_instances(cfg))
     while True:
         response = sqs.receive_message(
             QueueUrl=queue_url,
             MaxNumberOfMessages=1,
             WaitTimeSeconds=1,
-            VisibilityTimeout=1080,
+            VisibilityTimeout=settings.queue_visibility_seconds(cfg),
         )
         for message in response.get("Messages", []):
             failed = False
@@ -335,7 +341,7 @@ def _dispatch_loop(sqs, queue_url, s3, sagemaker, db, cfg):
                         db=db,
                         endpoint="local",
                         max_upload_bytes=cfg["max_upload_bytes"],
-                        max_duration_s=cfg.get("max_video_duration_seconds", 120),
+                        max_duration_s=settings.max_duration(cfg),
                     )
                     print(f"{key}: {result}")
                 except Exception as err:  # leave the message for a retry
@@ -393,7 +399,7 @@ def main(argv=None):
         s3 = boto3.client("s3")
         sqs = boto3.client("sqs")
         _make_s3(s3)
-        queue_url = _make_queue(sqs, s3)
+        queue_url = _make_queue(sqs, s3, cfg)
         app = create_app(
             cfg=cfg,
             db=db,

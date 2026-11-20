@@ -12,6 +12,16 @@ output "gpu_endpoint" {
   value       = local.endpoint_name
 }
 
+output "max_instances" {
+  description = "Most GPUs the endpoint may run (infra/start_work.sh reads it)."
+  value       = var.max_instances
+}
+
+output "idle_stop_minutes" {
+  description = "Idle minutes before the endpoint's last GPU stops (infra/start_work.sh reads it)."
+  value       = var.idle_stop_minutes
+}
+
 output "worker_ecr_repository" {
   description = "Where infra/build_image.sh pushes the SageMaker image."
   value       = aws_ecr_repository.worker.repository_url

@@ -24,7 +24,8 @@ alert_email = "you@example.com"
 # then build and apply with the digest. Build the image with infra/build_image.sh (it prints its
 # digest), then put the digest here and apply again. Empty: no endpoint is created.
 # worker_image   = "sha256:REPLACE-WITH-THE-BUILT-IMAGE-DIGEST"
-# max_instances  = 1          # stays 1: the app runs one GPU at a time
+# max_instances  = 1          # up to the account's GPU quota
+# idle_stop_minutes = 7       # idle time before the last GPU stops
 # log_retention_days = 90     # while developing; 14 once live
 
 # Required: sign-in (section 2a).

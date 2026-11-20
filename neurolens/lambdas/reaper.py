@@ -1,25 +1,23 @@
-"""Reaper, every 3 hours.
+"""Reaper, on Terraform's schedule (see infra/terraform/lambdas.tf).
 
-Backstop for a lost GPU notification: a job still open four hours after creation is settled if
-its result exists, else refunded ``deadline_passed``. Every run also retries the file deletes of
+Backstop for a lost GPU notification: a job still open past its deadline is settled if its
+result exists, else refunded ``deadline_passed``. Every run also retries the file deletes of
 recently failed jobs, removes shared copies that still have no retention curve (the limit comes
 from config.json), finishes purging copies already marked removed or deleted, finishes deleting
-marked accounts, deletes snapshots past the S3 lifecycle's age, and deletes expired sign-in
+marked accounts, deletes snapshots past the configured dataset age, and deletes expired sign-in
 sessions.
 """
 
 import logging
 import os
 
-from neurolens import billing, lambdas, settings, storage
+from neurolens import billing, deadlines, lambdas, settings, storage
 
 logger = logging.getLogger(__name__)
 
-DEADLINE_S = 4 * 60 * 60
-HEARTBEAT_STALE_S = 10 * 60
-FAILED_RETRY_S = 2 * 24 * 60 * 60
-# Matches the dataset/ S3 lifecycle rule.
-SNAPSHOT_RETENTION_DAYS = 1095
+DEADLINE_S = deadlines.JOB_DEADLINE_S
+HEARTBEAT_STALE_S = deadlines.HEARTBEAT_STALE_S
+FAILED_RETRY_S = deadlines.FAILED_RETRY_S
 
 
 def stuck_jobs(db):
@@ -86,13 +84,13 @@ def deleted_accounts(db):
         return tx.execute("SELECT user_id FROM users WHERE deleted_at IS NOT NULL")
 
 
-def expired_snapshots(db):
-    """Delete curve snapshots past the S3 lifecycle's age."""
+def expired_snapshots(db, days):
+    """Delete curve snapshots past the configured dataset retention."""
     with db.transaction() as tx:
         tx.execute(
             "DELETE FROM retention_snapshots WHERE added_at < now() "
             "- make_interval(days => CAST(:days AS integer))",
-            {"days": SNAPSHOT_RETENTION_DAYS},
+            {"days": days},
         )
 
 
@@ -123,7 +121,7 @@ def reap(db, s3, bucket, job):
         queued=True,
         processing_stale_s=HEARTBEAT_STALE_S,
     ):
-        logger.warning(f"{job_id}: past the 4-hour deadline, refunded")
+        logger.warning(f"{job_id}: past the {DEADLINE_S // 3600}-hour deadline, refunded")
         # A failed delete raises after the refund, never undoing it; the run then fails loudly.
         _delete_job_files(s3, bucket, job_id, job["object_key"])
 
@@ -142,7 +140,8 @@ def handler(event, context):
     import boto3
 
     cfg = settings.load_config()
-    no_curve_days = cfg["research"]["no_curve_days"]
+    no_curve_days = settings.no_curve_days(cfg)
+    dataset_retention_days = settings.dataset_retention_days(cfg)
     db, s3 = lambdas.database(), boto3.client("s3")
     bucket = os.environ["NEUROLENS_S3_BUCKET"]
     failed = []
@@ -179,7 +178,7 @@ def handler(event, context):
             logger.exception(f"{user['user_id']}: could not finish deleting its account")
             failed.append(user["user_id"])
     try:
-        expired_snapshots(db)
+        expired_snapshots(db, dataset_retention_days)
     except Exception:
         logger.exception("could not delete expired snapshots")
         failed.append("snapshots")

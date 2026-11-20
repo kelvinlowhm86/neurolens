@@ -27,7 +27,8 @@ QUEUED, PROCESSING, DONE, FAILED = "queued", "processing", "done", "failed"
 TERMINAL = (DONE, FAILED)
 LOST_CLAIM = "lost_claim"
 OK = "ok"
-# A live worker refreshes its claim every <= 50 s; a processing job older than this is dead.
+# A live worker refreshes its claim every worker.heartbeat_seconds (config.json); a processing
+# job older than this is dead.
 STALE_AFTER_S = 90
 # The wording of the research-consent box. A wording change needs a new value here and
 # The new text on the page together; old jobs keep the version they agreed to.
@@ -47,11 +48,14 @@ BOOTH_POOL_EMAIL = "booth-pool@booth.local"
 BOOTH_PASS_CENTS = 400
 BOOTH_INITIAL_PASSES = 10
 BOOTH_GPU_WARM_HOURS = 6
+# The pass, grant and GPU choices the admin panel offers through the API.
+BOOTH_ADJUST_DELTAS = (0, 5, 10)
+BOOTH_GRANT_MINUTES = (0, 2, 5, 10)
 GUEST_PREFIX = "guest-"
 
 CURVE_REMOVED_MESSAGES = {
     "stopped": "You stopped sharing this video.",
-    "no_curve": "This video's shared copy was deleted after 90 days without a curve.",
+    "no_curve": "This video's shared copy was deleted after {days} days without a curve.",
 }
 
 
@@ -475,10 +479,10 @@ def delete_job(db, user_id, job_id):
     """Mark the user's job deleted under its row lock, keeping its row and ledger.
 
     This is the mark half of job deletion: it happens before the files are purged, so
-    no curve can be added while the purge runs. A copy purged earlier (Stop sharing, the 90-day
-    rule) has its `dataset_purged_at` cleared, so its own files are purged now too. False,
-    changing nothing, when the job is not the user's, already deleted, or still queued or
-    processing.
+    no curve can be added while the purge runs. A copy purged earlier (Stop sharing, the
+    configured no-curve limit) has its `dataset_purged_at` cleared, so its own files are purged
+    now too. False, changing nothing, when the job is not the user's, already deleted, or still
+    queued or processing.
     """
     with db.transaction() as tx:
         rows = tx.execute(
@@ -543,7 +547,8 @@ def mark_dataset_removed(db, job_id, reason, *, user_id=None, require_no_snapsho
 
     One guarded update: the job must be done, consented, not already removed and not deleted.
     With `user_id` it must also be that user's, and with `require_no_snapshot` it must still have
-    no curve (the reaper's 90-day rule). False, changing nothing, when it no longer qualifies.
+    no curve (the reaper's configured no-curve limit). False, changing nothing, when it no
+    longer qualifies.
     """
     clauses = [
         "job_id = CAST(:job_id AS uuid)",
@@ -1154,11 +1159,20 @@ def _text_array(values):
     return "{" + ",".join(quoted(value) for value in values) + "}"
 
 
-def _curve_state(tx, user_id, job_id, video_ref, *, lock=False):
+def curve_removed_message(reason, no_curve_days=None):
+    """The refusal for a removed shared copy, with the configured no-curve limit."""
+    template = CURVE_REMOVED_MESSAGES.get(reason, CURVE_REMOVED_MESSAGES["no_curve"])
+    if no_curve_days is None and "{days}" in template:
+        return "This video's shared copy was deleted without a curve."
+    return template.format(days=no_curve_days)
+
+
+def _curve_state(tx, user_id, job_id, video_ref, *, lock=False, no_curve_days=None):
     """The job checks and link refusals shared by `add_curve` and `curve_offer`.
 
     Returns `(job, same_video_rewarded, same_link_rewarded)`. The job must be the caller's, done,
-    shared, not removed and not deleted. A link another account already used raises VideoTaken,
+    shared, not removed and not deleted. `no_curve_days` fills the no-curve refusal message from
+    the configured setting. A link another account already used raises VideoTaken,
     and a job already linked to a different video raises VideoLinkChanged. The
     once-per-link reward guard reads `jobs.curve_reward_ref`, never `retention_snapshots`, so a
     purged copy cannot forget a reward. `lock` takes the job row lock, as the save must; the
@@ -1179,9 +1193,7 @@ def _curve_state(tx, user_id, job_id, video_ref, *, lock=False):
     if not job["research_consent"]:
         raise CurveRefused("no_consent", "This video was not shared.")
     if job["dataset_removed_at"] is not None:
-        message = CURVE_REMOVED_MESSAGES.get(
-            job["dataset_removed_reason"], CURVE_REMOVED_MESSAGES["no_curve"]
-        )
+        message = curve_removed_message(job["dataset_removed_reason"], no_curve_days)
         raise CurveRefused("dataset_removed", message)
 
     taken = tx.execute(
@@ -1222,6 +1234,7 @@ def curve_offer(
     reward_window_days,
     length_tolerance_s,
     min_views=DEFAULT_MIN_VIEWS,
+    no_curve_days=None,
 ):
     """What `add_curve` would pay for this link, without writing anything.
 
@@ -1229,7 +1242,9 @@ def curve_offer(
     the save's can never disagree. Returns `(cents, reason)`.
     """
     with db.transaction() as tx:
-        job, same_video, same_link = _curve_state(tx, user_id, job_id, video_ref)
+        job, same_video, same_link = _curve_state(
+            tx, user_id, job_id, video_ref, no_curve_days=no_curve_days
+        )
         funded, under_cap = _reward_status(tx, user_id, reward_cap, reward_window_days)
         return _curve_reward(
             job,
@@ -1264,6 +1279,7 @@ def add_curve(
     facts=None,
     length_tolerance_s=DEFAULT_LENGTH_TOLERANCE_S,
     min_views=DEFAULT_MIN_VIEWS,
+    no_curve_days=None,
 ):
     """Store one retention snapshot and reward the analysis when all the rules allow it.
 
@@ -1280,7 +1296,9 @@ def add_curve(
     """
     with db.transaction() as tx:
         _lock_balance(tx, user_id)
-        job, same_video, same_link = _curve_state(tx, user_id, job_id, video_ref, lock=True)
+        job, same_video, same_link = _curve_state(
+            tx, user_id, job_id, video_ref, lock=True, no_curve_days=no_curve_days
+        )
         duplicate = tx.execute(
             "SELECT 1 AS present FROM retention_snapshots WHERE curve_sha256 = :sha LIMIT 1",
             {"sha": curve_sha256},
@@ -1358,8 +1376,8 @@ def _ensure_booth_pool(tx):
 
 
 def _read_booth_gpu_warm(tx):
-    """Return the active booth GPU keep-warm target (0, 1, or 2), expiring
-    BOOTH_GPU_WARM_HOURS after the click."""
+    """Return the active booth GPU keep-warm target (0 for auto-scale, or a positive count),
+    expiring BOOTH_GPU_WARM_HOURS after the click."""
     rows = tx.execute(
         "SELECT session_hash, "
         "(last_seen_at < now() - make_interval(hours => CAST(:hours AS integer))) AS expired "
@@ -1369,7 +1387,9 @@ def _read_booth_gpu_warm(tx):
     if not rows:
         return 0
     sh = rows[0]["session_hash"]
-    target = 1 if sh == "booth-gpu-warm-1" else (2 if sh == "booth-gpu-warm-2" else 0)
+    prefix = "booth-gpu-warm-"
+    suffix = sh[len(prefix) :] if isinstance(sh, str) and sh.startswith(prefix) else ""
+    target = int(suffix) if suffix.isdigit() else 0
     if target == 0 or rows[0]["expired"]:
         tx.execute(
             "DELETE FROM sessions WHERE user_id = :user_id",
@@ -1380,16 +1400,16 @@ def _read_booth_gpu_warm(tx):
 
 
 def set_booth_gpu_warm(db, target):
-    """Set the booth GPU keep-warm target (0 for auto-scale, or 1 / 2 to hold warm)."""
-    if type(target) is not int or target not in (0, 1, 2):
-        raise ValueError(f"target must be 0, 1 or 2, not {target!r}")
+    """Set the booth GPU keep-warm target (0 for auto-scale, or a positive count to hold warm)."""
+    if type(target) is not int or target < 0:
+        raise ValueError(f"target must be a non-negative integer, not {target!r}")
     with db.transaction() as tx:
         _ensure_booth_pool(tx)
         tx.execute(
             "DELETE FROM sessions WHERE user_id = :user_id",
             {"user_id": BOOTH_POOL_USER_ID},
         )
-        if target in (1, 2):
+        if target > 0:
             tx.execute(
                 "INSERT INTO sessions (session_hash, user_id, last_seen_at) "
                 "VALUES (:session_hash, :user_id, now())",

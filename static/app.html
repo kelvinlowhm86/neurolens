@@ -984,11 +984,11 @@
     <button class="booth-help-btn" id="boothHelpBtn" type="button" aria-expanded="false" aria-controls="boothHelp" title="How this panel works">?</button>
   </div>
   <div class="booth-help" id="boothHelp" hidden>
-    <p><strong>QR &amp; Passes:</strong> Each QR pass grants 2 min credit and auto-rotates as soon as a device claims it. Copying the phone link to a laptop opens the same session. <strong>Stop passes</strong> sets remaining passes to 0.</p>
-    <p><strong>GPU endpoint:</strong> <strong>0 (Auto-scale)</strong> scales to 0 ($0/hr) when idle and wakes a GPU (~4–5 min cold start) on upload. <strong>Keep 1 / 2 GPUs</strong> starts and holds 1 or 2 GPUs warm for 6 hours (~30–60s per video, no cold start) before auto-reverting to 0.</p>
+    <p id="boothPassHelp"><strong>QR &amp; Passes:</strong> Each QR pass grants demo credit and auto-rotates as soon as a device claims it. Copying the phone link to a laptop opens the same session. <strong>Stop passes</strong> sets remaining passes to 0.</p>
+    <p id="boothGpuHelp"><strong>GPU endpoint:</strong> <strong>0 (Auto-scale)</strong> scales to 0 ($0/hr) when idle and wakes a GPU (~4–5 min cold start) on upload. Keeping GPUs warm holds them for a set time (~30–60s per video, no cold start) before auto-reverting to 0.</p>
     <p><strong>Account credit:</strong> Adds permanent minutes or resets available credit to 0 for any signed-in email (leave blank for your own account).</p>
   </div>
-  <p>Live demo pass (2 min) — scan with phone camera:</p>
+  <p id="boothPassLead">Live demo pass — scan with phone camera:</p>
   <div class="booth-qr-box" id="boothQrBox" aria-label="Demo pass QR code"></div>
   <p class="booth-claimed" id="boothClaimedMsg" hidden>✓ Pass claimed — fresh QR ready</p>
   <p class="error" id="boothErrorMsg" hidden></p>
@@ -997,26 +997,16 @@
     <thead><tr><th>Date (SGT)</th><th>Passes</th><th>Videos</th><th>Reports</th><th>Compares</th></tr></thead>
     <tbody id="boothDaysBody"></tbody>
   </table>
-  <div class="booth-controls">
-    <button class="btn-ghost" id="boothAdd5" type="button">+5 passes</button>
-    <button class="btn-ghost" id="boothAdd10" type="button">+10 passes</button>
-    <button class="btn-danger" id="boothStop" type="button">Stop passes</button>
-  </div>
+  <div class="booth-controls" id="boothPassControls"></div>
   <div class="booth-section">
     <div class="booth-section-head"><span>GPU endpoint</span><strong id="boothGpuStatus">—</strong></div>
-    <div class="booth-controls">
-      <button class="btn-ghost" id="boothGpu1" type="button">Keep 1 GPU</button>
-      <button class="btn-ghost" id="boothGpu2" type="button">Keep 2 GPUs</button>
-      <button class="btn-danger" id="boothGpu0" type="button">0 (Auto-scale)</button>
-    </div>
+    <div class="booth-controls" id="boothGpuControls"></div>
   </div>
   <div class="booth-section">
     <div class="booth-section-head"><span>Account credit</span><strong id="boothGrantMsg"></strong></div>
     <div class="field-row" style="margin-top:6px">
       <input id="boothGrantEmail" type="email" placeholder="Email (blank = my account)" autocomplete="off">
-      <button class="btn-ghost" id="boothGrant5" type="button">+5 min</button>
-      <button class="btn-ghost" id="boothGrant10" type="button">+10 min</button>
-      <button class="btn-danger" id="boothGrant0" type="button">Reset (0)</button>
+      <span id="boothGrantControls" style="display:contents"></span>
     </div>
   </div>
   <div class="actions">
@@ -1075,7 +1065,12 @@
 const $ = id => document.getElementById(id);
 const video = $('videoPlayer');
 const BRAIN_UNAVAILABLE = 'The 3D view is not available for this video.';
-const VIDEO_DELETED = 'This video is no longer available to play. Original uploads are removed after 30 days. See the privacy policy for how long shared copies are kept.';
+function videoDeletedMessage() {
+  const kept = Number.isFinite(resultRetentionDays)
+    ? `removed after ${resultRetentionDays} days`
+    : 'removed after their retention period';
+  return `This video is no longer available to play. Original uploads are ${kept}. See the privacy policy for how long shared copies are kept.`;
+}
 const VIDEO_UNPLAYABLE = "This video can't be played here.";
 const GROUPS = {
   see: { label: 'Seeing', signals: ['faces', 'bodies', 'scenes', 'visual'] },
@@ -1090,7 +1085,7 @@ let currentResult = null, currentSummary = null, currentContext = null, currentR
 let comparison = null, mutedOn = false, resultSeq = 0, compareRequest = 0;
 let reportSeq = 0, reportPollTimer = null, reportJob = null;
 let comparisonReportSeq = 0, comparisonPollTimer = null;
-let signedIn = false, me = null, limits = null;
+let signedIn = false, me = null, limits = null, resultRetentionDays = null, cancelSeconds = null;
 let virtualTime = 0, virtualPlaying = false, virtualAnchor = 0, virtualRaf = 0, videoRaf = 0;
 let videoJob = null, videoRetried = false, videoRequest = 0, videoPlaying = false;
 let playheads = [];
@@ -1441,22 +1436,55 @@ $('deleteJobBtn').addEventListener('click', () => { if (deleteTarget) deleteJob(
 closeOnBackdrop(deleteJobDialog);
 
 const boothDialog = $('boothDialog');
-let boothPassId = null, boothNextPass = null, boothPollTimer = null, boothClaimedTimer = null, boothPollTick = 0, boothGpuInfo = null, boothLastStats = null, boothActionSeq = 0, boothPendingWarm = null;
+let boothPassId = null, boothNextPass = null, boothPollTimer = null, boothClaimedTimer = null, boothPollTick = 0, boothGpuInfo = null, boothLastStats = null, boothActionSeq = 0, boothPendingWarm = null, boothConfig = null, boothConfigKey = '';
+function gpuWords(n) {
+  return `${n} GPU${n === 1 ? '' : 's'}`;
+}
 function setBoothGpuButtons(warmTarget) {
-  [
-    ['boothGpu1', warmTarget === 1],
-    ['boothGpu2', warmTarget === 2],
-    ['boothGpu0', warmTarget === 0],
-  ].forEach(([id, active]) => {
-    const btn = $(id);
-    if (!btn) return;
+  document.querySelectorAll('[data-booth-gpu]').forEach(btn => {
+    const active = Number(btn.dataset.boothGpu) === warmTarget;
     btn.classList.toggle('active', active);
     btn.setAttribute('aria-pressed', active ? 'true' : 'false');
   });
 }
+function renderBoothConfig(stats) {
+  if (Number.isInteger(stats.gpu_max_instances)) {
+    boothConfig = {
+      maxGpus: stats.gpu_max_instances,
+      warmHours: stats.gpu_warm_hours,
+      passMinutes: stats.pass_minutes,
+      adjustDeltas: stats.adjust_deltas,
+      grantMinutes: stats.grant_minutes,
+    };
+  }
+  if (!boothConfig) return;
+  const key = JSON.stringify(boothConfig);
+  if (key === boothConfigKey) return;
+  boothConfigKey = key;
+  const { maxGpus, warmHours, passMinutes, adjustDeltas, grantMinutes } = boothConfig;
+  $('boothPassHelp').innerHTML = `<strong>QR &amp; Passes:</strong> Each QR pass grants ${passMinutes} min credit and auto-rotates as soon as a device claims it. Copying the phone link to a laptop opens the same session. <strong>Stop passes</strong> sets remaining passes to 0.`;
+  $('boothGpuHelp').innerHTML = `<strong>GPU endpoint:</strong> <strong>0 (Auto-scale)</strong> scales to 0 ($0/hr) when idle and wakes a GPU (~4–5 min cold start) on upload. <strong>Keep ${gpuWords(maxGpus)}</strong> starts and holds up to ${gpuWords(maxGpus)} warm for ${warmHours} hours (~30–60s per video, no cold start) before auto-reverting to 0.`;
+  $('boothPassLead').textContent = `Live demo pass (${passMinutes} min) — scan with phone camera:`;
+  $('boothPassControls').innerHTML = (adjustDeltas || []).map(delta => {
+    const danger = delta === 0;
+    return `<button class="${danger ? 'btn-danger' : 'btn-ghost'}" type="button" data-booth-delta="${delta}">${danger ? 'Stop passes' : `+${delta} passes`}</button>`;
+  }).join('');
+  const gpuChoices = [];
+  for (let n = 1; n <= maxGpus; n += 1) {
+    gpuChoices.push({ n, label: `Keep ${gpuWords(n)}`, danger: false });
+  }
+  gpuChoices.push({ n: 0, label: '0 (Auto-scale)', danger: true });
+  $('boothGpuControls').innerHTML = gpuChoices.map(({ n, label, danger }) => (
+    `<button class="${danger ? 'btn-danger' : 'btn-ghost'}" type="button" data-booth-gpu="${n}">${label}</button>`
+  )).join('');
+  $('boothGrantControls').innerHTML = (grantMinutes || []).map(minutes => {
+    const danger = minutes === 0;
+    return `<button class="${danger ? 'btn-danger' : 'btn-ghost'}" type="button" data-booth-grant="${minutes}">${danger ? 'Reset (0)' : `+${minutes} min`}</button>`;
+  }).join('');
+  setBoothGpuButtons(boothPendingWarm != null ? boothPendingWarm : 0);
+}
 function formatBoothGpuStatus(gpu, warmTarget, videosRunning) {
   const cur = (gpu && Number.isInteger(gpu.current)) ? gpu.current : 0;
-  const readyWord = `${cur} GPU${cur === 1 ? '' : 's'} ready`;
   const shortReady = `${cur} ready`;
   if (gpu && gpu.status === 'local') return 'Local mode';
   if (warmTarget === 0) {
@@ -1465,17 +1493,10 @@ function formatBoothGpuStatus(gpu, warmTarget, videosRunning) {
     }
     return videosRunning > 0 ? `${shortReady} · stops after video` : `${shortReady} · stopping to 0…`;
   }
-  if (warmTarget === 1) {
-    if (cur === 0) return '0 ready · starting 1 GPU…';
-    if (cur === 1) return '1 GPU ready';
-    return '2 ready · stopping 2nd GPU…';
-  }
-  if (warmTarget === 2) {
-    if (cur === 0) return '0 ready · starting 2 GPUs…';
-    if (cur === 1) return '1 ready · starting 2nd GPU…';
-    return '2 GPUs ready';
-  }
-  return readyWord;
+  if (cur === 0) return `0 ready · starting ${gpuWords(warmTarget)}…`;
+  if (cur < warmTarget) return `${cur} ready · starting ${gpuWords(warmTarget - cur)}…`;
+  if (cur > warmTarget) return `${gpuWords(cur)} ready · stopping ${gpuWords(cur - warmTarget)}…`;
+  return `${gpuWords(warmTarget)} ready`;
 }
 function renderBoothStats(stats) {
   if (!stats) return;
@@ -1499,6 +1520,7 @@ function renderBoothStats(stats) {
   if (stats.gpu && typeof stats.gpu.status === 'string') {
     boothGpuInfo = stats.gpu;
   }
+  renderBoothConfig(stats);
   $('boothGpuStatus').textContent = formatBoothGpuStatus(boothGpuInfo, warmTarget, stats.videos_running || 0);
   setBoothGpuButtons(warmTarget);
 }
@@ -1653,15 +1675,18 @@ $('boothHelpBtn').addEventListener('click', () => {
   $('boothHelpBtn').setAttribute('aria-expanded', open ? 'true' : 'false');
 });
 $('boothNewQr').addEventListener('click', () => loadBoothQr(false));
-$('boothAdd5').addEventListener('click', () => adjustBoothPasses(5));
-$('boothAdd10').addEventListener('click', () => adjustBoothPasses(10));
-$('boothStop').addEventListener('click', () => adjustBoothPasses(0));
-$('boothGpu1').addEventListener('click', () => setBoothGpu(1));
-$('boothGpu2').addEventListener('click', () => setBoothGpu(2));
-$('boothGpu0').addEventListener('click', () => setBoothGpu(0));
-$('boothGrant5').addEventListener('click', () => grantBoothCredit(5));
-$('boothGrant10').addEventListener('click', () => grantBoothCredit(10));
-$('boothGrant0').addEventListener('click', () => grantBoothCredit(0));
+$('boothPassControls').addEventListener('click', e => {
+  const button = e.target.closest('[data-booth-delta]');
+  if (button) adjustBoothPasses(Number(button.dataset.boothDelta));
+});
+$('boothGpuControls').addEventListener('click', e => {
+  const button = e.target.closest('[data-booth-gpu]');
+  if (button) setBoothGpu(Number(button.dataset.boothGpu));
+});
+$('boothGrantControls').addEventListener('click', e => {
+  const button = e.target.closest('[data-booth-grant]');
+  if (button) grantBoothCredit(Number(button.dataset.boothGrant));
+});
 $('boothClose').addEventListener('click', () => boothDialog.close());
 boothDialog.addEventListener('close', () => {
   clearTimeout(boothPollTimer);
@@ -1932,7 +1957,6 @@ $('signOut').addEventListener('click', async () => {
   }
 });
 
-const RESULT_DAYS = 30;
 const QUEUED_SLOW_MS = 20 * 60000;
 let historyPollTimer = null, openJobIds = new Set();
 
@@ -2304,10 +2328,12 @@ function historyDetail(job) {
     // Each part stays whole; on a narrow row the line wraps between parts instead of being cut.
     const line = parts.map(part => part.replace(/ /g, '\u00a0')).join(' · ');
     if (!job.result_available) return `${line} · result expired`;
-    const msLeft = created.getTime() + RESULT_DAYS * 86400000 - Date.now();
-    if (msLeft <= 7 * 86400000) {
-      const days = Math.max(1, Math.ceil(msLeft / 86400000));
-      return `${line} · Deleted in ${days} day${days === 1 ? '' : 's'}`;
+    if (Number.isFinite(resultRetentionDays)) {
+      const msLeft = created.getTime() + resultRetentionDays * 86400000 - Date.now();
+      if (msLeft <= 7 * 86400000) {
+        const days = Math.max(1, Math.ceil(msLeft / 86400000));
+        return `${line} · Deleted in ${days} day${days === 1 ? '' : 's'}`;
+      }
     }
     return line;
   }
@@ -2483,12 +2509,17 @@ async function loadLimits() {
     const res = await fetch('/api/limits');
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     limits = await res.json();
+    resultRetentionDays = Number.isFinite(limits.result_retention_days) ? limits.result_retention_days : null;
+    cancelSeconds = Number.isFinite(limits.cancel_seconds) ? limits.cancel_seconds : null;
     const block = limits.price && limits.price.block_seconds > 0 ? ` · credit used in ${minSec(limits.price.block_seconds)} steps` : '';
     $('limitsText').textContent = `MP4, MOV or WebM · up to ${minSec(limits.max_video_duration_seconds)}${block}`;
     if (creditWords(0) == null) console.error('No usable price in /api/limits: credit is hidden', limits.price);
     if (signedIn && me) showBalance();
     return limits;
   } catch (e) { console.error("Couldn't load /api/limits: credit is hidden", e); return null; }
+}
+function cancelWindowCopy() {
+  return Number.isFinite(cancelSeconds) ? ` · cancel within ${cancelSeconds} s` : '';
 }
 const ACCEPTED_TYPES = ['video/mp4', 'video/quicktime', 'video/webm'];
 const EXTENSION_TYPES = { mp4: 'video/mp4', mov: 'video/quicktime', webm: 'video/webm' };
@@ -2736,7 +2767,7 @@ function updateBatchTotal() {
     totalEl.textContent = `Needs ${creditWords(total)} of credit; you have ${creditWords(available)}`;
     totalEl.classList.add('error');
   } else {
-    totalEl.textContent = `Uses ${creditWords(total)} of credit · only videos that finish · cancel within 15 s`;
+    totalEl.textContent = `Uses ${creditWords(total)} of credit · only videos that finish${cancelWindowCopy()}`;
   }
 }
 
@@ -2759,7 +2790,7 @@ function startBatchUpload() {
 // ---- Upload queue: one file at a time, one presign just before its upload ----
 
 let uploadQueue = [], queueRunning = false;
-const cancelWindows = new Map();      // job_id → when its 15-second window ends
+const cancelWindows = new Map();      // job_id → when its cancel window ends
 
 // A queued entry stops counting for the tab title when it can no longer become a finished job.
 function untrackQueueEntry(entry) {
@@ -2908,7 +2939,7 @@ async function uploadEntry(entry) {
       entry.xhr = null;
       if (xhr.status !== 204) return failUpload(`Upload didn't finish (HTTP ${xhr.status}).`);
       uploadQueue = uploadQueue.filter(en => en !== entry);
-      cancelWindows.set(jobId, Date.now() + 15000);
+      cancelWindows.set(jobId, Date.now() + (Number.isFinite(cancelSeconds) ? cancelSeconds : 0) * 1000);
       tabJobs.set(jobId, false);
       if (item.thumb) localFrames.set(jobId, item.thumb);
       renderHistory(jobsCache);
@@ -2932,7 +2963,7 @@ async function cancelReservedJob(jobId) {
   } catch (e) { return false; /* the job's own row shows it; it can be cancelled from History */ }
 }
 
-// The 15-second cancel window counts down each second in place of the "⋯" menu.
+// The cancel window counts down each second in place of the "⋯" menu.
 setInterval(() => {
   if (cancelWindows.size === 0) return;
   let changed = false;
@@ -3873,7 +3904,7 @@ function openResult(jobId, result) {
   const videoSeq = resultSeq;
   loadJobVideo(jobId, videoSeq).then(outcome => {
     if (!outcome || outcome.ok) return;
-    showVideoMessage(outcome.deleted ? VIDEO_DELETED : VIDEO_UNPLAYABLE);
+    showVideoMessage(outcome.deleted ? videoDeletedMessage() : VIDEO_UNPLAYABLE);
   });
   requestAnimationFrame(() => requestAnimationFrame(() => {
     window.neurolensTimings.render_ms = Math.round(performance.now() - t0);
@@ -6213,7 +6244,7 @@ video.addEventListener('error', async () => {
   virtualTime = time;
   clearVideoSource();
   virtualTime = time;
-  showVideoMessage(outcome.deleted ? VIDEO_DELETED : VIDEO_UNPLAYABLE);
+  showVideoMessage(outcome.deleted ? videoDeletedMessage() : VIDEO_UNPLAYABLE);
   if (playing) startVirtual();
   updateTransport();
 });

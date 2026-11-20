@@ -670,7 +670,7 @@ def test_validate_config_accepts_a_complete_config(make_cfg):
     worker.validate_config(make_cfg())
 
 
-def test_validate_config_refuses_a_heartbeat_over_50_seconds(make_cfg):
-    cfg = make_cfg(worker={"heartbeat_seconds": 75, "max_job_minutes": 55})
+def test_validate_config_refuses_a_heartbeat_that_cannot_go_stale(make_cfg):
+    cfg = make_cfg(worker={"heartbeat_seconds": 120, "max_job_minutes": 55})
     with pytest.raises(ValueError, match="heartbeat_seconds"):
         worker.validate_config(cfg)

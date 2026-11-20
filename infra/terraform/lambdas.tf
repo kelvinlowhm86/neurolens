@@ -13,6 +13,7 @@ locals {
     "neurolens/__init__.py",
     "neurolens/db.py",
     "neurolens/billing.py",
+    "neurolens/deadlines.py",
     "neurolens/media.py",
     "neurolens/pricing.py",
     "neurolens/report_prompt.py",
@@ -179,8 +180,8 @@ resource "aws_lambda_permission" "sns_invoke_gpu_failed" {
 # hourly, it costs about $15 (measured). A lost notification is refunded within about 7 hours.
 resource "aws_cloudwatch_event_rule" "reaper" {
   name                = "neurolens-reaper-schedule"
-  description         = "Run the NeuroLens reaper (settles or refunds stuck jobs) every 3 hours."
-  schedule_expression = "rate(3 hours)"
+  description         = "Run the NeuroLens reaper (settles or refunds stuck jobs) every ${var.reaper_schedule_hours} hours."
+  schedule_expression = "rate(${var.reaper_schedule_hours} hours)"
   state               = "ENABLED"
 }
 
@@ -515,8 +516,8 @@ resource "aws_lambda_function" "report" {
   depends_on = [aws_cloudwatch_log_group.report, aws_iam_role_policy.report]
 }
 
-# A queued request older than 4 min is dropped. The function's timeout is 900 s and
-# report.stale_minutes (16) is above it, so a live run is never treated as stale.
+# A queued request older than 4 min is dropped. The function's timeout is below
+# config.json's report.stale_minutes, so a live run is never treated as stale.
 resource "aws_lambda_function_event_invoke_config" "report" {
   function_name                = aws_lambda_function.report.function_name
   maximum_retry_attempts       = 0

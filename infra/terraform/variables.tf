@@ -59,13 +59,69 @@ variable "worker_image" {
 }
 
 variable "max_instances" {
-  description = "Most GPUs the endpoint may run. Stays 1; 2 only if the account's GPU quota allows it."
+  description = "Most GPUs the endpoint may run. The account's GPU quota is the real upper bound."
   type        = number
   default     = 1
 
   validation {
-    condition     = var.max_instances >= 1 && var.max_instances <= 2
-    error_message = "max_instances must be 1 (the normal state) or 2 (only if the quota allows it)."
+    condition     = var.max_instances >= 1
+    error_message = "max_instances must be at least 1."
+  }
+}
+
+variable "idle_stop_minutes" {
+  description = "Idle minutes before the endpoint's last GPU stops (at most the scale-in alarm's period count)."
+  type        = number
+  default     = 7
+
+  validation {
+    condition     = var.idle_stop_minutes >= 1
+    error_message = "idle_stop_minutes must be at least 1."
+  }
+}
+
+variable "queue_delay_seconds" {
+  description = "Seconds an upload waits before the dispatcher sees it, so the user can still cancel."
+  type        = number
+  default     = 15
+
+  validation {
+    condition     = var.queue_delay_seconds >= 0
+    error_message = "queue_delay_seconds must be zero or more."
+  }
+}
+
+variable "queue_visibility_seconds" {
+  description = "Seconds the dispatcher has to process one message before SQS redelivers it."
+  type        = number
+  default     = 1080
+}
+
+variable "dlq_visibility_seconds" {
+  description = "Seconds a message waits in the dead-letter queue before the handler retries it."
+  type        = number
+  default     = 720
+}
+
+variable "queue_max_receives" {
+  description = "Failed receives before SQS moves a message to the dead-letter queue."
+  type        = number
+  default     = 2
+
+  validation {
+    condition     = var.queue_max_receives >= 1
+    error_message = "queue_max_receives must be at least 1."
+  }
+}
+
+variable "reaper_schedule_hours" {
+  description = "Hours between reaper runs."
+  type        = number
+  default     = 3
+
+  validation {
+    condition     = var.reaper_schedule_hours >= 1
+    error_message = "reaper_schedule_hours must be at least 1."
   }
 }
 
@@ -99,4 +155,10 @@ variable "log_retention_days" {
   description = "Days CloudWatch keeps the Lambda, web and GPU logs: 90 while developing and running experiments (they hold the run timings), 14 once live."
   type        = number
   default     = 14
+}
+
+variable "codebuild_log_retention_days" {
+  description = "Days CloudWatch keeps the image-build logs, which are only needed while a build is being debugged."
+  type        = number
+  default     = 30
 }

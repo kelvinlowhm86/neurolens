@@ -69,6 +69,7 @@ ENV_SETTING_VARS = [
     "NEUROLENS_S3_BUCKET",
     "NEUROLENS_GPU_ENDPOINT",  # aws.gpu_endpoint
     "NEUROLENS_MAX_INSTANCES",  # gpu.max_instances (Terraform max_instances)
+    "NEUROLENS_CANCEL_SECONDS",  # queue.cancel_seconds (Terraform queue_delay_seconds)
     "NEUROLENS_DEPLOYED",  # marks a deployed (Cognito) web app
     "NEUROLENS_DB_CLUSTER_ARN",  # aws.db_cluster_arn
     "NEUROLENS_DB_SECRET_ARN",  # aws.db_secret_arn

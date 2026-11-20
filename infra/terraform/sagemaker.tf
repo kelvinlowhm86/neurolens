@@ -93,7 +93,7 @@ resource "aws_ecr_lifecycle_policy" "worker" {
 
 resource "aws_cloudwatch_log_group" "codebuild" {
   name              = "/aws/codebuild/neurolens-worker-image"
-  retention_in_days = 30
+  retention_in_days = var.codebuild_log_retention_days
 }
 
 # Linux x86-64, Docker in privileged mode, one hour. The source is the repository at HEAD,
@@ -306,7 +306,7 @@ resource "aws_sns_topic" "gpu_errors" {
   name = "neurolens-gpu-errors"
 }
 
-# ─── Scaling: a GPU on demand, back to 0 after 7 idle minutes ───
+# ─── Scaling: a GPU on demand, back to 0 after var.idle_stop_minutes ───
 
 resource "aws_appautoscaling_target" "endpoint" {
   count = local.image_ready ? 1 : 0
@@ -394,7 +394,7 @@ resource "aws_cloudwatch_metric_alarm" "scale_in" {
   count = local.image_ready ? 1 : 0
 
   alarm_name        = "neurolens-gpu-scale-in"
-  alarm_description = "The NeuroLens endpoint has been idle for 7 minutes: stop its GPU."
+  alarm_description = "The NeuroLens endpoint has been idle for ${var.idle_stop_minutes} minutes: stop its GPU."
 
   namespace   = "AWS/SageMaker"
   metric_name = "ApproximateBacklogSize"
@@ -406,8 +406,8 @@ resource "aws_cloudwatch_metric_alarm" "scale_in" {
   statistic = "Maximum"
 
   period              = 60
-  evaluation_periods  = 7
-  datapoints_to_alarm = 7
+  evaluation_periods  = var.idle_stop_minutes
+  datapoints_to_alarm = var.idle_stop_minutes
   comparison_operator = "LessThanOrEqualToThreshold"
   threshold           = 0
   treat_missing_data  = "breaching"

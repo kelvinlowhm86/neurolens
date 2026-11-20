@@ -53,7 +53,7 @@ infra/start_work.sh --keep-warm --hours 3   # hold one GPU for 1-5 hours, then a
 infra/stop_work.sh                          # emergency pause
 ```
 
-The start script sets the SageMaker endpoint `neurolens`, variant `main`, to a maximum of one. A waiting upload starts a GPU, and seven idle minutes stop it. `--keep-warm` raises the minimum for the chosen hours and sets a scheduled action named `neurolens-keep-warm-end`. The stop script deletes that action, sets the scaling target to 0/0, sends the desired count to zero, and prints `ALL STOPPED` only when the scalable target and endpoint read 0. A running job is interrupted and its failure path refunds it. A result other than `ALL STOPPED` means the stop is not proven.
+The start script sets the SageMaker endpoint `neurolens`, variant `main`, to the Terraform maximum `max_instances`. A waiting upload starts a GPU, and `idle_stop_minutes` (seven idle minutes) stop it. `--keep-warm` raises the minimum for the chosen hours and sets a scheduled action named `neurolens-keep-warm-end`. The stop script deletes that action, sets the scaling target to 0/0, sends the desired count to zero, and prints `ALL STOPPED` only when the scalable target and endpoint read 0. A running job is interrupted and its failure path refunds it. A result other than `ALL STOPPED` means the stop is not proven.
 
 In the code: `infra/start_work.sh`, `infra/stop_work.sh`
 
@@ -114,7 +114,7 @@ The `Admin` button appears only for an email in the admin list.
 | Area | What it does |
 | --- | --- |
 | Who is an admin | On AWS, set `admin_emails` in the terraform variables. On a laptop, set `NEUROLENS_ADMIN_EMAILS` in the local environment file. The list is comma-separated and lowercased; an empty list means nobody can open the panel. To delegate, add the person's email and apply or restart. The panel itself has no user management. |
-| Keep the GPU warm | `0 (Auto-scale)` lets the endpoint stop when idle. `Keep 1 GPU` or `Keep 2 GPUs` holds that count for six hours, then the setting expires. |
+| Keep the GPU warm | `0 (Auto-scale)` lets the endpoint stop when idle. The panel builds `Keep N GPUs` choices from `max_instances` and holds that count for `billing.BOOTH_GPU_WARM_HOURS` (six hours), then the setting expires. |
 | Grant credit | Enter an email or leave it blank for your own account, then choose `+5 min`, `+10 min` or `Reset (0)`. The API also accepts `2` minutes. `+5 min` equals the invite credit. |
 | Visitor passes | Each QR code is a signed two-minute guest pass. The pool starts with ten passes. `+5 passes`, `+10 passes` and `Stop passes` change the pool. A scan creates or joins a `guest-` account; a copied link joins the same session, while a second phone gets a separate guest account. |
 | Access requests | A signed-in user asks for free minutes with a channel link. The request is stored in `access_requests` and an SNS email goes to `alert_email`. List waiting requests with `python infra/access_requests.py list --backend data_api`; decline one with `python infra/access_requests.py decline --backend data_api`. Grant credit in the panel; a grant marks the request granted. |
@@ -127,7 +127,7 @@ These settings control GPU capacity, the video length limit and the first-video 
 
 | Setting | What it controls |
 | --- | --- |
-| Most GPUs at once | `max_instances` in the terraform variables is 1 by default. Set it to 2 to run two videos at once, once the account's GPU quota allows two instances, then apply. |
+| Most GPUs at once | `max_instances` in the Terraform variables defaults to 1. Raise it to run more videos at once, up to the account's GPU quota, then apply. The admin panel and `start_work.sh` read the same value. |
 | Longest video | `max_video_duration_seconds` in the config is 120. A longer limit costs more per video and waits longer: a 120-second 4K video already takes about 40 to 47 minutes on the GPU, and each job is capped at 55 minutes (`worker.max_job_minutes` in the config), so raise that cap with it. |
 | First-video wait | With no GPU running, the first video waits while one starts, usually minutes. Keep a GPU warm from the admin panel before a busy period. |
 
