@@ -5,7 +5,8 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "neurolens"
 version = "0.1.0"
-description = "Video engagement analysis via predicted brain activity"
+description = "Predicts the second-by-second brain response to a video (Meta TRIBE v2)"
+license = {file = "LICENSE"}
 requires-python = ">=3.12,<3.14"
 # No dependencies here on purpose: the files in requirements/ are the single source.
 # Install with: pip install -e .

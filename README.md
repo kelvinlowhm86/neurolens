@@ -8,8 +8,6 @@ See how a viewer's brain would respond to your video, second by second, before y
 
 [🏆 Best Project – Platinum, CS5224 track, 29th NUS STEPS (Nov 2026)](https://uvents.nus.edu.sg/event/29th-steps)
 
-<img src="docs/images/steps_award.jpg" alt="NeuroLens at the 29th NUS STEPS awards" width="600">
-
 **Try it live:** https://df6girqyykyfa.cloudfront.net (the samples open without signing in).
 
 ## What it does
@@ -22,12 +20,18 @@ NeuroLens is built on Meta's TRIBE v2 (TRImodal Brain Encoder). It predicts, sec
 - An AI-written report with timed advice on what to keep and what to change.
 - A written comparison of two videos, including two cuts of one.
 - Real audience retention beside the prediction once a shared video reaches 1,000 views on YouTube or Facebook.
-- Pay per use with credits.
+- Production-style billing: credit is reserved at upload, charged only when a result is ready and refunded on any failure.
 - Scale-to-zero GPU on AWS.
 
 ![NeuroLens analysis view](docs/images/neurolens_app.png)
 
 *The analysis view of the CeraVe ad sample (© CeraVe, shown for non-commercial analysis).*
+
+**Built with:** Python, Flask, PyTorch (TRIBE v2), Three.js, AWS (SageMaker, Lambda, S3, SQS, Aurora, Cognito, CloudFront, Bedrock), Terraform, GitHub Actions.
+
+<img src="docs/images/steps_award.jpg" alt="NeuroLens at the 29th NUS STEPS awards" width="600">
+
+*At the 29th NUS STEPS, where NeuroLens won Best Project (Platinum) in the CS5224 track.*
 
 ## How it works
 
@@ -150,6 +154,6 @@ The dependency lists live in `requirements/`, one file per machine type:
 
 ## License
 
-This project is for non-commercial research use only, in compliance with TRIBE v2's CC BY-NC 4.0 license.
+Licensed under [CC BY-NC 4.0](LICENSE): free to use and adapt with attribution, for non-commercial purposes only, matching TRIBE v2's own license.
 
 Brain-area map: data were provided [in part] by the Human Connectome Project, WU-Minn Consortium (Principal Investigators: David Van Essen and Kamil Ugurbil; 1U54MH091657) funded by the 16 NIH Institutes and Centers that support the NIH Blueprint for Neuroscience Research; and by the McDonnell Center for Systems Neuroscience at Washington University. Parcellation: Glasser, M. F. et al. (2016), A multi-modal parcellation of human cerebral cortex, *Nature* 536, 171-178.
