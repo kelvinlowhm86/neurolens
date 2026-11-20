@@ -83,6 +83,24 @@ def render_contact_page(static_dir, name, contact_email):
     return text.replace(CONTACT_PLACEHOLDER, contact_html(contact_email))
 
 
+def fill_contact_pages(static_dir, contact_email):
+    """Fill the contact pages in a staged site and refuse to leave any placeholder behind."""
+    static_dir = Path(static_dir)
+    for name in CONTACT_PAGES:
+        (static_dir / name).write_text(
+            render_contact_page(static_dir, name, contact_email), encoding="utf-8"
+        )
+    placeholder = CONTACT_PLACEHOLDER.encode()
+    remaining = [
+        path
+        for path in sorted(static_dir.rglob("*"))
+        if path.is_file() and placeholder in path.read_bytes()
+    ]
+    if remaining:
+        names = ", ".join(str(path.relative_to(static_dir)) for path in remaining)
+        raise RuntimeError(f"{CONTACT_PLACEHOLDER} remains in: {names}")
+
+
 def _is_number(value):
     return isinstance(value, int | float) and not isinstance(value, bool) and math.isfinite(value)
 

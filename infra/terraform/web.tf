@@ -227,7 +227,6 @@ locals {
         NEUROLENS_GPU_ENDPOINT    = local.endpoint_name
         NEUROLENS_REPORT_FUNCTION = aws_lambda_function.report.function_name
         NEUROLENS_ADMIN_EMAILS    = join(",", var.admin_emails)
-        NEUROLENS_CONTACT_EMAIL   = var.contact_email
       }
     }
   }

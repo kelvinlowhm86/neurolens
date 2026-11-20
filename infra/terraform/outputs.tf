@@ -40,6 +40,11 @@ output "region" {
   value       = var.region
 }
 
+output "contact_email" {
+  description = "The address infra/deploy_web.sh fills into the privacy and retention pages."
+  value       = var.contact_email
+}
+
 output "public_base_url" {
   description = "The website's HTTPS address (CloudFront's free *.cloudfront.net name)."
   value       = local.public_base_url

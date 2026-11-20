@@ -90,7 +90,7 @@ variable "admin_emails" {
 }
 
 variable "contact_email" {
-  description = "Contact address shown on the privacy and retention pages. Empty shows the GitHub repo link."
+  description = "Contact address filled into the privacy and retention pages at deploy. Empty shows the GitHub repo link."
   type        = string
   default     = ""
 }

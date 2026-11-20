@@ -12,6 +12,12 @@ fi
 TF="terraform -chdir=infra/terraform"
 BUCKET=$($TF output -raw bucket_name)
 DISTRIBUTION=$($TF output -raw cloudfront_distribution_id)
+CONTACT_EMAIL=$($TF output -raw contact_email)
+# The page step below imports the app; check it before anything ships, so a missing venv cannot
+# leave a half-done deploy.
+if ! python3 -I -c "import neurolens.web.app" 2>/dev/null; then
+  echo "python3 cannot import neurolens: activate the project venv first." >&2; exit 1
+fi
 
 # 1. Code. The zip goes through the bucket's deploy/ prefix (M3h §18e), then Lambda reads it
 # from there; wait until the update is live.
@@ -68,6 +74,20 @@ for c in comparisons:
 )
 print(f"{len(public)} of {len(samples)} samples are public; "
       f"{len(comparisons)} comparisons.")
+PY
+# CloudFront serves these pages from S3, not through the Lambda, so fill the contact address
+# with the same renderer Flask uses. Terraform holds the setting; the script refuses to ship a
+# page that still shows the literal placeholder.
+python3 -I - "$STAGE/static" "$CONTACT_EMAIL" <<'PY'
+import sys
+
+from neurolens.web.app import fill_contact_pages
+
+try:
+    fill_contact_pages(sys.argv[1], sys.argv[2])
+except RuntimeError as error:
+    print(f"error: {error}", file=sys.stderr)
+    raise SystemExit(1)
 PY
 aws s3 sync "$STAGE" "s3://$BUCKET/site/" --delete --only-show-errors
 # The page itself: browsers must check for a new version on every load, or a tab can keep running
