@@ -4,9 +4,9 @@
     python infra/access_requests.py decline --backend postgres
 
 `list` prints the waiting requests, oldest first. `decline` asks for the requester's email,
-shows the request, then declines it only after a "y" at the prompt. Granting stays in
-`infra/grant_credit.py`, which also marks the request as granted. Runs from a laptop with the
-`neurolens` profile, never from the web app.
+shows the request, then declines it only after a "y" at the prompt. Grant credit in the web admin
+panel (+5 min is the invite credit), which also marks the request as granted. Runs from a laptop
+with the `neurolens` profile, never from the web app.
 """
 
 import argparse

@@ -22,8 +22,7 @@ def sns_notifier(region, topic_arn):
                 "",
                 "List waiting requests:",
                 "python infra/access_requests.py list --backend data_api",
-                "Grant credit:",
-                "python infra/grant_credit.py --backend data_api",
+                "Grant credit: use the web admin panel (+5 min is the invite credit).",
             ]
         )
         boto3.client("sns", region_name=region).publish(

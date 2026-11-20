@@ -52,7 +52,7 @@ down.
 3. A named AWS profile in `~/.aws` (`aws configure --profile neurolens`). For the live account,
    use its named profile. **Never paste keys into chat, git or a Docker image.**
 4. Python 3.12 for the repo (`AGENTS.md`) and `git`. Set up the repo's virtual environment (the
-   operator scripts `apply_schema.py`, `grant_credit.py` and the others use it), from the repo
+   operator scripts `apply_schema.py`, `access_requests.py` and the others use it), from the repo
    root:
    ```bash
    python3.12 -m venv .venv && source .venv/bin/activate && pip install -e . -r requirements/dev.txt

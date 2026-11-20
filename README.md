@@ -35,7 +35,7 @@ pip install -e . -r requirements/dev.txt
 docker run -d --name neurolens-test-pg -e POSTGRES_PASSWORD=test -p 55432:5432 postgres:16
 export NEUROLENS_TEST_DSN=postgresql://postgres:test@localhost:55432/postgres
 
-python infra/local_stack.py                     # whole product, fake S3/SQS and fake analysis: http://127.0.0.1:5003 (--grant <email> <dollars> adds credit)
+python infra/local_stack.py                     # whole product, fake S3/SQS and fake analysis: http://127.0.0.1:5003 (--grant <email> <minutes> adds credit)
 FAKE_INFERENCE=1 python worker.py serve         # only the GPU container, with a fake model
 ```
 

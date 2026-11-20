@@ -1,7 +1,7 @@
 """Run the whole product on a laptop against local fakes: no real AWS, no real credentials.
 
     python infra/local_stack.py
-    python infra/local_stack.py --grant you@example.com 5
+    python infra/local_stack.py --grant you@example.com 5   # five minutes of credit
 
 It needs a local PostgreSQL (default postgresql://postgres:test@localhost:55432/postgres), starts
 moto's S3/SQS server on port 5005, applies the schema, then serves the web app on 5003 and passes
@@ -274,12 +274,14 @@ def _console_notifier(request, email):
     )
 
 
-def _grant(db, cfg, email, dollars):
-    from neurolens import billing
+def _grant(db, cfg, email, minutes):
+    from neurolens import billing, pricing
 
-    cents = round(float(dollars) * 100)
-    if cents <= 0:
-        raise SystemExit("--grant needs an amount greater than 0")
+    text = str(minutes).strip()
+    if not text.isdigit() or int(text) <= 0:
+        raise SystemExit("--grant needs a whole number of minutes greater than 0")
+    whole_minutes = int(text)
+    cents = whole_minutes * 60 * pricing.CENTS_PER_BLOCK // pricing.BLOCK_SECONDS
     existing = billing.user_by_email(db, email)
     if existing is None:
         dev_email = cfg["auth"]["dev_email"]
@@ -289,7 +291,7 @@ def _grant(db, cfg, email, dollars):
             user_id = str(uuid.uuid4())
         billing.ensure_user(db, user_id, email, 0)
     billing.grant_credit(db, email, cents)
-    print(f"Added ${cents / 100:.2f} to {email}.")
+    print(f"Added {whole_minutes} min to {email}.")
 
 
 def _serve_web(app):
@@ -352,8 +354,8 @@ def main(argv=None):
     parser.add_argument(
         "--grant",
         nargs=2,
-        metavar=("EMAIL", "DOLLARS"),
-        help="give a local account credit, then continue",
+        metavar=("EMAIL", "MINUTES"),
+        help="give a local account whole minutes of credit, then continue",
     )
     args = parser.parse_args(argv)
 

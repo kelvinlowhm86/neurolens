@@ -8,12 +8,11 @@ Operator scripts and the AWS resources they drive. AWS commands run with the pro
 - `Admin` button in the web header (visible when signed in with an admin email):
   - Opens the **Admin controls** modal, which dispenses 2-minute QR demo passes (1 pass per phone, auto-rotating every 0.5 s when scanned, with `?booth=<token>` preserved in the URL bar so copying the link to a laptop opens the same guest session) with `+5 passes`, `+10 passes` and `Stop passes` controls, plus a built-in `?` help cheat-sheet.
   - Controls GPU warmth (`Keep 1 GPU`, `Keep 2 GPUs` for 6 hours, or `0 (Auto-scale)`), grants or resets account credit by email (`+5 min`, `+10 min`, `Reset (0)`), and shows live SGT per-day funnel stats.
-  - Admin emails are stored as SHA-256 hashes in `BOOTH_ADMIN_HASHES` (`neurolens/web/app.py`). To generate a hash for a new admin email:
-    `python3 -c 'import hashlib; print(hashlib.sha256(b"you@example.com").hexdigest())'`
+  - Admin emails come from the deployment setting `NEUROLENS_ADMIN_EMAILS` (a comma-separated list, lowercased; empty means nobody can open the panel). On AWS it is Terraform's `admin_emails`; on a laptop it is in `.env`.
+  - The pages' contact address comes from `NEUROLENS_CONTACT_EMAIL` (Terraform's `contact_email`; empty shows the GitHub repo link).
 - `start_work.sh`: starts processing: normal on-demand state, or `--keep-warm [--hours 1-5]` for one GPU now.
 - `stop_work.sh`: emergency pause: no GPU may start or stay on; prints ALL STOPPED only when proven.
-- `grant_credit.py 5 --backend data_api`: gives a user credit by email (the email is asked for at a prompt); the amount is dollars.
-- `access_requests.py list --backend data_api`: lists or declines early-access requests by email.
+- `access_requests.py list --backend data_api`: lists or declines early-access requests by email. Grant credit in the web admin panel (+5 min is the invite credit).
 - `check_aurora.py`: checks the database code on the real database with throwaway jobs and sign-ins.
 - `aws_env.sh`: sourced by the AWS scripts; sets the profile and region from Terraform.
 

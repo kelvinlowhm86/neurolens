@@ -77,6 +77,8 @@ ENV_SETTING_VARS = [
     "NEUROLENS_COGNITO_CLIENT_ID",  # M3b §2b: auth.cognito_client_id
     "NEUROLENS_COGNITO_DOMAIN",  # M3b §2b: auth.cognito_domain
     "NEUROLENS_PUBLIC_BASE_URL",  # M3b §2b: public_base_url
+    "NEUROLENS_ADMIN_EMAILS",  # auth.admin_emails (booth admins)
+    "NEUROLENS_CONTACT_EMAIL",  # contact_email (privacy and retention pages)
 ]
 
 

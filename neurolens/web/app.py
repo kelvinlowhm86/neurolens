@@ -20,6 +20,7 @@ from pathlib import Path, PurePosixPath
 from urllib.parse import quote
 
 from flask import Flask, jsonify, redirect, request, send_from_directory, session
+from markupsafe import escape
 from werkzeug.exceptions import HTTPException
 
 from neurolens import (
@@ -56,24 +57,30 @@ RETENTION_PUBLISHED = {"week", "month", "older"}
 DEFAULT_REWARD_CAP = 5
 DEFAULT_REWARD_WINDOW_DAYS = 30
 JOB_ACTIVE_MESSAGE = "This video is still waiting or being processed. Try again when it finishes."
-# SHA-256 hex digests of lowercased, stripped booth-admin emails (so raw emails never sit in git).
-# Add one with: python3 -c 'import hashlib; print(hashlib.sha256(b"you@example.com").hexdigest())'
-BOOTH_ADMIN_HASHES = frozenset(
-    {
-        "1913f1aa43f6f0cbfdedd18e5842e072a830000008ba7e1191c682a900c2a852",
-        "0326082fc86908b10234f55a7b34359a883f16e2b3701b2da1124ac2dd933754",
-        "29b946a2e02413f159b8db47288f2f8813de733828476bfdbb0dc13c4cc9284f",
-        "61ff977f92fe6757866532ee5fdd67d09f16084c65798a56fc21849112b27588",
-    }
-)
 BOOTH_ADJUST_DELTAS = (0, 5, 10)
+CONTACT_PLACEHOLDER = "{{CONTACT_EMAIL}}"
+GITHUB_REPO_URL = "https://github.com/kelvinlowhm86/neurolens"
+CONTACT_PAGES = ("privacy.html", "retention_guide.html")
 
 
-def is_booth_admin(email):
-    if not isinstance(email, str) or not email:
+def is_booth_admin(email, admin_emails):
+    if not isinstance(email, str) or not email.strip():
         return False
-    digest = hashlib.sha256(email.strip().lower().encode()).hexdigest()
-    return digest in BOOTH_ADMIN_HASHES
+    return email.strip().lower() in admin_emails
+
+
+def contact_html(contact_email):
+    """The contact sentence fragment for the pages: a mailto link, or the GitHub fallback."""
+    if contact_email:
+        email = escape(contact_email)
+        return f'email <a href="mailto:{email}">{email}</a>'
+    return f'contact the team via the <a href="{GITHUB_REPO_URL}">GitHub repo</a>'
+
+
+def render_contact_page(static_dir, name, contact_email):
+    """A static page with its one contact placeholder filled in."""
+    text = (Path(static_dir) / name).read_text(encoding="utf-8")
+    return text.replace(CONTACT_PLACEHOLDER, contact_html(contact_email))
 
 
 def _is_number(value):
@@ -192,6 +199,11 @@ def create_app(
     """
     auth_cfg = auth.auth_settings(cfg)  # first: refuses the dev identity on a public address
     cfg = cfg or {}
+    admin_emails = {
+        str(email).strip().lower()
+        for email in ((cfg.get("auth") or {}).get("admin_emails") or [])
+        if str(email).strip()
+    }
     response_cfg = cfg.get("response")
     if cfg:  # a launcher's settings must carry a usable block: fail at start-up, not per request
         results.validate_response_config(response_cfg)
@@ -254,6 +266,7 @@ def create_app(
     )
     curve_min_views = research_cfg.get("curve_min_views", billing.DEFAULT_MIN_VIEWS)
     static_dir = root / "static"
+    contact_email = (cfg.get("contact_email") or "").strip()
     autoscaling = None
     sagemaker = None
     if gpu_endpoint:
@@ -277,6 +290,14 @@ def create_app(
     app.config["MAX_DURATION"] = max_seconds
     app.config["NEUROLENS_AUTH"] = auth_cfg
     app.config["NEUROLENS_DB"] = db
+    default_static = app.view_functions["static"]
+
+    def static_with_contact(filename):
+        if filename in CONTACT_PAGES:
+            return render_contact_page(static_dir, filename, contact_email)
+        return default_static(filename=filename)
+
+    app.view_functions["static"] = static_with_contact
     oauth = auth.init_auth(app, cfg, ssm_client)
 
     @app.errorhandler(Exception)
@@ -496,7 +517,7 @@ def create_app(
                 "request": access.request_status(db, user_id),
             },
         }
-        if is_booth_admin(email):
+        if is_booth_admin(email, admin_emails):
             payload["booth_admin"] = True
         return jsonify(payload)
 
@@ -505,7 +526,7 @@ def create_app(
         if db is None:
             return _not_configured()
         _, email = signed_in_user()
-        if not is_booth_admin(email):
+        if not is_booth_admin(email, admin_emails):
             return _error("forbidden", "Booth QR is only available to booth admins.", status=403)
         data = request.get_json(silent=True) if request.is_json else None
         prefetch = isinstance(data, dict) and bool(data.get("prefetch"))
@@ -571,7 +592,7 @@ def create_app(
         if db is None:
             return _not_configured()
         _, email = signed_in_user()
-        if not is_booth_admin(email):
+        if not is_booth_admin(email, admin_emails):
             return _error(
                 "forbidden", "Booth stats are only available to booth admins.", status=403
             )
@@ -589,7 +610,7 @@ def create_app(
         if db is None:
             return _not_configured()
         _, email = signed_in_user()
-        if not is_booth_admin(email):
+        if not is_booth_admin(email, admin_emails):
             return _error(
                 "forbidden", "Booth passes can only be changed by booth admins.", status=403
             )

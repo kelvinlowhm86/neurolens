@@ -1,23 +1,24 @@
 """Booth QR visitor passes and admin controls."""
 
-import hashlib
 import uuid
 
 import pytest
 from conftest import sign_in
 from neurolens import billing, qr
-from neurolens.web.app import BOOTH_ADMIN_HASHES, create_app
+from neurolens.web.app import create_app
 
 ADMIN_EMAIL = "admin-booth-test@example.com"
-ADMIN_HASH = hashlib.sha256(ADMIN_EMAIL.encode("utf-8")).hexdigest()
 
 
 @pytest.fixture
-def booth_admin_patch(monkeypatch):
-    monkeypatch.setattr(
-        "neurolens.web.app.BOOTH_ADMIN_HASHES",
-        BOOTH_ADMIN_HASHES | {ADMIN_HASH},
-    )
+def booth_admin_patch():
+    """Turn on the deployment setting that makes ADMIN_EMAIL a booth admin."""
+
+    def apply(cfg):
+        cfg.setdefault("auth", {})["admin_emails"] = [ADMIN_EMAIL]
+        return cfg
+
+    return apply
 
 
 def make_client(aws, db, make_cfg, tmp_path, **auth_overrides):
@@ -51,7 +52,9 @@ def test_non_admin_cannot_access_booth_endpoints(aws, db, make_cfg, tmp_path):
 def test_admin_can_create_pass_adjust_pool_and_visitor_can_redeem(
     aws, db, pg, make_cfg, tmp_path, booth_admin_patch
 ):
-    cfg = make_cfg(auth={"mode": "dev", "dev_user_id": "admin-1", "dev_email": ADMIN_EMAIL})
+    cfg = booth_admin_patch(
+        make_cfg(auth={"mode": "dev", "dev_user_id": "admin-1", "dev_email": ADMIN_EMAIL})
+    )
     app = create_app(cfg=cfg, data_dir=tmp_path / "data", db=db, s3_client=aws.s3)
     app.config["TESTING"] = True
     admin = app.test_client()
@@ -174,7 +177,9 @@ def test_admin_can_create_pass_adjust_pool_and_visitor_can_redeem(
 def test_booth_guest_upload_forces_research_consent_false(
     aws, db, pg, make_cfg, tmp_path, booth_admin_patch
 ):
-    cfg = make_cfg(auth={"mode": "dev", "dev_user_id": "admin-1", "dev_email": ADMIN_EMAIL})
+    cfg = booth_admin_patch(
+        make_cfg(auth={"mode": "dev", "dev_user_id": "admin-1", "dev_email": ADMIN_EMAIL})
+    )
     app = create_app(cfg=cfg, data_dir=tmp_path / "data", db=db, s3_client=aws.s3)
     app.config["TESTING"] = True
     admin = app.test_client()
@@ -209,16 +214,17 @@ def test_tampered_booth_token_is_rejected(aws, db, make_cfg, tmp_path):
 
 
 def test_cognito_signed_out_visitor_can_redeem_booth_pass(
-    aws, db, cognito_client, idp, booth_admin_patch
+    aws, db, cognito_app, cognito_cfg, idp, booth_admin_patch
 ):
-    assert sign_in(cognito_client, idp, email=ADMIN_EMAIL).status_code in (302, 303)
-    token = cognito_client.post("/api/booth/pass", json={}).get_json()["token"]
-    assert cognito_client.post("/logout", json={}).status_code == 200
-    assert cognito_client.get("/api/me").status_code == 401
+    client = cognito_app(cfg=booth_admin_patch(cognito_cfg())).test_client()
+    assert sign_in(client, idp, email=ADMIN_EMAIL).status_code in (302, 303)
+    token = client.post("/api/booth/pass", json={}).get_json()["token"]
+    assert client.post("/logout", json={}).status_code == 200
+    assert client.get("/api/me").status_code == 401
 
-    redeem = cognito_client.post("/api/wake", json={"booth": token})
+    redeem = client.post("/api/wake", json={"booth": token})
     assert redeem.status_code == 200
-    me = cognito_client.get("/api/me")
+    me = client.get("/api/me")
     assert me.status_code == 200
     assert me.get_json()["user_id"].startswith("guest-")
 
@@ -263,9 +269,11 @@ def test_gpu_warm_queues_while_updating_and_scales_down_when_idle(
         return real_client(service, *args, **kwargs)
 
     monkeypatch.setattr(boto3, "client", fake_client)
-    cfg = make_cfg(
-        auth={"mode": "dev", "dev_user_id": "admin-1", "dev_email": ADMIN_EMAIL},
-        aws={"s3_bucket": aws.bucket, "gpu_endpoint": "neurolens"},
+    cfg = booth_admin_patch(
+        make_cfg(
+            auth={"mode": "dev", "dev_user_id": "admin-1", "dev_email": ADMIN_EMAIL},
+            aws={"s3_bucket": aws.bucket, "gpu_endpoint": "neurolens"},
+        )
     )
     app = create_app(cfg=cfg, data_dir=tmp_path / "data", db=db, s3_client=aws.s3)
     app.config["TESTING"] = True

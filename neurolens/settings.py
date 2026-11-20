@@ -76,9 +76,12 @@ def apply_env(cfg):
     PostgreSQL DSN holds a password, so it never goes in config.json). M3b's web functions:
     NEUROLENS_AUTH_MODE / _COGNITO_ISSUER / _COGNITO_CLIENT_ID / _COGNITO_DOMAIN -> auth.mode /
     auth.cognito_issuer / auth.cognito_client_id / auth.cognito_domain,
-    NEUROLENS_PUBLIC_BASE_URL -> public_base_url, and NEUROLENS_DEPLOYED -> deployed: true.
-    NEUROLENS_YOUTUBE_API_KEY -> youtube_api_key (M3j §2). Only variables that are set and
-    non-empty change anything. The input is never modified.
+    NEUROLENS_PUBLIC_BASE_URL -> public_base_url, NEUROLENS_ADMIN_EMAILS ->
+    auth.admin_emails (a comma-separated list, lowercased, stripped, empty entries dropped),
+    NEUROLENS_CONTACT_EMAIL -> contact_email (stripped; blank means unset), and
+    NEUROLENS_DEPLOYED -> deployed: true. NEUROLENS_YOUTUBE_API_KEY -> youtube_api_key (M3j §2).
+    Only variables that are set and non-empty change anything, except
+    NEUROLENS_ADMIN_EMAILS: set but blank means no admins. The input is never modified.
     """
     out = copy.deepcopy(cfg)
     token = os.environ.get("HF_TOKEN")
@@ -106,6 +109,18 @@ def apply_env(cfg):
             out.setdefault(section, {})[key] = value
     if os.environ.get("NEUROLENS_PUBLIC_BASE_URL"):
         out["public_base_url"] = os.environ["NEUROLENS_PUBLIC_BASE_URL"]
+    admin_emails = os.environ.get("NEUROLENS_ADMIN_EMAILS")
+    if admin_emails is not None:
+        out.setdefault("auth", {})["admin_emails"] = [
+            email.strip().lower() for email in admin_emails.split(",") if email.strip()
+        ]
+    contact_email = os.environ.get("NEUROLENS_CONTACT_EMAIL")
+    if contact_email is not None:
+        contact = contact_email.strip()
+        if contact:
+            out["contact_email"] = contact
+        else:
+            out.pop("contact_email", None)
     if os.environ.get("NEUROLENS_DEPLOYED"):
         out["deployed"] = True
     return out

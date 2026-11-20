@@ -83,6 +83,18 @@ variable "google_client_id" {
   type        = string
 }
 
+variable "admin_emails" {
+  description = "Emails that may open the web admin panel. Empty means nobody can open it."
+  type        = list(string)
+  default     = []
+}
+
+variable "contact_email" {
+  description = "Contact address shown on the privacy and retention pages. Empty shows the GitHub repo link."
+  type        = string
+  default     = ""
+}
+
 variable "log_retention_days" {
   description = "Days CloudWatch keeps the Lambda, web and GPU logs: 90 while developing and running experiments (they hold the run timings), 14 once live."
   type        = number

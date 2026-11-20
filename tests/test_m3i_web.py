@@ -2,17 +2,15 @@
 
 The retention route needs a valid `video_url` and `same_cut`, parses a Facebook report with the
 link's video id, and saves the link and its source. The invite credit is read from `config.json`,
-which no longer carries a one-week curve wait; `grant_credit.py` grants the invite credit when no
-amount is given. Refusals write nothing to S3 or PostgreSQL.
+which no longer carries a one-week curve wait. Refusals write nothing to S3 or PostgreSQL.
 """
 
-import importlib.util
 import json
 import re
 import uuid
 
 import pytest
-from conftest import ISSUER, REPO_ROOT, WEB_USER_ID
+from conftest import REPO_ROOT, WEB_USER_ID
 from neurolens import billing, pricing, settings, storage
 from neurolens.web.app import create_app
 
@@ -28,11 +26,6 @@ FACEBOOK_ID = "1234567890"
 FACEBOOK_LINK = f"https://www.facebook.com/MyPage/videos/{FACEBOOK_ID}"
 FACEBOOK_REF = f"facebook:{FACEBOOK_ID}"
 MISSING = object()
-
-SCRIPT = REPO_ROOT / "infra" / "grant_credit.py"
-_spec = importlib.util.spec_from_file_location("m3i_grant_credit", SCRIPT)
-grant_credit = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(grant_credit)
 
 
 # ---------------------------------------------------------------- fixtures and helpers
@@ -413,28 +406,3 @@ def test_the_privacy_page_states_the_configured_view_rule_without_a_week():
     assert f"{min_views:,} views" in text
     assert "public at least 7 days" not in text
     assert "YouTube or Facebook" in text
-
-
-# ---------------------------------------------------------------- grant_credit.py
-
-
-def _answers(*replies):
-    prompts = []
-    replies = iter(replies)
-
-    def ask(prompt):
-        prompts.append(prompt)
-        return next(replies)
-
-    return ask, prompts
-
-
-def test_grant_without_an_amount_gives_the_invite_credit(db, pg):
-    user_id = billing.sign_in(db, ISSUER, "sub-invite", "ann@example.com", 0)
-    assert settings.load_settings()["billing"]["invite_cents"] == 1000
-    ask, prompts = _answers("ann@example.com", "y")
-
-    assert grant_credit.main(["--backend", "postgres"], ask=ask, db=db) == 0
-
-    assert pg.balance(user_id) == (1000, 0)
-    assert "Grant $10.00 (5 min, the invite credit) to ann@example.com?" in prompts[1]

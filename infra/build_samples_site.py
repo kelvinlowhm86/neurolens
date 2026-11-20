@@ -23,7 +23,8 @@ SHIM_SOURCE = Path(__file__).resolve().parent / "static_shim.js"
 MAX_FILE_BYTES = 95_000_000
 
 DATA_FIELDS = ("video_file", "thumbnail", "brain_file", "csv_file", "pdf_file")
-STATIC_FILES = ("brain_view.js", "post_json.js", "privacy.html", "retention_guide.html")
+STATIC_FILES = ("brain_view.js", "post_json.js")
+CONTACT_PAGES = ("privacy.html", "retention_guide.html")
 STATIC_DIRS = ("brain", "three")
 FORBIDDEN = (
     r'href="/',
@@ -241,6 +242,8 @@ def build(out, *, force=False, samples_path=None, allow_inside_repo=False):
     limits = build_limits()
     _prepare_output(out, force)
 
+    from neurolens.web.app import render_contact_page
+
     static_out = out / "static"
     static_out.mkdir(parents=True, exist_ok=True)
     for name in STATIC_FILES:
@@ -248,8 +251,11 @@ def build(out, *, force=False, samples_path=None, allow_inside_repo=False):
             STATIC_ROOT / name,
             static_out / name,
             module_in_static=name == "brain_view.js",
-            pages_in_static=name.endswith(".html"),
         )
+    for name in CONTACT_PAGES:
+        text = render_contact_page(STATIC_ROOT, name, "")
+        text = _rewrite_text(text, module_in_static=False, pages_in_static=True)
+        (static_out / name).write_text(text, encoding="utf-8")
     for name in STATIC_DIRS:
         shutil.copytree(
             STATIC_ROOT / name,

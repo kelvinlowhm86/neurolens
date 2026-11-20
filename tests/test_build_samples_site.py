@@ -66,6 +66,11 @@ def test_build_is_relative_and_serves_the_samples(tmp_path):
         for pattern in FORBIDDEN:
             assert not re.search(pattern, text), f"{path.relative_to(out)}: {pattern}"
 
+    for page in ("privacy.html", "retention_guide.html"):
+        text = (out / "static" / page).read_text(encoding="utf-8")
+        assert "{{CONTACT_EMAIL}}" not in text
+        assert "comp.nus" not in text
+
 
 def test_missing_referenced_file_fails_loudly(tmp_path):
     samples = json.loads(json.dumps(SAMPLES))
