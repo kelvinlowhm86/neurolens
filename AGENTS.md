@@ -10,7 +10,7 @@ NeuroLens predicts brain activity for a video (TRIBE v2) and turns it into a sig
 ## Commands
 - Set up: `python3.12 -m venv .venv && source .venv/bin/activate && pip install -e . -r requirements/dev.txt`
 - Test: `pytest`. Lint: `ruff check .`. Format: `ruff format .`
-- CI (`.github/workflows/ci.yml`) runs pytest and both ruff checks; `trailer/` is excluded.
+- CI (`.github/workflows/ci.yml`) runs pytest and both ruff checks.
 - Laptop, whole product with no real AWS: `python infra/local_stack.py` (the local PostgreSQL from README "Run it on a laptop"; `--grant <email> <minutes>` adds credit). `python app.py` runs only against it.
 
 ## Rules

@@ -148,7 +148,6 @@ The dependency lists live in `requirements/`, one file per machine type:
 - [`requirements/`](requirements/): one dependency list per machine type.
 - [`tests/`](tests/): pytest; [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs them on every push.
 - [`docs/`](docs/): [architecture.md](docs/architecture.md) (design), [operating.md](docs/operating.md) (running it), `evidence/`, `course/`, `images/` and [tribev2_reference.md](docs/tribev2_reference.md). See [`docs/README.md`](docs/README.md).
-- [`trailer/`](trailer/): the launch video, made with Remotion; separate from the product. See [`trailer/README.md`](trailer/README.md).
 
 ## License
 
