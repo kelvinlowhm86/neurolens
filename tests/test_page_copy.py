@@ -167,6 +167,16 @@ def test_limits_publish_the_invite_seconds_from_the_configured_credit(aws, make_
     assert data["invite_seconds"] == invite_cents * pricing.BLOCK_SECONDS / pricing.CENTS_PER_BLOCK
 
 
+# ---------------------------------------------------------------- the admin GPU choices
+
+
+def test_the_admin_panel_builds_gpu_choices_from_the_reported_maximum():
+    html = (REPO_ROOT / "static" / "app.html").read_text()
+
+    assert "gpu_max_instances" in html
+    assert 'id="boothGpu2"' not in html
+
+
 # ---------------------------------------------------------------- the operator script
 
 

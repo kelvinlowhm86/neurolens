@@ -215,6 +215,17 @@ def test_apply_env_value_overrides_the_file_value(monkeypatch):
     assert out["hf_token"] == "from-env"
 
 
+def test_apply_env_reads_the_gpu_max_instances(monkeypatch):
+    monkeypatch.setenv("NEUROLENS_MAX_INSTANCES", "3")
+    out = settings.apply_env({})
+    assert settings.max_instances(out) == 3
+
+
+def test_apply_env_without_max_instances_keeps_the_laptop_default(monkeypatch):
+    monkeypatch.delenv("NEUROLENS_MAX_INSTANCES", raising=False)
+    assert settings.max_instances(settings.apply_env({})) == 1
+
+
 # ------------------------------------------------------------------ load_settings
 
 FILE_CFG = {

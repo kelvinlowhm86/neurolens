@@ -138,5 +138,14 @@ def test_max_duration_reads_config_value():
     assert settings.max_duration({"max_video_duration_seconds": 45}) == 45
 
 
+def test_max_instances_defaults_to_one_without_config():
+    assert settings.max_instances(None) == 1
+    assert settings.max_instances({}) == 1
+
+
+def test_max_instances_reads_the_gpu_setting():
+    assert settings.max_instances({"gpu": {"max_instances": 4}}) == 4
+
+
 def test_no_module_level_max_duration_constant():
     assert not hasattr(settings, "MAX_DURATION")

@@ -150,6 +150,13 @@ sys.exit(99)
 
 SH = "#!/usr/bin/env bash\n"
 
+TERRAFORM_STUB = r"""#!/usr/bin/env bash
+case "$*" in
+  *max_instances*) echo "${FAKE_MAX_INSTANCES:-1}" ;;
+  *) echo us-east-1 ;;
+esac
+"""
+
 
 def healthy_world(**overrides):
     world = {
@@ -194,7 +201,7 @@ def sandbox(tmp_path):
     bindir = tmp_path / "bin"
     bindir.mkdir()
     (bindir / "aws").write_text(AWS_STUB)
-    (bindir / "terraform").write_text(SH + "echo us-east-1\n")
+    (bindir / "terraform").write_text(TERRAFORM_STUB)
     (bindir / "sleep").write_text(SH + 'echo sleep >> "$FAKE_LOG.sleeps"\n')
     for f in bindir.iterdir():
         f.chmod(0o755)
@@ -209,6 +216,7 @@ def sandbox(tmp_path):
             "HOME": str(tmp_path),
             "FAKE_WORLD": str(world_file),
             "FAKE_LOG": str(log),
+            "FAKE_MAX_INSTANCES": str(world.get("max_instances", 1)),
             "AWS_ACCESS_KEY_ID": "x",
             "AWS_SECRET_ACCESS_KEY": "x",
         }
@@ -242,6 +250,48 @@ def test_start_plain_sets_the_maximum_to_one(sandbox):
     assert option(call, "--max-capacity") == "1"
     assert option(call, "--min-capacity") in (None, "0")
     assert r.find("application-autoscaling", "put-scheduled-action") == []
+
+
+def test_start_takes_the_maximum_from_the_terraform_output(sandbox):
+    r = sandbox("start_work.sh", healthy_world(max_instances=3))
+    assert r.code == 0, r.err
+    call = r.only("application-autoscaling", "register-scalable-target")
+    assert option(call, "--max-capacity") == "3"
+    assert option(call, "--min-capacity") in (None, "0")
+
+
+def test_keep_warm_takes_the_maximum_from_the_terraform_output(sandbox):
+    r = sandbox("start_work.sh", healthy_world(max_instances=3), "--keep-warm", "--hours", "2")
+    assert r.code == 0, r.err
+    target = r.only("application-autoscaling", "register-scalable-target")
+    assert option(target, "--min-capacity") == "1"
+    assert option(target, "--max-capacity") == "3"
+    action = option(
+        r.only("application-autoscaling", "put-scheduled-action"), "--scalable-target-action"
+    )
+    assert "MaxCapacity=3" in (action or "")
+
+
+def test_start_work_does_not_hard_code_the_maximum():
+    text = (INFRA / "start_work.sh").read_text()
+    assert not re.search(r"--max-capacity\s+1\b", text)
+    assert not re.search(r"MaxCapacity=1\b", text)
+
+
+def test_max_instances_variable_has_no_upper_cap():
+    text = (REPO / "infra" / "terraform" / "variables.tf").read_text()
+    block = re.search(r'variable "max_instances"\s*\{.*?\n\}', text, re.S)
+    assert block, "max_instances variable is missing"
+    assert "var.max_instances >= 1" in block.group(0)
+    assert not re.search(r"var\.max_instances\s*<=\s*2", block.group(0))
+
+
+def test_terraform_exposes_the_maximum_and_gives_it_to_the_web_lambda():
+    outputs = (REPO / "infra" / "terraform" / "outputs.tf").read_text()
+    web = (REPO / "infra" / "terraform" / "web.tf").read_text()
+    assert re.search(r'output\s+"max_instances"', outputs)
+    assert "NEUROLENS_MAX_INSTANCES" in web
+    assert "var.max_instances" in web
 
 
 @pytest.mark.parametrize(

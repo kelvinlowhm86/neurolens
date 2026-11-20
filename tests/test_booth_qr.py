@@ -16,6 +16,8 @@ def booth_admin_patch():
 
     def apply(cfg):
         cfg.setdefault("auth", {})["admin_emails"] = [ADMIN_EMAIL]
+        # The booth's deployed maximum is two GPUs; keep the tests on that setting.
+        cfg.setdefault("gpu", {})["max_instances"] = 2
         return cfg
 
     return apply
@@ -25,6 +27,21 @@ def make_client(aws, db, make_cfg, tmp_path, **auth_overrides):
     auth = {"mode": "dev", "dev_user_id": "user-1", "dev_email": "visitor@example.com"}
     auth.update(auth_overrides)
     cfg = make_cfg(auth=auth)
+    app = create_app(cfg=cfg, data_dir=tmp_path / "data", db=db, s3_client=aws.s3)
+    app.config["TESTING"] = True
+    return app.test_client()
+
+
+def admin_client(aws, db, make_cfg, tmp_path, max_instances):
+    cfg = make_cfg(
+        auth={
+            "mode": "dev",
+            "dev_user_id": "admin-1",
+            "dev_email": ADMIN_EMAIL,
+            "admin_emails": [ADMIN_EMAIL],
+        },
+        gpu={"max_instances": max_instances},
+    )
     app = create_app(cfg=cfg, data_dir=tmp_path / "data", db=db, s3_client=aws.s3)
     app.config["TESTING"] = True
     return app.test_client()
@@ -302,3 +319,45 @@ def test_gpu_warm_queues_while_updating_and_scales_down_when_idle(
     polled = admin.get("/api/booth/stats?gpu=1").get_json()
     assert sm.updates == [0]
     assert polled["gpu"]["desired"] == 0
+
+
+def test_admin_can_keep_more_gpus_up_to_the_configured_maximum(aws, db, pg, make_cfg, tmp_path):
+    admin = admin_client(aws, db, make_cfg, tmp_path, max_instances=3)
+
+    warm3 = admin.post("/api/booth/passes", json={"gpu_desired": 3})
+    assert warm3.status_code == 200, warm3.get_json()
+    assert warm3.get_json()["gpu_warm_target"] == 3
+
+    auto0 = admin.post("/api/booth/passes", json={"gpu_desired": 0})
+    assert auto0.status_code == 200, auto0.get_json()
+    assert auto0.get_json()["gpu_warm_target"] == 0
+
+
+def test_admin_keep_warm_above_the_configured_maximum_is_refused(aws, db, pg, make_cfg, tmp_path):
+    admin = admin_client(aws, db, make_cfg, tmp_path, max_instances=3)
+
+    refused = admin.post("/api/booth/passes", json={"gpu_desired": 4})
+
+    assert refused.status_code == 400
+    body = refused.get_json()
+    assert body["error"] == "invalid_request"
+    assert "3" in body["message"], body["message"]
+
+
+def test_booth_stats_report_the_configured_maximum(aws, db, make_cfg, tmp_path):
+    admin = admin_client(aws, db, make_cfg, tmp_path, max_instances=3)
+
+    stats = admin.get("/api/booth/stats").get_json()
+
+    assert stats["gpu_max_instances"] == 3
+
+
+def test_booth_gpu_warm_accepts_any_non_negative_target(db):
+    billing.set_booth_gpu_warm(db, 3)
+    assert billing.booth_stats(db)["gpu_warm_target"] == 3
+
+    billing.set_booth_gpu_warm(db, 0)
+    assert billing.booth_stats(db)["gpu_warm_target"] == 0
+
+    with pytest.raises(ValueError):
+        billing.set_booth_gpu_warm(db, -1)
