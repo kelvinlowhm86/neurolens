@@ -9,6 +9,7 @@ import pytest
 from botocore.config import Config
 from neurolens import billing, settings, storage
 from neurolens import db as dbmod
+from conftest import CFG
 
 CLUSTER = "arn:aws:rds:us-east-1:000000000000:cluster:neurolens-db"
 SECRET = "arn:aws:secretsmanager:us-east-1:000000000000:secret:rds!cluster-x"
@@ -62,7 +63,7 @@ def test_dead_letter_handler_ignores_a_plain_name(aws, db, monkeypatch, patch_ev
 def test_a_duration_beyond_the_integer_column_is_refunded_as_too_long(db, pg, new_job):
     job_id, _ = new_job()
     result = billing.verify_queued(
-        db, job_id, 3_000_000_000, settings.max_duration(None)
+        db, job_id, 3_000_000_000, settings.max_duration(CFG), cfg=CFG
     )  # ~833 hours > 2**31 ms
     assert result == "duration_exceeds_max_verified"
     assert pg.job(job_id)["status"] == "failed"

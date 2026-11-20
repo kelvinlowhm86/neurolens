@@ -13,6 +13,7 @@ import hmac
 import json
 import logging
 import math
+import os
 import re
 import threading
 import uuid
@@ -73,28 +74,59 @@ def contact_html(contact_email):
     return f'contact the team via the <a href="{GITHUB_REPO_URL}">GitHub repo</a>'
 
 
-def render_contact_page(static_dir, name, contact_email):
-    """A static page with its one contact placeholder filled in."""
+def render_page(static_dir, name, cfg, contact_email):
+    """A static page with its contact and configured-number placeholders filled in."""
     text = (Path(static_dir) / name).read_text(encoding="utf-8")
-    return text.replace(CONTACT_PLACEHOLDER, contact_html(contact_email))
+    for placeholder, value in page_values(cfg, contact_email).items():
+        text = text.replace(placeholder, value)
+    return text
 
 
-def fill_contact_pages(static_dir, contact_email):
-    """Fill the contact pages in a staged site and refuse to leave any placeholder behind."""
+def _whole_years(days):
+    if days % 365:
+        raise ValueError(f"dataset_retention_days ({days}) is not a whole number of years")
+    return days // 365
+
+
+def page_values(cfg, contact_email):
+    """Every placeholder a static page may use, filled from config.json."""
+    return {
+        CONTACT_PLACEHOLDER: contact_html(contact_email),
+        "{{UPLOAD_RETENTION_DAYS}}": str(settings.upload_retention_days(cfg)),
+        "{{UPLOAD_RETENTION_MAX_DAYS}}": str(settings.upload_retention_days(cfg) + 1),
+        "{{RESULT_RETENTION_DAYS}}": str(settings.result_retention_days(cfg)),
+        "{{DATASET_RETENTION_YEARS}}": str(_whole_years(settings.dataset_retention_days(cfg))),
+        "{{NO_CURVE_DAYS}}": str(settings.no_curve_days(cfg)),
+        "{{CURVE_LENGTH_TOLERANCE_S}}": str(
+            int(settings._required(cfg, "research", "curve_length_tolerance_s"))
+        ),
+        "{{CURVE_MIN_VIEWS}}": f"{settings._required(cfg, 'research', 'curve_min_views'):,}",
+        "{{CURVE_REWARDS}}": str(
+            int(settings._required(cfg, "research", "curve_rewards_per_window"))
+        ),
+        "{{CURVE_REWARD_WINDOW_DAYS}}": str(
+            int(settings._required(cfg, "research", "curve_reward_window_days"))
+        ),
+        "{{CURVE_MIN_POINTS}}": str(settings.min_curve_points(cfg)),
+        "{{CURVE_MAX_WATCH_RATIO_PERCENT}}": f"{settings.max_watch_ratio(cfg) * 100:,.0f}",
+    }
+
+
+def fill_pages(static_dir, cfg, contact_email):
+    """Fill the static pages in a staged site and refuse to leave any placeholder behind."""
     static_dir = Path(static_dir)
     for name in CONTACT_PAGES:
         (static_dir / name).write_text(
-            render_contact_page(static_dir, name, contact_email), encoding="utf-8"
+            render_page(static_dir, name, cfg, contact_email), encoding="utf-8"
         )
-    placeholder = CONTACT_PLACEHOLDER.encode()
     remaining = [
         path
-        for path in sorted(static_dir.rglob("*"))
-        if path.is_file() and placeholder in path.read_bytes()
+        for path in sorted(static_dir.rglob("*.html"))
+        if path.is_file() and re.search(rb"\{\{[^}]+\}\}", path.read_bytes())
     ]
     if remaining:
         names = ", ".join(str(path.relative_to(static_dir)) for path in remaining)
-        raise RuntimeError(f"{CONTACT_PLACEHOLDER} remains in: {names}")
+        raise RuntimeError(f"unfilled placeholder remains in: {names}")
 
 
 def _is_number(value):
@@ -206,10 +238,10 @@ def create_app(
     """Build the Flask app.
 
     Never reads config.json itself (the launchers app.py and lambda_handler.py load it and pass
-    cfg), so tests need no config file. Without cfg: the built-in development user, max duration
-    120, and no S3 client or database unless handed in. A route that needs a database or S3
-    client the app doesn't have answers 500 `not_configured`. In Cognito mode every required
-    setting and Parameter Store secret is read now, so a missing one fails at startup.
+    cfg), so tests need no config file; cfg is required and carries every behaviour setting.
+    A route that needs a database or S3 client the app doesn't have answers 500
+    `not_configured`. In Cognito mode every required setting and Parameter Store secret is read
+    now, so a missing one fails at startup.
     """
     auth_cfg = auth.auth_settings(cfg)  # first: refuses the dev identity on a public address
     cfg = cfg or {}
@@ -219,8 +251,7 @@ def create_app(
         if str(email).strip()
     }
     response_cfg = cfg.get("response")
-    if cfg:  # a launcher's settings must carry a usable block: fail at start-up, not per request
-        results.validate_response_config(response_cfg)
+    results.validate_response_config(response_cfg)
     cognito = auth_cfg["mode"] == "cognito"
     gpu_endpoint = (cfg.get("aws") or {}).get("gpu_endpoint")
     if cognito and not gpu_endpoint:
@@ -268,22 +299,20 @@ def create_app(
     starter_cents = (cfg.get("billing") or {}).get("starter_cents", 0)
     invite_cents = (cfg.get("billing") or {}).get("invite_cents", 0)
     max_bytes = cfg.get("max_upload_bytes")
-    max_seconds = settings.max_duration(cfg or None)
-    max_gpus = settings.max_instances(cfg or None)
-    result_days = settings.result_retention_days(cfg) if cfg else None
-    no_curve_days = settings.no_curve_days(cfg) if cfg else None
-    cancel_s = settings.cancel_seconds(cfg) if cfg else None
+    max_seconds = settings.max_duration(cfg)
+    max_gpus = settings.max_instances(cfg)
+    result_days = settings.result_retention_days(cfg)
+    no_curve_days = settings.no_curve_days(cfg)
+    cancel_s = settings.cancel_seconds(cfg)
+    gpu_wait_grace_s = settings.gpu_wait_grace_s(cfg)
     upload_cfg = cfg.get("upload") or {}
     max_batch_files = upload_cfg.get("max_batch_files")
     max_waiting_jobs = upload_cfg.get("max_waiting_jobs")
     research_cfg = cfg.get("research") or {}
-    if cfg:
-        reward_cap = research_cfg["curve_rewards_per_window"]
-        reward_window_days = research_cfg["curve_reward_window_days"]
-        length_tolerance_s = research_cfg["curve_length_tolerance_s"]
-        curve_min_views = research_cfg["curve_min_views"]
-    else:
-        reward_cap = reward_window_days = length_tolerance_s = curve_min_views = None
+    reward_cap = research_cfg["curve_rewards_per_window"]
+    reward_window_days = research_cfg["curve_reward_window_days"]
+    length_tolerance_s = research_cfg["curve_length_tolerance_s"]
+    curve_min_views = research_cfg["curve_min_views"]
     static_dir = root / "static"
     contact_email = (cfg.get("contact_email") or "").strip()
     autoscaling = None
@@ -313,7 +342,7 @@ def create_app(
 
     def static_with_contact(filename):
         if filename in CONTACT_PAGES:
-            return render_contact_page(static_dir, filename, contact_email)
+            return render_page(static_dir, filename, cfg, contact_email)
         return default_static(filename=filename)
 
     app.view_functions["static"] = static_with_contact
@@ -455,10 +484,15 @@ def create_app(
             "colour_range": (response_cfg or {}).get("colour_range"),
             "result_retention_days": result_days,
             "cancel_seconds": cancel_s,
-            "invite_seconds": invite_cents * pricing.BLOCK_SECONDS / pricing.CENTS_PER_BLOCK,
+            "invite_seconds": invite_cents
+            * settings.block_seconds(cfg)
+            / settings.cents_per_block(cfg),
+            "consent_version": billing.CONSENT_VERSION,
+            "curve_min_views": curve_min_views,
+            "curve_length_tolerance_s": length_tolerance_s,
             "price": {
-                "cents_per_block": pricing.CENTS_PER_BLOCK,
-                "block_seconds": pricing.BLOCK_SECONDS,
+                "cents_per_block": settings.cents_per_block(cfg),
+                "block_seconds": settings.block_seconds(cfg),
                 "allowance_seconds": pricing.ALLOWANCE_SECONDS,
             },
         }
@@ -500,7 +534,7 @@ def create_app(
             is_scan = bool(data.get("scan"))
             try:
                 guest_id = billing.redeem_visitor_pass(
-                    db, pass_id, current_user_id=current_uid, is_scan=is_scan
+                    db, pass_id, cfg=cfg, current_user_id=current_uid, is_scan=is_scan
                 )
             except billing.VisitorLimitReached:
                 return _error(
@@ -564,7 +598,7 @@ def create_app(
             "qr_svg": qr.svg(url),
         }
         if not prefetch:
-            stats = billing.visitor_stats(db)
+            stats = billing.visitor_stats(db, cfg=cfg)
             if request.args.get("gpu") == "1":
                 stats["gpu"] = _gpu_status()
             payload["stats"] = stats
@@ -573,11 +607,11 @@ def create_app(
     def _with_visitor_limits(stats):
         """Add the admin panel's configured choices to a stats response."""
         stats["gpu_max_instances"] = max_gpus
-        stats["gpu_warm_hours"] = billing.VISITOR_GPU_WARM_HOURS
-        stats["pass_minutes"] = billing.visitor_pass_minutes()
-        stats["initial_passes"] = billing.VISITOR_INITIAL_PASSES
-        stats["adjust_deltas"] = list(billing.VISITOR_ADJUST_DELTAS)
-        stats["grant_minutes"] = list(billing.VISITOR_GRANT_MINUTES)
+        stats["gpu_warm_hours"] = settings.visitor_gpu_warm_hours(cfg)
+        stats["pass_minutes"] = billing.visitor_pass_minutes(cfg)
+        stats["initial_passes"] = settings.visitor_initial_passes(cfg)
+        stats["adjust_deltas"] = list(settings.visitor_adjust_deltas(cfg))
+        stats["grant_minutes"] = list(settings.visitor_grant_minutes(cfg))
         return stats
 
     def _sync_gpu_capacity(stats, *, allow_error=False):
@@ -605,7 +639,10 @@ def create_app(
             sagemaker.update_endpoint_weights_and_capacities(
                 EndpointName=gpu_endpoint,
                 DesiredWeightsAndCapacities=[
-                    {"VariantName": "main", "DesiredInstanceCount": warm_target}
+                    {
+                        "VariantName": os.environ["NEUROLENS_GPU_VARIANT"],
+                        "DesiredInstanceCount": warm_target,
+                    }
                 ],
             )
             gpu["desired"] = warm_target
@@ -631,7 +668,7 @@ def create_app(
         pass_id = request.args.get("pass_id")
         if pass_id is not None and not _is_uuid(pass_id):
             pass_id = None
-        stats = _with_visitor_limits(billing.visitor_stats(db, check_pass_id=pass_id))
+        stats = _with_visitor_limits(billing.visitor_stats(db, cfg=cfg, check_pass_id=pass_id))
         if request.args.get("gpu") == "1":
             gpu, _ = _sync_gpu_capacity(stats)
             stats["gpu"] = gpu
@@ -651,7 +688,7 @@ def create_app(
             desired = data.get("gpu_desired")
             if type(desired) is not int or not 0 <= desired <= max_gpus:
                 return _error("invalid_request", f"gpu_desired must be between 0 and {max_gpus}.")
-            stats = billing.set_visitor_gpu_warm(db, desired)
+            stats = billing.set_visitor_gpu_warm(db, desired, cfg=cfg)
             gpu, err_resp = _sync_gpu_capacity(stats, allow_error=True)
             if err_resp is not None:
                 return err_resp
@@ -660,10 +697,10 @@ def create_app(
         if "grant_email" in data:
             target_email = (data.get("grant_email") or "").strip() or email
             minutes = data.get("minutes")
-            if type(minutes) is not int or minutes not in billing.VISITOR_GRANT_MINUTES:
-                choices = ", ".join(str(value) for value in billing.VISITOR_GRANT_MINUTES)
+            if type(minutes) is not int or minutes not in settings.visitor_grant_minutes(cfg):
+                choices = ", ".join(str(value) for value in settings.visitor_grant_minutes(cfg))
                 return _error("invalid_request", f"minutes must be one of {choices}.")
-            cents = minutes * 60 * pricing.CENTS_PER_BLOCK // pricing.BLOCK_SECONDS
+            cents = minutes * 60 * settings.cents_per_block(cfg) // settings.block_seconds(cfg)
             try:
                 if minutes == 0:
                     billing.reset_credit(db, target_email)
@@ -675,7 +712,7 @@ def create_app(
                     f"No account found for {target_email}. Have them sign in first.",
                     status=404,
                 )
-            stats = billing.visitor_stats(db)
+            stats = billing.visitor_stats(db, cfg=cfg)
             stats["granted"] = {
                 "email": target_email,
                 "minutes": minutes,
@@ -683,10 +720,10 @@ def create_app(
             }
             return jsonify(stats)
         delta = data.get("delta")
-        if type(delta) is not int or delta not in billing.VISITOR_ADJUST_DELTAS:
-            choices = ", ".join(str(value) for value in billing.VISITOR_ADJUST_DELTAS)
+        if type(delta) is not int or delta not in settings.visitor_adjust_deltas(cfg):
+            choices = ", ".join(str(value) for value in settings.visitor_adjust_deltas(cfg))
             return _error("invalid_request", f"delta must be one of {choices}.")
-        return jsonify(billing.adjust_visitor_passes(db, delta))
+        return jsonify(billing.adjust_visitor_passes(db, delta, cfg=cfg))
 
     @app.route("/api/access-request", methods=["POST"])
     def access_request():
@@ -769,7 +806,9 @@ def create_app(
         if autoscaling is not None:
             # Before any reservation: while GPU work is stopped no upload could run.
             try:
-                paused = scaling.endpoint_paused(autoscaling, gpu_endpoint)
+                paused = scaling.endpoint_paused(
+                    autoscaling, gpu_endpoint, os.environ["NEUROLENS_GPU_VARIANT"]
+                )
             except Exception:
                 logger.exception("Presign refused: could not read the GPU endpoint")
                 return _error("presign_failed", "Could not prepare the upload.", status=500)
@@ -798,6 +837,7 @@ def create_app(
                 filename,
                 round(duration * 1000),
                 research_consent=research_consent,
+                cfg=cfg,
                 max_waiting_jobs=max_waiting_jobs,
             )
         except billing.TooManyWaiting:
@@ -829,7 +869,7 @@ def create_app(
                 "job_id": job_id,
                 "object_key": key,
                 **presigned,
-                "estimated_cost_usd": pricing.estimate_cost_usd(duration),
+                "estimated_cost_usd": pricing.estimate_cost_usd(cfg, duration),
                 "reserved_cents": reserved,
             }
         )
@@ -852,6 +892,7 @@ def create_app(
                 int(limit),
                 reward_cap=reward_cap,
                 reward_window_days=reward_window_days,
+                gpu_wait_grace_s=gpu_wait_grace_s,
             )
 
         jobs = load_jobs()
@@ -882,7 +923,9 @@ def create_app(
         """Refund a job whose GPU wait ran out while its owner looks. A failure here
         must not break the answer: it is logged, and the reaper refunds the job later."""
         try:
-            return billing.refund_if_gpu_wait_over(db, str(job_id))
+            return billing.refund_if_gpu_wait_over(
+                db, str(job_id), gpu_wait_grace_s=gpu_wait_grace_s
+            )
         except Exception:
             app.logger.exception(f"{job_id}: could not refund the expired GPU wait")
             return False
@@ -912,7 +955,7 @@ def create_app(
                     "job_id": job_id,
                     "user_id": user_id,
                     "queued": billing.QUEUED,
-                    "grace": billing.GPU_WAIT_GRACE_S,
+                    "grace": gpu_wait_grace_s,
                 },
             )
         if not rows:
@@ -1383,7 +1426,7 @@ def create_app(
                 csv_key=csv_key,
                 curve_sha256=curve_sha256,
                 points=pairs,
-                quality_flags=results.curve_quality(pairs),
+                quality_flags=results.curve_quality(cfg, pairs),
                 views=views,
                 published=published,
                 promoted=promoted,

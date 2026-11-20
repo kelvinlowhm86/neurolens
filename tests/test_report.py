@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 from botocore.exceptions import ClientError
-from conftest import STARTER_CENTS, USER_ID, WEB_USER_ID
+from conftest import CFG, STARTER_CENTS, USER_ID, WEB_USER_ID
 from neurolens import billing, inference, pricing, results, storage, worker
 from neurolens.web.app import create_app
 
@@ -46,7 +46,7 @@ def job_in_state(db, state="done", *, user_id=USER_ID):
     billing.ensure_user(db, user_id, f"{user_id}@example.com", STARTER_CENTS)
     job_id = str(uuid.uuid4())
     key = f"uploads/{user_id}/{job_id}.mp4"
-    billing.reserve(db, user_id, job_id, key, "clip.mp4", 3000)
+    billing.reserve(db, user_id, job_id, key, "clip.mp4", 3000, cfg=CFG)
     if state in ("processing", "done", "failed"):
         assert billing.claim(db, job_id) == 1
     if state == "done":
@@ -407,7 +407,7 @@ def no_gpu(patch_everywhere):
 
 def worker_job(db, *, user_id=USER_ID):
     job_id, key = job_in_state(db, "queued", user_id=user_id)
-    assert billing.verify_queued(db, job_id, 3000, 120) == "ok"
+    assert billing.verify_queued(db, job_id, 3000, 120, cfg=CFG) == "ok"
     return job_id, key
 
 
@@ -488,7 +488,7 @@ def test_a_frames_failure_still_finishes_and_charges_the_job(
     assert "frames" not in stored
     assert not object_exists(aws, FRAMES_KEY.format(job_id=job_id))
     assert pg.job(job_id)["status"] == "done"
-    assert pg.balance() == (STARTER_CENTS - pricing.estimate_cost_cents(3), 0)
+    assert pg.balance() == (STARTER_CENTS - pricing.estimate_cost_cents(CFG, 3), 0)
 
 
 def test_a_frames_s3_failure_still_finishes_and_charges_the_job(
@@ -509,7 +509,7 @@ def test_a_frames_s3_failure_still_finishes_and_charges_the_job(
     assert "frames" not in stored
     assert not object_exists(aws, FRAMES_KEY.format(job_id=job_id))
     assert pg.job(job_id)["status"] == "done"
-    assert pg.balance() == (STARTER_CENTS - pricing.estimate_cost_cents(3), 0)
+    assert pg.balance() == (STARTER_CENTS - pricing.estimate_cost_cents(CFG, 3), 0)
 
 
 # ---------------------------------------------------------------- web routes
@@ -720,8 +720,12 @@ def test_the_web_app_imports_no_anthropic_or_inference():
     code = """
 import json, sys, tempfile
 from pathlib import Path
+from neurolens import settings
 from neurolens.web.app import create_app
-create_app(data_dir=Path(tempfile.mkdtemp()))
+cfg = settings.load_config()
+cfg.pop("db", None)
+cfg.pop("aws", None)
+create_app(data_dir=Path(tempfile.mkdtemp()), cfg=cfg)
 print(json.dumps([m for m in ("anthropic", "neurolens.inference", "torch") if m in sys.modules]))
 """
     proc = subprocess.run(

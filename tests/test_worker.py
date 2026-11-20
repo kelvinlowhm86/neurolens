@@ -18,7 +18,7 @@ from pathlib import Path
 
 import pytest
 from botocore.exceptions import ClientError
-from conftest import STARTER_CENTS
+from conftest import CFG, STARTER_CENTS
 from neurolens import billing, inference, pricing, settings, storage, worker
 from neurolens.media import probe_duration as _real_probe_duration  # before tests patch it
 from neurolens.worker import Outcome
@@ -76,7 +76,9 @@ def no_keep_alive(on_beat):
 
 
 def verify(db, job_id, duration_ms=3000):
-    assert billing.verify_queued(db, job_id, duration_ms, settings.max_duration(None)) == "ok"
+    assert (
+        billing.verify_queued(db, job_id, duration_ms, settings.max_duration(CFG), cfg=CFG) == "ok"
+    )
 
 
 def run_job(aws, db, job_id, clip_path, make_cfg, roi_masks, keep_alive=no_keep_alive):
@@ -548,7 +550,7 @@ def test_duplicate_is_charged_once_and_leaves_the_other_result(
     body = aws.s3.get_object(Bucket=aws.bucket, Key=f"results/{job_id}.json")["Body"]
     assert json.loads(body.read()) == theirs
     job = pg.job(job_id)
-    price = pricing.estimate_cost_cents(3)
+    price = pricing.estimate_cost_cents(CFG, 3)
     assert job["status"] == "done" and job["captured_cents"] == price
     assert pg.kinds().count("capture") == 1
     assert pg.balance() == (STARTER_CENTS - price, 0)
@@ -606,7 +608,7 @@ def test_a_claim_lost_mid_pipeline_stops_with_lost_claim_and_moves_no_money(
     assert run_job(aws, db, job_id, clip_path, make_cfg, roi_masks_small) is Outcome.LOST_CLAIM
     job = pg.job(job_id)
     assert job["status"] == "processing" and job["attempt"] == 2
-    price = pricing.estimate_cost_cents(3)
+    price = pricing.estimate_cost_cents(CFG, 3)
     assert pg.balance() == (STARTER_CENTS - price, price)
     assert not object_exists(aws, f"results/{job_id}.json")
 

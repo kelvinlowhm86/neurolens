@@ -11,7 +11,7 @@ import uuid
 
 import pytest
 from botocore.exceptions import ClientError
-from conftest import WEB_USER_ID
+from conftest import CFG, WEB_USER_ID
 from neurolens import billing, storage
 from neurolens.web.app import create_app
 
@@ -99,7 +99,7 @@ def make_job(db, *, consent=True, done=True, processing=False, user_id=WEB_USER_
     billing.ensure_user(db, user_id, f"{user_id}@example.com", STARTER_CENTS)
     job_id = str(uuid.uuid4())
     key = storage.object_key(user_id, job_id, "video/mp4")
-    billing.reserve(db, user_id, job_id, key, "clip.mp4", 3000, research_consent=consent)
+    billing.reserve(db, user_id, job_id, key, "clip.mp4", 3000, research_consent=consent, cfg=CFG)
     if processing:
         assert billing.claim(db, job_id) == 1
     if done:

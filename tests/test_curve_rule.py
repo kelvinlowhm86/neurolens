@@ -10,12 +10,12 @@ import uuid
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from conftest import RESEARCH, REWARD, WEB_USER_ID
+from conftest import CFG, GPU_WAIT_GRACE_S, RESEARCH, REWARD, WEB_USER_ID
 from neurolens import billing, pricing, storage
 from neurolens.web.app import create_app
 
 STARTER_CENTS = 10_000
-PRICE_CENTS = pricing.estimate_cost_cents(30.1)
+PRICE_CENTS = pricing.estimate_cost_cents(CFG, 30.1)
 LENGTH_TOLERANCE_S = RESEARCH["curve_length_tolerance_s"]
 MIN_VIEWS = RESEARCH["curve_min_views"]
 VIEWS = "lt_1k"
@@ -53,9 +53,9 @@ def make_job(db, *, user_id=WEB_USER_ID, seconds=30.1, sha="a" * 64):
     job_id = str(uuid.uuid4())
     key = storage.object_key(user_id, job_id, "video/mp4")
     billing.reserve(
-        db, user_id, job_id, key, "clip.mp4", round(seconds * 1000), research_consent=True
+        db, user_id, job_id, key, "clip.mp4", round(seconds * 1000), research_consent=True, cfg=CFG
     )
-    assert billing.verify_queued(db, job_id, round(seconds * 1000), 3600) == "ok"
+    assert billing.verify_queued(db, job_id, round(seconds * 1000), 3600, cfg=CFG) == "ok"
     assert billing.claim(db, job_id) == 1
     assert billing.settle_success(db, job_id) is True
     billing.record_video_hash(db, job_id, sha)
@@ -385,7 +385,7 @@ def test_the_history_preview_still_ignores_the_view_count(db, pg):
         **curve_args(job_id, facts_=facts(days_ago(30), views=640)),
     )
 
-    [row] = billing.list_jobs(db, WEB_USER_ID, 50, **REWARD)
+    [row] = billing.list_jobs(db, WEB_USER_ID, 50, **REWARD, gpu_wait_grace_s=GPU_WAIT_GRACE_S)
 
     assert row["curve_reward_cents"] == PRICE_CENTS
     assert row["curve_rewarded"] is False

@@ -46,8 +46,8 @@ def test_a_failed_wake_still_answers_204(cognito_app, caplog):
     assert "Wake failed" in caplog.text
 
 
-def test_wake_without_a_database_answers_204(tmp_path):
-    app = create_app(data_dir=tmp_path / "data")
+def test_wake_without_a_database_answers_204(tmp_path, make_cfg):
+    app = create_app(data_dir=tmp_path / "data", cfg=make_cfg())
     app.config["TESTING"] = True
 
     resp = app.test_client().post("/api/wake", json={})

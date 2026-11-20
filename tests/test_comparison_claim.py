@@ -8,7 +8,7 @@ nothing here calls Bedrock or S3.
 import uuid
 
 import pytest
-from conftest import STARTER_CENTS, USER_ID
+from conftest import CFG, STARTER_CENTS, USER_ID
 from neurolens import billing, storage
 from test_report import job_in_state
 
@@ -27,7 +27,7 @@ def canonical(x, y):
 def job_with_id(db, job_id, state="done", *, user_id=USER_ID):
     billing.ensure_user(db, user_id, f"{user_id}@example.com", STARTER_CENTS)
     key = f"uploads/{user_id}/{job_id}.mp4"
-    billing.reserve(db, user_id, job_id, key, "clip.mp4", 3000)
+    billing.reserve(db, user_id, job_id, key, "clip.mp4", 3000, cfg=CFG)
     if state in ("processing", "done", "failed"):
         assert billing.claim(db, job_id) == 1
     if state == "done":

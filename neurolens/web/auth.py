@@ -4,7 +4,7 @@ Two modes. "dev" (laptop and tests): a fixed development user, allowed only on a
 address and never on AWS, so it can never be exposed publicly; every request is signed in as it.
 "cognito" (AWS): sign-in through Amazon Cognito's hosted pages (Google or email and password).
 The signed cookie holds only a random session token; the server stores its SHA-256 and reads the
-user id and email from the database. A session lasts `billing.SESSION_DAYS` from its last use.
+user id and email from the database. A session lasts `auth.session_days` from its last use.
 """
 
 import hashlib
@@ -13,11 +13,9 @@ from datetime import UTC, datetime, timedelta
 
 from flask import current_app, session
 
-from neurolens import billing, settings
+from neurolens import settings
 
 LOCAL_HOST = "127.0.0.1"
-DEFAULT_AUTH = {"mode": "dev", "dev_user_id": "dev-user", "dev_email": "dev@localhost"}
-SESSION_DAYS = billing.SESSION_DAYS
 REFRESH_AFTER_S = 60 * 60  # `last_seen_at` moves at most once an hour
 SESSION_TOKEN_KEY = "session"
 SIGNED_IN_HINT_COOKIE = "nl_signed_in"
@@ -34,12 +32,15 @@ REQUIRED_COGNITO_SETTINGS = (
 
 
 def auth_settings(cfg):
-    """The auth block with defaults, checked. Raises UnsafeConfigError for the development
+    """The auth block from config.json, checked. Raises UnsafeConfigError for the development
     identity on AWS (`deployed`) or on anything but 127.0.0.1, and ValueError for a Cognito
     setting that is missing."""
-    cfg = cfg or {}
-    auth = {**DEFAULT_AUTH, **(cfg.get("auth") or {})}
+    auth = dict(cfg.get("auth") or {})
+    auth["mode"] = settings._required(cfg, "auth", "mode")
+    auth["session_days"] = settings.session_days(cfg)
     if auth["mode"] == "dev":
+        auth["dev_user_id"] = settings._required(cfg, "auth", "dev_user_id")
+        auth["dev_email"] = settings._required(cfg, "auth", "dev_email")
         if cfg.get("deployed"):
             raise settings.UnsafeConfigError(
                 "auth.mode 'dev' gives everyone the same account, so it never runs on AWS "
@@ -84,7 +85,7 @@ def init_auth(app, cfg, ssm_client, *, server_metadata=None):
         SESSION_COOKIE_SECURE=True,
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Lax",
-        PERMANENT_SESSION_LIFETIME=timedelta(days=SESSION_DAYS),
+        PERMANENT_SESSION_LIFETIME=timedelta(days=auth["session_days"]),
         SESSION_REFRESH_EACH_REQUEST=False,
     )
     if server_metadata is None:
@@ -142,7 +143,7 @@ def set_signed_in_hint(response):
     response.set_cookie(
         SIGNED_IN_HINT_COOKIE,
         "1",
-        max_age=SESSION_DAYS * 24 * 60 * 60,
+        max_age=current_app.config["NEUROLENS_AUTH"]["session_days"] * 24 * 60 * 60,
         secure=current_app.config["SESSION_COOKIE_SECURE"],
         httponly=False,
         samesite="Lax",
@@ -161,7 +162,7 @@ def current_user():
     """(user_id, email) of the request's user, or None when nobody is signed in.
 
     Cognito mode trusts only the server's session row: the token must exist there, its account
-    must not be marked deleted, and its last use must be within SESSION_DAYS. The email comes
+    must not be marked deleted, and its last use must be within `auth.session_days`. The email comes
     from the database, never the cookie.
     """
     auth = current_app.config["NEUROLENS_AUTH"]
@@ -183,7 +184,7 @@ def current_user():
         return None
     row = rows[0]
     now = datetime.now(UTC)
-    if now - row["last_seen_at"] >= timedelta(days=SESSION_DAYS):
+    if now - row["last_seen_at"] >= timedelta(days=auth["session_days"]):
         return None
     if now - row["last_seen_at"] >= timedelta(seconds=REFRESH_AFTER_S):
         with db.transaction() as tx:

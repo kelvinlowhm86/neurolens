@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 from botocore.exceptions import ClientError
-from conftest import MIGRATIONS, STARTER_CENTS, USER_ID
+from conftest import CFG, MIGRATIONS, STARTER_CENTS, USER_ID
 from neurolens import billing, settings, storage, worker
 from neurolens.web.app import create_app
 
@@ -73,6 +73,7 @@ def make_job(db, *, consent, ext=".mp4", user_id=USER_ID, client_seconds=3):
         f"clip{ext}",
         round(client_seconds * 1000),
         research_consent=consent,
+        cfg=CFG,
     )
     assert billed > 0
     return job_id, key
@@ -88,7 +89,7 @@ def object_exists(aws, key):
 
 
 def verify(db, job_id):
-    assert billing.verify_queued(db, job_id, 3000, settings.max_duration(None)) == "ok"
+    assert billing.verify_queued(db, job_id, 3000, settings.max_duration(CFG), cfg=CFG) == "ok"
 
 
 def run_job(aws, db, job_id, clip_path, cfg, masks, *, s3=None):
@@ -146,7 +147,7 @@ def test_reserve_defaults_research_consent_to_false(db, pg):
     job_id = str(uuid.uuid4())
     key = f"uploads/{USER_ID}/{job_id}.mp4"
     billing.ensure_user(db, USER_ID, f"{USER_ID}@example.com", STARTER_CENTS)
-    billing.reserve(db, USER_ID, job_id, key, "clip.mp4", 3000)
+    billing.reserve(db, USER_ID, job_id, key, "clip.mp4", 3000, cfg=CFG)
     assert pg.job(job_id)["research_consent"] is False
 
 

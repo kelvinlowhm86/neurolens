@@ -966,7 +966,7 @@
       <input type="checkbox" id="consentBox">
       <div class="consent-copy">
         <label for="consentBox">Share to help improve NeuroLens (<a href="/static/privacy.html#sharing" target="_blank" rel="noopener">details</a>). I own the rights to it.</label>
-        <p class="consent-note">Add its retention curve once it's reached 1,000 views: see real viewers beside the prediction, and get its credit back.</p>
+        <p class="consent-note">Add its retention curve once it's reached <span id="consentViews"></span> views: see real viewers beside the prediction, and get its credit back.</p>
       </div>
     </div>
     <div class="actions">
@@ -2505,6 +2505,9 @@ async function loadLimits() {
     limits = await res.json();
     resultRetentionDays = Number.isFinite(limits.result_retention_days) ? limits.result_retention_days : null;
     cancelSeconds = Number.isFinite(limits.cancel_seconds) ? limits.cancel_seconds : null;
+    CONSENT_VERSION = limits.consent_version;
+    const views = limits.curve_min_views;
+    $('consentViews').textContent = Number.isFinite(views) ? Number(views).toLocaleString('en-US') : '';
     const block = limits.price && limits.price.block_seconds > 0 ? ` · credit used in ${minSec(limits.price.block_seconds)} steps` : '';
     $('limitsText').textContent = `MP4, MOV or WebM · up to ${minSec(limits.max_video_duration_seconds)}${block}`;
     if (creditWords(0) == null) console.error('No usable price in /api/limits: credit is hidden', limits.price);
@@ -2514,6 +2517,10 @@ async function loadLimits() {
 }
 function cancelWindowCopy() {
   return Number.isFinite(cancelSeconds) ? ` · cancel within ${cancelSeconds} s` : '';
+}
+function viewsText() {
+  const views = limits && limits.curve_min_views;
+  return Number.isFinite(views) ? Number(views).toLocaleString('en-US') : '';
 }
 const ACCEPTED_TYPES = ['video/mp4', 'video/quicktime', 'video/webm'];
 const EXTENSION_TYPES = { mp4: 'video/mp4', mov: 'video/quicktime', webm: 'video/webm' };
@@ -2831,8 +2838,8 @@ function stopQueueAfter(entry, reason, signedOut) {
 const UPLOAD_STALL_MS = 60000;
 
 // The version of the consent wording shown in the upload dialog; the server records it per job and
-// Refuses an outdated one. Change it together with the wording and billing.CONSENT_VERSION.
-const CONSENT_VERSION = '2026-11-03';
+// Refuses an outdated one. It comes from /api/limits, whose value the server owns.
+let CONSENT_VERSION = null;
 
 async function uploadEntry(entry) {
   const item = entry.item;
@@ -3923,7 +3930,7 @@ function showRetention(jobId, title) {
     const reward = cached && (cached.curve_reward_cents || 0) > 0
       ? creditWords(cached.curve_reward_cents) : null;
     $('retentionCardText').textContent = reward
-      ? `Add its retention curve to see real viewers beside the prediction; once it reaches 1,000 views, an eligible curve can earn ${reward} back.`
+      ? `Add its retention curve to see real viewers beside the prediction; once it reaches ${viewsText()} views, an eligible curve can earn ${reward} back.`
       : "Add its retention curve to see real viewers beside the prediction.";
   }
 }
@@ -5370,7 +5377,8 @@ function retentionSeries(points, T) {
 
 function renderRetentionStrip(data) {
   const T = totalSeconds();
-  if (!currentResult || !data || !T || !Number.isFinite(Number(data.duration_s)) || Math.abs(Number(data.duration_s) - T) > 2) {
+  const tolerance = limits && Number(limits.curve_length_tolerance_s);
+  if (!currentResult || !data || !T || !Number.isFinite(tolerance) || !Number.isFinite(Number(data.duration_s)) || Math.abs(Number(data.duration_s) - T) > tolerance) {
     clearRetentionStrip();
     return;
   }

@@ -9,8 +9,8 @@ not JSON raise `ProbeFailed`, which the dispatcher lets propagate so SQS redeliv
 import subprocess
 
 import pytest
-from conftest import STARTER_CENTS
-from neurolens import pricing
+from conftest import CFG, STARTER_CENTS
+from neurolens import deadlines, pricing, settings
 
 
 def media():
@@ -165,14 +165,17 @@ def test_probe_failed_propagates_and_leaves_the_job_queued(aws, db, pg, new_job,
             appscaling=NotPausedAppScaling(),
             db=db,
             endpoint="neurolens-gpu",
-            max_upload_bytes=300_000_000,
-            max_duration_s=120,
+            max_upload_bytes=CFG["max_upload_bytes"],
+            max_duration_s=settings.max_duration(CFG),
+            deadline_s=deadlines.dispatch_deadline_s(CFG),
+            cfg=CFG,
+            variant="main",
         )
 
     job = pg.job(job_id)
     assert job["status"] == "queued" and job["verified_duration_ms"] is None
     assert job["error_code"] is None
-    price = pricing.estimate_cost_cents(3)
+    price = pricing.estimate_cost_cents(CFG, 3)
     assert pg.balance() == (STARTER_CENTS - price, price)
     assert storage.object_exists(aws.s3, aws.bucket, key)
     assert sagemaker.calls == []

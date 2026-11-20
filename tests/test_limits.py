@@ -2,15 +2,33 @@
 
 import pytest
 from conftest import UPLOAD
-from neurolens import pricing
+from neurolens import billing, pricing, settings
 from neurolens.web.app import create_app
 
 
-def _price():
+def _price(cfg):
     return {
-        "cents_per_block": pricing.CENTS_PER_BLOCK,
-        "block_seconds": pricing.BLOCK_SECONDS,
+        "cents_per_block": settings.cents_per_block(cfg),
+        "block_seconds": settings.block_seconds(cfg),
         "allowance_seconds": pricing.ALLOWANCE_SECONDS,
+    }
+
+
+def _limits(cfg):
+    return {
+        "max_video_duration_seconds": settings.max_duration(cfg),
+        "max_upload_bytes": cfg.get("max_upload_bytes"),
+        "colour_range": cfg["response"]["colour_range"],
+        "result_retention_days": settings.result_retention_days(cfg),
+        "cancel_seconds": settings.cancel_seconds(cfg),
+        "invite_seconds": cfg["billing"]["invite_cents"]
+        * settings.block_seconds(cfg)
+        / settings.cents_per_block(cfg),
+        "consent_version": billing.CONSENT_VERSION,
+        "curve_min_views": cfg["research"]["curve_min_views"],
+        "curve_length_tolerance_s": cfg["research"]["curve_length_tolerance_s"],
+        "max_batch_files": UPLOAD["max_batch_files"],
+        "price": _price(cfg),
     }
 
 
@@ -25,37 +43,19 @@ def get_limits(tmp_path):
 
 
 def test_returns_the_upload_limits_and_the_colour_range(get_limits, make_cfg):
-    resp = get_limits(cfg=make_cfg())
+    cfg = make_cfg()
+    resp = get_limits(cfg=cfg)
     assert resp.status_code == 200
     assert resp.is_json
-    assert resp.get_json() == {
-        "max_video_duration_seconds": 120,
-        "max_upload_bytes": 300000000,
-        "colour_range": 0.5,
-        "result_retention_days": 30,
-        "cancel_seconds": 15,
-        "invite_seconds": 0.0,
-        "max_batch_files": UPLOAD["max_batch_files"],
-        "price": _price(),
-    }
+    assert resp.get_json() == _limits(cfg)
 
 
 def test_changing_the_config_changes_the_answer(get_limits, make_cfg):
     response = {**make_cfg()["response"], "colour_range": 0.7}
-    resp = get_limits(
-        cfg=make_cfg(max_video_duration_seconds=45, max_upload_bytes=5000, response=response)
-    )
+    cfg = make_cfg(max_video_duration_seconds=45, max_upload_bytes=5000, response=response)
+    resp = get_limits(cfg=cfg)
     assert resp.status_code == 200
-    assert resp.get_json() == {
-        "max_video_duration_seconds": 45,
-        "max_upload_bytes": 5000,
-        "colour_range": 0.7,
-        "result_retention_days": 30,
-        "cancel_seconds": 15,
-        "invite_seconds": 0.0,
-        "max_batch_files": UPLOAD["max_batch_files"],
-        "price": _price(),
-    }
+    assert resp.get_json() == _limits(cfg)
 
 
 def test_upload_bytes_is_null_when_config_has_none(get_limits, make_cfg):
@@ -64,49 +64,21 @@ def test_upload_bytes_is_null_when_config_has_none(get_limits, make_cfg):
     resp = get_limits(cfg=cfg)
     assert resp.status_code == 200
     data = resp.get_json()
-    assert set(data) == {
-        "max_video_duration_seconds",
-        "max_upload_bytes",
-        "colour_range",
-        "result_retention_days",
-        "cancel_seconds",
-        "invite_seconds",
-        "max_batch_files",
-        "price",
-    }
+    assert set(data) == set(_limits(cfg))
     assert data["max_upload_bytes"] is None
-    assert data["max_video_duration_seconds"] == 120
-    assert data["colour_range"] == 0.5
-
-
-def test_no_cfg_uses_default_duration_and_null_bytes_but_still_has_a_colour_range(get_limits):
-    resp = get_limits()
-    assert resp.status_code == 200
-    data = resp.get_json()
-    assert data["max_video_duration_seconds"] == 120
-    assert data["max_upload_bytes"] is None
-    assert "colour_range" in data
+    assert data["max_video_duration_seconds"] == settings.max_duration(cfg)
+    assert data["colour_range"] == cfg["response"]["colour_range"]
 
 
 def test_needs_no_aws_block(get_limits, make_cfg):
-    resp = get_limits(cfg=make_cfg(with_aws=False))
+    cfg = make_cfg(with_aws=False)
+    resp = get_limits(cfg=cfg)
     assert resp.status_code == 200
-    assert resp.get_json() == {
-        "max_video_duration_seconds": 120,
-        "max_upload_bytes": 300000000,
-        "colour_range": 0.5,
-        "result_retention_days": 30,
-        "cancel_seconds": 15,
-        "invite_seconds": 0.0,
-        "max_batch_files": UPLOAD["max_batch_files"],
-        "price": _price(),
-    }
+    assert resp.get_json() == _limits(cfg)
 
 
-def test_the_price_follows_the_pricing_constant(get_limits, make_cfg, monkeypatch):
-    monkeypatch.setattr(
-        pricing, "CENTS_PER_BLOCK", 137
-    )  # not the real price, so a typed-in copy fails
+def test_the_price_follows_the_config(get_limits, make_cfg, monkeypatch):
+    monkeypatch.setattr(settings, "cents_per_block", lambda cfg: 137)
     resp = get_limits(cfg=make_cfg())
     assert resp.status_code == 200
     assert resp.get_json()["price"]["cents_per_block"] == 137

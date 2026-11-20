@@ -14,7 +14,7 @@ import uuid
 
 import pytest
 import boto3
-from conftest import GPU_ENDPOINT, STARTER_CENTS, WEB_USER_EMAIL, WEB_USER_ID, sign_in
+from conftest import CFG, GPU_ENDPOINT, STARTER_CENTS, WEB_USER_EMAIL, WEB_USER_ID, sign_in
 from neurolens import billing, pricing, storage
 from neurolens.web.app import create_app
 
@@ -137,7 +137,9 @@ def owned_job(db, user_id=WEB_USER_ID, seconds=27.4, starter_cents=10_000):
     billing.ensure_user(db, user_id, f"{user_id}@example.com", starter_cents)
     job_id = str(uuid.uuid4())
     key = storage.object_key(user_id, job_id, "video/mp4")
-    billing.reserve(db, user_id, job_id, key, f"ad-{job_id[:8]}.mp4", round(seconds * 1000))
+    billing.reserve(
+        db, user_id, job_id, key, f"ad-{job_id[:8]}.mp4", round(seconds * 1000), cfg=CFG
+    )
     return job_id
 
 
@@ -149,7 +151,7 @@ def put_result(aws, job_id):
 
 def done_job(aws, db, **kwargs):
     job_id = owned_job(db, **kwargs)
-    assert billing.verify_queued(db, job_id, 27_400, 120) == "ok"
+    assert billing.verify_queued(db, job_id, 27_400, 120, cfg=CFG) == "ok"
     billing.claim(db, job_id)
     result = put_result(aws, job_id)
     billing.settle_success(db, job_id)
@@ -182,7 +184,7 @@ def test_me_shows_a_reservation(client):
         "/api/uploads/presign",
         json={"content_type": "video/mp4", "client_duration_seconds": 27.4, "filename": "a.mp4"},
     )
-    price = pricing.estimate_cost_cents(27.4)
+    price = pricing.estimate_cost_cents(CFG, 27.4)
     assert client.get("/api/me").get_json()["balance"] == {
         "available_cents": STARTER_CENTS - price,
         "reserved_cents": price,
@@ -223,7 +225,7 @@ def test_history_rows_carry_the_jobs_values(aws, client, db):
     assert done["status"] == "done"
     assert done["filename"] == f"ad-{done_id[:8]}.mp4"
     assert done["verified_duration_ms"] == 27_400
-    assert done["captured_cents"] == pricing.estimate_cost_cents(27.4)
+    assert done["captured_cents"] == pricing.estimate_cost_cents(CFG, 27.4)
     assert done["error_code"] is None
     assert done["created_at"]
     assert failed["status"] == "failed"

@@ -8,7 +8,7 @@ alone and the handler raises, so SQS retries the message later.
 
 import logging
 
-from neurolens import lambdas, storage
+from neurolens import lambdas, settings, storage
 
 logger = logging.getLogger(__name__)
 
@@ -16,12 +16,15 @@ logger = logging.getLogger(__name__)
 def handler(event, context):
     lambdas.setup_logging()
     db, s3 = lambdas.database(), lambdas.s3_client()
+    gpu_wait_grace_s = settings.gpu_wait_grace_s(settings.load_config())
     waiting, failed = [], []
     for record in event["Records"]:
         for bucket, key in storage.parse_s3_event(record["body"]):
             job_id = storage.job_id_from_key(key)
             try:
-                if not lambdas.finish_job(db, s3, bucket, job_id):
+                if not lambdas.finish_job(
+                    db, s3, bucket, job_id, gpu_wait_grace_s=gpu_wait_grace_s
+                ):
                     waiting.append(job_id)
             except Exception:
                 logger.exception(f"{job_id}: could not finish")

@@ -13,7 +13,7 @@ from urllib.parse import unquote, urlparse
 
 import pytest
 from botocore.exceptions import ClientError
-from conftest import STARTER_CENTS, USER_ID, WEB_USER_ID, write_config
+from conftest import CFG, STARTER_CENTS, USER_ID, WEB_USER_ID, write_config
 from neurolens import billing, inference, pricing, settings, storage, worker
 from neurolens.web.app import create_app
 
@@ -38,12 +38,14 @@ def make_job(db, *, consent=False):
     job_id = str(uuid.uuid4())
     key = f"uploads/{USER_ID}/{job_id}.mp4"
     billing.ensure_user(db, USER_ID, f"{USER_ID}@example.com", STARTER_CENTS)
-    billing.reserve(db, USER_ID, job_id, key, "clip.mp4", 3000, research_consent=consent)
+    billing.reserve(db, USER_ID, job_id, key, "clip.mp4", 3000, research_consent=consent, cfg=CFG)
     return job_id, key
 
 
 def verify(db, job_id, duration_ms=3000):
-    assert billing.verify_queued(db, job_id, duration_ms, settings.max_duration(None)) == "ok"
+    assert (
+        billing.verify_queued(db, job_id, duration_ms, settings.max_duration(CFG), cfg=CFG) == "ok"
+    )
 
 
 def run_job(aws, db, job_id, video_path, cfg, masks, *, s3=None):
@@ -85,7 +87,7 @@ def written_keys(s3):
 
 
 def assert_charged(pg, job_id, seconds=3):
-    price = pricing.estimate_cost_cents(seconds)
+    price = pricing.estimate_cost_cents(CFG, seconds)
     job = pg.job(job_id)
     assert job["status"] == "done" and job["captured_cents"] == price
     assert pg.balance() == (STARTER_CENTS - price, 0)
@@ -444,7 +446,7 @@ def done_web_job(db, *, user_id=WEB_USER_ID, content_type="video/mp4", consent=F
     billing.ensure_user(db, user_id, f"{user_id}@example.com", STARTER_CENTS)
     job_id = str(uuid.uuid4())
     key = storage.object_key(user_id, job_id, content_type)
-    billing.reserve(db, user_id, job_id, key, "clip.mp4", 27_400, research_consent=consent)
+    billing.reserve(db, user_id, job_id, key, "clip.mp4", 27_400, research_consent=consent, cfg=CFG)
     assert billing.claim(db, job_id) == 1
     assert billing.settle_success(db, job_id) is True
     return job_id, key

@@ -83,8 +83,8 @@ CFG_WITHOUT_AWS.pop("aws", None)
 CFG_WITHOUT_AWS.pop("db", None)
 
 
-@pytest.mark.parametrize("cfg", [None, CFG_WITHOUT_AWS], ids=["cfg_none", "cfg_without_aws"])
-def test_create_app_does_not_load_inference_or_torch(cfg):
+def test_create_app_does_not_load_inference_or_torch():
+    cfg = CFG_WITHOUT_AWS
     proc = subprocess.run(
         [sys.executable, "-c", CREATE_APP_CODE.format(cfg=cfg)],
         cwd=REPO_ROOT,

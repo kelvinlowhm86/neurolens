@@ -13,7 +13,7 @@ from pathlib import Path
 
 import psycopg
 import pytest
-from conftest import MIGRATIONS, STARTER_CENTS, USER_ID
+from conftest import CFG, MIGRATIONS, STARTER_CENTS, USER_ID
 from neurolens import billing
 from neurolens import db as dbmod
 from psycopg.conninfo import make_conninfo
@@ -29,7 +29,7 @@ def reserved_job(db, *, user_id=USER_ID, client_ms=3000):
     billing.ensure_user(db, user_id, f"{user_id}@example.com", STARTER_CENTS)
     job_id = str(uuid.uuid4())
     key = f"uploads/{user_id}/{job_id}.mp4"
-    billing.reserve(db, user_id, job_id, key, "clip.mp4", client_ms)
+    billing.reserve(db, user_id, job_id, key, "clip.mp4", client_ms, cfg=CFG)
     return job_id
 
 

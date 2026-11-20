@@ -23,7 +23,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from conftest import STARTER_CENTS, USER_ID
+from conftest import CFG, STARTER_CENTS, USER_ID
 from neurolens import billing, inference, pricing, settings, storage, worker
 
 JOB_HEADER = "X-Amzn-SageMaker-Custom-Attributes"
@@ -46,7 +46,9 @@ def no_keep_alive(on_beat):
 
 
 def verify(db, job_id, duration_ms=3000):
-    assert billing.verify_queued(db, job_id, duration_ms, settings.max_duration(None)) == "ok"
+    assert (
+        billing.verify_queued(db, job_id, duration_ms, settings.max_duration(CFG), cfg=CFG) == "ok"
+    )
 
 
 def upload(aws, key, clip_path):
@@ -68,7 +70,7 @@ def run_job(aws, db, job_id, clip_path, make_cfg, roi_masks_small):
 def consented_job(db, new_key):
     job_id, key = new_key()
     billing.ensure_user(db, USER_ID, f"{USER_ID}@example.com", STARTER_CENTS)
-    billing.reserve(db, USER_ID, job_id, key, "clip.mp4", 3000, research_consent=True)
+    billing.reserve(db, USER_ID, job_id, key, "clip.mp4", 3000, research_consent=True, cfg=CFG)
     return job_id, key
 
 
@@ -98,7 +100,7 @@ def test_success_charges_once_and_keeps_the_result_files(
 
     assert outcome is worker.Outcome.DONE
     job = pg.job(job_id)
-    price = pricing.estimate_cost_cents(3)
+    price = pricing.estimate_cost_cents(CFG, 3)
     assert job["status"] == "done"
     assert job["captured_cents"] == price and job["attempt"] == 1
     assert pg.balance() == (STARTER_CENTS - price, 0)
@@ -146,7 +148,7 @@ def test_an_existing_result_settles_the_job_and_skips_the_analysis(
     assert run_job(aws, db, job_id, clip_path, make_cfg, roi_masks_small) is worker.Outcome.SKIPPED
 
     job = pg.job(job_id)
-    price = pricing.estimate_cost_cents(3)
+    price = pricing.estimate_cost_cents(CFG, 3)
     assert job["status"] == "done" and job["captured_cents"] == price
     assert pg.balance() == (STARTER_CENTS - price, 0)
     stored = json.loads(
@@ -286,7 +288,7 @@ def test_a_video_within_a_second_of_the_checked_length_runs_normally(
     assert run_job(aws, db, job_id, clip_path, make_cfg, roi_masks_small) is worker.Outcome.DONE
 
     job = pg.job(job_id)
-    price = pricing.estimate_cost_cents(3)
+    price = pricing.estimate_cost_cents(CFG, 3)
     assert job["status"] == "done" and job["captured_cents"] == price
     assert pg.balance() == (STARTER_CENTS - price, 0)
     assert object_exists(aws, key)
@@ -337,7 +339,7 @@ def test_a_consented_job_that_lost_its_claim_writes_no_dataset_files(
 
     job = pg.job(job_id)
     assert job["status"] == "processing" and job["attempt"] == 2
-    price = pricing.estimate_cost_cents(3)
+    price = pricing.estimate_cost_cents(CFG, 3)
     assert pg.balance() == (STARTER_CENTS - price, price)
     assert object_exists(aws, key)
     for absent in (
@@ -374,7 +376,7 @@ def test_a_lost_claim_returns_lost_claim_without_refund_or_deletes(
     assert outcome is worker.Outcome.LOST_CLAIM
     job = pg.job(job_id)
     assert job["status"] == "processing" and job["attempt"] == 2
-    price = pricing.estimate_cost_cents(3)
+    price = pricing.estimate_cost_cents(CFG, 3)
     assert pg.balance() == (STARTER_CENTS - price, price)
     assert object_exists(aws, key)
     assert not object_exists(aws, f"results/{job_id}.json")
@@ -397,7 +399,7 @@ def test_a_settlement_that_commits_then_raises_keeps_the_done_result(
     assert run_job(aws, db, job_id, clip_path, make_cfg, roi_masks_small) is worker.Outcome.FAILED
 
     job = pg.job(job_id)
-    price = pricing.estimate_cost_cents(3)
+    price = pricing.estimate_cost_cents(CFG, 3)
     assert job["status"] == "done" and job["captured_cents"] == price
     assert pg.balance() == (STARTER_CENTS - price, 0)
     assert pg.kinds().count("capture") == 1 and "refund" not in pg.kinds()

@@ -25,7 +25,7 @@ import time
 import uuid
 from datetime import datetime, timedelta
 
-from neurolens import billing, settings
+from neurolens import billing, pricing, settings
 from neurolens import db as dbmod
 
 STRS = (str,)
@@ -127,18 +127,22 @@ def check_sign_in(db, created):
     return problems
 
 
-def smoke(db, max_duration_s):
+def smoke(db, cfg):
+    max_duration_s = settings.max_duration(cfg)
+    cents_per_block = settings.cents_per_block(cfg)
+    starter_cents = cents_per_block * 5
+    final_price = pricing.estimate_cost_cents(cfg, 61)
     user_id = f"smoke-{uuid.uuid4()}"
     job_id = str(uuid.uuid4())
     problems = []
     created = [user_id]
     try:
         started = time.monotonic()
-        billing.ensure_user(db, user_id, "smoke@localhost", 500)
+        billing.ensure_user(db, user_id, "smoke@localhost", starter_cents)
         print(f"first call (includes any wake-up): {time.monotonic() - started:.1f} s")
         key = f"uploads/{user_id}/{job_id}.mp4"
-        price = billing.reserve(db, user_id, job_id, key, "smoke.mp4", 27400)
-        verdict = billing.verify_queued(db, job_id, 61000, max_duration_s)
+        price = billing.reserve(db, user_id, job_id, key, "smoke.mp4", 27400, cfg=cfg)
+        verdict = billing.verify_queued(db, job_id, 61000, max_duration_s, cfg=cfg)
         if verdict != billing.OK:
             problems.append(f"verify_queued returned {verdict!r}")
         attempt = billing.claim(db, job_id)
@@ -153,13 +157,24 @@ def smoke(db, max_duration_s):
             problems.append("settle_success returned False")
         refunded = str(uuid.uuid4())
         billing.reserve(
-            db, user_id, refunded, f"uploads/{user_id}/{refunded}.mp4", "smoke-2.mp4", 27400
+            db,
+            user_id,
+            refunded,
+            f"uploads/{user_id}/{refunded}.mp4",
+            "smoke-2.mp4",
+            27400,
+            cfg=cfg,
         )
         if not billing.issue_refund(db, refunded, "presign_failed", queued=True):
             problems.append("issue_refund returned False")
         balance = billing.get_balance(db, user_id)
-        if balance != {"available_cents": 200, "reserved_cents": 0}:
-            problems.append(f"balance {balance} after reserving {price}, capturing 300, refunding")
+        if balance != {
+            "available_cents": starter_cents - final_price,
+            "reserved_cents": 0,
+        }:
+            problems.append(
+                f"balance {balance} after reserving {price}, capturing {final_price}, refunding"
+            )
         problems += check_invariant(db, user_id)
         with db.transaction() as tx:
             [row] = tx.execute(
@@ -181,7 +196,7 @@ def main(argv=None):
     args = parser.parse_args(argv)
     cfg = settings.load_settings()
     cfg.setdefault("db", {})["backend"] = args.backend
-    problems = smoke(dbmod.from_config(cfg), settings.max_duration(cfg))
+    problems = smoke(dbmod.from_config(cfg), cfg)
     for problem in problems:
         print(f"FAIL {problem}")
     print(

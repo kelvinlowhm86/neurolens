@@ -15,12 +15,12 @@ import threading
 import uuid
 
 import pytest
-from conftest import RESEARCH, REWARD, WEB_USER_ID
+from conftest import CFG, RESEARCH, REWARD, WEB_USER_ID
 from neurolens import billing, pricing, results, storage
 from neurolens.web.app import create_app
 
 STARTER_CENTS = 10_000
-PRICE_CENTS = pricing.estimate_cost_cents(27.4)  # one started 30 s block
+PRICE_CENTS = pricing.estimate_cost_cents(CFG, 27.4)  # one started 30 s block
 OTHER_USER = "other-user"
 VIEWS = "lt_1k"
 PUBLISHED = "week"
@@ -84,7 +84,14 @@ def make_job(
     job_id = str(uuid.uuid4())
     key = storage.object_key(user_id, job_id, "video/mp4")
     billing.reserve(
-        db, user_id, job_id, key, "clip.mp4", round(seconds * 1000), research_consent=consent
+        db,
+        user_id,
+        job_id,
+        key,
+        "clip.mp4",
+        round(seconds * 1000),
+        research_consent=consent,
+        cfg=CFG,
     )
     if state in ("processing", "done", "failed"):
         assert billing.claim(db, job_id) == 1
@@ -162,7 +169,7 @@ def youtube_falls_back(monkeypatch):
 def quality(points):
     from neurolens.results import curve_quality
 
-    return curve_quality(points)
+    return curve_quality(CFG, points)
 
 
 def test_a_good_curve_has_no_failed_checks():

@@ -18,7 +18,7 @@ import logging
 import uuid
 from datetime import UTC, datetime
 
-from neurolens import pricing, storage
+from neurolens import settings, storage
 from neurolens.pricing import estimate_cost_cents
 
 logger = logging.getLogger("neurolens")
@@ -32,19 +32,10 @@ STALE_AFTER_S = 90
 # The wording of the research-consent box. A wording change needs a new value here and
 # the new text on the page together; old jobs keep the version they agreed to.
 CONSENT_VERSION = "2026-11-03"
-# A session row older than this (by its last use) no longer signs anybody in.
-SESSION_DAYS = 30
-# A dispatched request that has not been claimed this long after its GPU wait is over is refunded.
-GPU_WAIT_GRACE_S = 300
-# Visitor passes: 2 minutes ($4 / 400 cents) per visitor pass, 10 passes initially.
+# Visitor passes: the pool and its guest accounts. The amounts and choices come from config.json
+# (`visitor`); these identifiers stay in code.
 VISITOR_POOL_USER_ID = "visitor-pool"
 VISITOR_POOL_EMAIL = "visitor-pool@visitor.local"
-VISITOR_PASS_CENTS = 400
-VISITOR_INITIAL_PASSES = 10
-VISITOR_GPU_WARM_HOURS = 6
-# The pass, grant and GPU choices the admin panel offers through the API.
-VISITOR_ADJUST_DELTAS = (0, 5, 10)
-VISITOR_GRANT_MINUTES = (0, 2, 5, 10)
 GUEST_PREFIX = "guest-"
 
 CURVE_REMOVED_MESSAGES = {
@@ -410,6 +401,7 @@ def list_jobs(
     *,
     reward_cap,
     reward_window_days,
+    gpu_wait_grace_s,
 ):
     """The user's jobs, newest first, at most `limit`.
 
@@ -447,7 +439,7 @@ def list_jobs(
                 "done": DONE,
                 "queued": QUEUED,
                 "cancelled": "cancelled",
-                "grace": GPU_WAIT_GRACE_S,
+                "grace": gpu_wait_grace_s,
             },
         )
     for row in rows:
@@ -711,6 +703,7 @@ def reserve(
     client_duration_ms,
     research_consent=False,
     *,
+    cfg,
     max_waiting_jobs=None,
 ):
     """Move the estimated price from available to reserved and create the queued job.
@@ -721,7 +714,7 @@ def reserve(
     row lock makes the count and the new job one decision per user. Raises AccountDeleted
     (changing nothing) once the account's delete has marked it.
     """
-    price = estimate_cost_cents(client_duration_ms / 1000)
+    price = estimate_cost_cents(cfg, client_duration_ms / 1000)
     consent_version = CONSENT_VERSION if research_consent else None
     with db.transaction() as tx:
         rows = tx.execute(
@@ -836,7 +829,7 @@ def set_stage(db, job_id, attempt, stage, now=None):
 # ---------------------------------------------------------------- Stage 2
 
 
-def verify_queued(db, job_id, verified_duration_ms, max_duration_s):
+def verify_queued(db, job_id, verified_duration_ms, max_duration_s, *, cfg):
     """Price a queued job by its measured duration, before any GPU runs. Returns "ok",
     "not_queued" (nothing changed), or the refund reason it applied."""
     with db.transaction() as tx:
@@ -854,7 +847,7 @@ def verify_queued(db, job_id, verified_duration_ms, max_duration_s):
             "UPDATE jobs SET verified_duration_ms = :ms WHERE job_id = CAST(:job_id AS uuid)",
             {"ms": verified_duration_ms, "job_id": job_id},
         )
-        price = estimate_cost_cents(verified_duration_ms / 1000)
+        price = estimate_cost_cents(cfg, verified_duration_ms / 1000)
         difference = price - job["reserved_cents"]
         if difference == 0:
             return OK
@@ -964,7 +957,7 @@ def record_gpu_wait(db, job_id, until):
     return bool(rows)
 
 
-def refund_if_gpu_wait_over(db, job_id):
+def refund_if_gpu_wait_over(db, job_id, *, gpu_wait_grace_s):
     """Refund a queued, never-claimed job whose recorded GPU wait ended more than the grace ago.
     True when this call refunded it; False, changing nothing, otherwise.
 
@@ -977,7 +970,7 @@ def refund_if_gpu_wait_over(db, job_id):
             "gpu_wait_until IS NOT NULL AND "
             "gpu_wait_until + make_interval(secs => :grace) < now() AS expired "
             "FROM jobs WHERE job_id = CAST(:job_id AS uuid) FOR UPDATE",
-            {"job_id": job_id, "grace": GPU_WAIT_GRACE_S},
+            {"job_id": job_id, "grace": gpu_wait_grace_s},
         )
         job = rows[0] if rows else None
         if (
@@ -1361,9 +1354,13 @@ def add_curve(
 # ---------------------------------------------------------------- Visitor passes
 
 
-def visitor_pass_minutes():
+def visitor_pass_minutes(cfg):
     """The minutes one visitor pass buys, from its cents and the shared price formula."""
-    return VISITOR_PASS_CENTS * pricing.BLOCK_SECONDS / (pricing.CENTS_PER_BLOCK * 60)
+    return (
+        settings.visitor_pass_cents(cfg)
+        * settings.block_seconds(cfg)
+        / (settings.cents_per_block(cfg) * 60)
+    )
 
 
 def is_visitor_guest(user_id):
@@ -1371,21 +1368,24 @@ def is_visitor_guest(user_id):
     return isinstance(user_id, str) and user_id.startswith(GUEST_PREFIX)
 
 
-def _ensure_visitor_pool(tx):
-    """Create the visitor pass pool once with the initial 10 passes."""
+def _ensure_visitor_pool(tx, cfg):
+    """Create the visitor pass pool once with the configured initial passes."""
     _create_user(
-        tx, VISITOR_POOL_USER_ID, VISITOR_POOL_EMAIL, VISITOR_INITIAL_PASSES * VISITOR_PASS_CENTS
+        tx,
+        VISITOR_POOL_USER_ID,
+        VISITOR_POOL_EMAIL,
+        settings.visitor_initial_passes(cfg) * settings.visitor_pass_cents(cfg),
     )
 
 
-def _read_visitor_gpu_warm(tx):
+def _read_visitor_gpu_warm(tx, cfg):
     """Return the active admin GPU keep-warm target (0 for auto-scale, or a positive count),
-    expiring VISITOR_GPU_WARM_HOURS after the click."""
+    expiring `visitor.gpu_warm_hours` after the click."""
     rows = tx.execute(
         "SELECT session_hash, "
         "(last_seen_at < now() - make_interval(hours => CAST(:hours AS integer))) AS expired "
         "FROM sessions WHERE user_id = :user_id LIMIT 1",
-        {"user_id": VISITOR_POOL_USER_ID, "hours": VISITOR_GPU_WARM_HOURS},
+        {"user_id": VISITOR_POOL_USER_ID, "hours": settings.visitor_gpu_warm_hours(cfg)},
     )
     if not rows:
         return 0
@@ -1402,12 +1402,12 @@ def _read_visitor_gpu_warm(tx):
     return target
 
 
-def set_visitor_gpu_warm(db, target):
+def set_visitor_gpu_warm(db, target, *, cfg):
     """Set the admin GPU keep-warm target (0 for auto-scale, or a positive count to hold warm)."""
     if type(target) is not int or target < 0:
         raise ValueError(f"target must be a non-negative integer, not {target!r}")
     with db.transaction() as tx:
-        _ensure_visitor_pool(tx)
+        _ensure_visitor_pool(tx, cfg)
         tx.execute(
             "DELETE FROM sessions WHERE user_id = :user_id",
             {"user_id": VISITOR_POOL_USER_ID},
@@ -1421,15 +1421,15 @@ def set_visitor_gpu_warm(db, target):
                     "user_id": VISITOR_POOL_USER_ID,
                 },
             )
-        return _read_visitor_stats(tx)
+        return _read_visitor_stats(tx, cfg=cfg)
 
 
-def _read_visitor_stats(tx, *, check_pass_id=None):
+def _read_visitor_stats(tx, *, cfg, check_pass_id=None):
     pool = tx.execute(
         "SELECT available_cents FROM balances WHERE user_id = :user_id",
         {"user_id": VISITOR_POOL_USER_ID},
     )
-    remaining = (pool[0]["available_cents"] if pool else 0) // VISITOR_PASS_CENTS
+    remaining = (pool[0]["available_cents"] if pool else 0) // settings.visitor_pass_cents(cfg)
     prefix = f"{GUEST_PREFIX}%"
     pass_days = tx.execute(
         "SELECT CAST((created_at AT TIME ZONE :tz) AS date) AS day, count(*) AS n "
@@ -1520,36 +1520,37 @@ def _read_visitor_stats(tx, *, check_pass_id=None):
         "reports_ready": reports_ready,
         "comparisons_ready": comparisons_ready,
         "days": days,
-        "gpu_warm_target": _read_visitor_gpu_warm(tx),
+        "gpu_warm_target": _read_visitor_gpu_warm(tx, cfg),
         "pass_claimed": pass_claimed,
     }
 
 
-def visitor_stats(db, *, check_pass_id=None):
+def visitor_stats(db, *, cfg, check_pass_id=None):
     """Anonymous visitor pass and job totals across `guest-*` accounts."""
     with db.transaction() as tx:
-        _ensure_visitor_pool(tx)
-        return _read_visitor_stats(tx, check_pass_id=check_pass_id)
+        _ensure_visitor_pool(tx, cfg)
+        return _read_visitor_stats(tx, cfg=cfg, check_pass_id=check_pass_id)
 
 
-def adjust_visitor_passes(db, delta_passes):
+def adjust_visitor_passes(db, delta_passes, *, cfg):
     """Add `delta_passes` (> 0) to the visitor pool, or clear remaining passes when 0."""
     if not isinstance(delta_passes, int) or isinstance(delta_passes, bool) or delta_passes < 0:
         raise ValueError(f"delta_passes must be a non-negative integer, not {delta_passes!r}")
+    pass_cents = settings.visitor_pass_cents(cfg)
     with db.transaction() as tx:
-        _ensure_visitor_pool(tx)
+        _ensure_visitor_pool(tx, cfg)
         pool = _lock_balance(tx, VISITOR_POOL_USER_ID)
         avail = pool["available_cents"] if pool else 0
         if delta_passes == 0:
             if avail > 0:
                 _move(tx, VISITOR_POOL_USER_ID, None, "grant", -avail, 0)
         else:
-            _move(tx, VISITOR_POOL_USER_ID, None, "grant", delta_passes * VISITOR_PASS_CENTS, 0)
-        return _read_visitor_stats(tx)
+            _move(tx, VISITOR_POOL_USER_ID, None, "grant", delta_passes * pass_cents, 0)
+        return _read_visitor_stats(tx, cfg=cfg)
 
 
-def redeem_visitor_pass(db, pass_id, *, current_user_id=None, is_scan=False):
-    """Redeem one visitor QR pass into an isolated `guest-<pass_id>` user with 2 min of credit.
+def redeem_visitor_pass(db, pass_id, *, cfg, current_user_id=None, is_scan=False):
+    """Redeem one visitor QR pass into an isolated `guest-<pass_id>` user with its credit.
 
     Idempotent for the same device or shared link (`is_scan=False`): opening a copied URL without
     `&scan=1` joins the existing guest user without consuming a second pass. If two strangers scan
@@ -1559,8 +1560,9 @@ def redeem_visitor_pass(db, pass_id, *, current_user_id=None, is_scan=False):
     guest account without consuming another pass.
     """
     guest_id = f"{GUEST_PREFIX}{pass_id}"
+    pass_cents = settings.visitor_pass_cents(cfg)
     with db.transaction() as tx:
-        _ensure_visitor_pool(tx)
+        _ensure_visitor_pool(tx, cfg)
         existing = tx.execute(
             "SELECT deleted_at FROM users WHERE user_id = :user_id FOR UPDATE",
             {"user_id": guest_id},
@@ -1581,8 +1583,8 @@ def redeem_visitor_pass(db, pass_id, *, current_user_id=None, is_scan=False):
             pass_id = str(uuid.uuid4())
             guest_id = f"{GUEST_PREFIX}{pass_id}"
         pool = _lock_balance(tx, VISITOR_POOL_USER_ID)
-        if not pool or pool["available_cents"] < VISITOR_PASS_CENTS:
+        if not pool or pool["available_cents"] < pass_cents:
             raise VisitorLimitReached("no visitor passes remaining")
-        _move(tx, VISITOR_POOL_USER_ID, None, "grant", -VISITOR_PASS_CENTS, 0)
-        _create_user(tx, guest_id, f"{guest_id}@visitor.local", VISITOR_PASS_CENTS)
+        _move(tx, VISITOR_POOL_USER_ID, None, "grant", -pass_cents, 0)
+        _create_user(tx, guest_id, f"{guest_id}@visitor.local", pass_cents)
     return guest_id

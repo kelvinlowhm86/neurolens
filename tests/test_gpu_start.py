@@ -11,10 +11,12 @@ import uuid
 
 import pytest
 from botocore.exceptions import ClientError
+from conftest import CFG
+from neurolens import settings
 
 ENDPOINT = "neurolens-gpu"
-MAX_UPLOAD_BYTES = 300_000_000
-MAX_S = 120
+MAX_UPLOAD_BYTES = CFG["max_upload_bytes"]
+MAX_S = settings.max_duration(CFG)
 
 
 class RecordingControl:

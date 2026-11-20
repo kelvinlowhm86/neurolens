@@ -17,11 +17,11 @@ import uuid
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from conftest import RESEARCH, REWARD, WEB_USER_ID
+from conftest import CFG, GPU_WAIT_GRACE_S, RESEARCH, REWARD, WEB_USER_ID
 from neurolens import billing, pricing, storage
 
 STARTER_CENTS = 10_000
-PRICE_CENTS = pricing.estimate_cost_cents(30.1)
+PRICE_CENTS = pricing.estimate_cost_cents(CFG, 30.1)
 VIEWS = "lt_1k"
 PUBLISHED = "week"
 LENGTH_TOLERANCE_S = RESEARCH["curve_length_tolerance_s"]
@@ -235,11 +235,18 @@ def make_job(
     job_id = str(uuid.uuid4())
     key = storage.object_key(user_id, job_id, "video/mp4")
     billing.reserve(
-        db, user_id, job_id, key, "clip.mp4", round(seconds * 1000), research_consent=consent
+        db,
+        user_id,
+        job_id,
+        key,
+        "clip.mp4",
+        round(seconds * 1000),
+        research_consent=consent,
+        cfg=CFG,
     )
     if state != "queued":
         # The dispatcher measures the length before any GPU runs.
-        assert billing.verify_queued(db, job_id, round(seconds * 1000), 3600) == "ok"
+        assert billing.verify_queued(db, job_id, round(seconds * 1000), 3600, cfg=CFG) == "ok"
     if state in ("processing", "done", "failed"):
         assert billing.claim(db, job_id) == 1
     if state == "done":
@@ -478,7 +485,7 @@ def test_list_jobs_no_longer_promises_a_reward_date(db, pg):
     pg.age(job_id, created_s=5 * DAY_S)
     billing.grant_credit(db, f"{WEB_USER_ID}@example.com", 100)
 
-    [row] = billing.list_jobs(db, WEB_USER_ID, 50, **REWARD)
+    [row] = billing.list_jobs(db, WEB_USER_ID, 50, **REWARD, gpu_wait_grace_s=GPU_WAIT_GRACE_S)
 
     assert row["curve_reward_cents"] == PRICE_CENTS
     assert "curve_reward_from" not in row

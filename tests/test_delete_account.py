@@ -15,7 +15,7 @@ from pathlib import PurePosixPath
 import pytest
 from botocore.client import BaseClient
 from botocore.exceptions import ClientError
-from conftest import ISSUER, STARTER_CENTS, check_invariants, sign_in, write_config
+from conftest import CFG, ISSUER, STARTER_CENTS, check_invariants, sign_in, write_config
 from neurolens import billing, storage
 from neurolens.web.app import create_app
 from test_delete_job import DeleteReportsError
@@ -129,7 +129,7 @@ def reserve_job(db, user_id, *, content_type="video/mp4", done=True):
     job_id = str(uuid.uuid4())
     key = storage.object_key(user_id, job_id, content_type)
     ext = PurePosixPath(key).suffix
-    billing.reserve(db, user_id, job_id, key, f"clip{ext}", 3000)
+    billing.reserve(db, user_id, job_id, key, f"clip{ext}", 3000, cfg=CFG)
     if done:
         assert billing.settle_success(db, job_id) is True
     return job_id, key
@@ -243,7 +243,7 @@ def test_a_reserve_racing_delete_account_cannot_leave_a_job_behind(db, pg, row_l
 
     def do_reserve():
         try:
-            reserved.append(billing.reserve(db, user, job_id, key, "clip.mp4", 3000))
+            reserved.append(billing.reserve(db, user, job_id, key, "clip.mp4", 3000, cfg=CFG))
         except Exception as err:  # reported below
             reserve_errors.append(err)
 
@@ -310,7 +310,7 @@ def test_reserve_refuses_a_deleted_account_and_creates_nothing(db, pg):
     before = pg.snapshot()
 
     with pytest.raises(billing.AccountDeleted):
-        billing.reserve(db, user, job_id, key, "clip.mp4", 3000)
+        billing.reserve(db, user, job_id, key, "clip.mp4", 3000, cfg=CFG)
 
     assert pg.job(job_id) is None
     assert pg.snapshot() == before

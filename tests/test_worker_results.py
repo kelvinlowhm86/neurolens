@@ -14,6 +14,7 @@ import pytest
 from botocore.exceptions import ClientError
 from neurolens import billing, settings, storage, worker
 from neurolens.worker import Outcome
+from conftest import CFG
 
 MODULES = ("neurolens.inference", "neurolens.worker")
 
@@ -23,7 +24,7 @@ def no_keep_alive(on_beat):
 
 
 def verify(db, job_id):
-    assert billing.verify_queued(db, job_id, 3000, settings.max_duration(None)) == "ok"
+    assert billing.verify_queued(db, job_id, 3000, settings.max_duration(CFG), cfg=CFG) == "ok"
 
 
 def run_job(aws, db, job_id, clip_path, cfg, masks):

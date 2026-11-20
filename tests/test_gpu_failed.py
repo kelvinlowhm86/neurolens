@@ -13,7 +13,7 @@ import json
 import logging
 
 import pytest
-from conftest import STARTER_CENTS
+from conftest import CFG, STARTER_CENTS
 from neurolens import billing, lambdas, pricing, storage
 
 
@@ -75,7 +75,7 @@ def test_a_job_with_a_result_is_settled(aws, db, pg, gpu_env, new_job):
     gpu_failed()(sns_event(job_id), None)
 
     job = pg.job(job_id)
-    price = pricing.estimate_cost_cents(3)
+    price = pricing.estimate_cost_cents(CFG, 3)
     assert job["status"] == "done" and job["captured_cents"] == price
     assert pg.balance() == (STARTER_CENTS - price, 0)
     assert storage.result_exists(aws.s3, aws.bucket, job_id)

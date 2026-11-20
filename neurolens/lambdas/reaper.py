@@ -15,12 +15,11 @@ from neurolens import billing, deadlines, lambdas, settings, storage
 
 logger = logging.getLogger(__name__)
 
-DEADLINE_S = deadlines.JOB_DEADLINE_S
 HEARTBEAT_STALE_S = deadlines.HEARTBEAT_STALE_S
 FAILED_RETRY_S = deadlines.FAILED_RETRY_S
 
 
-def stuck_jobs(db):
+def stuck_jobs(db, deadline_s):
     with db.transaction() as tx:
         return tx.execute(
             "SELECT job_id, object_key FROM jobs WHERE "
@@ -30,7 +29,7 @@ def stuck_jobs(db):
             {
                 "queued": billing.QUEUED,
                 "processing": billing.PROCESSING,
-                "deadline": DEADLINE_S,
+                "deadline": deadline_s,
                 "stale": HEARTBEAT_STALE_S,
             },
         )
@@ -68,13 +67,13 @@ def unpurged_dataset_jobs(db):
         )
 
 
-def expired_sessions(db):
-    """Delete session rows not used within SESSION_DAYS."""
+def expired_sessions(db, session_days):
+    """Delete session rows not used within the configured session length."""
     with db.transaction() as tx:
         tx.execute(
             "DELETE FROM sessions WHERE last_seen_at < now() "
             "- make_interval(days => CAST(:days AS integer))",
-            {"days": billing.SESSION_DAYS},
+            {"days": session_days},
         )
 
 
@@ -104,13 +103,13 @@ def _delete_job_files(s3, bucket, job_id, object_key):
     _delete(s3, bucket, storage.job_keys(job_id, object_key))
 
 
-def reap(db, s3, bucket, job):
+def reap(db, s3, bucket, job, *, deadline_s, gpu_wait_grace_s):
     job_id = job["job_id"]
     if storage.result_exists(s3, bucket, job_id):
         if billing.settle_success(db, job_id):
             logger.info(f"{job_id}: result exists, settled")
         return
-    if billing.refund_if_gpu_wait_over(db, job_id):
+    if billing.refund_if_gpu_wait_over(db, job_id, gpu_wait_grace_s=gpu_wait_grace_s):
         logger.warning(f"{job_id}: its GPU wait ran out, refunded")
         _delete_job_files(s3, bucket, job_id, job["object_key"])
         return
@@ -121,7 +120,7 @@ def reap(db, s3, bucket, job):
         queued=True,
         processing_stale_s=HEARTBEAT_STALE_S,
     ):
-        logger.warning(f"{job_id}: past the {DEADLINE_S // 3600}-hour deadline, refunded")
+        logger.warning(f"{job_id}: past the {deadline_s // 3600}-hour deadline, refunded")
         # A failed delete raises after the refund, never undoing it; the run then fails loudly.
         _delete_job_files(s3, bucket, job_id, job["object_key"])
 
@@ -142,12 +141,22 @@ def handler(event, context):
     cfg = settings.load_config()
     no_curve_days = settings.no_curve_days(cfg)
     dataset_retention_days = settings.dataset_retention_days(cfg)
+    deadline_s = deadlines.job_deadline_s(cfg)
+    gpu_wait_grace_s = settings.gpu_wait_grace_s(cfg)
+    session_days = settings.session_days(cfg)
     db, s3 = lambdas.database(), boto3.client("s3")
     bucket = os.environ["NEUROLENS_S3_BUCKET"]
     failed = []
-    for job in stuck_jobs(db):
+    for job in stuck_jobs(db, deadline_s):
         try:
-            reap(db, s3, bucket, job)
+            reap(
+                db,
+                s3,
+                bucket,
+                job,
+                deadline_s=deadline_s,
+                gpu_wait_grace_s=gpu_wait_grace_s,
+            )
         except Exception:
             logger.exception(f"{job['job_id']}: could not reap")
             failed.append(job["job_id"])
@@ -183,7 +192,7 @@ def handler(event, context):
         logger.exception("could not delete expired snapshots")
         failed.append("snapshots")
     try:
-        expired_sessions(db)
+        expired_sessions(db, session_days)
     except Exception:
         logger.exception("could not delete expired sessions")
         failed.append("sessions")

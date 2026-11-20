@@ -12,7 +12,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 import pytest
 from botocore.client import BaseClient
 from botocore.exceptions import ClientError
-from conftest import STARTER_CENTS, USER_ID, WEB_USER_ID, sign_in
+from conftest import CFG, STARTER_CENTS, USER_ID, WEB_USER_ID, sign_in
 from neurolens import billing, inference, pricing, response, settings, storage, worker
 from neurolens.web.app import create_app
 
@@ -33,20 +33,12 @@ def make_job(db, *, consent=False, user_id=USER_ID):
     job_id = str(uuid.uuid4())
     key = f"uploads/{user_id}/{job_id}.mp4"
     billing.ensure_user(db, user_id, f"{user_id}@example.com", STARTER_CENTS)
-    billing.reserve(
-        db,
-        user_id,
-        job_id,
-        key,
-        "clip.mp4",
-        3000,
-        research_consent=consent,
-    )
+    billing.reserve(db, user_id, job_id, key, "clip.mp4", 3000, research_consent=consent, cfg=CFG)
     return job_id, key
 
 
 def verify(db, job_id):
-    assert billing.verify_queued(db, job_id, 3000, settings.max_duration(None)) == "ok"
+    assert billing.verify_queued(db, job_id, 3000, settings.max_duration(CFG), cfg=CFG) == "ok"
 
 
 def run_job(aws, db, job_id, clip_path, cfg, masks):
@@ -191,7 +183,7 @@ def test_a_failed_thumbnail_does_not_fail_the_job(
 
     assert not object_exists(aws, f"results/{job_id}.jpg")
     assert pg.job(job_id)["status"] == "done"
-    assert pg.balance() == (STARTER_CENTS - pricing.estimate_cost_cents(27.4), 0)
+    assert pg.balance() == (STARTER_CENTS - pricing.estimate_cost_cents(CFG, 27.4), 0)
 
 
 def test_a_storage_failure_on_the_thumbnail_does_not_fail_the_job(
@@ -210,7 +202,7 @@ def test_a_storage_failure_on_the_thumbnail_does_not_fail_the_job(
 
     assert not object_exists(aws, f"results/{job_id}.jpg")
     assert pg.job(job_id)["status"] == "done"
-    assert pg.balance() == (STARTER_CENTS - pricing.estimate_cost_cents(27.4), 0)
+    assert pg.balance() == (STARTER_CENTS - pricing.estimate_cost_cents(CFG, 27.4), 0)
 
 
 # ---------------------------------------------------------------- deletion
@@ -254,7 +246,7 @@ def finished_job(db, *, user_id=WEB_USER_ID, state="done"):
     billing.ensure_user(db, user_id, f"{user_id}@example.com", STARTER_CENTS)
     job_id = str(uuid.uuid4())
     key = storage.object_key(user_id, job_id, "video/mp4")
-    billing.reserve(db, user_id, job_id, key, "clip.mp4", 3000)
+    billing.reserve(db, user_id, job_id, key, "clip.mp4", 3000, cfg=CFG)
     if state == "processing":
         assert billing.claim(db, job_id) == 1
     elif state == "failed":

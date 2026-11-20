@@ -75,17 +75,18 @@ for c in comparisons:
 print(f"{len(public)} of {len(samples)} samples are public; "
       f"{len(comparisons)} comparisons.")
 PY
-# CloudFront serves these pages from S3, not through the Lambda, so fill the contact address
-# with the same renderer Flask uses. Terraform holds the setting; the script refuses to ship a
-# page that still shows the literal placeholder.
+# CloudFront serves these pages from S3, not through the Lambda, so fill the contact address and
+# configured numbers with the same renderer Flask uses. Terraform and config.json hold the values;
+# the script refuses to ship a page that still shows a literal placeholder.
 python3 -I - "$STAGE/static" "$CONTACT_EMAIL" <<'PY'
 import sys
 
-from neurolens.web.app import fill_contact_pages
+from neurolens import settings
+from neurolens.web.app import fill_pages
 
 try:
-    fill_contact_pages(sys.argv[1], sys.argv[2])
-except RuntimeError as error:
+    fill_pages(sys.argv[1], settings.load_settings(), sys.argv[2])
+except (KeyError, ValueError, RuntimeError) as error:
     print(f"error: {error}", file=sys.stderr)
     raise SystemExit(1)
 PY

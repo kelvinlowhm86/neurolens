@@ -11,7 +11,7 @@ import json
 import logging
 import os
 
-from neurolens import lambdas
+from neurolens import lambdas, settings
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +29,7 @@ def handler(event, context):
     lambdas.setup_logging()
     db, s3 = lambdas.database(), lambdas.s3_client()
     bucket = os.environ["NEUROLENS_S3_BUCKET"]
+    gpu_wait_grace_s = settings.gpu_wait_grace_s(settings.load_config())
     waiting = []
     for record in event.get("Records", []):
         message = _message(record)
@@ -42,7 +43,7 @@ def handler(event, context):
             raw = str((record.get("Sns") or {}).get("Message"))[:2000]
             logger.warning(f"Dropped an unparseable SageMaker notification: {raw}")
             continue
-        if not lambdas.finish_job(db, s3, bucket, job_id):
+        if not lambdas.finish_job(db, s3, bucket, job_id, gpu_wait_grace_s=gpu_wait_grace_s):
             waiting.append(job_id)
     if waiting:
         raise RuntimeError(f"a worker still holds {waiting}: retrying this notification later")

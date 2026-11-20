@@ -7,11 +7,19 @@ import sys
 from pathlib import Path
 
 
+def _required(cfg, *keys):
+    """A value from config.json, or an error that names the missing key."""
+    value = cfg
+    for key in keys:
+        if not isinstance(value, dict) or key not in value:
+            raise KeyError(f"Missing required setting {'.'.join(keys)} in config.json")
+        value = value[key]
+    return value
+
+
 def server_address(cfg):
-    """(host, port) the web app binds to: config `server.host` / `server.port`, by default
-    127.0.0.1:5003 (this machine only; the development identity requires it)."""
-    server = (cfg or {}).get("server") or {}
-    return server.get("host", "127.0.0.1"), server.get("port", 5003)
+    """(host, port) the web app binds to: config `server.host` / `server.port`."""
+    return _required(cfg, "server", "host"), _required(cfg, "server", "port")
 
 
 class UnsafeConfigError(Exception):
@@ -187,7 +195,7 @@ def configure_env(cfg, paths):
     os.environ["TORCH_HOME"] = str(models / "torch")
 
     os.environ["NILEARN_DATA"] = str(data / "nilearn")
-    timeout = str(cfg.get("hf_download_timeout", 300))
+    timeout = str(_required(cfg, "hf_download_timeout"))
     os.environ["HF_HUB_DOWNLOAD_TIMEOUT"] = timeout
     os.environ["HF_HUB_HTTP_TIMEOUT"] = timeout
 
@@ -200,25 +208,22 @@ def configure_env(cfg, paths):
 # regardless of credit balance (see `verify_queued`, which must check this
 # BEFORE any credit-adjustment logic, not instead of it).
 def max_duration(cfg):
-    """Longest accepted video in seconds (120 when unset or when there is no config)."""
-    if cfg is None:
-        return 120
-    return cfg.get("max_video_duration_seconds", 120)
+    """Longest accepted video in seconds (config `max_video_duration_seconds`)."""
+    return int(_required(cfg, "max_video_duration_seconds"))
 
 
 def max_instances(cfg):
-    """Most GPUs the endpoint may run (1 when unset or when there is no config)."""
+    """Most GPUs the endpoint may run (1 when unset or when there is no config).
+
+    The fallback stays because config.json has no `gpu` block and a laptop has no
+    NEUROLENS_MAX_INSTANCES; every AWS caller sets it from Terraform's max_instances.
+    """
     return int(((cfg or {}).get("gpu") or {}).get("max_instances", 1))
 
 
-def _required(cfg, *keys):
-    """A value from config.json, or an error that names the missing key."""
-    value = cfg
-    for key in keys:
-        if not isinstance(value, dict) or key not in value:
-            raise KeyError(f"Missing required setting {'.'.join(keys)} in config.json")
-        value = value[key]
-    return value
+def upload_retention_days(cfg):
+    """Days an unshared upload stays before S3 deletes it."""
+    return int(_required(cfg, "upload_retention_days"))
 
 
 def result_retention_days(cfg):
@@ -244,3 +249,68 @@ def cancel_seconds(cfg):
 def queue_visibility_seconds(cfg):
     """Seconds the dispatcher has to process one message."""
     return int(_required(cfg, "queue", "visibility_seconds"))
+
+
+def job_deadline_hours(cfg):
+    """Hours after creation a job is still allowed to run."""
+    return int(_required(cfg, "queue", "job_deadline_hours"))
+
+
+def cents_per_block(cfg):
+    """Price in cents of one started block."""
+    return int(_required(cfg, "pricing", "cents_per_block"))
+
+
+def block_seconds(cfg):
+    """Length of one priced block in seconds."""
+    return int(_required(cfg, "pricing", "block_seconds"))
+
+
+def session_days(cfg):
+    """Days a sign-in session lasts from its last use."""
+    return int(_required(cfg, "auth", "session_days"))
+
+
+def gpu_wait_grace_s(cfg):
+    """Seconds after a GPU wait runs out before the job is refunded."""
+    return int(_required(cfg, "billing", "gpu_wait_grace_s"))
+
+
+def visitor_pass_cents(cfg):
+    """Credit in cents one visitor pass gives."""
+    return int(_required(cfg, "visitor", "pass_cents"))
+
+
+def visitor_initial_passes(cfg):
+    """Visitor passes the pool starts with."""
+    return int(_required(cfg, "visitor", "initial_passes"))
+
+
+def visitor_gpu_warm_hours(cfg):
+    """Hours an admin keep-warm choice lasts."""
+    return int(_required(cfg, "visitor", "gpu_warm_hours"))
+
+
+def visitor_adjust_deltas(cfg):
+    """Pass-count changes the admin panel offers (0 means stop the pool)."""
+    return tuple(_required(cfg, "visitor", "adjust_deltas"))
+
+
+def visitor_grant_minutes(cfg):
+    """Credit grants in minutes the admin panel offers (0 means reset)."""
+    return tuple(_required(cfg, "visitor", "grant_minutes"))
+
+
+def min_curve_points(cfg):
+    """Fewest points a valid retention curve must have."""
+    return int(_required(cfg, "research", "min_curve_points"))
+
+
+def min_watch_spread(cfg):
+    """Smallest watch-ratio spread a valid retention curve must have."""
+    return float(_required(cfg, "research", "min_watch_spread"))
+
+
+def max_watch_ratio(cfg):
+    """Highest watch ratio a valid retention curve may have."""
+    return float(_required(cfg, "research", "max_watch_ratio"))

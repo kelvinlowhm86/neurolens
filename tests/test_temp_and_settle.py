@@ -18,7 +18,7 @@ import uuid
 from pathlib import Path
 
 import pytest
-from conftest import STARTER_CENTS
+from conftest import CFG, GPU_WAIT_GRACE_S, STARTER_CENTS
 from neurolens import billing, pricing, settings, storage, worker
 
 JOB_HEADER = "X-Amzn-SageMaker-Custom-Attributes"
@@ -34,7 +34,9 @@ def no_keep_alive(on_beat):
 
 
 def verify(db, job_id, duration_ms=3000):
-    assert billing.verify_queued(db, job_id, duration_ms, settings.max_duration(None)) == "ok"
+    assert (
+        billing.verify_queued(db, job_id, duration_ms, settings.max_duration(CFG), cfg=CFG) == "ok"
+    )
 
 
 def upload(aws, key, clip_path):
@@ -90,7 +92,7 @@ def test_settle_that_raises_before_committing_keeps_files_and_finish_job_charges
     assert outcome is worker.Outcome.FAILED
     job = pg.job(job_id)
     assert job["status"] == "processing" and job["captured_cents"] is None
-    price = pricing.estimate_cost_cents(3)
+    price = pricing.estimate_cost_cents(CFG, 3)
     assert pg.balance() == (STARTER_CENTS - price, price)
     assert "refund" not in pg.kinds()
     for kept in (
@@ -103,7 +105,7 @@ def test_settle_that_raises_before_committing_keeps_files_and_finish_job_charges
     assert f"SETTLE_FAILED {job_id}" in caplog.text
 
     monkeypatch.setattr(billing, "settle_success", real_settle)
-    assert finish_job(db, aws.s3, aws.bucket, job_id) is True
+    assert finish_job(db, aws.s3, aws.bucket, job_id, gpu_wait_grace_s=GPU_WAIT_GRACE_S) is True
 
     job = pg.job(job_id)
     assert job["status"] == "done" and job["captured_cents"] == price

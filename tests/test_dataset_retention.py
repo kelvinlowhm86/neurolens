@@ -9,7 +9,7 @@ import json
 import uuid
 
 import pytest
-from conftest import REWARD, WEB_USER_ID
+from conftest import CFG, GPU_WAIT_GRACE_S, REWARD, WEB_USER_ID
 from neurolens import billing, storage
 from neurolens.web.app import create_app
 
@@ -58,7 +58,9 @@ def make_job(db, *, consent=True, done=True, processing=False):
     billing.ensure_user(db, WEB_USER_ID, f"{WEB_USER_ID}@example.com", STARTER_CENTS)
     job_id = str(uuid.uuid4())
     key = storage.object_key(WEB_USER_ID, job_id, "video/mp4")
-    billing.reserve(db, WEB_USER_ID, job_id, key, "clip.mp4", 3000, research_consent=consent)
+    billing.reserve(
+        db, WEB_USER_ID, job_id, key, "clip.mp4", 3000, research_consent=consent, cfg=CFG
+    )
     if processing:
         assert billing.claim(db, job_id) == 1
     if done:
@@ -145,7 +147,7 @@ def test_list_jobs_marks_sharing_and_curve_count_only_when_needed(db, pg):
     failed, _ = make_job(db, consent=True, done=False)
     assert billing.issue_refund(db, failed, "processing_failed", queued=True) is True
 
-    rows = billing.list_jobs(db, WEB_USER_ID, 50, **REWARD)
+    rows = billing.list_jobs(db, WEB_USER_ID, 50, **REWARD, gpu_wait_grace_s=GPU_WAIT_GRACE_S)
     by_id = {
         str(row["job_id"]): row["sharing"] and row["status"] == "done" and row["curve_count"] == 0
         for row in rows

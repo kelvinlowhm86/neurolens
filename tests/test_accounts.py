@@ -12,7 +12,7 @@ import threading
 import uuid
 
 import pytest
-from conftest import ISSUER, REWARD, STARTER_CENTS
+from conftest import CFG, GPU_WAIT_GRACE_S, ISSUER, REWARD, STARTER_CENTS
 from neurolens import billing, pricing, storage
 
 GOOGLE = "https://accounts.google.example"  # a second issuer, for identities across providers
@@ -29,7 +29,7 @@ def identities(pg):
 def reserve_job(db, user_id, seconds=27.4):
     job_id = str(uuid.uuid4())
     key = storage.object_key(user_id, job_id, "video/mp4")
-    billing.reserve(db, user_id, job_id, key, f"{job_id}.mp4", round(seconds * 1000))
+    billing.reserve(db, user_id, job_id, key, f"{job_id}.mp4", round(seconds * 1000), cfg=CFG)
     return job_id
 
 
@@ -136,7 +136,7 @@ def test_a_linked_account_keeps_its_balance(db, pg):
     reserve_job(db, first)
     second = billing.sign_in(db, ISSUER, "cognito-1", "ann@example.com", STARTER_CENTS)
     assert second == first
-    price = pricing.estimate_cost_cents(27.4)
+    price = pricing.estimate_cost_cents(CFG, 27.4)
     assert pg.balance(first) == (STARTER_CENTS - price, price)
 
 
@@ -226,7 +226,7 @@ def test_grant_credit_adds_to_an_existing_balance_and_reservation(db, pg):
     reserve_job(db, "u-1")
     billing.grant_credit(db, "u1@example.com", 100)
     billing.grant_credit(db, "u1@example.com", 1)
-    price = pricing.estimate_cost_cents(27.4)
+    price = pricing.estimate_cost_cents(CFG, 27.4)
     assert pg.balance("u-1") == (STARTER_CENTS - price + 101, price)
     assert pg.kinds("u-1") == ["starter", "reserve", "grant", "grant"]
 
@@ -259,7 +259,10 @@ def test_list_jobs_returns_only_the_users_jobs_newest_first(db, pg):
     pg.age(old, created_s=300)
     pg.age(middle, created_s=200)
     pg.age(new, created_s=100)
-    jobs = billing.list_jobs(db, "u-1", 50, **REWARD)
+    jobs = billing.list_jobs(db, "u-1", 50, **REWARD, gpu_wait_grace_s=GPU_WAIT_GRACE_S)
     assert [j["job_id"] for j in jobs] == [new, middle, old]
-    assert [j["job_id"] for j in billing.list_jobs(db, "u-1", 2, **REWARD)] == [new, middle]
-    assert billing.list_jobs(db, "nobody", 50, **REWARD) == []
+    assert [
+        j["job_id"]
+        for j in billing.list_jobs(db, "u-1", 2, **REWARD, gpu_wait_grace_s=GPU_WAIT_GRACE_S)
+    ] == [new, middle]
+    assert billing.list_jobs(db, "nobody", 50, **REWARD, gpu_wait_grace_s=GPU_WAIT_GRACE_S) == []

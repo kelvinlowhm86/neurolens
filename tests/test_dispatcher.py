@@ -13,12 +13,12 @@ import json
 import uuid
 
 import pytest
-from conftest import STARTER_CENTS
-from neurolens import billing, pricing, storage
+from conftest import CFG, STARTER_CENTS
+from neurolens import billing, deadlines, pricing, settings, storage
 
 ENDPOINT = "neurolens-gpu"
-MAX_UPLOAD_BYTES = 300_000_000
-MAX_S = 120
+MAX_UPLOAD_BYTES = CFG["max_upload_bytes"]
+MAX_S = settings.max_duration(CFG)
 
 
 class RecordingSageMaker:
@@ -98,6 +98,9 @@ def dispatch(
         endpoint=ENDPOINT,
         max_upload_bytes=max_upload_bytes,
         max_duration_s=max_duration_s,
+        deadline_s=deadlines.dispatch_deadline_s(CFG),
+        cfg=CFG,
+        variant="main",
     )
 
 
@@ -169,7 +172,7 @@ def test_a_job_claimed_while_the_file_is_probed_is_skipped(aws, db, pg, new_job,
     assert sagemaker.calls == []
     job = pg.job(job_id)
     assert job["status"] == "processing" and job["attempt"] == 1
-    price = pricing.estimate_cost_cents(3)
+    price = pricing.estimate_cost_cents(CFG, 3)
     assert pg.balance() == (STARTER_CENTS - price, price)
     assert exists(aws, key)
 
@@ -234,7 +237,7 @@ def test_a_too_long_video_refunds_and_deletes(aws, db, pg, new_job, probe):
 
 
 def test_short_credit_for_the_real_length_refunds_and_deletes(aws, db, pg, new_job, probe):
-    price = pricing.estimate_cost_cents(1)
+    price = pricing.estimate_cost_cents(CFG, 1)
     job_id, key = new_job(client_seconds=1, starter_cents=price)
     upload(aws, key)
     probe(seconds=61.0)  # the user has none left for the actual price
@@ -322,7 +325,7 @@ def test_a_failed_pause_check_propagates_and_changes_nothing(aws, db, pg, new_jo
 
     job = pg.job(job_id)
     assert job["status"] == "queued" and job["error_code"] is None
-    price = pricing.estimate_cost_cents(3)
+    price = pricing.estimate_cost_cents(CFG, 3)
     assert pg.balance() == (STARTER_CENTS - price, price)
     assert sagemaker.calls == []
     assert exists(aws, key)
@@ -356,19 +359,19 @@ def test_an_earlier_refusal_keeps_its_reason_and_skips_the_pause_check(aws, db, 
 def test_endpoint_paused_is_true_when_the_target_max_is_zero():
     from neurolens import scaling
 
-    assert scaling.endpoint_paused(FakeAppScaling(0), ENDPOINT) is True
+    assert scaling.endpoint_paused(FakeAppScaling(0), ENDPOINT, "main") is True
 
 
 def test_endpoint_paused_is_true_without_a_scalable_target():
     from neurolens import scaling
 
-    assert scaling.endpoint_paused(FakeAppScaling(targets=[]), ENDPOINT) is True
+    assert scaling.endpoint_paused(FakeAppScaling(targets=[]), ENDPOINT, "main") is True
 
 
 def test_endpoint_paused_is_false_when_the_target_max_is_one():
     from neurolens import scaling
 
-    assert scaling.endpoint_paused(FakeAppScaling(1), ENDPOINT) is False
+    assert scaling.endpoint_paused(FakeAppScaling(1), ENDPOINT, "main") is False
 
 
 # ---------------------------------------------------------------- the invoke
@@ -394,7 +397,7 @@ def test_a_good_job_is_invoked_with_the_specs_arguments(aws, db, pg, new_job, pr
     assert probed["url"].startswith("https://")
     assert probed["timeout_s"] == 90
     assert pg.job(job_id)["status"] == "queued"
-    price = pricing.estimate_cost_cents(3)
+    price = pricing.estimate_cost_cents(CFG, 3)
     assert pg.balance() == (STARTER_CENTS - price, price)
     assert exists(aws, key)
 
@@ -408,7 +411,7 @@ def test_a_second_dispatch_reserves_no_more_credit(aws, db, pg, new_job, probe):
     assert dispatch(aws, db, key, sagemaker=sagemaker) == "invoked"
     assert dispatch(aws, db, key, sagemaker=sagemaker) == "invoked"
 
-    price = pricing.estimate_cost_cents(3)
+    price = pricing.estimate_cost_cents(CFG, 3)
     assert pg.balance() == (STARTER_CENTS - price, price)
     assert pg.kinds() == ["starter", "reserve"]
     assert pg.job(job_id)["status"] == "queued"
@@ -459,7 +462,7 @@ def test_an_exception_before_the_invoke_leaves_the_job_queued_and_reserved(
 
     job = pg.job(job_id)
     assert job["status"] == "queued" and job["verified_duration_ms"] is None
-    price = pricing.estimate_cost_cents(3)
+    price = pricing.estimate_cost_cents(CFG, 3)
     assert pg.balance() == (STARTER_CENTS - price, price)
     assert sagemaker.calls == []
     assert exists(aws, key)
@@ -505,6 +508,7 @@ def run_handler(
     )
     monkeypatch.setenv("NEUROLENS_S3_BUCKET", aws.bucket)
     monkeypatch.setenv("NEUROLENS_GPU_ENDPOINT", ENDPOINT)
+    monkeypatch.setenv("NEUROLENS_GPU_VARIANT", "main")
     monkeypatch.setenv("NEUROLENS_MAX_UPLOAD_BYTES", str(max_upload_bytes))
     monkeypatch.setenv("NEUROLENS_MAX_DURATION_SECONDS", str(MAX_S))
 
@@ -561,7 +565,7 @@ def test_a_handler_exception_propagates_so_sqs_redelivers(aws, db, pg, new_job, 
         run_handler(aws, db, monkeypatch, key, sagemaker)
 
     assert pg.job(job_id)["status"] == "queued"
-    price = pricing.estimate_cost_cents(3)
+    price = pricing.estimate_cost_cents(CFG, 3)
     assert pg.balance() == (STARTER_CENTS - price, price)
     assert sagemaker.calls == []
     assert exists(aws, key)

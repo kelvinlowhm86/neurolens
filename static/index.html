@@ -353,7 +353,7 @@
       <div class="access-col">
         <span class="access-label">Your videos</span>
         <span class="access-value">Free to try</span>
-        <p>Creators and marketers get 5 free minutes.*</p>
+        <p>Creators and marketers get <span id="freeMinutes"></span> free minutes.*</p>
         <a class="btn-line access-btn" href="/login">Get free minutes</a>
       </div>
       <div class="access-col">
@@ -479,6 +479,12 @@ async function loadLimits() {
   const minutes = Number.isFinite(seconds) && seconds > 0 ? Math.max(1, Math.round(seconds / 60)) : null;
   if (minutes !== null) {
     $('uploadLimit').textContent = `Any video up to ${minutes} ${minutes === 1 ? 'minute' : 'minutes'}. Sample videos are free without an account.`;
+  }
+  const invite = limits && Number(limits.invite_seconds);
+  const free = $('freeMinutes');
+  if (free && Number.isFinite(invite)) {
+    const minutes = invite / 60;
+    free.textContent = Number.isInteger(minutes) ? String(minutes) : minutes.toFixed(1);
   }
 }
 

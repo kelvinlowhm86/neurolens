@@ -11,7 +11,7 @@ import uuid
 import numpy as np
 import pytest
 from botocore.exceptions import ClientError
-from conftest import STARTER_CENTS, USER_ID
+from conftest import CFG, STARTER_CENTS, USER_ID
 from neurolens import billing, settings, storage, worker
 
 MODULES = ("neurolens.inference", "neurolens.worker")
@@ -31,20 +31,12 @@ def make_job(db, *, consent=False):
     job_id = str(uuid.uuid4())
     key = f"uploads/{USER_ID}/{job_id}.mp4"
     billing.ensure_user(db, USER_ID, f"{USER_ID}@example.com", STARTER_CENTS)
-    billing.reserve(
-        db,
-        USER_ID,
-        job_id,
-        key,
-        "clip.mp4",
-        3000,
-        research_consent=consent,
-    )
+    billing.reserve(db, USER_ID, job_id, key, "clip.mp4", 3000, research_consent=consent, cfg=CFG)
     return job_id, key
 
 
 def verify(db, job_id):
-    assert billing.verify_queued(db, job_id, 3000, settings.max_duration(None)) == "ok"
+    assert billing.verify_queued(db, job_id, 3000, settings.max_duration(CFG), cfg=CFG) == "ok"
 
 
 def run_job(aws, db, job_id, clip_path, cfg, masks, *, s3=None):

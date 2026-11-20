@@ -278,13 +278,13 @@ def _console_notifier(request, email):
 
 
 def _grant(db, cfg, email, minutes):
-    from neurolens import billing, pricing
+    from neurolens import billing, settings
 
     text = str(minutes).strip()
     if not text.isdigit() or int(text) <= 0:
         raise SystemExit("--grant needs a whole number of minutes greater than 0")
     whole_minutes = int(text)
-    cents = whole_minutes * 60 * pricing.CENTS_PER_BLOCK // pricing.BLOCK_SECONDS
+    cents = whole_minutes * 60 * settings.cents_per_block(cfg) // settings.block_seconds(cfg)
     existing = billing.user_by_email(db, email)
     if existing is None:
         dev_email = cfg["auth"]["dev_email"]
@@ -317,7 +317,7 @@ class _NeverPaused:
 
 
 def _dispatch_loop(sqs, queue_url, s3, sagemaker, db, cfg):
-    from neurolens import settings, storage
+    from neurolens import deadlines, settings, storage
     from neurolens.lambdas import dispatcher
 
     appscaling = _NeverPaused(settings.max_instances(cfg))
@@ -342,6 +342,9 @@ def _dispatch_loop(sqs, queue_url, s3, sagemaker, db, cfg):
                         endpoint="local",
                         max_upload_bytes=cfg["max_upload_bytes"],
                         max_duration_s=settings.max_duration(cfg),
+                        deadline_s=deadlines.dispatch_deadline_s(cfg),
+                        cfg=cfg,
+                        variant="local",
                     )
                     print(f"{key}: {result}")
                 except Exception as err:  # leave the message for a retry

@@ -13,6 +13,7 @@ from urllib.parse import parse_qs, urlparse
 
 import pytest
 from conftest import (
+    CFG,
     CLIENT_ID,
     COGNITO_DOMAIN,
     ISSUER,
@@ -29,7 +30,7 @@ from neurolens.web.app import create_app
 
 SESSION_KEYS = {"session"}
 HOUR = 3600
-SESSION_DAYS = 30
+SESSION_DAYS = settings.session_days(CFG)
 PUBLIC_RULES = {"/", "/app", "/login", "/auth/callback", "/logout", "/healthz"}
 PUBLIC_PREFIXES = ("/static/", "/data/")
 STATIC = Path(__file__).resolve().parent.parent / "static"
@@ -316,16 +317,19 @@ def test_slash_serves_the_landing_page(cognito_client):
 def test_limits_answer_signed_out_and_signed_in(cognito_client, idp):
     """The page needs colour_range to colour a sample's brain before sign-in."""
     expected = {
-        "max_video_duration_seconds": 120,
-        "max_upload_bytes": 300000000,
-        "colour_range": 0.5,
-        "result_retention_days": 30,
-        "cancel_seconds": 15,
+        "max_video_duration_seconds": settings.max_duration(CFG),
+        "max_upload_bytes": CFG["max_upload_bytes"],
+        "colour_range": CFG["response"]["colour_range"],
+        "result_retention_days": settings.result_retention_days(CFG),
+        "cancel_seconds": settings.cancel_seconds(CFG),
         "invite_seconds": 0.0,
+        "consent_version": billing.CONSENT_VERSION,
+        "curve_min_views": CFG["research"]["curve_min_views"],
+        "curve_length_tolerance_s": CFG["research"]["curve_length_tolerance_s"],
         "max_batch_files": UPLOAD["max_batch_files"],
         "price": {
-            "cents_per_block": pricing.CENTS_PER_BLOCK,
-            "block_seconds": pricing.BLOCK_SECONDS,
+            "cents_per_block": settings.cents_per_block(CFG),
+            "block_seconds": settings.block_seconds(CFG),
             "allowance_seconds": pricing.ALLOWANCE_SECONDS,
         },
     }
@@ -348,7 +352,7 @@ def test_dev_mode_is_always_signed_in(aws, db, make_cfg, tmp_path):
 
 def test_a_config_without_a_starter_credit_grants_nothing(aws, db, make_cfg, tmp_path, pg):
     cfg = make_cfg()
-    cfg.pop("billing", None)
+    cfg["billing"] = {"gpu_wait_grace_s": CFG["billing"]["gpu_wait_grace_s"]}
     app = create_app(cfg=cfg, data_dir=tmp_path / "data", db=db, s3_client=aws.s3)
 
     resp = app.test_client().get("/api/me")

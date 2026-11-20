@@ -12,8 +12,8 @@ DATA_DIR = REPO_ROOT / "data"
 
 
 @pytest.fixture
-def client():
-    app = create_app(data_dir=DATA_DIR)
+def client(make_cfg):
+    app = create_app(data_dir=DATA_DIR, cfg=make_cfg())
     app.config["TESTING"] = True
     return app.test_client()
 
@@ -25,14 +25,14 @@ def test_index_serves_index_html(client):
     resp.close()
 
 
-def test_thumbnail_is_served(tmp_path):
+def test_thumbnail_is_served(tmp_path, make_cfg):
     """A sample thumbnail under data/output/ is served as is. Uses its own data folder, so it does
     not depend on which samples data/samples.json lists (empties it until the AWS day)."""
     data = tmp_path / "data"
     thumb = data / "output" / "clip" / "thumb.jpg"
     thumb.parent.mkdir(parents=True)
     thumb.write_bytes(b"\xff\xd8\xff\xe0 fake jpeg")
-    test_client = create_app(data_dir=data).test_client()
+    test_client = create_app(data_dir=data, cfg=make_cfg()).test_client()
     resp = test_client.get("/data/output/clip/thumb.jpg")
     assert resp.status_code == 200
     assert resp.data == thumb.read_bytes()
@@ -49,12 +49,12 @@ def test_path_traversal_to_config_json_returns_404(client):
         assert client.get(url).status_code == 404, url
 
 
-def test_path_traversal_cannot_read_file_outside_data_dir(tmp_path):
+def test_path_traversal_cannot_read_file_outside_data_dir(tmp_path, make_cfg):
     data = tmp_path / "data"
     data.mkdir()
     (data / "ok.txt").write_text("fine")
     (tmp_path / "config.json").write_text('{"hf_token": "secret"}')
-    app = create_app(data_dir=data)
+    app = create_app(data_dir=data, cfg=make_cfg())
     test_client = app.test_client()
     assert test_client.get("/data/ok.txt").data == b"fine"
     for url in ("/data/../config.json", "/data/%2e%2e/config.json", "/data/..%2fconfig.json"):

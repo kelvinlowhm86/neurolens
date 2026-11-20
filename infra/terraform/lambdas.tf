@@ -300,6 +300,7 @@ resource "aws_lambda_function" "dispatcher" {
   environment {
     variables = merge(local.lambda_env, {
       NEUROLENS_GPU_ENDPOINT         = local.endpoint_name
+      NEUROLENS_GPU_VARIANT          = local.variant_name
       NEUROLENS_MAX_UPLOAD_BYTES     = tostring(local.config.max_upload_bytes)
       NEUROLENS_MAX_DURATION_SECONDS = tostring(local.config.max_video_duration_seconds)
     })
@@ -377,6 +378,7 @@ resource "aws_lambda_function" "gpu_guard" {
   environment {
     variables = merge(local.lambda_env, {
       NEUROLENS_GPU_ENDPOINT = local.endpoint_name
+      NEUROLENS_GPU_VARIANT  = local.variant_name
     })
   }
 

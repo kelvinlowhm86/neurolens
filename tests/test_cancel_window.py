@@ -8,11 +8,11 @@ it, so Cancel answers 409 and changes nothing. `list_jobs` says which is which.
 import uuid
 
 import pytest
-from conftest import REWARD, STARTER_CENTS, WEB_USER_ID
-from neurolens import billing, storage
+from conftest import CFG, GPU_WAIT_GRACE_S, REWARD, STARTER_CENTS, WEB_USER_ID
+from neurolens import billing, settings, storage
 from neurolens.web.app import create_app
 
-MAX_S = 120
+MAX_S = settings.max_duration(CFG)
 
 
 @pytest.fixture
@@ -39,9 +39,9 @@ def make_job(db, *, dispatched=False, processing=False, user_id=WEB_USER_ID):
     billing.ensure_user(db, user_id, f"{user_id}@example.com", STARTER_CENTS)
     job_id = str(uuid.uuid4())
     key = storage.object_key(user_id, job_id, "video/mp4")
-    billing.reserve(db, user_id, job_id, key, "clip.mp4", 3000)
+    billing.reserve(db, user_id, job_id, key, "clip.mp4", 3000, cfg=CFG)
     if dispatched:
-        assert billing.verify_queued(db, job_id, 3000, MAX_S) == "ok"
+        assert billing.verify_queued(db, job_id, 3000, MAX_S, cfg=CFG) == "ok"
     if processing:
         assert billing.claim(db, job_id) == 1
     return job_id, key
@@ -120,7 +120,9 @@ def test_list_jobs_cancellable_is_true_only_before_dispatch(db):
 
     rows = {
         str(row["job_id"]): row["cancellable"]
-        for row in billing.list_jobs(db, WEB_USER_ID, 50, **REWARD)
+        for row in billing.list_jobs(
+            db, WEB_USER_ID, 50, **REWARD, gpu_wait_grace_s=GPU_WAIT_GRACE_S
+        )
     }
 
     assert rows[undispatched] is True
@@ -133,7 +135,7 @@ def test_verify_queued_on_a_cancelled_job_changes_nothing(db, pg):
     assert billing.issue_refund(db, job_id, "cancelled", queued=True, undispatched_only=True)
     before = pg.snapshot()
 
-    assert billing.verify_queued(db, job_id, 3000, MAX_S) == "not_queued"
+    assert billing.verify_queued(db, job_id, 3000, MAX_S, cfg=CFG) == "not_queued"
 
     assert pg.snapshot() == before
     assert pg.job(job_id)["verified_duration_ms"] is None

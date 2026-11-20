@@ -126,14 +126,6 @@ def test_configure_env_raises_if_huggingface_hub_already_imported(clean_env, tmp
     pytest.fail("configure_env should raise when huggingface_hub is already imported")
 
 
-def test_max_duration_defaults_to_120_without_config():
-    assert settings.max_duration(None) == 120
-
-
-def test_max_duration_defaults_to_120_when_key_missing():
-    assert settings.max_duration({}) == 120
-
-
 def test_max_duration_reads_config_value():
     assert settings.max_duration({"max_video_duration_seconds": 45}) == 45
 
@@ -149,3 +141,34 @@ def test_max_instances_reads_the_gpu_setting():
 
 def test_no_module_level_max_duration_constant():
     assert not hasattr(settings, "MAX_DURATION")
+
+
+ACCESSORS = [
+    "server_address",
+    "max_duration",
+    "upload_retention_days",
+    "result_retention_days",
+    "dataset_retention_days",
+    "no_curve_days",
+    "cancel_seconds",
+    "queue_visibility_seconds",
+    "job_deadline_hours",
+    "cents_per_block",
+    "block_seconds",
+    "session_days",
+    "gpu_wait_grace_s",
+    "visitor_pass_cents",
+    "visitor_initial_passes",
+    "visitor_gpu_warm_hours",
+    "visitor_adjust_deltas",
+    "visitor_grant_minutes",
+    "min_curve_points",
+    "min_watch_spread",
+    "max_watch_ratio",
+]
+
+
+@pytest.mark.parametrize("name", ACCESSORS)
+def test_each_accessor_requires_its_config_key(name):
+    with pytest.raises(KeyError, match="config.json"):
+        getattr(settings, name)({})

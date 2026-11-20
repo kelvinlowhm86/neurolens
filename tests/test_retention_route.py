@@ -9,7 +9,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from conftest import STARTER_CENTS, WEB_USER_ID
+from conftest import CFG, STARTER_CENTS, WEB_USER_ID
 from neurolens import billing, results, storage
 
 OTHER_USER = "other-user"
@@ -20,9 +20,9 @@ def make_done_job(db, *, user_id=WEB_USER_ID, seconds=30.0, sha="a" * 64):
     job_id = str(uuid.uuid4())
     key = storage.object_key(user_id, job_id, "video/mp4")
     billing.reserve(
-        db, user_id, job_id, key, "clip.mp4", round(seconds * 1000), research_consent=True
+        db, user_id, job_id, key, "clip.mp4", round(seconds * 1000), research_consent=True, cfg=CFG
     )
-    assert billing.verify_queued(db, job_id, round(seconds * 1000), 3600) == "ok"
+    assert billing.verify_queued(db, job_id, round(seconds * 1000), 3600, cfg=CFG) == "ok"
     assert billing.claim(db, job_id) == 1
     assert billing.settle_success(db, job_id) is True
     billing.record_video_hash(db, job_id, sha)

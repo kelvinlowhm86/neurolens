@@ -8,7 +8,7 @@ import re
 import uuid
 
 import pytest
-from conftest import STARTER_CENTS, WEB_USER_EMAIL, WEB_USER_ID
+from conftest import CFG, STARTER_CENTS, WEB_USER_EMAIL, WEB_USER_ID
 from neurolens import billing, pricing, settings, storage
 from neurolens.web.app import create_app
 
@@ -77,7 +77,7 @@ def owned_job(db, user_id=WEB_USER_ID, seconds=27.4):
     billing.ensure_user(db, user_id, f"{user_id}@example.com", STARTER_CENTS)
     job_id = str(uuid.uuid4())
     key = storage.object_key(user_id, job_id, "video/mp4")
-    billing.reserve(db, user_id, job_id, key, "ad.mp4", round(seconds * 1000))
+    billing.reserve(db, user_id, job_id, key, "ad.mp4", round(seconds * 1000), cfg=CFG)
     return job_id
 
 
@@ -122,9 +122,9 @@ def test_presign_reserves_before_handing_out_the_form(client, pg):
     data = resp.get_json()
     for name in ("job_id", "url", "fields", "object_key", "expires_in", "estimated_cost_usd"):
         assert name in data, name
-    price = pricing.estimate_cost_cents(27.4)
+    price = pricing.estimate_cost_cents(CFG, 27.4)
     assert data["reserved_cents"] == price
-    assert data["estimated_cost_usd"] == pricing.estimate_cost_usd(27.4)
+    assert data["estimated_cost_usd"] == pricing.estimate_cost_usd(CFG, 27.4)
     assert pg.balance(WEB_USER_ID) == (STARTER_CENTS - price, price)
     job = pg.job(data["job_id"])
     assert job["user_id"] == WEB_USER_ID
@@ -150,7 +150,7 @@ def test_presign_without_enough_credit_is_402_and_reserves_nothing(app_for, pg):
     assert data["error"] == "insufficient_credit"
     assert isinstance(data["message"], str) and data["message"]
     assert data["available_cents"] == 50
-    assert data["required_cents"] == pricing.estimate_cost_cents(27.4)
+    assert data["required_cents"] == pricing.estimate_cost_cents(CFG, 27.4)
     assert "fields" not in data and "url" not in data
     assert pg.balance(WEB_USER_ID) == (50, 0)
     assert pg.rows("SELECT job_id FROM jobs") == []
@@ -208,20 +208,8 @@ def test_me_returns_email_and_balance(client):
 def test_me_shows_a_reservation(client):
     client.post("/api/uploads/presign", json=body())
     assert client.get("/api/me").get_json()["balance"]["reserved_cents"] == (
-        pricing.estimate_cost_cents(27.4)
+        pricing.estimate_cost_cents(CFG, 27.4)
     )
-
-
-def test_me_uses_create_apps_built_in_dev_user_without_a_cfg(aws, db, tmp_path):
-    app = create_app(data_dir=tmp_path / "data", db=db, s3_client=aws.s3)
-    resp = app.test_client().get("/api/me")
-    assert resp.status_code == 200
-    assert resp.get_json() == {
-        "user_id": "dev-user",
-        "email": "dev@localhost",
-        "balance": {"available_cents": 0, "reserved_cents": 0},
-        "access": {"funded": False, "request": None},
-    }
 
 
 def test_routes_without_a_database_return_not_configured(aws, make_cfg, tmp_path):
@@ -269,12 +257,6 @@ def test_dev_mode_on_a_non_local_host_refuses_to_start(make_cfg, tmp_path, host)
 
 def test_dev_mode_on_127_0_0_1_starts(make_cfg, tmp_path):
     create_app(cfg=make_cfg(), data_dir=tmp_path / "data")
-
-
-def test_server_host_defaults_to_127_0_0_1(make_cfg, tmp_path):
-    cfg = make_cfg()
-    del cfg["server"]
-    create_app(cfg=cfg, data_dir=tmp_path / "data")
 
 
 # ---------------------------------------------------------------- status

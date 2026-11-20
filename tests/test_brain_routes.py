@@ -7,7 +7,7 @@ import uuid
 from urllib.parse import parse_qs, unquote, urlparse
 
 import pytest
-from conftest import STARTER_CENTS, WEB_USER_ID
+from conftest import CFG, STARTER_CENTS, WEB_USER_ID
 from neurolens import billing, results, storage
 from neurolens.web.app import create_app
 
@@ -64,7 +64,9 @@ def reserved_job(db, *, user_id=WEB_USER_ID, content_type="video/mp4", research_
     billing.ensure_user(db, user_id, f"{user_id}@example.com", STARTER_CENTS)
     job_id = str(uuid.uuid4())
     key = storage.object_key(user_id, job_id, content_type)
-    billing.reserve(db, user_id, job_id, key, "ad.mp4", 27_400, research_consent=research_consent)
+    billing.reserve(
+        db, user_id, job_id, key, "ad.mp4", 27_400, research_consent=research_consent, cfg=CFG
+    )
     return job_id
 
 

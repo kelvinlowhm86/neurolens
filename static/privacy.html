@@ -82,7 +82,7 @@
   <ul>
     <li><strong>Your email address</strong>, from Google or from the address you sign up with. We
     use it only to recognise your account when you sign in and when you come back.</li>
-    <li><strong>Videos you upload</strong>, and the analysis results made from them, including the 3D brain data. We also keep a copy re-encoded to play on phones; it is deleted with the video, kept with the result (30 days), and is not part of any shared copy.</li>
+    <li><strong>Videos you upload</strong>, and the analysis results made from them, including the 3D brain data. We also keep a copy re-encoded to play on phones; it is deleted with the video, kept with the result ({{RESULT_RETENTION_DAYS}} days), and is not part of any shared copy.</li>
     <li><strong>A job record</strong> for each upload: the file name, when it ran, how long the
     video was and what it cost in credit. If a retention curve got its credit back, the record
     also keeps that video's link, so the same video counts once.</li>
@@ -104,12 +104,12 @@
 
   <h2>How long we keep it</h2>
   <ul>
-    <li>Uploaded videos that are not shared are deleted automatically after 30 days (up to 31
+    <li>Uploaded videos that are not shared are deleted automatically after {{UPLOAD_RETENTION_DAYS}} days (up to {{UPLOAD_RETENTION_MAX_DAYS}}
     days, since deletion happens overnight). They are deleted at once when the job is cancelled
     or refunded.</li>
-    <li>Results are deleted automatically after 30 days.</li>
-    <li>A video you share, and any retention curve you add, are kept for up to 3 years. If no
-    curve is added, the shared copy is deleted 90 days after upload.</li>
+    <li>Results are deleted automatically after {{RESULT_RETENTION_DAYS}} days.</li>
+    <li>A video you share, and any retention curve you add, are kept for up to {{DATASET_RETENTION_YEARS}} years. If no
+    curve is added, the shared copy is deleted {{NO_CURVE_DAYS}} days after upload.</li>
     <li>Your email address and job records stay until you delete your account, or until the
     project is taken down.</li>
   </ul>
@@ -127,7 +127,7 @@
   on NeuroLens's brain predictions. Nothing is published, sold or given outside the team; anything
   shown publicly is only statistics. Everything is stored with Amazon Web Services in the United
   States.</p>
-  <p>The shared copy is kept for up to 3 years, or deleted 90 days after upload if no curve was
+  <p>The shared copy is kept for up to {{DATASET_RETENTION_YEARS}} years, or deleted {{NO_CURVE_DAYS}} days after upload if no curve was
   added. "Stop sharing" in the video's menu, deleting the video, or deleting your account removes
   the shared copy at once. A model trained before that is not retrained, but your data is not used
   again.</p>
@@ -135,19 +135,19 @@
   in it agreed to appear. You keep all rights to the video and give us a free, non-exclusive
   licence to use it for the purposes above. As a thank-you, a valid audience-retention curve added
   to a video can make that video's analysis free: its price comes back as credit (not cash). A
-  curve counts when the video is the same length as the analysed video, give or take 2 seconds,
-  and, when we can check it, has at least 1,000 views. This applies once per published video (the
-  same file or link counts once), to up to 5 videos in any 30 days, and only on accounts that
-  have had credit added. A curve is valid when it has at least 20 points, is not flat, does not
-  rise overall and never goes above 1,000%.</p>
+  curve counts when the video is the same length as the analysed video, give or take {{CURVE_LENGTH_TOLERANCE_S}} seconds,
+  and, when we can check it, has at least {{CURVE_MIN_VIEWS}} views. This applies once per published video (the
+  same file or link counts once), to up to {{CURVE_REWARDS}} videos in any {{CURVE_REWARD_WINDOW_DAYS}} days, and only on accounts that
+  have had credit added. A curve is valid when it has at least {{CURVE_MIN_POINTS}} points, is not flat, does not
+  rise overall and never goes above {{CURVE_MAX_WATCH_RATIO_PERCENT}}%.</p>
 
   <h2>AI reports</h2>
   <p>When you ask for a report, the video's frames (one per second), its spoken words and its
   brain numbers are sent to Claude on Amazon Bedrock, processed in AWS's US regions. AWS states that Bedrock
   does not store them or use them for training. The frames and the report are deleted with the
-  job, and expire with the result after 30 days. When you ask for a comparison, the same things
+  job, and expire with the result after {{RESULT_RETENTION_DAYS}} days. When you ask for a comparison, the same things
   for both videos are sent the same way; the comparison is deleted when either video is deleted,
-  and expires after 30 days.</p>
+  and expires after {{RESULT_RETENTION_DAYS}} days.</p>
 
   <h2>Who can see it</h2>
   <p>Only you, and the NeuroLens team, can see your videos and results. We do not sell or share

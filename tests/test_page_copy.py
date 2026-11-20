@@ -11,8 +11,9 @@ import importlib.util
 import re
 
 import pytest
-from conftest import ISSUER, REPO_ROOT
-from neurolens import billing, pricing, settings
+from conftest import CFG, ISSUER, REPO_ROOT
+from neurolens import billing, settings
+from neurolens.web.app import render_page
 
 CHANNEL = "https://www.youtube.com/@anncreates"
 OTHER_CHANNEL = "https://www.facebook.com/anncreates"
@@ -28,7 +29,9 @@ def page_text(name):
 def config_numbers():
     cfg = settings.load_settings()
     minutes = (
-        cfg["billing"]["invite_cents"] * pricing.BLOCK_SECONDS / (pricing.CENTS_PER_BLOCK * 60)
+        cfg["billing"]["invite_cents"]
+        * settings.block_seconds(cfg)
+        / (settings.cents_per_block(cfg) * 60)
     )
     return minutes, cfg["research"]["curve_min_views"]
 
@@ -38,9 +41,12 @@ def config_numbers():
 
 def test_the_landing_page_offers_the_configured_free_minutes():
     minutes, _ = config_numbers()
-    assert minutes == 5
+    html = (REPO_ROOT / "static" / "index.html").read_text()
 
-    assert f"Creators and marketers get {minutes:g} free minutes" in page_text("index.html")
+    assert minutes == 5
+    assert "Creators and marketers get" in page_text("index.html")
+    assert 'id="freeMinutes"' in html
+    assert "limits.invite_seconds" in html
 
 
 def test_the_landing_page_names_the_three_ways_in():
@@ -66,12 +72,20 @@ def test_the_landing_page_names_the_three_ways_in():
 # ---------------------------------------------------------------- the configured minimum
 
 
-@pytest.mark.parametrize("name", ["retention_guide.html", "privacy.html", "app.html"])
-def test_each_page_shows_the_configured_view_minimum(name):
+@pytest.mark.parametrize("name", ["retention_guide.html", "privacy.html"])
+def test_each_static_page_shows_the_configured_view_minimum(name):
     _, min_views = config_numbers()
     assert min_views == 1000
 
-    assert f"{min_views:,}" in page_text(name)
+    text = render_page(REPO_ROOT / "static", name, CFG, "")
+    assert f"{min_views:,}" in " ".join(re.sub(r"<[^>]+>", " ", text).split())
+
+
+def test_the_app_reads_the_view_minimum_from_the_limits():
+    html = (REPO_ROOT / "static" / "app.html").read_text()
+
+    assert 'id="consentViews"' in html
+    assert "limits.curve_min_views" in html
 
 
 @pytest.mark.parametrize("name", ["index.html", "retention_guide.html", "privacy.html", "app.html"])
@@ -81,7 +95,7 @@ def test_no_page_still_calls_access_invited(name):
 
 def test_the_guide_gives_the_views_line_on_youtube_and_facebook():
     _, min_views = config_numbers()
-    html = (REPO_ROOT / "static" / "retention_guide.html").read_text()
+    html = render_page(REPO_ROOT / "static", "retention_guide.html", CFG, "")
     youtube = html.split('id="youtube"', 1)[1].split("<h2", 1)[0]
     facebook = html.split('id="facebook"', 1)[1].split("<h2", 1)[0]
 
@@ -107,8 +121,9 @@ def test_the_privacy_page_names_the_access_request_data():
 def test_the_privacy_page_states_the_view_rule():
     _, min_views = config_numbers()
 
-    assert f"and, when we can check it, has at least {min_views:,} views" in page_text(
-        "privacy.html"
+    html = render_page(REPO_ROOT / "static", "privacy.html", CFG, "")
+    assert f"and, when we can check it, has at least {min_views:,} views" in " ".join(
+        re.sub(r"<[^>]+>", " ", html).split()
     )
 
 
@@ -162,7 +177,9 @@ def test_limits_publish_the_invite_seconds_from_the_configured_credit(aws, make_
 
     data = app.test_client().get("/api/limits").get_json()
 
-    assert data["invite_seconds"] == invite_cents * pricing.BLOCK_SECONDS / pricing.CENTS_PER_BLOCK
+    assert data["invite_seconds"] == invite_cents * settings.block_seconds(
+        cfg
+    ) / settings.cents_per_block(cfg)
 
 
 def test_the_page_does_not_type_in_the_demo_pass_length():

@@ -11,7 +11,7 @@ from pathlib import PurePosixPath
 
 import pytest
 from botocore.exceptions import ClientError
-from conftest import REWARD, WEB_USER_ID
+from conftest import CFG, GPU_WAIT_GRACE_S, REWARD, WEB_USER_ID
 from neurolens import billing, storage
 from neurolens.web.app import create_app
 
@@ -87,7 +87,7 @@ def make_job(
     job_id = str(uuid.uuid4())
     key = storage.object_key(user_id, job_id, content_type)
     ext = PurePosixPath(key).suffix
-    billing.reserve(db, user_id, job_id, key, f"clip{ext}", 3000, research_consent=consent)
+    billing.reserve(db, user_id, job_id, key, f"clip{ext}", 3000, research_consent=consent, cfg=CFG)
     if processing:
         assert billing.claim(db, job_id) == 1
     if done:
@@ -271,6 +271,11 @@ def test_list_jobs_skips_deleted_jobs_but_job_state_still_sees_them(db, content_
     deleted, _ = make_job(db, content_type=content_type)
     kept, _ = make_job(db, content_type=content_type)
     billing.delete_job(db, WEB_USER_ID, deleted)
-    assert {job["job_id"] for job in billing.list_jobs(db, WEB_USER_ID, 50, **REWARD)} == {kept}
+    assert {
+        job["job_id"]
+        for job in billing.list_jobs(
+            db, WEB_USER_ID, 50, **REWARD, gpu_wait_grace_s=GPU_WAIT_GRACE_S
+        )
+    } == {kept}
     state = billing.job_state(db, deleted)
     assert state is not None and state["status"] == "done"

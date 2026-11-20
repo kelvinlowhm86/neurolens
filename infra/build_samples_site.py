@@ -121,19 +121,27 @@ def _check_references(references):
 
 def _fallback_limits(cfg):
     """The /api/limits body from the same sources, when create_app cannot be built here."""
-    from neurolens import pricing, settings
+    from neurolens import billing, pricing, settings
 
     response_cfg = cfg.get("response") or {}
     upload_cfg = cfg.get("upload") or {}
+    research_cfg = cfg.get("research") or {}
     invite_cents = (cfg.get("billing") or {}).get("invite_cents", 0)
     limits = {
         "max_video_duration_seconds": settings.max_duration(cfg),
         "max_upload_bytes": cfg.get("max_upload_bytes"),
         "colour_range": response_cfg.get("colour_range"),
-        "invite_seconds": invite_cents * pricing.BLOCK_SECONDS / pricing.CENTS_PER_BLOCK,
+        "result_retention_days": settings.result_retention_days(cfg),
+        "cancel_seconds": settings.cancel_seconds(cfg),
+        "invite_seconds": invite_cents
+        * settings.block_seconds(cfg)
+        / settings.cents_per_block(cfg),
+        "consent_version": billing.CONSENT_VERSION,
+        "curve_min_views": research_cfg.get("curve_min_views"),
+        "curve_length_tolerance_s": research_cfg.get("curve_length_tolerance_s"),
         "price": {
-            "cents_per_block": pricing.CENTS_PER_BLOCK,
-            "block_seconds": pricing.BLOCK_SECONDS,
+            "cents_per_block": settings.cents_per_block(cfg),
+            "block_seconds": settings.block_seconds(cfg),
             "allowance_seconds": pricing.ALLOWANCE_SECONDS,
         },
     }
@@ -239,10 +247,13 @@ def build(out, *, force=False, samples_path=None, allow_inside_repo=False):
             print(f"missing referenced file: {value} ({origin})", file=sys.stderr)
         raise ValueError(f"{len(missing)} referenced file(s) missing")
 
+    from neurolens import settings
+
+    cfg = settings.load_config(REPO_ROOT)
     limits = build_limits()
     _prepare_output(out, force)
 
-    from neurolens.web.app import render_contact_page
+    from neurolens.web.app import render_page
 
     static_out = out / "static"
     static_out.mkdir(parents=True, exist_ok=True)
@@ -253,7 +264,7 @@ def build(out, *, force=False, samples_path=None, allow_inside_repo=False):
             module_in_static=name == "brain_view.js",
         )
     for name in CONTACT_PAGES:
-        text = render_contact_page(STATIC_ROOT, name, "")
+        text = render_page(STATIC_ROOT, name, cfg, "")
         text = _rewrite_text(text, module_in_static=False, pages_in_static=True)
         (static_out / name).write_text(text, encoding="utf-8")
     for name in STATIC_DIRS:

@@ -14,11 +14,11 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 from botocore.exceptions import ClientError
-from conftest import REPO_ROOT, RESEARCH, REWARD, STARTER_CENTS, WEB_USER_ID, fresh_import
+from conftest import CFG, REPO_ROOT, RESEARCH, REWARD, STARTER_CENTS, WEB_USER_ID, fresh_import
 from neurolens import billing, pricing, settings, storage
-from neurolens.web.app import create_app
+from neurolens.web.app import create_app, render_page
 
-PRICE_CENTS = pricing.estimate_cost_cents(30.1)
+PRICE_CENTS = pricing.estimate_cost_cents(CFG, 30.1)
 OTHER_USER = "other-user"
 VIEWS = "lt_1k"
 PUBLISHED = "week"
@@ -133,11 +133,18 @@ def make_job(
     job_id = str(uuid.uuid4())
     key = storage.object_key(user_id, job_id, "video/mp4")
     billing.reserve(
-        db, user_id, job_id, key, "clip.mp4", round(seconds * 1000), research_consent=consent
+        db,
+        user_id,
+        job_id,
+        key,
+        "clip.mp4",
+        round(seconds * 1000),
+        research_consent=consent,
+        cfg=CFG,
     )
     if state != "queued":
         # The dispatcher measures the length before any GPU runs.
-        assert billing.verify_queued(db, job_id, round(seconds * 1000), 3600) == "ok"
+        assert billing.verify_queued(db, job_id, round(seconds * 1000), 3600, cfg=CFG) == "ok"
     if state in ("processing", "done"):
         assert billing.claim(db, job_id) == 1
     if state == "done":
@@ -559,13 +566,13 @@ def test_the_youtube_key_never_appears_in_a_reply(db, aws, make_cfg, tmp_path, m
 # ---------------------------------------------------------------- copy
 
 
-def test_the_page_and_the_server_share_the_new_consent_version():
+def test_the_page_reads_the_consent_version_from_the_server():
     assert billing.CONSENT_VERSION == "2026-11-03"
 
     html = (REPO_ROOT / "static" / "app.html").read_text()
-    match = re.search(r"const\s+CONSENT_VERSION\s*=\s*['\"](?P<version>[^'\"]+)['\"]", html)
-    assert match, "static/app.html has no `const CONSENT_VERSION = '...'` literal"
-    assert match.group("version") == billing.CONSENT_VERSION
+
+    assert "limits.consent_version" in html
+    assert "const CONSENT_VERSION = '2026-11-03'" not in html
 
 
 def test_the_privacy_page_states_the_configured_view_rule_and_length_tolerance():
@@ -574,7 +581,7 @@ def test_the_privacy_page_states_the_configured_view_rule_and_length_tolerance()
     tolerance = research["curve_length_tolerance_s"]
     assert tolerance == LENGTH_TOLERANCE_S
 
-    html = (REPO_ROOT / "static" / "privacy.html").read_text()
+    html = render_page(REPO_ROOT / "static", "privacy.html", CFG, "")
     text = _section_text(html, "sharing")
 
     assert f"{min_views:,} views" in text
@@ -608,14 +615,14 @@ def worker_job(db, *, consent=True):
     job_id = str(uuid.uuid4())
     key = f"uploads/{USER_ID}/{job_id}.mp4"
     billing.ensure_user(db, USER_ID, f"{USER_ID}@example.com", STARTER_CENTS)
-    billing.reserve(db, USER_ID, job_id, key, "clip.mp4", 3000, research_consent=consent)
+    billing.reserve(db, USER_ID, job_id, key, "clip.mp4", 3000, research_consent=consent, cfg=CFG)
     return job_id, key
 
 
 def run_worker(aws, db, job_id, clip_path, cfg, masks):
     from neurolens import settings, worker
 
-    assert billing.verify_queued(db, job_id, 3000, settings.max_duration(None)) == "ok"
+    assert billing.verify_queued(db, job_id, 3000, settings.max_duration(CFG), cfg=CFG) == "ok"
     return worker.handle_job(
         job_id,
         str(clip_path),

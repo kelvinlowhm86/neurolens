@@ -10,9 +10,9 @@ import re
 import uuid
 
 import pytest
-from conftest import REPO_ROOT, RESEARCH, REWARD, WEB_USER_ID
+from conftest import CFG, REPO_ROOT, RESEARCH, REWARD, WEB_USER_ID
 from neurolens import billing, pricing, settings, storage
-from neurolens.web.app import create_app
+from neurolens.web.app import create_app, render_page
 
 STARTER_CENTS = 10_000
 OTHER_USER = "other-user"
@@ -107,7 +107,14 @@ def make_job(
     job_id = str(uuid.uuid4())
     key = storage.object_key(user_id, job_id, "video/mp4")
     billing.reserve(
-        db, user_id, job_id, key, "clip.mp4", round(seconds * 1000), research_consent=consent
+        db,
+        user_id,
+        job_id,
+        key,
+        "clip.mp4",
+        round(seconds * 1000),
+        research_consent=consent,
+        cfg=CFG,
     )
     if state in ("processing", "done"):
         assert billing.claim(db, job_id) == 1
@@ -214,10 +221,10 @@ def test_a_young_curve_with_unknown_views_pays_at_once(db, aws, make_cfg, tmp_pa
 
     assert resp.status_code == 200
     data = resp.get_json()
-    assert data["rewarded_cents"] == pricing.estimate_cost_cents(27.4)
+    assert data["rewarded_cents"] == pricing.estimate_cost_cents(CFG, 27.4)
     assert "reward_from" not in data
     [snapshot] = snapshot_rows(pg, job_id)
-    assert snapshot["rewarded_cents"] == pricing.estimate_cost_cents(27.4)
+    assert snapshot["rewarded_cents"] == pricing.estimate_cost_cents(CFG, 27.4)
 
 
 @pytest.mark.parametrize("same_cut", ["same", "light_edit", "recut"])
@@ -403,14 +410,18 @@ def test_config_has_the_invite_credit_and_no_week_setting():
 def test_the_landing_page_offers_five_minutes_from_the_configured_credit():
     cfg = settings.load_settings()
     minutes = (
-        cfg["billing"]["invite_cents"] * pricing.BLOCK_SECONDS / (pricing.CENTS_PER_BLOCK * 60)
+        cfg["billing"]["invite_cents"]
+        * settings.block_seconds(cfg)
+        / (settings.cents_per_block(cfg) * 60)
     )
     assert minutes == 5
 
     html = (REPO_ROOT / "static" / "index.html").read_text()
     text = " ".join(re.sub(r"<[^>]+>", " ", html).split())
 
-    assert "Creators and marketers get 5 free minutes" in text
+    assert "Creators and marketers get" in text
+    assert 'id="freeMinutes"' in html
+    assert "limits.invite_seconds" in html
     assert "For channels with 1,000+ followers." in text
     assert "Add a video's retention curve; an eligible curve can earn its credit back." in text
 
@@ -428,7 +439,7 @@ def test_the_privacy_page_states_the_configured_view_rule_without_a_week():
     research = settings.load_settings()["research"]
     min_views = research["curve_min_views"]
 
-    html = (REPO_ROOT / "static" / "privacy.html").read_text()
+    html = render_page(REPO_ROOT / "static", "privacy.html", CFG, "")
     text = _section_text(html, "sharing")
 
     assert f"{min_views:,} views" in text

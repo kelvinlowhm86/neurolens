@@ -62,7 +62,7 @@ def _delete_job_files(s3, bucket, job_id, object_key):
         raise RuntimeError(f"{job_id}: refunded, but S3 could not delete all of its files")
 
 
-def finish_job(db, s3, bucket, job_id):
+def finish_job(db, s3, bucket, job_id, *, gpu_wait_grace_s):
     """True when the job is finished (charged, refunded or already terminal); False while a
     live worker holds it.
 
@@ -83,7 +83,7 @@ def finish_job(db, s3, bucket, job_id):
         billing.settle_success(db, job_id)
         logger.info(f"{job_id}: result exists, settled")
         return True
-    if billing.refund_if_gpu_wait_over(db, job_id):
+    if billing.refund_if_gpu_wait_over(db, job_id, gpu_wait_grace_s=gpu_wait_grace_s):
         logger.warning(f"{job_id}: its GPU wait ran out, refunded")
         _delete_job_files(s3, bucket, job_id, state["object_key"])
         return True

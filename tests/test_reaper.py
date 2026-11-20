@@ -11,12 +11,12 @@ import uuid
 
 import pytest
 from botocore.exceptions import ClientError
-from conftest import STARTER_CENTS, USER_ID, write_config
-from neurolens import billing, pricing, storage
+from conftest import CFG, STARTER_CENTS, USER_ID, write_config
+from neurolens import billing, deadlines, pricing, settings, storage
 
 DAY = 24 * 60 * 60
-DEADLINE_S = 4 * 60 * 60
-RETENTION_DAYS = 90
+DEADLINE_S = deadlines.job_deadline_s(CFG)
+RETENTION_DAYS = settings.no_curve_days(CFG)
 
 
 def reaper_module():
@@ -92,7 +92,7 @@ def object_exists(aws, key):
 def consented_done_job(db, new_key, *, consent=True):
     job_id, key = new_key()
     billing.ensure_user(db, USER_ID, f"{USER_ID}@example.com", STARTER_CENTS)
-    billing.reserve(db, USER_ID, job_id, key, "clip.mp4", 3000, research_consent=consent)
+    billing.reserve(db, USER_ID, job_id, key, "clip.mp4", 3000, research_consent=consent, cfg=CFG)
     assert billing.settle_success(db, job_id) is True
     return job_id, key
 
@@ -137,7 +137,6 @@ def dataset_files_exist(aws, job_id):
 
 
 def test_a_queued_job_past_four_hours_is_refunded_deadline_passed(aws, db, pg, lambda_env, new_job):
-    assert reaper_module().DEADLINE_S == DEADLINE_S
     job_id, key = new_job()
     upload(aws, key)
     pg.age(job_id, updated_s=DEADLINE_S + 3600, created_s=DEADLINE_S + 3600)
@@ -204,7 +203,7 @@ def test_a_done_jobs_files_are_never_deleted(aws, db, pg, lambda_env, new_job):
     run_reaper()
 
     job = pg.job(job_id)
-    assert job["status"] == "done" and job["captured_cents"] == pricing.estimate_cost_cents(3)
+    assert job["status"] == "done" and job["captured_cents"] == pricing.estimate_cost_cents(CFG, 3)
     assert object_exists(aws, key)
     assert object_exists(aws, f"results/{job_id}.json")
 
@@ -314,11 +313,12 @@ def test_the_reaper_deletes_snapshots_older_than_1095_days(aws, db, pg, lambda_e
     job_id, _ = consented_done_job(db, new_key)
     old = str(uuid.uuid4())
     recent = str(uuid.uuid4())
+    days = settings.dataset_retention_days(CFG)
     pg.conn.execute(
         "INSERT INTO retention_snapshots (snapshot_id, job_id, added_at, curve_sha256) "
-        "VALUES (%s::uuid, %s::uuid, now() - make_interval(days => 1096), %s), "
-        "(%s::uuid, %s::uuid, now() - make_interval(days => 1094), %s)",
-        (old, job_id, "3" * 64, recent, job_id, "4" * 64),
+        "VALUES (%s::uuid, %s::uuid, now() - make_interval(days => %s), %s), "
+        "(%s::uuid, %s::uuid, now() - make_interval(days => %s), %s)",
+        (old, job_id, days + 1, "3" * 64, recent, job_id, days - 1, "4" * 64),
     )
 
     run_reaper()

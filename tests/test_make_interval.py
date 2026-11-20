@@ -11,8 +11,8 @@ import re
 import uuid
 
 import pytest
-from conftest import WEB_USER_ID
-from neurolens import billing, storage
+from conftest import CFG, WEB_USER_ID
+from neurolens import billing, settings, storage
 from neurolens.lambdas import reaper
 
 STARTER_CENTS = 10_000
@@ -48,7 +48,9 @@ def make_job(db):
     billing.ensure_user(db, WEB_USER_ID, f"{WEB_USER_ID}@example.com", STARTER_CENTS)
     job_id = str(uuid.uuid4())
     key = storage.object_key(WEB_USER_ID, job_id, "video/mp4")
-    billing.reserve(db, WEB_USER_ID, job_id, key, "clip.mp4", 27_400, research_consent=True)
+    billing.reserve(
+        db, WEB_USER_ID, job_id, key, "clip.mp4", 27_400, research_consent=True, cfg=CFG
+    )
     assert billing.claim(db, job_id) == 1
     assert billing.settle_success(db, job_id) is True
     billing.record_video_hash(db, job_id, "a" * 64)
@@ -82,7 +84,7 @@ def test_expired_sessions_accepts_a_bigint_day_count(db, pg):
     )
 
     run_or_fail(
-        lambda: reaper.expired_sessions(BigIntDaysDatabase(db)),
+        lambda: reaper.expired_sessions(BigIntDaysDatabase(db), settings.session_days(CFG)),
         "expired_sessions",
     )
 

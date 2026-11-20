@@ -8,25 +8,24 @@ It reads our own database rather than the backlog metric the scale-in alarm uses
 import logging
 import os
 
-from neurolens import billing, lambdas
+from neurolens import billing, lambdas, settings
 from neurolens.billing import STALE_AFTER_S
 
 logger = logging.getLogger(__name__)
 
 DISPATCHED_S = 3 * 60 * 60
 QUIET_S = 30 * 60
-VARIANT = "main"
 
 
-def _scalable_target_id(endpoint):
-    return f"endpoint/{endpoint}/variant/{VARIANT}"
+def _scalable_target_id(endpoint, variant):
+    return f"endpoint/{endpoint}/variant/{variant}"
 
 
-def _work_possible(db):
+def _work_possible(db, cfg):
     """True when a live claim, a dispatched request, recent activity, or an active admin
     keep-warm setting says work is coming."""
     with db.transaction() as tx:
-        warm = billing._read_visitor_gpu_warm(tx)
+        warm = billing._read_visitor_gpu_warm(tx, cfg)
         rows = tx.execute(
             "SELECT "
             "EXISTS(SELECT 1 FROM jobs WHERE status = :processing "
@@ -47,27 +46,27 @@ def _work_possible(db):
     return bool(warm > 0 or rows[0]["live"] or rows[0]["dispatched"] or rows[0]["recent"])
 
 
-def check(db, *, sagemaker, appscaling, endpoint):
+def check(db, *, sagemaker, appscaling, endpoint, variant, cfg):
     """Stop the endpoint when every condition allows it. True when it stopped it."""
     description = sagemaker.describe_endpoint(EndpointName=endpoint)
     variants = description.get("ProductionVariants", [])
-    variant = variants[0] if variants else {}
-    instances = variant.get("CurrentInstanceCount", 0)
+    production_variant = variants[0] if variants else {}
+    instances = production_variant.get("CurrentInstanceCount", 0)
     # A desired count with no instance yet is a start AWS has not filled (no GPU free); it keeps
     # trying, and the GPU would arrive later with nobody waiting for it.
-    desired = variant.get("DesiredInstanceCount", 0)
+    desired = production_variant.get("DesiredInstanceCount", 0)
     if instances < 1 and desired < 1:
         return False
 
     targets = appscaling.describe_scalable_targets(
         ServiceNamespace="sagemaker",
-        ResourceIds=[_scalable_target_id(endpoint)],
+        ResourceIds=[_scalable_target_id(endpoint, variant)],
         ScalableDimension="sagemaker:variant:DesiredInstanceCount",
     ).get("ScalableTargets", [])
     if targets and targets[0].get("MinCapacity", 0) >= 1:
         return False
 
-    if _work_possible(db):
+    if _work_possible(db, cfg):
         return False
 
     # Logged before the call: the stuck alarm counts decisions to stop, and a stop still in
@@ -76,7 +75,7 @@ def check(db, *, sagemaker, appscaling, endpoint):
     try:
         sagemaker.update_endpoint_weights_and_capacities(
             EndpointName=endpoint,
-            DesiredWeightsAndCapacities=[{"VariantName": VARIANT, "DesiredInstanceCount": 0}],
+            DesiredWeightsAndCapacities=[{"VariantName": variant, "DesiredInstanceCount": 0}],
         )
     except Exception as exc:
         if "in-progress" not in str(exc):
@@ -93,4 +92,6 @@ def handler(event, context):
         sagemaker=lambdas.sagemaker_client(),
         appscaling=lambdas.appscaling_client(),
         endpoint=endpoint,
+        variant=os.environ["NEUROLENS_GPU_VARIANT"],
+        cfg=settings.load_config(),
     )

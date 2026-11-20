@@ -11,7 +11,7 @@ import uuid
 from pathlib import Path
 
 import pytest
-from conftest import STARTER_CENTS, WEB_USER_ID
+from conftest import CFG, STARTER_CENTS, WEB_USER_ID
 from neurolens import billing, storage
 from neurolens.web.app import create_app
 
@@ -34,7 +34,7 @@ def owned(db):
         billing.ensure_user(db, WEB_USER_ID, "web@example.com", STARTER_CENTS)
         job_id = str(uuid.uuid4())
         key = storage.object_key(WEB_USER_ID, job_id, "video/mp4")
-        billing.reserve(db, WEB_USER_ID, job_id, key, "ad.mp4", 27400)
+        billing.reserve(db, WEB_USER_ID, job_id, key, "ad.mp4", 27400, cfg=CFG)
         return job_id
 
     return make
@@ -119,7 +119,7 @@ def test_status_of_a_queued_undispatched_job_is_cancellable(client, db, owned):
 
 def test_status_of_a_queued_dispatched_job_is_not_cancellable(client, db, owned):
     job_id = owned()
-    assert billing.verify_queued(db, job_id, 27400, 120) == "ok"
+    assert billing.verify_queued(db, job_id, 27400, 120, cfg=CFG) == "ok"
     data = client.get(f"/api/jobs/{job_id}/status").get_json()
     assert data["cancellable"] is False
     assert "verified_duration_ms" not in data

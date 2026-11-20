@@ -9,7 +9,7 @@ from pathlib import PurePosixPath
 import pytest
 from botocore.client import BaseClient
 from botocore.exceptions import ClientError
-from conftest import STARTER_CENTS, WEB_USER_ID, sign_in
+from conftest import CFG, STARTER_CENTS, WEB_USER_ID, sign_in
 from neurolens import billing, storage
 from neurolens.web.app import create_app
 
@@ -42,7 +42,7 @@ def make_job(db, *, user_id=WEB_USER_ID):
     job_id = str(uuid.uuid4())
     key = storage.object_key(user_id, job_id, "video/mp4")
     ext = PurePosixPath(key).suffix
-    billing.reserve(db, user_id, job_id, key, f"clip{ext}", 3000)
+    billing.reserve(db, user_id, job_id, key, f"clip{ext}", 3000, cfg=CFG)
     assert billing.claim(db, job_id) == 1
     assert billing.settle_success(db, job_id) is True
     return job_id, key

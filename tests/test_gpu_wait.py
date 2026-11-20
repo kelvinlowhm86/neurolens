@@ -11,22 +11,22 @@ import uuid
 from datetime import UTC, datetime
 
 import pytest
-from conftest import STARTER_CENTS, USER_ID, WEB_USER_ID, write_config
-from neurolens import billing, storage
+from conftest import CFG, GPU_WAIT_GRACE_S, STARTER_CENTS, USER_ID, WEB_USER_ID, write_config
+from neurolens import billing, deadlines, settings, storage
 from neurolens.db import PostgresDatabase
 
 OTHER_USER = "other-user"
 ENDPOINT = "neurolens-gpu"
-MAX_UPLOAD_BYTES = 300_000_000
-MAX_S = 120
-REAPER_DEADLINE_S = 4 * 60 * 60
+MAX_UPLOAD_BYTES = CFG["max_upload_bytes"]
+MAX_S = settings.max_duration(CFG)
+REAPER_DEADLINE_S = deadlines.job_deadline_s(CFG)
 
 
 def make_job(db, *, user_id=USER_ID, seconds=3.0, starter_cents=STARTER_CENTS):
     billing.ensure_user(db, user_id, f"{user_id}@example.com", starter_cents)
     job_id = str(uuid.uuid4())
     key = storage.object_key(user_id, job_id, "video/mp4")
-    billing.reserve(db, user_id, job_id, key, "clip.mp4", round(seconds * 1000))
+    billing.reserve(db, user_id, job_id, key, "clip.mp4", round(seconds * 1000), cfg=CFG)
     return job_id, key
 
 
@@ -56,10 +56,10 @@ def assert_refunded_no_gpu_free(pg, job_id, user_id=USER_ID):
 
 def test_a_queued_unclaimed_job_past_the_grace_is_refunded_no_gpu_free(db, pg):
     job_id, _ = make_job(db)
-    set_gpu_wait(pg, job_id, -(billing.GPU_WAIT_GRACE_S + 60))
+    set_gpu_wait(pg, job_id, -(GPU_WAIT_GRACE_S + 60))
 
-    assert billing.refund_if_gpu_wait_over(db, job_id) is True
-    billing.refund_if_gpu_wait_over(db, job_id)
+    assert billing.refund_if_gpu_wait_over(db, job_id, gpu_wait_grace_s=GPU_WAIT_GRACE_S) is True
+    billing.refund_if_gpu_wait_over(db, job_id, gpu_wait_grace_s=GPU_WAIT_GRACE_S)
 
     assert_refunded_no_gpu_free(pg, job_id)
     assert pg.kinds() == ["starter", "reserve", "refund"]
@@ -68,10 +68,10 @@ def test_a_queued_unclaimed_job_past_the_grace_is_refunded_no_gpu_free(db, pg):
 
 def test_a_job_still_inside_the_grace_is_left_alone(db, pg):
     job_id, _ = make_job(db)
-    set_gpu_wait(pg, job_id, -(billing.GPU_WAIT_GRACE_S - 60))
+    set_gpu_wait(pg, job_id, -(GPU_WAIT_GRACE_S - 60))
     before = pg.snapshot()
 
-    assert billing.refund_if_gpu_wait_over(db, job_id) is False
+    assert billing.refund_if_gpu_wait_over(db, job_id, gpu_wait_grace_s=GPU_WAIT_GRACE_S) is False
 
     assert pg.snapshot() == before
 
@@ -79,10 +79,10 @@ def test_a_job_still_inside_the_grace_is_left_alone(db, pg):
 def test_a_claimed_job_is_left_alone_even_if_its_wait_expired(db, pg):
     job_id, _ = make_job(db)
     assert billing.claim(db, job_id) == 1
-    set_gpu_wait(pg, job_id, -(billing.GPU_WAIT_GRACE_S + 60))
+    set_gpu_wait(pg, job_id, -(GPU_WAIT_GRACE_S + 60))
     before = pg.snapshot()
 
-    assert billing.refund_if_gpu_wait_over(db, job_id) is False
+    assert billing.refund_if_gpu_wait_over(db, job_id, gpu_wait_grace_s=GPU_WAIT_GRACE_S) is False
 
     assert pg.snapshot() == before
 
@@ -90,11 +90,11 @@ def test_a_claimed_job_is_left_alone_even_if_its_wait_expired(db, pg):
 def test_a_queued_job_whose_claim_was_already_taken_is_left_alone(db, pg):
     """The claimed_at condition, on its own: a worker claim that has not yet changed the status."""
     job_id, _ = make_job(db)
-    set_gpu_wait(pg, job_id, -(billing.GPU_WAIT_GRACE_S + 60))
+    set_gpu_wait(pg, job_id, -(GPU_WAIT_GRACE_S + 60))
     pg.conn.execute("UPDATE jobs SET claimed_at = now() WHERE job_id = %s::uuid", (job_id,))
     before = pg.snapshot()
 
-    assert billing.refund_if_gpu_wait_over(db, job_id) is False
+    assert billing.refund_if_gpu_wait_over(db, job_id, gpu_wait_grace_s=GPU_WAIT_GRACE_S) is False
 
     assert pg.snapshot() == before
 
@@ -102,10 +102,10 @@ def test_a_queued_job_whose_claim_was_already_taken_is_left_alone(db, pg):
 def test_a_done_job_is_left_alone(db, pg):
     job_id, _ = make_job(db)
     assert billing.settle_success(db, job_id) is True
-    set_gpu_wait(pg, job_id, -(billing.GPU_WAIT_GRACE_S + 60))
+    set_gpu_wait(pg, job_id, -(GPU_WAIT_GRACE_S + 60))
     before = pg.snapshot()
 
-    assert billing.refund_if_gpu_wait_over(db, job_id) is False
+    assert billing.refund_if_gpu_wait_over(db, job_id, gpu_wait_grace_s=GPU_WAIT_GRACE_S) is False
 
     assert pg.snapshot() == before
 
@@ -115,7 +115,7 @@ def test_a_job_with_no_recorded_wait_is_left_alone(db, pg):
     assert pg.job(job_id)["gpu_wait_until"] is None
     before = pg.snapshot()
 
-    assert billing.refund_if_gpu_wait_over(db, job_id) is False
+    assert billing.refund_if_gpu_wait_over(db, job_id, gpu_wait_grace_s=GPU_WAIT_GRACE_S) is False
 
     assert pg.snapshot() == before
 
@@ -146,13 +146,15 @@ def run_blocked(row_lock, job_id, *calls):
 
 def test_a_claim_and_the_refund_racing_leave_exactly_one_outcome(db, db_dsn, pg, row_lock):
     job_id, _ = make_job(db)
-    set_gpu_wait(pg, job_id, -(billing.GPU_WAIT_GRACE_S + 60))
+    set_gpu_wait(pg, job_id, -(GPU_WAIT_GRACE_S + 60))
 
     claimed, refunded = run_blocked(
         row_lock,
         job_id,
         lambda: billing.claim(PostgresDatabase(db_dsn), job_id),
-        lambda: billing.refund_if_gpu_wait_over(PostgresDatabase(db_dsn), job_id),
+        lambda: billing.refund_if_gpu_wait_over(
+            PostgresDatabase(db_dsn), job_id, gpu_wait_grace_s=GPU_WAIT_GRACE_S
+        ),
     )
 
     assert isinstance(refunded, bool)
@@ -203,7 +205,7 @@ def run_reaper():
 def test_the_reaper_refunds_an_expired_gpu_wait_as_no_gpu_free(aws, db, pg, reaper_env):
     job_id, key = make_job(db)
     upload(aws, key)
-    set_gpu_wait(pg, job_id, -(billing.GPU_WAIT_GRACE_S + 60))
+    set_gpu_wait(pg, job_id, -(GPU_WAIT_GRACE_S + 60))
     pg.age(job_id, updated_s=REAPER_DEADLINE_S + 3600, created_s=REAPER_DEADLINE_S + 3600)
 
     run_reaper()
@@ -230,9 +232,12 @@ def test_finish_job_refunds_an_expired_gpu_wait_as_no_gpu_free(aws, db, pg):
 
     job_id, key = make_job(db)
     upload(aws, key)
-    set_gpu_wait(pg, job_id, -(billing.GPU_WAIT_GRACE_S + 60))
+    set_gpu_wait(pg, job_id, -(GPU_WAIT_GRACE_S + 60))
 
-    assert lambdas.finish_job(db, aws.s3, aws.bucket, job_id) is True
+    assert (
+        lambdas.finish_job(db, aws.s3, aws.bucket, job_id, gpu_wait_grace_s=GPU_WAIT_GRACE_S)
+        is True
+    )
 
     assert_refunded_no_gpu_free(pg, job_id)
     assert not storage.object_exists(aws.s3, aws.bucket, key)
@@ -243,9 +248,12 @@ def test_finish_job_keeps_processing_failed_before_the_wait_expires(aws, db, pg)
 
     job_id, key = make_job(db)
     upload(aws, key)
-    set_gpu_wait(pg, job_id, billing.GPU_WAIT_GRACE_S + 60)
+    set_gpu_wait(pg, job_id, GPU_WAIT_GRACE_S + 60)
 
-    assert lambdas.finish_job(db, aws.s3, aws.bucket, job_id) is True
+    assert (
+        lambdas.finish_job(db, aws.s3, aws.bucket, job_id, gpu_wait_grace_s=GPU_WAIT_GRACE_S)
+        is True
+    )
 
     job = pg.job(job_id)
     assert job["status"] == "failed" and job["error_code"] == "processing_failed"
@@ -297,6 +305,9 @@ def test_the_dispatcher_records_the_wait_it_sent(aws, db, pg, probe):
         endpoint=ENDPOINT,
         max_upload_bytes=MAX_UPLOAD_BYTES,
         max_duration_s=MAX_S,
+        deadline_s=deadlines.dispatch_deadline_s(CFG),
+        cfg=CFG,
+        variant="main",
     )
 
     assert outcome == "invoked"
@@ -331,7 +342,7 @@ def test_the_job_list_refunds_the_signed_in_persons_expired_wait(client, db, pg)
     own, _ = make_job(db, user_id=WEB_USER_ID)
     other, _ = make_job(db, user_id=OTHER_USER)
     for job_id in (own, other):
-        set_gpu_wait(pg, job_id, -(billing.GPU_WAIT_GRACE_S + 60))
+        set_gpu_wait(pg, job_id, -(GPU_WAIT_GRACE_S + 60))
 
     resp = client.get("/api/jobs")
 
@@ -345,7 +356,7 @@ def test_the_status_route_refunds_the_callers_expired_wait(client, db, pg):
     own, _ = make_job(db, user_id=WEB_USER_ID)
     other, _ = make_job(db, user_id=OTHER_USER)
     for job_id in (own, other):
-        set_gpu_wait(pg, job_id, -(billing.GPU_WAIT_GRACE_S + 60))
+        set_gpu_wait(pg, job_id, -(GPU_WAIT_GRACE_S + 60))
 
     resp = client.get(f"/api/jobs/{own}/status")
     refused = client.get(f"/api/jobs/{other}/status")

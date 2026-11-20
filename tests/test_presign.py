@@ -11,8 +11,8 @@ import re
 import uuid
 
 import pytest
-from conftest import STARTER_CENTS, WEB_USER_ID
-from neurolens import pricing
+from conftest import CFG, STARTER_CENTS, WEB_USER_ID
+from neurolens import pricing, settings
 from neurolens.web.app import create_app
 
 KEY_RE = re.compile(rf"^uploads/{WEB_USER_ID}/([0-9a-f-]{{36}})(\.[a-z0-9]+)$")
@@ -82,15 +82,13 @@ def test_success_fields_hold_a_signed_policy_with_the_size_cap(client_for):
 
 def test_success_estimated_cost_uses_the_pricing_formula(client):
     data = client.post("/api/uploads/presign", json=body(client_duration_seconds=27.4)).get_json()
-    assert data["estimated_cost_usd"] == pricing.estimate_cost_usd(27.4)
+    assert data["estimated_cost_usd"] == pricing.estimate_cost_usd(CFG, 27.4)
     data = client.post("/api/uploads/presign", json=body(client_duration_seconds=61)).get_json()
-    assert data["estimated_cost_usd"] == pricing.estimate_cost_usd(61)
+    assert data["estimated_cost_usd"] == pricing.estimate_cost_usd(CFG, 61)
 
 
-def test_estimated_cost_follows_the_pricing_constant(client, monkeypatch):
-    monkeypatch.setattr(
-        pricing, "CENTS_PER_BLOCK", 137
-    )  # not the real price, so a typed-in copy fails
+def test_estimated_cost_follows_the_config_price(client, monkeypatch):
+    monkeypatch.setattr(settings, "cents_per_block", lambda cfg: 137)
     data = client.post("/api/uploads/presign", json=body(client_duration_seconds=45)).get_json()
     assert data["estimated_cost_usd"] == 2.74  # 45 s is two blocks at 137 cents
 
@@ -105,7 +103,7 @@ def test_each_request_gets_its_own_job_id(client):
 def test_duration_equal_to_the_maximum_is_accepted(client):
     resp = client.post("/api/uploads/presign", json=body(client_duration_seconds=120))
     assert resp.status_code == 200
-    assert resp.get_json()["estimated_cost_usd"] == pricing.estimate_cost_usd(120)
+    assert resp.get_json()["estimated_cost_usd"] == pricing.estimate_cost_usd(CFG, 120)
 
 
 def test_declared_bytes_equal_to_the_cap_is_accepted(client_for):

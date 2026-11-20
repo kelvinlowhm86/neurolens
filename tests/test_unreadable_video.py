@@ -11,7 +11,7 @@ import os
 import subprocess
 
 import pytest
-from conftest import STARTER_CENTS
+from conftest import CFG, STARTER_CENTS
 from neurolens import billing, settings, worker
 from neurolens.worker import Outcome
 
@@ -71,7 +71,7 @@ def audio_only_path(tmp_path_factory):
 
 
 def verify(db, job_id):
-    assert billing.verify_queued(db, job_id, 3000, settings.max_duration(None)) == "ok"
+    assert billing.verify_queued(db, job_id, 3000, settings.max_duration(CFG), cfg=CFG) == "ok"
 
 
 def run_job(aws, db, job_id, video_path, cfg, masks):

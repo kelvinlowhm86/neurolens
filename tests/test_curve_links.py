@@ -17,11 +17,11 @@ import subprocess
 import uuid
 
 import pytest
-from conftest import MIGRATIONS, REPO_ROOT, RESEARCH, REWARD, WEB_USER_ID
+from conftest import CFG, GPU_WAIT_GRACE_S, MIGRATIONS, REPO_ROOT, RESEARCH, REWARD, WEB_USER_ID
 from neurolens import billing, pricing, results, storage
 
 STARTER_CENTS = 10_000
-PRICE_CENTS = pricing.estimate_cost_cents(27.4)
+PRICE_CENTS = pricing.estimate_cost_cents(CFG, 27.4)
 OTHER_USER = "other-user"
 VIEWS = "lt_1k"
 PUBLISHED = "week"
@@ -91,7 +91,14 @@ def make_job(
     job_id = str(uuid.uuid4())
     key = storage.object_key(user_id, job_id, "video/mp4")
     billing.reserve(
-        db, user_id, job_id, key, "clip.mp4", round(seconds * 1000), research_consent=consent
+        db,
+        user_id,
+        job_id,
+        key,
+        "clip.mp4",
+        round(seconds * 1000),
+        research_consent=consent,
+        cfg=CFG,
     )
     if state in ("processing", "done", "failed"):
         assert billing.claim(db, job_id) == 1
@@ -603,7 +610,7 @@ def test_list_jobs_previews_the_reward_without_a_date(db, pg):
     pg.age(job_id, created_s=5 * DAY_S)
     billing.grant_credit(db, f"{WEB_USER_ID}@example.com", 100)
 
-    [row] = billing.list_jobs(db, WEB_USER_ID, 50, **REWARD)
+    [row] = billing.list_jobs(db, WEB_USER_ID, 50, **REWARD, gpu_wait_grace_s=GPU_WAIT_GRACE_S)
 
     assert row["sharing"] is True
     assert row["curve_reward_cents"] == PRICE_CENTS
@@ -614,7 +621,7 @@ def test_list_jobs_previews_the_reward_without_a_date(db, pg):
 def test_list_jobs_has_no_reward_date_when_no_reward_is_possible(db, pg, consent):
     job_id, _ = make_job(db, consent=consent)
 
-    [row] = billing.list_jobs(db, WEB_USER_ID, 50, **REWARD)
+    [row] = billing.list_jobs(db, WEB_USER_ID, 50, **REWARD, gpu_wait_grace_s=GPU_WAIT_GRACE_S)
 
     assert row["curve_reward_cents"] == 0
     assert "curve_reward_from" not in row

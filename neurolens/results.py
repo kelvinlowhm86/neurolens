@@ -8,6 +8,8 @@ import math
 import re
 from urllib.parse import parse_qs, urlsplit
 
+from neurolens import settings
+
 SERIES = [
     "faces",
     "bodies",
@@ -290,28 +292,24 @@ def retention_points(pairs, duration_s):
     return [[ratio * duration_s, watch * 100] for ratio, watch in pairs]
 
 
-MIN_CURVE_POINTS = 20
-MIN_WATCH_SPREAD = 0.02
-MAX_WATCH_RATIO = 10
-
-
-def curve_quality(pairs):
+def curve_quality(cfg, pairs):
     """The failed checks of an audience-retention curve, empty when it is valid.
 
-    A full curve has at least 20 points, a watch-ratio spread of at least 0.02, ends no higher
-    than it started, and has no value above 10.
+    A full curve has at least `research.min_curve_points` points, a watch-ratio spread of at
+    least `research.min_watch_spread`, ends no higher than it started, and has no value above
+    `research.max_watch_ratio`.
     """
     failed = []
-    if len(pairs) < MIN_CURVE_POINTS:
+    if len(pairs) < settings.min_curve_points(cfg):
         failed.append("too_few_points")
     if not pairs:
         return failed
     watches = [watch for _, watch in pairs]
-    if max(watches) - min(watches) < MIN_WATCH_SPREAD:
+    if max(watches) - min(watches) < settings.min_watch_spread(cfg):
         failed.append("flat_curve")
     if watches[-1] > watches[0]:
         failed.append("rising_curve")
-    if max(watches) > MAX_WATCH_RATIO:
+    if max(watches) > settings.max_watch_ratio(cfg):
         failed.append("watch_ratio_too_high")
     return failed
 

@@ -14,10 +14,10 @@ from email.utils import parsedate_to_datetime
 
 import pytest
 from botocore.client import BaseClient
-from conftest import sign_in, write_config
-from neurolens import billing
+from conftest import CFG, sign_in, write_config
+from neurolens import billing, settings
 
-SESSION_DAYS = 30
+SESSION_DAYS = settings.session_days(CFG)
 DAY = 24 * 60 * 60
 HINT_COOKIE = "nl_signed_in"
 
@@ -126,10 +126,8 @@ def test_migration_adds_the_sessions_table(pg):
     )
 
 
-def test_the_session_lifetime_is_30_days():
-    from neurolens.web import auth
-
-    assert auth.SESSION_DAYS == SESSION_DAYS
+def test_the_session_lifetime_is_the_configured_value():
+    assert settings.session_days(settings.load_settings()) == SESSION_DAYS
 
 
 # ---------------------------------------------------------------- the cookie and the row
@@ -178,7 +176,7 @@ def test_app_sets_the_signed_in_hint_for_its_full_lifetime(cognito_client, idp):
     assert resp.status_code == 200
     line = cookie(resp, HINT_COOKIE)
     assert line is not None, "/app did not renew the signed-in hint cookie"
-    assert abs(lifetime(line) - billing.SESSION_DAYS * DAY) < 120
+    assert abs(lifetime(line) - SESSION_DAYS * DAY) < 120
 
 
 # ---------------------------------------------------------------- the 30-day window

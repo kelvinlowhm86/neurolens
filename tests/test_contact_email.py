@@ -1,13 +1,13 @@
 """The contact address comes from NEUROLENS_CONTACT_EMAIL; blank shows the GitHub repo link."""
 
 import pytest
-from conftest import REPO_ROOT
+from conftest import CFG, REPO_ROOT
 from neurolens import settings
 from neurolens.web.app import (
     CONTACT_PLACEHOLDER,
     GITHUB_REPO_URL,
     create_app,
-    fill_contact_pages,
+    fill_pages,
 )
 
 PAGES = ("privacy.html", "retention_guide.html")
@@ -78,7 +78,7 @@ def test_the_loaded_setting_reaches_the_pages(monkeypatch, aws, make_cfg, tmp_pa
 def test_a_staged_deploy_gets_the_address_into_the_page(tmp_path, page):
     static = staged_pages(tmp_path)
 
-    fill_contact_pages(static, "help&team@example.com")
+    fill_pages(static, CFG, "help&team@example.com")
 
     text = (static / page).read_text(encoding="utf-8")
     assert CONTACT_PLACEHOLDER not in text
@@ -89,7 +89,7 @@ def test_a_staged_deploy_gets_the_address_into_the_page(tmp_path, page):
 def test_a_staged_deploy_without_an_address_uses_the_github_fallback(tmp_path, page):
     static = staged_pages(tmp_path)
 
-    fill_contact_pages(static, "")
+    fill_pages(static, CFG, "")
 
     text = (static / page).read_text(encoding="utf-8")
     assert CONTACT_PLACEHOLDER not in text
@@ -101,10 +101,18 @@ def test_a_staged_deploy_refuses_any_page_with_a_placeholder_left(tmp_path):
     (static / "new_page.html").write_text("<p>{{CONTACT_EMAIL}}</p>", encoding="utf-8")
 
     with pytest.raises(RuntimeError, match="new_page.html"):
-        fill_contact_pages(static, "help@example.com")
+        fill_pages(static, CFG, "help@example.com")
 
 
 def test_no_static_file_mentions_the_old_school_address():
     for path in (REPO_ROOT / "static").rglob("*"):
         if path.is_file():
             assert b"comp.nus" not in path.read_bytes(), path
+
+
+def test_a_staged_deploy_refuses_an_unknown_placeholder(tmp_path):
+    static = staged_pages(tmp_path)
+    (static / "privacy.html").write_text("<p>{{UNKNOWN}}</p>", encoding="utf-8")
+
+    with pytest.raises(RuntimeError, match="unfilled placeholder"):
+        fill_pages(static, CFG, "help@example.com")

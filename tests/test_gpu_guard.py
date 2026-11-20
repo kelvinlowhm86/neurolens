@@ -8,6 +8,7 @@ live claim, a dispatched request, nor any recent job activity says work is still
 
 import logging
 
+from conftest import CFG
 from neurolens import billing
 
 ENDPOINT = "neurolens-gpu-test"
@@ -59,7 +60,14 @@ def run_check(db, *, instances=1, desired=None, min_capacity=0, refuse=None):
     module = gpu_guard()
     sagemaker = FakeSageMaker(instances, desired, refuse)
     appscaling = FakeAppScaling(min_capacity)
-    stopped = module.check(db, sagemaker=sagemaker, appscaling=appscaling, endpoint=ENDPOINT)
+    stopped = module.check(
+        db,
+        sagemaker=sagemaker,
+        appscaling=appscaling,
+        endpoint=ENDPOINT,
+        variant="main",
+        cfg=CFG,
+    )
     return stopped, sagemaker, appscaling
 
 
@@ -169,6 +177,7 @@ def test_handler_stops_the_endpoint_named_in_the_environment(aws, db, monkeypatc
     sagemaker = FakeSageMaker(instances=1)
     appscaling = FakeAppScaling(min_capacity=0)
     monkeypatch.setenv("NEUROLENS_GPU_ENDPOINT", ENDPOINT)
+    monkeypatch.setenv("NEUROLENS_GPU_VARIANT", "main")
     monkeypatch.setattr(lambdas, "database", lambda: db)
     monkeypatch.setattr(lambdas, "sagemaker_client", lambda: sagemaker)
     monkeypatch.setattr(lambdas, "appscaling_client", lambda: appscaling)

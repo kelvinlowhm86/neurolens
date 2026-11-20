@@ -21,10 +21,24 @@
     "no_curve_days": 90,
     "dataset_retention_days": 1095,
     "curve_length_tolerance_s": 2,
-    "curve_min_views": 1000
+    "curve_min_views": 1000,
+    "min_curve_points": 20,
+    "min_watch_spread": 0.02,
+    "max_watch_ratio": 10
   },
   "response": {
     "colour_range": 0.5
+  },
+  "pricing": {
+    "cents_per_block": 100,
+    "block_seconds": 30
+  },
+  "visitor": {
+    "pass_cents": 400,
+    "initial_passes": 10,
+    "gpu_warm_hours": 6,
+    "adjust_deltas": [0, 5, 10],
+    "grant_minutes": [0, 2, 5, 10]
   },
   "worker": {
     "heartbeat_seconds": 50,
@@ -34,7 +48,8 @@
     "cancel_seconds": 15,
     "visibility_seconds": 1080,
     "dlq_visibility_seconds": 720,
-    "max_receives": 2
+    "max_receives": 2,
+    "job_deadline_hours": 4
   },
   "report": {
     "model": "us.anthropic.claude-sonnet-4-6",
@@ -48,11 +63,13 @@
   "auth": {
     "mode": "dev",
     "dev_user_id": "dev-user",
-    "dev_email": "dev@localhost"
+    "dev_email": "dev@localhost",
+    "session_days": 30
   },
   "billing": {
     "starter_cents": 0,
-    "invite_cents": 1000
+    "invite_cents": 1000,
+    "gpu_wait_grace_s": 300
   },
   "server": {
     "host": "127.0.0.1",

@@ -13,9 +13,9 @@ from pathlib import Path, PurePosixPath
 
 import pytest
 from botocore.client import BaseClient
-from conftest import RESEARCH, REWARD, STARTER_CENTS, WEB_USER_ID, sign_in, write_config
-from neurolens import billing, results, settings, storage
-from neurolens.web.app import create_app
+from conftest import CFG, RESEARCH, REWARD, STARTER_CENTS, WEB_USER_ID, sign_in, write_config
+from neurolens import billing, settings, storage
+from neurolens.web.app import create_app, render_page
 
 OTHER_USER = "someone-else"
 DAY = 24 * 60 * 60
@@ -46,7 +46,14 @@ def make_job(
     job_id = str(uuid.uuid4())
     key = storage.object_key(user_id, job_id, content_type)
     billing.reserve(
-        db, user_id, job_id, key, f"clip{PurePosixPath(key).suffix}", 3000, research_consent=consent
+        db,
+        user_id,
+        job_id,
+        key,
+        f"clip{PurePosixPath(key).suffix}",
+        3000,
+        research_consent=consent,
+        cfg=CFG,
     )
     if state in ("processing", "done"):
         assert billing.claim(db, job_id) == 1
@@ -253,7 +260,7 @@ def test_a_failed_delete_still_marks_the_stop_sharing_row(aws, db, pg, make_cfg,
 def test_a_failed_stop_sharing_delete_marks_the_copy_and_the_reaper_finishes_it(
     aws, db, pg, make_cfg, tmp_path, reaper_env
 ):
-    reaper_env(90)
+    reaper_env(settings.no_curve_days(CFG))
     client = app_for(aws, db, make_cfg, tmp_path, s3_client=DeleteReportsErrors(aws.s3))
     job_id, key = make_job(db)
     dataset, own = seed_research(aws, job_id, key)
@@ -379,7 +386,7 @@ def insert_snapshot(pg, job_id):
 def test_the_reaper_deletes_the_copy_after_90_days_and_says_no_curve(
     aws, db, pg, reaper_env, make_cfg, tmp_path
 ):
-    reaper_env(90)
+    reaper_env(settings.no_curve_days(CFG))
     job_id, key = make_job(db)
     dataset, own = seed_research(aws, job_id, key)
     pg.age(job_id, created_s=91 * DAY)
@@ -394,7 +401,7 @@ def test_the_reaper_deletes_the_copy_after_90_days_and_says_no_curve(
 
 
 def test_the_reaper_keeps_a_copy_younger_than_its_configured_limit(aws, db, pg, reaper_env):
-    reaper_env(90)
+    reaper_env(settings.no_curve_days(CFG))
     job_id, key = make_job(db)
     dataset, _ = seed_research(aws, job_id, key)
     pg.age(job_id, created_s=89 * DAY)
@@ -418,7 +425,7 @@ def test_the_reaper_reads_the_limit_from_config(aws, db, pg, reaper_env):
 
 
 def test_the_reaper_keeps_a_job_that_has_any_snapshot(aws, db, pg, reaper_env):
-    reaper_env(90)
+    reaper_env(settings.no_curve_days(CFG))
     job_id, key = make_job(db)
     dataset, _ = seed_research(aws, job_id, key)
     insert_snapshot(pg, job_id)
@@ -436,11 +443,11 @@ def test_the_90_day_rule_keeps_a_job_that_gained_a_snapshot_after_selection(
 ):
     from neurolens.lambdas import reaper
 
-    reaper_env(90)
+    reaper_env(settings.no_curve_days(CFG))
     job_id, key = make_job(db)
     dataset, _ = seed_research(aws, job_id, key)
     pg.age(job_id, created_s=91 * DAY)
-    [stale] = reaper.expired_dataset_jobs(db, 90)
+    [stale] = reaper.expired_dataset_jobs(db, settings.no_curve_days(CFG))
 
     insert_snapshot(pg, job_id)
     reaper.clean_dataset(db, aws.s3, aws.bucket, stale)
@@ -462,18 +469,15 @@ def test_consent_stores_the_version_and_time(db, pg):
     assert job["consented_at"] is not None
 
 
-def test_page_consent_version_matches_the_server():
+def test_page_consent_version_comes_from_the_limits():
     html = (REPO_ROOT / "static" / "app.html").read_text()
-    match = re.search(r"const\s+CONSENT_VERSION\s*=\s*['\"](?P<version>[^'\"]+)['\"]", html)
-    assert match, "static/app.html has no `const CONSENT_VERSION = '...'` literal"
-    assert match.group("version") == billing.CONSENT_VERSION, (
-        "the page and the server disagree on the consent version; the server would refuse "
-        "every shared upload"
-    )
+
+    assert "limits.consent_version" in html
+    assert "const CONSENT_VERSION = '2026-11-03'" not in html
 
 
 def test_privacy_page_states_the_reward_limits_the_server_enforces():
-    html = (REPO_ROOT / "static" / "privacy.html").read_text()
+    html = render_page(REPO_ROOT / "static", "privacy.html", CFG, "")
     start = re.search(r'<h2[^>]*id="sharing"[^>]*>', html)
     assert start, 'static/privacy.html has no <h2 id="sharing"> section'
     rest = html[start.end() :]
@@ -486,8 +490,8 @@ def test_privacy_page_states_the_reward_limits_the_server_enforces():
     days = research["curve_reward_window_days"]
     assert "once per published video" in text
     assert f"up to {cap} videos in any {days} days" in text
-    assert f"at least {results.MIN_CURVE_POINTS} points" in text
-    assert f"never goes above {results.MAX_WATCH_RATIO * 100:,}%" in text
+    assert f"at least {settings.min_curve_points(CFG)} points" in text
+    assert f"never goes above {settings.max_watch_ratio(CFG) * 100:,.0f}%" in text
 
 
 def test_no_consent_leaves_the_version_and_time_empty(db, pg):

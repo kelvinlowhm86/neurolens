@@ -11,11 +11,11 @@ import uuid
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from conftest import STARTER_CENTS, USER_ID
-from neurolens import billing, pricing
+from conftest import CFG, STARTER_CENTS, USER_ID
+from neurolens import billing, pricing, settings
 from neurolens.db import PostgresDatabase
 
-MAX_S = 120  # max_video_duration_seconds
+MAX_S = settings.max_duration(CFG)
 
 
 def make_user(db, user_id=USER_ID, starter_cents=STARTER_CENTS):
@@ -25,7 +25,7 @@ def make_user(db, user_id=USER_ID, starter_cents=STARTER_CENTS):
 def reserve(db, client_ms=27400, user_id=USER_ID):
     job_id = str(uuid.uuid4())
     key = f"uploads/{user_id}/{job_id}.mp4"
-    price = billing.reserve(db, user_id, job_id, key, "ad.mp4", client_ms)
+    price = billing.reserve(db, user_id, job_id, key, "ad.mp4", client_ms, cfg=CFG)
     return job_id, price
 
 
@@ -104,8 +104,8 @@ def test_reserve_moves_the_exact_price_and_writes_the_job_and_one_reserve_row(db
     make_user(db)
     job_id = str(uuid.uuid4())
     key = f"uploads/{USER_ID}/{job_id}.mp4"
-    price = billing.reserve(db, USER_ID, job_id, key, "ad_variant_1.mp4", 27400)
-    assert price == pricing.estimate_cost_cents(27.4)
+    price = billing.reserve(db, USER_ID, job_id, key, "ad_variant_1.mp4", 27400, cfg=CFG)
+    assert price == pricing.estimate_cost_cents(CFG, 27.4)
     assert money(pg) == (STARTER_CENTS - price, price)
     job = pg.job(job_id)
     assert job["user_id"] == USER_ID
@@ -125,11 +125,11 @@ def test_reserve_moves_the_exact_price_and_writes_the_job_and_one_reserve_row(db
 @pytest.mark.parametrize(
     "client_ms, price",
     [
-        (1000, pricing.estimate_cost_cents(1)),
-        (30500, pricing.estimate_cost_cents(30.5)),
-        (30600, pricing.estimate_cost_cents(30.6)),
-        (61000, pricing.estimate_cost_cents(61)),
-        (120000, pricing.estimate_cost_cents(120)),
+        (1000, pricing.estimate_cost_cents(CFG, 1)),
+        (30500, pricing.estimate_cost_cents(CFG, 30.5)),
+        (30600, pricing.estimate_cost_cents(CFG, 30.6)),
+        (61000, pricing.estimate_cost_cents(CFG, 61)),
+        (120000, pricing.estimate_cost_cents(CFG, 120)),
     ],
 )
 def test_reserve_prices_with_estimate_cost_cents(db, client_ms, price):
@@ -137,10 +137,8 @@ def test_reserve_prices_with_estimate_cost_cents(db, client_ms, price):
     assert reserve(db, client_ms)[1] == price
 
 
-def test_reserve_follows_the_pricing_constant(db, pg, monkeypatch):
-    monkeypatch.setattr(
-        pricing, "CENTS_PER_BLOCK", 137
-    )  # not the real price, so a typed-in copy fails
+def test_reserve_follows_the_config_price(db, pg, monkeypatch):
+    monkeypatch.setattr(settings, "cents_per_block", lambda cfg: 137)
     make_user(db, starter_cents=1000)
     assert reserve(db, 45000)[1] == 274  # 45 s is two blocks
     assert money(pg) == (726, 274)
@@ -152,13 +150,15 @@ def test_reserve_with_too_little_credit_raises_and_changes_nothing(db, pg):
     before = pg.snapshot()
     job_id = str(uuid.uuid4())
     with pytest.raises(billing.InsufficientCredit):
-        billing.reserve(db, USER_ID, job_id, f"uploads/{USER_ID}/{job_id}.mp4", "a.mp4", 27400)
+        billing.reserve(
+            db, USER_ID, job_id, f"uploads/{USER_ID}/{job_id}.mp4", "a.mp4", 27400, cfg=CFG
+        )
     assert pg.snapshot() == before
     assert pg.job(job_id) is None
 
 
 def test_reserve_of_exactly_the_available_credit_succeeds(db, pg):
-    price = pricing.estimate_cost_cents(27.4)
+    price = pricing.estimate_cost_cents(CFG, 27.4)
     make_user(db, starter_cents=price)
     reserve(db, 27400)
     assert money(pg) == (0, price)
@@ -267,8 +267,8 @@ def test_set_stage_without_now_uses_the_current_time(db, pg):
 def test_settle_success_captures_exactly_the_verified_price(db, pg):
     make_user(db)
     job_id, _ = reserve(db)
-    actual = pricing.estimate_cost_cents(61)
-    assert billing.verify_queued(db, job_id, 61000, MAX_S) == "ok"
+    actual = pricing.estimate_cost_cents(CFG, 61)
+    assert billing.verify_queued(db, job_id, 61000, MAX_S, cfg=CFG) == "ok"
     assert billing.claim(db, job_id) == 1
     billing.set_stage(db, job_id, 1, "transcribing")
     assert billing.settle_success(db, job_id) is True
@@ -288,7 +288,7 @@ def test_settle_success_needs_no_attempt_and_works_on_a_queued_job(db, pg):
     job_id, _ = reserve(db)
     assert billing.settle_success(db, job_id) is True
     assert pg.job(job_id)["status"] == "done"
-    assert money(pg) == (STARTER_CENTS - pricing.estimate_cost_cents(27.4), 0)
+    assert money(pg) == (STARTER_CENTS - pricing.estimate_cost_cents(CFG, 27.4), 0)
 
 
 # ---------------------------------------------------------------- exclusivity
@@ -337,7 +337,7 @@ def test_issue_refund_without_a_condition_raises_value_error_and_changes_nothing
 
 
 def test_issue_refund_returns_the_reservation_and_records_reason_and_message(db, pg):
-    price = pricing.estimate_cost_cents(61)
+    price = pricing.estimate_cost_cents(CFG, 61)
     job_id = claimed(db, 61000)
     assert billing.issue_refund(db, job_id, "upload_missing", "The upload is gone.", attempt=1)
     assert money(pg) == (STARTER_CENTS, 0)
@@ -480,7 +480,7 @@ def run_blocked(row_lock, job_id, *calls):
 
 def test_concurrent_settle_and_refund_end_in_exactly_one_outcome(db, db_dsn, pg, row_lock):
     job_id = claimed(db)
-    price = pricing.estimate_cost_cents(27.4)
+    price = pricing.estimate_cost_cents(CFG, 27.4)
     results = run_blocked(
         row_lock,
         job_id,

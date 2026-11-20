@@ -10,8 +10,8 @@ import uuid
 
 import pytest
 from botocore.exceptions import ClientError
-from conftest import STARTER_CENTS, USER_ID
-from neurolens import billing, pricing, storage
+from conftest import CFG, STARTER_CENTS, USER_ID
+from neurolens import billing, deadlines, pricing, storage
 
 
 @pytest.fixture
@@ -79,7 +79,7 @@ def consented_job(db, new_key, *, ext=".mp4", user_id=USER_ID):
     """A reserved job whose owner consented to the research copy."""
     job_id, key = new_key(ext, user_id=user_id)
     billing.ensure_user(db, user_id, f"{user_id}@example.com", STARTER_CENTS)
-    billing.reserve(db, user_id, job_id, key, f"clip{ext}", 3000, research_consent=True)
+    billing.reserve(db, user_id, job_id, key, f"clip{ext}", 3000, research_consent=True, cfg=CFG)
     return job_id, key
 
 
@@ -104,7 +104,7 @@ def test_dead_lettered_job_with_a_result_is_settled(aws, db, pg, lambda_env, new
     put_result(aws, job_id)
     dlq_handler()(sqs_event(key, bucket=aws.bucket), None)
     job = pg.job(job_id)
-    price = pricing.estimate_cost_cents(3)
+    price = pricing.estimate_cost_cents(CFG, 3)
     assert job["status"] == "done" and job["captured_cents"] == price
     assert pg.balance() == (STARTER_CENTS - price, 0)
 
@@ -213,8 +213,8 @@ def test_a_dead_letter_refund_of_a_consented_job_deletes_its_research_copy(
 
 # ---------------------------------------------------------------- reaper
 
-DEADLINE_S = 4 * 60 * 60
-HEARTBEAT_STALE_S = 10 * 60
+DEADLINE_S = deadlines.job_deadline_s(CFG)
+HEARTBEAT_STALE_S = deadlines.HEARTBEAT_STALE_S
 
 
 def run_reaper():
@@ -316,7 +316,7 @@ def test_reaper_settles_a_job_past_the_deadline_whose_result_exists_and_keeps_th
     pg.age(job_id, updated_s=DEADLINE_S + 3600, created_s=DEADLINE_S + 3600)
     run_reaper()
     job = pg.job(job_id)
-    price = pricing.estimate_cost_cents(3)
+    price = pricing.estimate_cost_cents(CFG, 3)
     assert job["status"] == "done" and job["captured_cents"] == price
     assert pg.balance() == (STARTER_CENTS - price, 0)
     assert storage.object_exists(aws.s3, aws.bucket, key)
@@ -333,7 +333,7 @@ def test_reaper_settles_a_job_with_a_result_and_keeps_its_research_copy(
     run_reaper()
 
     job = pg.job(job_id)
-    price = pricing.estimate_cost_cents(3)
+    price = pricing.estimate_cost_cents(CFG, 3)
     assert job["status"] == "done" and job["captured_cents"] == price
     assert pg.balance() == (STARTER_CENTS - price, 0)
     for kept in [key, f"results/{job_id}.json", f"results/{job_id}.brain", *research_keys(job_id)]:
@@ -405,7 +405,7 @@ def test_reaper_leaves_a_job_claimed_between_its_query_and_the_refund(
     run_reaper()
     assert claimed == [job_id]
     assert pg.job(job_id)["status"] == "processing"
-    price = pricing.estimate_cost_cents(3)
+    price = pricing.estimate_cost_cents(CFG, 3)
     assert pg.balance() == (STARTER_CENTS - price, price)
     assert storage.object_exists(aws.s3, aws.bucket, key)
 

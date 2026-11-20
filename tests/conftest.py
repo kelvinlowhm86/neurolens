@@ -43,6 +43,8 @@ REWARD = {
     "reward_cap": RESEARCH["curve_rewards_per_window"],
     "reward_window_days": RESEARCH["curve_reward_window_days"],
 }
+CFG = COMMITTED_CONFIG
+GPU_WAIT_GRACE_S = COMMITTED_CONFIG["billing"]["gpu_wait_grace_s"]
 
 
 def write_config(root, **overrides):
@@ -90,6 +92,7 @@ ENV_SETTING_VARS = [
     "NEUROLENS_S3_BUCKET",
     "NEUROLENS_GPU_ENDPOINT",  # aws.gpu_endpoint
     "NEUROLENS_MAX_INSTANCES",  # gpu.max_instances (Terraform max_instances)
+    "NEUROLENS_GPU_VARIANT",  # the endpoint production variant
     "NEUROLENS_DEPLOYED",  # marks a deployed (Cognito) web app
     "NEUROLENS_DB_CLUSTER_ARN",  # aws.db_cluster_arn
     "NEUROLENS_DB_SECRET_ARN",  # aws.db_secret_arn
@@ -116,6 +119,8 @@ def isolate_env_settings(monkeypatch):
 
     for name in ENV_SETTING_VARS:
         monkeypatch.delenv(name, raising=False)
+    # The endpoint's one production variant, as Terraform passes it to the web and guard Lambdas.
+    monkeypatch.setenv("NEUROLENS_GPU_VARIANT", "main")
     monkeypatch.setattr(settings, "load_dotenv", lambda *a, **kw: None, raising=False)
 
 
@@ -158,7 +163,7 @@ def make_cfg(aws, tmp_path):
             "dev_user_id": WEB_USER_ID,
             "dev_email": WEB_USER_EMAIL,
         }
-        cfg["billing"] = {"starter_cents": STARTER_CENTS, "invite_cents": 0}
+        cfg["billing"] = {**cfg["billing"], "starter_cents": STARTER_CENTS, "invite_cents": 0}
         for key, value in overrides.items():
             if isinstance(value, dict) and isinstance(cfg.get(key), dict):
                 cfg[key] = {**cfg[key], **value}
@@ -232,7 +237,9 @@ def new_job(db, new_key):
     def make(ext=".mp4", *, client_seconds=3, user_id=USER_ID, starter_cents=STARTER_CENTS):
         job_id, key = new_key(ext, user_id=user_id)
         billing.ensure_user(db, user_id, f"{user_id}@example.com", starter_cents)
-        billing.reserve(db, user_id, job_id, key, f"clip{ext}", round(client_seconds * 1000))
+        billing.reserve(
+            db, user_id, job_id, key, f"clip{ext}", round(client_seconds * 1000), cfg=CFG
+        )
         return job_id, key
 
     return make

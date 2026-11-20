@@ -223,6 +223,7 @@ locals {
         NEUROLENS_COGNITO_ISSUER  = local.cognito_issuer
         NEUROLENS_COGNITO_DOMAIN  = local.cognito_domain
         NEUROLENS_GPU_ENDPOINT    = local.endpoint_name
+        NEUROLENS_GPU_VARIANT     = local.variant_name
         NEUROLENS_REPORT_FUNCTION = aws_lambda_function.report.function_name
         NEUROLENS_ADMIN_EMAILS    = join(",", var.admin_emails)
         NEUROLENS_MAX_INSTANCES   = tostring(var.max_instances)

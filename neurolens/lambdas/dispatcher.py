@@ -12,14 +12,13 @@ from datetime import UTC, datetime, timedelta
 
 from botocore.exceptions import ClientError
 
-from neurolens import billing, deadlines, lambdas, scaling, storage
+from neurolens import billing, deadlines, lambdas, scaling, settings, storage
 from neurolens.media import UnreadableVideo, probe_duration
 
 logger = logging.getLogger(__name__)
 
 PROBE_TIMEOUT_S = 90
 QUEUE_TTL_MAX_S = deadlines.QUEUE_TTL_MAX_S
-DEADLINE_S = deadlines.DISPATCH_DEADLINE_S
 MIN_TTL_S = 300
 INVOCATION_TIMEOUT_S = deadlines.INVOCATION_TIMEOUT_S
 PRESIGNED_GET_S = 600
@@ -59,6 +58,9 @@ def dispatch(
     endpoint,
     max_upload_bytes,
     max_duration_s,
+    deadline_s,
+    cfg,
+    variant,
 ):
     """Check, price and dispatch one upload. Returns "invoked", "skipped" or "refunded"."""
     job_id = storage.job_id_from_key(key)
@@ -96,7 +98,7 @@ def dispatch(
     except UnreadableVideo:
         return _refund(db, s3, bucket, key, job_id, "unreadable_video")
 
-    verdict = billing.verify_queued(db, job_id, round(duration * 1000), max_duration_s)
+    verdict = billing.verify_queued(db, job_id, round(duration * 1000), max_duration_s, cfg=cfg)
     if verdict == "not_queued":
         logger.info(f"Skipped {job_id}: no longer queued")
         return "skipped"
@@ -107,12 +109,12 @@ def dispatch(
         return "refunded"
 
     created = _created_at(db, job_id)
-    age = (datetime.now(UTC) - created).total_seconds() if created is not None else DEADLINE_S
-    ttl = min(QUEUE_TTL_MAX_S, DEADLINE_S - age)
+    age = (datetime.now(UTC) - created).total_seconds() if created is not None else deadline_s
+    ttl = min(QUEUE_TTL_MAX_S, deadline_s - age)
     if ttl < MIN_TTL_S:
         return _refund(db, s3, bucket, key, job_id, "deadline_passed")
 
-    if scaling.endpoint_paused(appscaling, endpoint):
+    if scaling.endpoint_paused(appscaling, endpoint, variant):
         return _refund(db, s3, bucket, key, job_id, "processing_paused")
 
     sagemaker.invoke_endpoint_async(
@@ -175,8 +177,11 @@ def handler(event, context):
     sagemaker = lambdas.sagemaker_runtime_client()
     appscaling = lambdas.appscaling_client()
     endpoint = os.environ["NEUROLENS_GPU_ENDPOINT"]
+    variant = os.environ["NEUROLENS_GPU_VARIANT"]
     max_upload_bytes = int(os.environ["NEUROLENS_MAX_UPLOAD_BYTES"])
     max_duration_s = int(os.environ["NEUROLENS_MAX_DURATION_SECONDS"])
+    cfg = settings.load_config()
+    deadline_s = deadlines.dispatch_deadline_s(cfg)
     results = []
     for record in event["Records"]:
         for bucket, key in storage.parse_s3_event(record["body"]):
@@ -191,6 +196,9 @@ def handler(event, context):
                     endpoint=endpoint,
                     max_upload_bytes=max_upload_bytes,
                     max_duration_s=max_duration_s,
+                    deadline_s=deadline_s,
+                    cfg=cfg,
+                    variant=variant,
                 )
             )
     if "invoked" in results:

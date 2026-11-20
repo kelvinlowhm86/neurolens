@@ -3,8 +3,8 @@
 import uuid
 
 import pytest
-from conftest import sign_in
-from neurolens import billing, qr
+from conftest import CFG, sign_in
+from neurolens import billing, qr, settings
 from neurolens.web.app import create_app
 
 ADMIN_EMAIL = "admin-visitor-test@example.com"
@@ -88,7 +88,7 @@ def test_admin_can_create_pass_adjust_pool_and_visitor_can_redeem(
     assert pass_data["qr_svg"].startswith("<svg")
     assert pass_data["stats"] == {
         "passes_claimed": 0,
-        "passes_remaining": billing.VISITOR_INITIAL_PASSES,
+        "passes_remaining": settings.visitor_initial_passes(CFG),
         "videos_running": 0,
         "videos_done": 0,
         "reports_ready": 0,
@@ -110,10 +110,10 @@ def test_admin_can_create_pass_adjust_pool_and_visitor_can_redeem(
     assert redeemed.get_json() == {"user_id": guest_id, "visitor": token}
 
     # Visitor is now signed in as guest-<pass_id> with 2 minutes (400 cents) of credit.
-    assert billing.VISITOR_PASS_CENTS == 400
+    assert settings.visitor_pass_cents(CFG) == 400
     guest_me = visitor.get("/api/me").get_json()
     assert guest_me["user_id"] == guest_id
-    assert guest_me["balance"]["available_cents"] == billing.VISITOR_PASS_CENTS
+    assert guest_me["balance"]["available_cents"] == settings.visitor_pass_cents(CFG)
     assert "admin" not in guest_me
 
     # Re-scanning or refreshing with the same token is idempotent and does not use a second pass.
@@ -149,7 +149,7 @@ def test_admin_can_create_pass_adjust_pool_and_visitor_can_redeem(
     stats_after = admin.get(f"/api/visitor/stats?pass_id={pass_id}").get_json()
     assert stats_after["pass_claimed"] is True
     assert stats_after["passes_claimed"] == 2
-    assert stats_after["passes_remaining"] == billing.VISITOR_INITIAL_PASSES - 2
+    assert stats_after["passes_remaining"] == settings.visitor_initial_passes(CFG) - 2
     assert len(stats_after["days"]) == 1
     assert stats_after["days"][0]["passes"] == 2
 
@@ -176,9 +176,9 @@ def test_admin_can_create_pass_adjust_pool_and_visitor_can_redeem(
 
     # Admin can add +5, +10, and stop passes (0).
     plus5 = admin.post("/api/visitor/passes", json={"delta": 5}).get_json()
-    assert plus5["passes_remaining"] == billing.VISITOR_INITIAL_PASSES - 2 + 5
+    assert plus5["passes_remaining"] == settings.visitor_initial_passes(CFG) - 2 + 5
     plus10 = admin.post("/api/visitor/passes", json={"delta": 10}).get_json()
-    assert plus10["passes_remaining"] == billing.VISITOR_INITIAL_PASSES - 2 + 15
+    assert plus10["passes_remaining"] == settings.visitor_initial_passes(CFG) - 2 + 15
     stopped = admin.post("/api/visitor/passes", json={"delta": 0}).get_json()
     assert stopped["passes_remaining"] == 0
 
@@ -355,11 +355,11 @@ def test_visitor_stats_report_the_configured_maximum(aws, db, make_cfg, tmp_path
 
 
 def test_visitor_gpu_warm_accepts_any_non_negative_target(db):
-    billing.set_visitor_gpu_warm(db, 3)
-    assert billing.visitor_stats(db)["gpu_warm_target"] == 3
+    billing.set_visitor_gpu_warm(db, 3, cfg=CFG)
+    assert billing.visitor_stats(db, cfg=CFG)["gpu_warm_target"] == 3
 
-    billing.set_visitor_gpu_warm(db, 0)
-    assert billing.visitor_stats(db)["gpu_warm_target"] == 0
+    billing.set_visitor_gpu_warm(db, 0, cfg=CFG)
+    assert billing.visitor_stats(db, cfg=CFG)["gpu_warm_target"] == 0
 
     with pytest.raises(ValueError):
-        billing.set_visitor_gpu_warm(db, -1)
+        billing.set_visitor_gpu_warm(db, -1, cfg=CFG)
