@@ -10,8 +10,9 @@ origin-request policies, because AWS does not let these be limited to a name. It
 open or change anything else in the account, start ordinary servers, or change billing. It can read
 a few account-wide lists: service limits, GPU availability, the activity log, and the tag, secret,
 SageMaker and role names the teardown checks for leftovers, which also show other projects' names.
-You can remove their access at any time by deleting their access key (step 3's Security credentials
-page).
+During teardown it can also delete the SageMaker history records (actions and contexts) named
+`neurolens-...`. You can remove their access at any time by deleting their access key (step 3's
+Security credentials page).
 
 ## 1. Create the five policies
 

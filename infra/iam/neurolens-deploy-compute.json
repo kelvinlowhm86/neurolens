@@ -230,10 +230,11 @@
       "Sid": "TeardownLeftoverReadsAccountWide",
       "Effect": "Allow",
       "Action": [
-        "resourcegroupstaggingapi:GetResources",
+        "tag:GetResources",
         "secretsmanager:ListSecrets",
         "sagemaker:ListEndpointConfigs",
         "sagemaker:ListModels",
+        "sagemaker:ListAssociations",
         "iam:ListRoles"
       ],
       "Resource": "*"
@@ -246,6 +247,24 @@
         "arn:aws:ssm:us-east-1:*:parameter/neurolens",
         "arn:aws:ssm:us-east-1:*:parameter/neurolens/*"
       ]
+    },
+    {
+      "Sid": "TeardownSageMakerLineageDeletes",
+      "Effect": "Allow",
+      "Action": [
+        "sagemaker:DeleteAction",
+        "sagemaker:DeleteContext"
+      ],
+      "Resource": [
+        "arn:aws:sagemaker:*:*:action/neurolens-*",
+        "arn:aws:sagemaker:*:*:context/neurolens-*"
+      ]
+    },
+    {
+      "Sid": "TeardownSageMakerAssociationDeleteNeedsAllEntities",
+      "Effect": "Allow",
+      "Action": "sagemaker:DeleteAssociation",
+      "Resource": "*"
     }
   ]
 }

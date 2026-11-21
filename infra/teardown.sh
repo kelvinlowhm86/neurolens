@@ -18,6 +18,7 @@ if ! CALLER_ACCOUNT=$(aws sts get-caller-identity --query Account --output text 
    || [ -z "$CALLER_ACCOUNT" ]; then
   echo "Cannot read the AWS account for profile '$AWS_PROFILE'. Check that the profile exists and its credentials work:" >&2
   echo "  AWS_PROFILE=$AWS_PROFILE aws sts get-caller-identity" >&2
+  echo "Nothing was deleted." >&2
   exit 1
 fi
 
@@ -27,20 +28,38 @@ fi
 if ! STATE=$(terraform -chdir="$TF_DIR" state list 2>/dev/null); then
   echo "Refusing: cannot read Terraform state in $TF_DIR (check the backend and AWS_PROFILE)." >&2
   echo "Run: terraform -chdir=$TF_DIR init -backend-config=backend.hcl" >&2
+  echo "Nothing was deleted." >&2
   exit 1
 fi
 
 if [ -n "$STATE" ]; then
+  # State older than the code can already be missing settings such as force_destroy, so destroy
+  # would delete most of the stack and then fail half-done. Plan against the current code first.
+  PLAN_RC=0
+  terraform -chdir="$TF_DIR" plan -detailed-exitcode -input=false -lock=false >/dev/null 2>&1 \
+    || PLAN_RC=$?
+  case "$PLAN_RC" in
+    0) ;;
+    2)
+      echo "Refusing: Terraform's state is behind the code (the plan shows changes)." >&2
+      echo "Apply the current code first: terraform -chdir=infra/terraform apply" >&2
+      echo "Then rerun infra/teardown.sh. Nothing was deleted." >&2
+      exit 1 ;;
+    *)
+      echo "Refusing: cannot plan with the current Terraform state and code. Nothing was deleted." >&2
+      echo "Check it with: terraform -chdir=infra/terraform plan" >&2
+      exit 1 ;;
+  esac
   source "$INFRA/aws_env.sh"
   CALLER_ACCOUNT=$AWS_ACCOUNT_ID
   if ! TF_ACCOUNT=$(terraform -chdir="$TF_DIR" output -raw account_id 2>/dev/null) \
      || [ -z "$TF_ACCOUNT" ]; then
-    echo "Refusing: Terraform has no account_id output in $AWS_REGION." >&2
+    echo "Refusing: Terraform has no account_id output in $AWS_REGION. Nothing was deleted." >&2
     exit 1
   fi
   if [ "$TF_ACCOUNT" != "$CALLER_ACCOUNT" ]; then
     echo "Refusing: the AWS caller is account $CALLER_ACCOUNT but Terraform's state belongs to" >&2
-    echo "$TF_ACCOUNT. Check AWS_PROFILE before tearing anything down." >&2
+    echo "$TF_ACCOUNT. Check AWS_PROFILE before tearing anything down. Nothing was deleted." >&2
     exit 1
   fi
   BUCKET=$(terraform -chdir="$TF_DIR" output -raw bucket_name)
@@ -54,14 +73,120 @@ else
     [a-z][a-z]-*-[0-9]) ;;
     *)
       echo "Refusing: Terraform's state is empty but $TFVARS has no region to finish in." >&2
-      echo 'Add region = "<aws-region>" to terraform.tfvars.' >&2
+      echo 'Add region = "<aws-region>" to terraform.tfvars. Nothing was deleted.' >&2
       exit 1 ;;
   esac
   export AWS_REGION
   RESUME=1
   echo "Terraform's state is empty: the stack is already destroyed. This run only deletes the"
-  echo "four hand-made Parameter Store secrets and checks for leftovers."
+  echo "four hand-made Parameter Store secrets and the SageMaker history records, then checks"
+  echo "for leftovers."
 fi
+
+# ---- Leftover checks ------------------------------------------------------------------------
+# The same reads run twice: first as a probe before the confirmation, so a missing permission
+# stops the teardown before anything is deleted; then for real after the destroy.
+LEFTOVERS=""
+LEFT_PROBLEMS=0
+FAILED_CHECKS=""
+TAGGED_LEFTOVERS=0
+PROBE=0
+leftover() {
+  if [ "$PROBE" = 1 ]; then
+    return 0
+  fi
+  LEFTOVERS="$LEFTOVERS  - $*"$'\n'
+  echo "LEFTOVER: $*" >&2
+}
+check_failed() {
+  echo "PROBLEM: could not finish the $1 check." >&2
+  LEFT_PROBLEMS=1
+  FAILED_CHECKS="$FAILED_CHECKS $1"
+}
+names_from() {
+  printf '%s\n' "$1" | tr '\t' '\n' | sed '/^[[:space:]]*$/d'
+}
+check_leftovers() {
+  if ! OUT=$(aws resourcegroupstaggingapi get-resources \
+      --tag-filters Key=Project,Values=neurolens \
+      --query 'ResourceTagMappingList[].ResourceARN' --output text); then
+    check_failed "tagged-resource"
+  else
+    while IFS= read -r arn; do
+      if [ "$PROBE" = 0 ]; then
+        TAGGED_LEFTOVERS=1
+      fi
+      leftover "tagged AWS resource $arn"
+    done < <(names_from "$OUT")
+  fi
+
+  # Secrets Manager is account-wide and holds other teams' secrets. The only secrets this stack
+  # creates are RDS-managed ones named rds!cluster-*; list-secrets cannot reliably tie one to
+  # this cluster by tag or description, so match that prefix and leave every other secret alone.
+  if ! OUT=$(aws secretsmanager list-secrets \
+      --query 'SecretList[].Name' --output text); then
+    check_failed "Secrets Manager"
+  else
+    while IFS= read -r name; do
+      case "$name" in
+        rds!cluster-*) leftover "Secrets Manager secret $name" ;;
+      esac
+    done < <(names_from "$OUT")
+  fi
+
+  if ! OUT=$(aws sagemaker list-endpoint-configs \
+      --query 'EndpointConfigs[].EndpointConfigName' --output text); then
+    check_failed "SageMaker endpoint-configuration"
+  else
+    while IFS= read -r name; do
+      case "$name" in
+        neurolens*) leftover "SageMaker endpoint configuration $name" ;;
+      esac
+    done < <(names_from "$OUT")
+  fi
+
+  if ! OUT=$(aws sagemaker list-models \
+      --query 'Models[].ModelName' --output text); then
+    check_failed "SageMaker model"
+  else
+    while IFS= read -r name; do
+      case "$name" in
+        neurolens*) leftover "SageMaker model $name" ;;
+      esac
+    done < <(names_from "$OUT")
+  fi
+
+  if ! OUT=$(aws ssm get-parameters-by-path --path /neurolens/ --recursive \
+      --query 'Parameters[].Name' --output text); then
+    check_failed "Parameter Store"
+  else
+    while IFS= read -r name; do
+      leftover "Parameter Store parameter $name"
+    done < <(names_from "$OUT")
+  fi
+
+  if ! OUT=$(aws iam list-roles --query 'Roles[].RoleName' --output text); then
+    check_failed "IAM role"
+  else
+    while IFS= read -r role; do
+      case "$role" in
+        neurolens*) leftover "IAM role $role" ;;
+      esac
+    done < <(names_from "$OUT")
+  fi
+}
+
+PROBE=1
+check_leftovers
+PROBE=0
+if [ "$LEFT_PROBLEMS" = 1 ]; then
+  echo "Refusing: cannot read the leftover checks:$FAILED_CHECKS. Nothing was deleted." >&2
+  echo "The account owner may need to re-paste the current infra/iam policies (see" >&2
+  echo "infra/iam/ACCOUNT_OWNER.md)." >&2
+  exit 1
+fi
+LEFT_PROBLEMS=0
+FAILED_CHECKS=""
 
 if [ "$RESUME" = 0 ]; then
   echo "This destroys the NeuroLens stack in account $CALLER_ACCOUNT, region $AWS_REGION."
@@ -73,7 +198,7 @@ fi
 ANSWER=""
 read -r ANSWER || true
 if [ "$ANSWER" != "$CALLER_ACCOUNT" ]; then
-  echo "Confirmation did not match. Nothing was changed." >&2
+  echo "Confirmation did not match. Nothing was deleted." >&2
   exit 1
 fi
 
@@ -108,8 +233,8 @@ else
   echo "Skipping steps 1-2: the stack is already destroyed."
 fi
 
-# ---- 3. Delete the secrets people created by hand -----------------------------------------
-echo "3/4 Deleting the hand-made Parameter Store secrets..."
+# ---- 3. Delete the secrets and SageMaker history people cannot destroy --------------------
+echo "3/4 Deleting the hand-made Parameter Store secrets and SageMaker history records..."
 SSM_SECRETS=(
   /neurolens/terraform/google_client_secret
   /neurolens/web/flask_secret_key
@@ -129,89 +254,108 @@ for name in "${SSM_SECRETS[@]}"; do
   fi
 done
 
+# SageMaker leaves lineage actions and contexts tagged Project=neurolens after the endpoint is
+# gone. They are linked by associations, which must be deleted before the records themselves.
+# The tagged list is mixed, so pick the action and context ARNs out of it below.
+LINEAGE_PROBLEMS=0
+if ! LINEAGE=$(aws resourcegroupstaggingapi get-resources \
+    --tag-filters Key=Project,Values=neurolens \
+    --query 'ResourceTagMappingList[].ResourceARN' --output text 2>&1); then
+  echo "PROBLEM: could not list the SageMaker history records: $LINEAGE" >&2
+  LINEAGE_PROBLEMS=1
+  LINEAGE=""
+fi
+ACTIONS=""
+CONTEXTS=""
+while IFS= read -r arn; do
+  case "$arn" in
+    *:action/*) ACTIONS="$ACTIONS$arn"$'\n' ;;
+    *:context/*) CONTEXTS="$CONTEXTS$arn"$'\n' ;;
+  esac
+done < <(names_from "$LINEAGE")
+
+ASSOCIATIONS=""
+while IFS= read -r arn; do
+  if [ -z "$arn" ]; then
+    continue
+  fi
+  for side in --source-arn --destination-arn; do
+    if ! OUT=$(aws sagemaker list-associations "$side" "$arn" \
+        --query 'AssociationSummaries[].[SourceArn,DestinationArn]' --output text 2>&1); then
+      echo "PROBLEM: could not list associations for $arn: $OUT" >&2
+      LINEAGE_PROBLEMS=1
+      continue
+    fi
+    while IFS=$'\t' read -r src dst; do
+      if [ -z "$src" ] || [ -z "$dst" ]; then
+        continue
+      fi
+      case $'\n'"$ASSOCIATIONS" in
+        *$'\n'"$src $dst"$'\n'*) continue ;;
+      esac
+      ASSOCIATIONS="$ASSOCIATIONS$src $dst"$'\n'
+    done <<< "$OUT"
+  done
+done <<< "$ACTIONS$CONTEXTS"
+
+while read -r src dst; do
+  if [ -z "$src" ]; then
+    continue
+  fi
+  if ! ERR=$(aws sagemaker delete-association --source-arn "$src" --destination-arn "$dst" \
+      2>&1 >/dev/null); then
+    case "$ERR" in
+      *ResourceNotFound*) ;;
+      *)
+        echo "PROBLEM: could not delete the association $src -> $dst: $ERR" >&2
+        LINEAGE_PROBLEMS=1
+        ;;
+    esac
+  fi
+done <<< "$ASSOCIATIONS"
+
+while IFS= read -r arn; do
+  if [ -z "$arn" ]; then
+    continue
+  fi
+  if ! ERR=$(aws sagemaker delete-action --action-name "${arn##*/}" 2>&1 >/dev/null); then
+    case "$ERR" in
+      *ResourceNotFound*) ;;
+      *)
+        echo "PROBLEM: could not delete the SageMaker action $arn: $ERR" >&2
+        LINEAGE_PROBLEMS=1
+        ;;
+    esac
+  fi
+done <<< "$ACTIONS"
+
+while IFS= read -r arn; do
+  if [ -z "$arn" ]; then
+    continue
+  fi
+  if ! ERR=$(aws sagemaker delete-context --context-name "${arn##*/}" 2>&1 >/dev/null); then
+    case "$ERR" in
+      *ResourceNotFound*) ;;
+      *)
+        echo "PROBLEM: could not delete the SageMaker context $arn: $ERR" >&2
+        LINEAGE_PROBLEMS=1
+        ;;
+    esac
+  fi
+done <<< "$CONTEXTS"
+
 # ---- 4. Prove nothing under our name is left ----------------------------------------------
 echo "4/4 Checking for leftovers..."
-LEFTOVERS=""
-CHECK_PROBLEMS=0
-leftover() {
-  LEFTOVERS="$LEFTOVERS  - $*"$'\n'
-  echo "LEFTOVER: $*" >&2
-}
-check_failed() {
-  echo "PROBLEM: could not finish the $1 check." >&2
-  CHECK_PROBLEMS=1
-}
-names_from() {
-  printf '%s\n' "$1" | tr '\t' '\n' | sed '/^[[:space:]]*$/d'
-}
+PROBE=0
+check_leftovers
 
-if ! OUT=$(aws resourcegroupstaggingapi get-resources \
-    --tag-filters Key=Project,Values=neurolens \
-    --query 'ResourceTagMappingList[].ResourceARN' --output text); then
-  check_failed "tagged-resource"
-else
-  while IFS= read -r arn; do
-    leftover "tagged AWS resource $arn"
-  done < <(names_from "$OUT")
-fi
-
-# Secrets Manager is account-wide and holds other teams' secrets. The only secrets this stack
-# creates are RDS-managed ones named rds!cluster-*; list-secrets cannot reliably tie one to this
-# cluster by tag or description, so match that prefix and leave every other secret alone.
-if ! OUT=$(aws secretsmanager list-secrets \
-    --query 'SecretList[].Name' --output text); then
-  check_failed "Secrets Manager"
-else
-  while IFS= read -r name; do
-    case "$name" in
-      rds!cluster-*) leftover "Secrets Manager secret $name" ;;
-    esac
-  done < <(names_from "$OUT")
-fi
-
-if ! OUT=$(aws sagemaker list-endpoint-configs \
-    --query 'EndpointConfigs[].EndpointConfigName' --output text); then
-  check_failed "SageMaker endpoint-configuration"
-else
-  while IFS= read -r name; do
-    case "$name" in
-      neurolens*) leftover "SageMaker endpoint configuration $name" ;;
-    esac
-  done < <(names_from "$OUT")
-fi
-
-if ! OUT=$(aws sagemaker list-models \
-    --query 'Models[].ModelName' --output text); then
-  check_failed "SageMaker model"
-else
-  while IFS= read -r name; do
-    case "$name" in
-      neurolens*) leftover "SageMaker model $name" ;;
-    esac
-  done < <(names_from "$OUT")
-fi
-
-if ! OUT=$(aws ssm get-parameters-by-path --path /neurolens/ --recursive \
-    --query 'Parameters[].Name' --output text); then
-  check_failed "Parameter Store"
-else
-  while IFS= read -r name; do
-    leftover "Parameter Store parameter $name"
-  done < <(names_from "$OUT")
-fi
-
-if ! OUT=$(aws iam list-roles --query 'Roles[].RoleName' --output text); then
-  check_failed "IAM role"
-else
-  while IFS= read -r role; do
-    case "$role" in
-      neurolens*) leftover "IAM role $role" ;;
-    esac
-  done < <(names_from "$OUT")
-fi
-
-if [ -n "$LEFTOVERS" ] || [ "$SECRET_PROBLEMS" = 1 ] || [ "$CHECK_PROBLEMS" = 1 ]; then
+if [ -n "$LEFTOVERS" ] || [ "$SECRET_PROBLEMS" = 1 ] || [ "$LINEAGE_PROBLEMS" = 1 ] \
+   || [ "$LEFT_PROBLEMS" = 1 ]; then
   printf 'TEARDOWN INCOMPLETE:\n%s' "$LEFTOVERS" >&2
+  if [ "$TAGGED_LEFTOVERS" = 1 ]; then
+    echo "AWS's tag list can lag after deletions; rerun infra/teardown.sh in a few minutes." >&2
+    echo "A leftover that persists is real." >&2
+  fi
   echo "Fix the items above, then run infra/teardown.sh again." >&2
   exit 1
 fi

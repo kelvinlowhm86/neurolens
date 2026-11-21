@@ -75,6 +75,8 @@ def bucket_exists(name):
 
 
 key = " ".join(args[:2])
+if key in w.get("denied", []) or " ".join(args) in w.get("denied", []):
+    fail("An error occurred (AccessDenied) when calling the " + key + " operation", 254)
 if key in w.get("fail", []) or " ".join(args) in w.get("fail", []):
     fail("fake aws: injected failure for " + key, 255)
 
@@ -194,11 +196,74 @@ if key == "ssm delete-parameters":
 
 if key == "resourcegroupstaggingapi get-resources":
     arns = list(w.get("tagged", []))
+    if "--resource-type-filters" in args:
+        i = args.index("--resource-type-filters") + 1
+        kinds = []
+        while i < len(args) and not args[i].startswith("-"):
+            kinds.append(args[i].split(":", 1)[-1])
+            i += 1
+        arns = [a for a in arns if any(f"/{kind}/" in a for kind in kinds)]
     if has_query("length("):
         out(str(len(arns)))
     if has_query("ResourceARN"):
         out("\t".join(arns))
     out(json.dumps({"ResourceTagMappingList": [{"ResourceARN": a} for a in arns]}))
+
+if key == "sagemaker list-associations":
+    source = opt("--source-arn")
+    destination = opt("--destination-arn")
+    pairs = [
+        a
+        for a in w.get("associations", [])
+        if (source and a["source"] == source) or (destination and a["destination"] == destination)
+    ]
+    query = opt("--query", "")
+    if has_query("length("):
+        out(str(len(pairs)))
+    if "AssociationSummaries[].[" in query:
+        for pair in pairs:
+            print(pair["source"] + "\t" + pair["destination"])
+        out()
+    if "SourceArn" in query:
+        out("\t".join(pair["source"] for pair in pairs))
+    if "DestinationArn" in query:
+        out("\t".join(pair["destination"] for pair in pairs))
+    out(
+        json.dumps(
+            {
+                "AssociationSummaries": [
+                    {"SourceArn": p["source"], "DestinationArn": p["destination"]} for p in pairs
+                ]
+            }
+        )
+    )
+
+if key == "sagemaker delete-association":
+    source = opt("--source-arn")
+    destination = opt("--destination-arn")
+    before = len(w.get("associations", []))
+    w["associations"] = [
+        a
+        for a in w.get("associations", [])
+        if not (a["source"] == source and a["destination"] == destination)
+    ]
+    if len(w["associations"]) == before:
+        fail("An error occurred (ResourceNotFound) when calling the DeleteAssociation operation")
+    out()
+
+if key in ("sagemaker delete-action", "sagemaker delete-context"):
+    kind = "action" if key.endswith("delete-action") else "context"
+    name = opt("--action-name") if kind == "action" else opt("--context-name")
+    wanted = name.rsplit("/", 1)[-1] if name else name
+    arn = next((a for a in w.get("tagged", []) if a.endswith(f":{kind}/{wanted}")), None)
+    if wanted in w.get("lineage_fail", []) or kind in w.get("lineage_fail", []):
+        fail("An error occurred (AccessDenied) when calling the Delete" + kind.title())
+    if arn is None:
+        fail("An error occurred (ResourceNotFound) when calling the Delete" + kind.title())
+    if any(a["source"] == arn or a["destination"] == arn for a in w.get("associations", [])):
+        fail("Cannot delete entity with associations")
+    w["tagged"] = [a for a in w.get("tagged", []) if a != arn]
+    out()
 
 if key == "secretsmanager list-secrets":
     names = list(w.get("secrets", []))
@@ -371,6 +436,16 @@ if cmd == "state":
     out("aws_s3_bucket.main")
 
 if cmd in ("init", "plan", "apply", "destroy", "validate", "fmt", "import"):
+    if cmd == "plan":
+        code = int(w.get("plan_exit", 0))
+        if code == 2:
+            print("Plan: 1 to add, 0 to change, 0 to destroy.")
+            save()
+            sys.exit(2)
+        if code:
+            print("Error: failed to plan", file=sys.stderr)
+            save()
+            sys.exit(code)
     if cmd == "apply":
         w["terraform_state"] = True
         w["terraform_state_empty"] = False
@@ -468,6 +543,10 @@ def teardown_world(**overrides):
         "endpoints": [],
         "ssm_parameters": list(SSM_SECRETS),
         "iam_roles": [],
+        "associations": [],
+        "lineage_fail": [],
+        "plan_exit": 0,
+        "denied": [],
         "fail": [],
     }
     world.update(overrides)
@@ -716,6 +795,70 @@ def test_teardown_refuses_when_terraform_has_no_state(sandbox):
     assert r.find("terraform", "destroy") == []
 
 
+def test_teardown_refuses_when_plan_shows_the_state_is_behind_the_code(sandbox):
+    r = sandbox.run(
+        "teardown.sh",
+        world=teardown_world(plan_exit=2),
+        input_text=ACCOUNT,
+        tty=True,
+    )
+    assert r.code != 0
+    assert r.find("terraform", "plan")
+    assert "terraform -chdir=infra/terraform apply" in r.text
+    assert "teardown.sh" in r.text
+    assert r.find("terraform", "destroy") == []
+    assert deleted_parameters(r) == set()
+    assert r.find("sagemaker", "delete-action") == []
+    assert r.find("sagemaker", "delete-context") == []
+
+
+def test_teardown_refuses_when_plan_fails(sandbox):
+    r = sandbox.run(
+        "teardown.sh",
+        world=teardown_world(plan_exit=1),
+        input_text=ACCOUNT,
+        tty=True,
+    )
+    assert r.code != 0
+    assert r.find("terraform", "plan")
+    assert "cannot plan" in r.text.lower()
+    assert r.find("terraform", "destroy") == []
+    assert deleted_parameters(r) == set()
+
+
+def test_teardown_proceeds_when_plan_shows_no_changes(sandbox):
+    r = sandbox.run(
+        "teardown.sh",
+        world=teardown_world(plan_exit=0),
+        input_text=ACCOUNT,
+        tty=True,
+    )
+    assert r.code == 0, r.err
+    assert r.find("terraform", "plan")
+    assert r.find("terraform", "destroy")
+    assert "TEARDOWN COMPLETE" in r.out
+
+
+@pytest.mark.parametrize("resume", [False, True])
+def test_teardown_refuses_when_a_leftover_read_is_denied(sandbox, resume):
+    if resume:
+        sandbox.seed()
+    world = teardown_world(
+        terraform_state_empty=resume,
+        denied=["resourcegroupstaggingapi get-resources"],
+    )
+    r = sandbox.run("teardown.sh", world=world, input_text=ACCOUNT, tty=True)
+    assert r.code != 0
+    assert "Type the AWS account ID" not in r.text
+    assert "Nothing was deleted" in r.text
+    assert "ACCOUNT_OWNER.md" in r.text
+    assert "tag" in r.text.lower()
+    assert r.find("terraform", "destroy") == []
+    assert deleted_parameters(r) == set()
+    assert r.find("sagemaker", "delete-action") == []
+    assert r.find("sagemaker", "delete-context") == []
+
+
 def test_teardown_no_destroy_when_stop_is_not_proven(sandbox):
     world = teardown_world(instances=1, status="Failed")
     r = sandbox.run("teardown.sh", world=world, input_text=ACCOUNT, tty=True)
@@ -732,6 +875,41 @@ def test_teardown_no_ssm_delete_when_destroy_fails(sandbox):
     assert r.find("ssm", "delete-parameter") == []
 
 
+def test_teardown_deletes_lineage_associations_then_actions_then_contexts(sandbox):
+    action = f"arn:aws:sagemaker:us-east-1:{ACCOUNT}:action/neurolens-1-1-aws-endpoint"
+    context = f"arn:aws:sagemaker:us-east-1:{ACCOUNT}:context/neurolens-1-aws-endpoint"
+    world = teardown_world(
+        tagged=[action, context],
+        associations=[{"source": action, "destination": context}],
+    )
+    r = sandbox.run("teardown.sh", world=world, input_text=ACCOUNT, tty=True)
+    assert r.code == 0, r.err
+    assert r.world["associations"] == []
+    assert r.world["tagged"] == []
+    associations = r.find("sagemaker", "delete-association")
+    actions = r.find("sagemaker", "delete-action")
+    contexts = r.find("sagemaker", "delete-context")
+    assert associations and actions and contexts
+    assert max(associations) < min(actions) < min(contexts)
+    assert "TEARDOWN COMPLETE" in r.out
+
+
+def test_teardown_is_incomplete_when_a_lineage_record_cannot_be_deleted(sandbox):
+    action = f"arn:aws:sagemaker:us-east-1:{ACCOUNT}:action/neurolens-2-1-aws-endpoint"
+    context = f"arn:aws:sagemaker:us-east-1:{ACCOUNT}:context/neurolens-2-aws-endpoint"
+    world = teardown_world(
+        tagged=[action, context],
+        associations=[{"source": action, "destination": context}],
+        lineage_fail=["neurolens-2-1-aws-endpoint"],
+    )
+    r = sandbox.run("teardown.sh", world=world, input_text=ACCOUNT, tty=True)
+    assert r.code != 0
+    assert "TEARDOWN COMPLETE" not in r.out
+    assert "INCOMPLETE" in r.text
+    assert "neurolens-2-1-aws-endpoint" in r.text
+    assert r.world["associations"] == []
+
+
 def test_teardown_runs_stop_destroy_secrets_then_leftover_checks(sandbox):
     r = sandbox.run("teardown.sh", world=teardown_world(), input_text=ACCOUNT, tty=True)
     assert r.code == 0, r.err
@@ -742,15 +920,15 @@ def test_teardown_runs_stop_destroy_secrets_then_leftover_checks(sandbox):
     )
     destroy = r.find("terraform", "destroy")[0]
     deletes = r.find("ssm", "delete-parameter") + r.find("ssm", "delete-parameters")
-    leftovers = (
-        r.find("resourcegroupstaggingapi", "get-resources")
-        + r.find("secretsmanager", "list-secrets")
-        + r.find("sagemaker", "list-endpoint-configs")
-        + r.find("sagemaker", "list-models")
-        + r.find("ssm", "describe-parameters")
-        + r.find("ssm", "get-parameters-by-path")
-        + r.find("iam", "list-roles")
-    )
+    # Reads also run as a probe before confirmation; use the last call of each as the real check.
+    leftovers = [
+        r.find("resourcegroupstaggingapi", "get-resources")[-1],
+        r.find("secretsmanager", "list-secrets")[-1],
+        r.find("sagemaker", "list-endpoint-configs")[-1],
+        r.find("sagemaker", "list-models")[-1],
+        r.find("ssm", "get-parameters-by-path")[-1],
+        r.find("iam", "list-roles")[-1],
+    ]
     assert stop < destroy < min(deletes) < min(leftovers)
 
     assert deleted_parameters(r) == set(SSM_SECRETS)
@@ -795,6 +973,18 @@ def test_teardown_reports_a_leftover_and_is_not_complete(sandbox, overrides, nee
     assert r.code != 0
     assert "TEARDOWN COMPLETE" not in r.out
     assert needle in r.text
+
+
+def test_teardown_tagged_leftover_says_the_tag_list_lags_and_to_rerun_later(sandbox):
+    world = teardown_world(
+        tagged=[f"arn:aws:cognito-idp:us-east-1:{ACCOUNT}:userpool/us-east-1_FAKE"]
+    )
+    r = sandbox.run("teardown.sh", world=world, input_text=ACCOUNT, tty=True)
+    assert r.code != 0
+    assert "TEARDOWN COMPLETE" not in r.out
+    assert "lag" in r.text.lower()
+    assert "minutes" in r.text.lower()
+    assert "infra/teardown.sh" in r.text
 
 
 def test_teardown_ignores_unrelated_secrets_models_and_configs(sandbox):
@@ -902,7 +1092,7 @@ def test_deploy_policies_allow_every_teardown_leftover_read():
                     resources = [resources]
                 granted.setdefault(action, []).extend(resources)
     for action in (
-        "resourcegroupstaggingapi:GetResources",
+        "tag:GetResources",
         "secretsmanager:ListSecrets",
         "sagemaker:ListEndpointConfigs",
         "sagemaker:ListModels",
@@ -915,6 +1105,33 @@ def test_deploy_policies_allow_every_teardown_leftover_read():
         "arn:aws:ssm:us-east-1:*:parameter/neurolens/*",
     ):
         assert resource in granted.get("ssm:GetParametersByPath", []), resource
+
+
+def test_deploy_compute_policy_covers_teardown_tags_and_lineage_deletes():
+    path = INFRA / "iam" / "neurolens-deploy-compute.json"
+    text = path.read_text()
+    document = json.loads(text)
+    granted = {}
+    for statement in document["Statement"]:
+        actions = statement.get("Action", [])
+        actions = [actions] if isinstance(actions, str) else actions
+        resources = statement.get("Resource", [])
+        resources = [resources] if isinstance(resources, str) else resources
+        for action in actions:
+            granted.setdefault(action, []).extend(resources)
+
+    assert "*" in granted.get("tag:GetResources", [])
+    assert "*" in granted.get("sagemaker:ListAssociations", [])
+    narrow = {
+        "arn:aws:sagemaker:*:*:action/neurolens-*",
+        "arn:aws:sagemaker:*:*:context/neurolens-*",
+    }
+    for action in ("sagemaker:DeleteAction", "sagemaker:DeleteContext"):
+        assert narrow <= set(granted.get(action, [])), action
+    association = set(granted.get("sagemaker:DeleteAssociation", []))
+    assert association, "sagemaker:DeleteAssociation is not granted"
+    assert association <= narrow | {"*"}, association
+    assert len("".join(text.split())) <= 6144
 
 
 # ---------------------------------------------------------------- setup.sh
